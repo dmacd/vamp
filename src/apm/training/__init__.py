@@ -1,0 +1,41 @@
+"""Dataset-agnostic training loops, optimizers, and evaluation helpers."""
+
+from apm.training.vae import (
+    EpochCallback,
+    TrainConfig,
+    TrainState,
+    candidate_label_patch_batch,
+    config_to_dict,
+    continue_train_epochs,
+    energy_classifier_predictions,
+    evaluate_vae,
+    init_train_state,
+    init_train_state_from_params,
+    label_patch_predictions,
+    mask_label_patch_flat,
+    per_example_observed_energy,
+    reconstruct,
+    sample,
+    stochastic_label_mask,
+    train_epochs,
+)
+
+__all__ = [
+    "EpochCallback",
+    "TrainConfig",
+    "TrainState",
+    "candidate_label_patch_batch",
+    "config_to_dict",
+    "continue_train_epochs",
+    "energy_classifier_predictions",
+    "evaluate_vae",
+    "init_train_state",
+    "init_train_state_from_params",
+    "label_patch_predictions",
+    "mask_label_patch_flat",
+    "per_example_observed_energy",
+    "reconstruct",
+    "sample",
+    "stochastic_label_mask",
+    "train_epochs",
+]
