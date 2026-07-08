@@ -19,6 +19,12 @@ dependencies = [
 dev = [
     "pytest>=8",
 ]
+pc = [
+    "fabricpc @ git+ssh://git@github.com/matthewbehrend/FabricPC.git@main",
+]
+gpu = [
+    "jax[cuda12]>=0.6.2",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

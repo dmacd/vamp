@@ -11,7 +11,7 @@ import optax
 from pyrsistent import PClass, field
 
 from apm.data.mnist.label_canvas import LABEL_CLASSES, LABEL_CELL_WIDTH, LABEL_PATCH_COLS, LABEL_PATCH_ROWS
-from apm.models.mlp_vae import VaeConfig, VaeParams, init_mlp_vae_params, vae_forward
+from apm.models.mlp_vae import VaeConfig, VaeParams, init_vae_params, vae_forward
 from apm.models.vae_losses import (
     digit_region_bce,
     flatten_canvases,
@@ -46,7 +46,7 @@ class TrainState(NamedTuple):
 
 def init_train_state(rng_key: Array, vae_config: VaeConfig, train_config: TrainConfig) -> TrainState:
     """Initialize VAE parameters and optimizer state."""
-    params = init_mlp_vae_params(rng_key, vae_config)
+    params = init_vae_params(rng_key, vae_config)
     return init_train_state_from_params(params, rng_key, train_config)
 
 
@@ -207,7 +207,7 @@ def candidate_label_patch_batch(targets: Array) -> Array:
     return base[:, None, :] + candidate_patches[None, :, :]
 
 
-def config_to_dict(config: VaeConfig | TrainConfig) -> dict[str, int | float | tuple[int, ...]]:
+def config_to_dict(config: VaeConfig | TrainConfig) -> dict[str, int | float | str | tuple[int, ...]]:
     """Convert immutable configs to JSON-serializable dictionaries."""
     return {key: value for key, value in config.serialize().items()}
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from apm.data.mnist import balanced_task_subset, make_permuted_mnist_stream
+from apm.data.mnist import balanced_task_subset, make_digit_mnist_stream, make_permuted_mnist_stream
 from apm.data.mnist.permutations import identity_permutation
 from apm.data.mnist.task_specs import make_permuted_task
 
@@ -27,3 +27,11 @@ def test_make_permuted_mnist_stream_is_deterministic(synthetic_mnist_arrays) -> 
     for left_task, right_task in zip(left_stream, right_stream):
         np.testing.assert_array_equal(left_task.train_images, right_task.train_images)
         np.testing.assert_array_equal(left_task.train_labels, right_task.train_labels)
+
+
+def test_make_digit_mnist_stream_has_one_digit_per_task(synthetic_mnist_arrays) -> None:
+    stream = make_digit_mnist_stream(synthetic_mnist_arrays, digits=(0, 1, 2), train_count=2, test_count=1)
+
+    assert tuple(task.spec.name for task in stream) == ("S0_P0", "S1_P0", "S2_P0")
+    assert tuple(task.spec.digit_subset for task in stream) == ((0,), (1,), (2,))
+    assert tuple(set(task.train_labels.tolist()) for task in stream) == ({0}, {1}, {2})

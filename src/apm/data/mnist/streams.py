@@ -6,7 +6,7 @@ import numpy as np
 
 from apm.data.mnist.loader import MnistArrays
 from apm.data.mnist.permutations import identity_permutation, random_digit_permutation
-from apm.data.mnist.task_specs import TaskDataset, make_permuted_task
+from apm.data.mnist.task_specs import TaskDataset, make_permuted_task, make_split_task
 
 
 def balanced_task_subset(
@@ -45,6 +45,24 @@ def make_permuted_mnist_stream(
     return tuple(
         balanced_task_subset(task, train_count=train_count, test_count=test_count, seed=seed + index * 10_000)
         for index, (seed, task) in enumerate(zip(permutation_seeds, tasks))
+    )
+
+
+def make_digit_mnist_stream(
+    arrays: MnistArrays,
+    digits: tuple[int, ...] = tuple(range(10)),
+    train_count: int = 2_000,
+    test_count: int = 400,
+) -> tuple[TaskDataset, ...]:
+    """Build a digit-incremental MNIST stream with one global-label digit per task."""
+    return tuple(
+        balanced_task_subset(
+            make_split_task(arrays, (digit,), permutation=identity_permutation(), permutation_id="P0"),
+            train_count=train_count,
+            test_count=test_count,
+            seed=digit + index * 10_000,
+        )
+        for index, digit in enumerate(digits)
     )
 
 

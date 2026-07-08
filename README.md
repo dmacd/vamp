@@ -13,6 +13,18 @@ python -m venv ve
 ve/bin/python -m pip install -e '.[dev]'
 ```
 
+Install the optional FabricPC backend dependency with:
+
+```bash
+ve/bin/python -m pip install -e '.[dev,pc]'
+```
+
+On CUDA-capable Linux hosts, install the GPU-enabled JAX runtime with:
+
+```bash
+ve/bin/python -m pip install -e '.[dev,pc,gpu]'
+```
+
 Run the data-layer tests with:
 
 ```bash
@@ -55,4 +67,31 @@ reconstruction grids under:
 
 ```text
 results/stage1_apm/permuted_mnist_dense_delta/
+```
+
+Run the related digit-incremental benchmark, where each task contains one
+MNIST digit with global labels, with:
+
+```bash
+ve/bin/python scripts/run_stage1_digit_apm.py
+```
+
+The default digit-incremental run writes the same report/artifact set under:
+
+```text
+results/stage1_apm/digit_mnist_dense_delta/
+```
+
+Run the FabricPC MNIST generative spike with:
+
+```bash
+ve/bin/python scripts/run_fabricpc_mnist_spike.py
+```
+
+The spike uses the same 32x32 digit-plus-label canvas as the VAE experiments,
+keeps the top latent node unconstrained, and writes loss, MSE, accuracy, and
+reconstruction artifacts under:
+
+```text
+results/fabricpc_mnist_spike/
 ```

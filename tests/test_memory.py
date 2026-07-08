@@ -11,6 +11,7 @@ from apm.memory import (
     add_dense_delta_node,
     edge_memory_stats,
     effective_params,
+    evaluate_addressed_on_arrays,
     evaluate_addressed_on_task,
     init_dense_memory_graph,
     observed_energy_matrix,
@@ -70,6 +71,32 @@ def test_addressed_evaluation_reports_counts_and_metrics(synthetic_mnist_arrays)
     assert "energy_classifier_accuracy" in result.metrics
 
 
+def test_addressed_evaluation_can_use_train_arrays(synthetic_mnist_arrays) -> None:
+    config = VaeConfig(latent_dim=4, encoder_widths=(8,), decoder_widths=(8,))
+    root_params = init_mlp_vae_params(jax.random.PRNGKey(13), config)
+    graph = add_dense_delta_node(
+        init_dense_memory_graph(root_params),
+        "node_1_ALL_P0",
+        "root",
+        jax.tree_util.tree_map(lambda leaf: leaf + 0.01, root_params),
+        "ALL_P0",
+        1,
+    )
+    task = make_permuted_task(synthetic_mnist_arrays, identity_permutation(), "P0")
+
+    result = evaluate_addressed_on_arrays(
+        graph,
+        task.train_canvases(),
+        task.train_labels,
+        "node_1_ALL_P0",
+        jax.random.PRNGKey(14),
+        TrainConfig(batch_size=2, epochs=1),
+    )
+
+    assert sum(result.selected_counts.values()) == task.train_labels.shape[0]
+    assert "loss" in result.metrics
+
+
 def test_memory_graph_svg_contains_node_edge_stats(tmp_path) -> None:
     config = VaeConfig(latent_dim=4, encoder_widths=(8,), decoder_widths=(8,))
     root_params = init_mlp_vae_params(jax.random.PRNGKey(5), config)
@@ -98,3 +125,5 @@ def test_memory_graph_svg_contains_node_edge_stats(tmp_path) -> None:
     assert "node_1_ALL_P0" in svg_text
     assert "ALL_P0" in svg_text
     assert "gain +0.250" in svg_text
+    assert "<path" in svg_text
+    assert 'width="190"' in svg_text

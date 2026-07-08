@@ -8,8 +8,9 @@ import jax
 import numpy as np
 
 from apm.data.mnist.task_specs import TaskDataset
-from apm.models.vae_losses import flatten_canvases
-from apm.training import TrainConfig, evaluate_vae, per_example_observed_energy
+from apm.models.backends import ModelBackend, VaeBackend
+from apm.models.mlp_vae import VaeConfig
+from apm.training import TrainConfig
 from apm.memory.dense import DenseMemoryGraph, effective_params, node_ids
 
 
@@ -30,17 +31,18 @@ def observed_energy_matrix(
     rng_key: jax.Array,
     train_config: TrainConfig,
     candidate_node_ids: tuple[str, ...] | None = None,
+    backend: ModelBackend | None = None,
 ) -> np.ndarray:
-    """Return [examples, candidates] observed-digit energies for candidate memory nodes."""
+    """Return [examples, candidates] raw observed-digit energies."""
     candidates = node_ids(graph) if candidate_node_ids is None else candidate_node_ids
+    model_backend = _backend_or_default(backend, train_config)
     return np.stack(
         [
             np.asarray(
-                per_example_observed_energy(
+                model_backend.per_example_observed_energy(
                     effective_params(graph, candidate_id),
                     canvases,
                     jax.random.fold_in(rng_key, candidate_index),
-                    train_config.beta,
                 )
             )
             for candidate_index, candidate_id in enumerate(candidates)
@@ -55,10 +57,11 @@ def select_addresses(
     rng_key: jax.Array,
     train_config: TrainConfig,
     candidate_node_ids: tuple[str, ...] | None = None,
+    backend: ModelBackend | None = None,
 ) -> tuple[tuple[str, ...], np.ndarray]:
     """Select the lowest observed-energy address for each example."""
     candidates = node_ids(graph) if candidate_node_ids is None else candidate_node_ids
-    score_matrix = observed_energy_matrix(graph, canvases, rng_key, train_config, candidates)
+    score_matrix = observed_energy_matrix(graph, canvases, rng_key, train_config, candidates, backend)
     winner_indices = np.argmin(score_matrix, axis=1)
     return tuple(candidates[int(index)] for index in winner_indices), score_matrix
 
@@ -69,11 +72,12 @@ def best_parent_by_observed_energy(
     rng_key: jax.Array,
     train_config: TrainConfig,
     probe_count: int = 1024,
+    backend: ModelBackend | None = None,
 ) -> str:
     """Pick the node with lowest mean observed-digit energy on a train probe."""
     probe_canvases = canvases[: min(probe_count, canvases.shape[0])]
     candidates = node_ids(graph)
-    score_matrix = observed_energy_matrix(graph, probe_canvases, rng_key, train_config, candidates)
+    score_matrix = observed_energy_matrix(graph, probe_canvases, rng_key, train_config, candidates, backend)
     return candidates[int(np.argmin(np.mean(score_matrix, axis=0)))]
 
 
@@ -83,15 +87,31 @@ def evaluate_node_on_task(
     task: TaskDataset,
     rng_key: jax.Array,
     train_config: TrainConfig,
+    backend: ModelBackend | None = None,
 ) -> dict[str, float]:
     """Evaluate one graph node on one task's test canvases."""
-    return evaluate_vae(
-        effective_params(graph, node_id),
-        flatten_canvases(task.test_canvases()),
+    return evaluate_node_on_arrays(
+        graph,
+        node_id,
+        task.test_canvases(),
         task.test_labels,
         rng_key,
         train_config,
+        backend,
     )
+
+
+def evaluate_node_on_arrays(
+    graph: DenseMemoryGraph,
+    node_id: str,
+    canvases: np.ndarray,
+    labels: np.ndarray,
+    rng_key: jax.Array,
+    train_config: TrainConfig,
+    backend: ModelBackend | None = None,
+) -> dict[str, float]:
+    """Evaluate one graph node on explicit canvas and label arrays."""
+    return _backend_or_default(backend, train_config).evaluate(effective_params(graph, node_id), canvases, labels, rng_key)
 
 
 def evaluate_addressed_on_task(
@@ -101,21 +121,44 @@ def evaluate_addressed_on_task(
     rng_key: jax.Array,
     train_config: TrainConfig,
     candidate_node_ids: tuple[str, ...] | None = None,
+    backend: ModelBackend | None = None,
 ) -> AddressedEvaluation:
     """Evaluate addressed memory on a task by grouping examples under selected nodes."""
-    canvases = task.test_canvases()
-    selected_node_ids, score_matrix = select_addresses(graph, canvases, rng_key, train_config, candidate_node_ids)
+    return evaluate_addressed_on_arrays(
+        graph,
+        task.test_canvases(),
+        task.test_labels,
+        oracle_node_id,
+        rng_key,
+        train_config,
+        candidate_node_ids,
+        backend,
+    )
+
+
+def evaluate_addressed_on_arrays(
+    graph: DenseMemoryGraph,
+    canvases: np.ndarray,
+    labels: np.ndarray,
+    oracle_node_id: str,
+    rng_key: jax.Array,
+    train_config: TrainConfig,
+    candidate_node_ids: tuple[str, ...] | None = None,
+    backend: ModelBackend | None = None,
+) -> AddressedEvaluation:
+    """Evaluate addressed memory on explicit arrays by grouping examples under selected nodes."""
+    model_backend = _backend_or_default(backend, train_config)
+    selected_node_ids, score_matrix = select_addresses(graph, canvases, rng_key, train_config, candidate_node_ids, model_backend)
     selected_array = np.asarray(selected_node_ids, dtype=object)
     metrics_by_node = tuple(
         (
             node_id,
             int(np.sum(selected_array == node_id)),
-            evaluate_vae(
+            model_backend.evaluate(
                 effective_params(graph, node_id),
-                flatten_canvases(canvases[selected_array == node_id]),
-                task.test_labels[selected_array == node_id],
+                canvases[selected_array == node_id],
+                labels[selected_array == node_id],
                 jax.random.fold_in(rng_key, node_index + 10_000),
-                train_config,
             ),
         )
         for node_index, node_id in enumerate(sorted(set(selected_node_ids)))
@@ -153,3 +196,7 @@ def _weighted_metrics(metrics_by_node: tuple[tuple[str, int, dict[str, float]], 
         metric_name: float(sum(metrics[metric_name] * count for _, count, metrics in metrics_by_node) / total_count)
         for metric_name in metrics_by_node[0][2]
     }
+
+
+def _backend_or_default(backend: ModelBackend | None, train_config: TrainConfig) -> ModelBackend:
+    return backend if backend is not None else VaeBackend(VaeConfig(), train_config)

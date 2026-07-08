@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypeAlias, cast
+from typing import Any, TypeAlias, cast
 
 import jax
 import numpy as np
 
-from apm.models import VaeParams
-
-ParamTree: TypeAlias = VaeParams
+ParamTree: TypeAlias = Any
 
 
 @dataclass(frozen=True)

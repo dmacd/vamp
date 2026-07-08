@@ -21,7 +21,7 @@ from apm.data.mnist.permutations import (
     near_swap_permutation,
     random_digit_permutation,
 )
-from apm.data.mnist.streams import balanced_task_subset, make_permuted_mnist_stream
+from apm.data.mnist.streams import balanced_task_subset, make_digit_mnist_stream, make_permuted_mnist_stream
 from apm.data.mnist.task_specs import (
     TaskDataset,
     TaskSpec,
@@ -50,6 +50,7 @@ __all__ = [
     "identity_permutation",
     "load_mnist",
     "load_mnist_npz",
+    "make_digit_mnist_stream",
     "make_permuted_task",
     "make_permuted_mnist_stream",
     "make_split_permuted_task",

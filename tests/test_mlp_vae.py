@@ -4,12 +4,24 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from apm.models import VaeConfig, init_mlp_vae_params, negative_elbo, vae_forward
+from apm.models import VaeConfig, init_mlp_vae_params, init_vae_params, negative_elbo, vae_forward
 
 
 def test_mlp_vae_initialization_and_forward_shapes() -> None:
     config = VaeConfig()
     params = init_mlp_vae_params(jax.random.PRNGKey(0), config)
+    batch = jnp.zeros((3, config.input_dim), dtype=jnp.float32)
+    outputs = vae_forward(params, batch, jax.random.PRNGKey(1), training=True)
+
+    assert outputs["logits"].shape == (3, config.input_dim)
+    assert outputs["mu"].shape == (3, config.latent_dim)
+    assert outputs["logvar"].shape == (3, config.latent_dim)
+    assert outputs["latent"].shape == (3, config.latent_dim)
+
+
+def test_conv_vae_initialization_and_forward_shapes() -> None:
+    config = VaeConfig(architecture="conv", latent_dim=8, conv_channels=(4, 8), conv_dense_width=16)
+    params = init_vae_params(jax.random.PRNGKey(0), config)
     batch = jnp.zeros((3, config.input_dim), dtype=jnp.float32)
     outputs = vae_forward(params, batch, jax.random.PRNGKey(1), training=True)
 
@@ -34,4 +46,3 @@ def test_negative_elbo_is_finite() -> None:
 
     assert bool(jnp.isfinite(loss))
     assert all(bool(jnp.isfinite(value)) for value in metrics.values())
-

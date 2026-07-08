@@ -9,6 +9,12 @@ from pathlib import Path
 from apm.memory.dense import DenseMemoryGraph, node_ids
 
 TASK_COLORS = ("#2563eb", "#dc2626", "#059669", "#7c3aed", "#ca8a04", "#0891b2")
+NODE_WIDTH = 280
+NODE_HEIGHT = 112
+DEPTH_SPACING = 520
+ROW_SPACING = 150
+EDGE_LABEL_WIDTH = 190
+EDGE_LABEL_HEIGHT = 58
 
 
 @dataclass(frozen=True)
@@ -44,8 +50,8 @@ def write_memory_graph_svg(
 ) -> None:
     """Write a labeled SVG visualization of a dense memory graph."""
     positions = _node_positions(graph)
-    width = max(x for x, _ in positions.values()) + 290
-    height = max(y for _, y in positions.values()) + 150
+    width = max(x for x, _ in positions.values()) + NODE_WIDTH + 50
+    height = max(y for _, y in positions.values()) + NODE_HEIGHT + 46
     edges = "\n".join(
         _edge_markup(
             positions[edge.parent_id],
@@ -82,7 +88,7 @@ def _node_positions(graph: DenseMemoryGraph) -> dict[str, tuple[int, int]]:
         for depth in sorted({node.depth for node in graph.nodes})
     }
     return {
-        node_id: (50 + depth * 300, 62 + index * 130)
+        node_id: (50 + depth * DEPTH_SPACING, 62 + index * ROW_SPACING)
         for depth, ids_at_depth in grouped_ids.items()
         for index, node_id in enumerate(ids_at_depth)
     }
@@ -106,7 +112,7 @@ def _node_markup(position: tuple[int, int], stats: NodeVisualStats, task_colors:
     no_wins = "" if stats.eval_wins else f'<text class="muted" x="{x + 12}" y="{y + 88}">wins: none</text>'
     return "\n".join(
         [
-            f'<rect x="{x}" y="{y}" width="240" height="104" rx="6" fill="#f9fafb" stroke="#9ca3af"/>',
+            f'<rect x="{x}" y="{y}" width="{NODE_WIDTH}" height="{NODE_HEIGHT}" rx="6" fill="#f9fafb" stroke="#9ca3af"/>',
             line_markup,
             badge_markup,
             no_wins,
@@ -117,9 +123,11 @@ def _node_markup(position: tuple[int, int], stats: NodeVisualStats, task_colors:
 def _edge_markup(parent_position: tuple[int, int], child_position: tuple[int, int], stats: EdgeVisualStats) -> str:
     parent_x, parent_y = parent_position
     child_x, child_y = child_position
-    start_x, start_y = parent_x + 240, parent_y + 52
-    end_x, end_y = child_x, child_y + 52
-    label_x, label_y = (start_x + end_x) / 2 - 42, (start_y + end_y) / 2 - 8
+    start_x, start_y = parent_x + NODE_WIDTH + 8, parent_y + NODE_HEIGHT / 2
+    end_x, end_y = child_x - 14, child_y + NODE_HEIGHT / 2
+    control_x = (start_x + end_x) / 2
+    label_x = control_x - EDGE_LABEL_WIDTH / 2
+    label_y = _edge_label_y(start_y, end_y)
     labels = (
         f"{stats.child_task}",
         f"||d|| {stats.delta_l2_norm:.2f}",
@@ -127,11 +135,11 @@ def _edge_markup(parent_position: tuple[int, int], child_position: tuple[int, in
     )
     return "\n".join(
         [
-            f'<line x1="{start_x}" y1="{start_y}" x2="{end_x}" y2="{end_y}" stroke="#6b7280" stroke-width="1.8"/>',
-            f'<polygon points="{end_x},{end_y} {end_x - 8},{end_y - 5} {end_x - 8},{end_y + 5}" fill="#6b7280"/>',
-            f'<rect x="{label_x - 6:.1f}" y="{label_y - 14:.1f}" width="120" height="50" rx="4" fill="#ffffff" stroke="#d1d5db"/>',
+            f'<path d="M {start_x:.1f} {start_y:.1f} C {control_x:.1f} {start_y:.1f}, {control_x:.1f} {end_y:.1f}, {end_x:.1f} {end_y:.1f}" fill="none" stroke="#6b7280" stroke-width="1.8"/>',
+            f'<polygon points="{end_x + 8:.1f},{end_y:.1f} {end_x:.1f},{end_y - 5:.1f} {end_x:.1f},{end_y + 5:.1f}" fill="#6b7280"/>',
+            f'<rect x="{label_x:.1f}" y="{label_y:.1f}" width="{EDGE_LABEL_WIDTH}" height="{EDGE_LABEL_HEIGHT}" rx="5" fill="#ffffff" stroke="#d1d5db"/>',
             "\n".join(
-                f'<text class="edge" x="{label_x:.1f}" y="{label_y + line_index * 15:.1f}">{html.escape(label)}</text>'
+                f'<text class="edge" x="{label_x + 10:.1f}" y="{label_y + 18 + line_index * 16:.1f}">{html.escape(label)}</text>'
                 for line_index, label in enumerate(labels)
             ),
         ]
@@ -166,3 +174,10 @@ def _compact_int(value: int) -> str:
     if value >= 1_000:
         return f"{value / 1_000:.1f}K"
     return str(value)
+
+
+def _edge_label_y(start_y: float, end_y: float) -> float:
+    midpoint = (start_y + end_y) / 2
+    if abs(start_y - end_y) < 8:
+        return max(38.0, midpoint - EDGE_LABEL_HEIGHT - 20)
+    return midpoint - EDGE_LABEL_HEIGHT / 2

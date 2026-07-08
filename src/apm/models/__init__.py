@@ -1,6 +1,6 @@
 """Dataset-agnostic model architectures for addressed-memory experiments."""
 
-from apm.models.mlp_vae import VaeConfig, VaeParams, init_mlp_vae_params, vae_forward
+from apm.models.mlp_vae import VaeConfig, VaeParams, init_conv_vae_params, init_mlp_vae_params, init_vae_params, vae_forward
 from apm.models.vae_losses import (
     bernoulli_bce_with_logits,
     digit_region_bce,
@@ -19,7 +19,9 @@ __all__ = [
     "digit_region_bce",
     "digit_region_flat_mask",
     "flatten_canvases",
+    "init_conv_vae_params",
     "init_mlp_vae_params",
+    "init_vae_params",
     "label_patch_flat_mask",
     "negative_elbo",
     "per_example_negative_elbo",
