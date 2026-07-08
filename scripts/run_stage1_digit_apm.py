@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
+
+os.environ.setdefault("ABSL_MIN_LOG_LEVEL", "2")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 from apm.data import load_mnist
 from apm.data.mnist import make_digit_mnist_stream

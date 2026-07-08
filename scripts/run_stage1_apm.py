@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import html
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
+
+os.environ.setdefault("ABSL_MIN_LOG_LEVEL", "2")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 import jax
 import numpy as np
