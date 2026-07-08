@@ -156,7 +156,7 @@ class VaeBackend:
         )
 
 
-def make_model_backend(model_kind: str, task_epochs: int) -> ModelBackend:
+def make_model_backend(model_kind: str, task_epochs: int, show_progress: bool = False) -> ModelBackend:
     """Create the configured model backend for a benchmark run."""
     if model_kind == "vae":
         return VaeBackend(
@@ -166,5 +166,5 @@ def make_model_backend(model_kind: str, task_epochs: int) -> ModelBackend:
     if model_kind == "fabricpc":
         from apm.models.fabricpc_backend import FabricPcBackend, FabricPcTrainConfig
 
-        return FabricPcBackend(train_config=FabricPcTrainConfig(epochs=task_epochs))
+        return FabricPcBackend(train_config=FabricPcTrainConfig(epochs=task_epochs, show_progress=show_progress))
     raise ValueError(f"unknown model_kind: {model_kind}")

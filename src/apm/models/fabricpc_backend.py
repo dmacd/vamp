@@ -211,7 +211,7 @@ class FabricPcBackend:
         batch_starts = range(0, canvases.shape[0], self.train_config.eval_batch_size)
         batch_iterable = _progress(
             batch_starts,
-            enabled=self.train_config.show_progress and progress_desc is not None,
+            enabled=self.train_config.show_progress,
             desc=progress_desc or "FabricPC eval",
             total=len(batch_starts),
             leave=False,

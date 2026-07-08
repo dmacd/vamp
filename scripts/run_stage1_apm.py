@@ -103,6 +103,7 @@ def run_stage1_benchmark(
     parent_probe_count: int,
     report_canvas_count: int,
     model_kind: str = "vae",
+    show_progress: bool = False,
 ) -> None:
     """Run Stage 1 baselines and dense-delta memory on a supplied task stream."""
     global RUN_DIR, REPLAY_EXAMPLES_PER_TASK, PARENT_PROBE_COUNT, REPORT_CANVAS_COUNT
@@ -111,7 +112,7 @@ def run_stage1_benchmark(
     PARENT_PROBE_COUNT = parent_probe_count
     REPORT_CANVAS_COUNT = report_canvas_count
     RUN_DIR.mkdir(parents=True, exist_ok=True)
-    backend = make_model_backend(model_kind, task_epochs=task_epochs)
+    backend = make_model_backend(model_kind, task_epochs=task_epochs, show_progress=show_progress)
     config_payload = _config_payload(backend, tasks, stream_payload)
     online_run = _run_sequential_baseline("online_sgd", tasks, backend, replay=False)
     replay_run = _run_sequential_baseline("replay_sgd", tasks, backend, replay=True)
