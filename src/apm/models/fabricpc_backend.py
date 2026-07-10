@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -19,6 +20,8 @@ from apm.data.mnist.label_canvas import (
     LABEL_PATCH_ROWS,
 )
 from apm.models.backends import BackendTrainState
+
+ProgressCallback = Callable[[], None]
 
 
 @dataclass(frozen=True)
@@ -131,6 +134,7 @@ class FabricPcBackend:
         train_labels: np.ndarray,
         test_labels: np.ndarray,
         collect_epoch_metrics: bool = True,
+        progress_callback: ProgressCallback | None = None,
     ) -> tuple[BackendTrainState, list[dict[str, int | float]]]:
         train_parts = _canvas_parts(train_canvases)
         params, opt_state, rng_key = state
@@ -143,7 +147,14 @@ class FabricPcBackend:
         )
         for epoch in epoch_iterable:
             rng_key, epoch_key = jax.random.split(rng_key)
-            params, opt_state, train_metrics = self._train_epoch(params, opt_state, train_parts, epoch_key, epoch + 1)
+            params, opt_state, train_metrics = self._train_epoch(
+                params,
+                opt_state,
+                train_parts,
+                epoch_key,
+                epoch + 1,
+                progress_callback,
+            )
             if collect_epoch_metrics:
                 train_eval_key, test_eval_key, rng_key = jax.random.split(rng_key, 3)
                 train_eval_canvases, train_eval_labels = _evaluation_subset(
@@ -194,11 +205,15 @@ class FabricPcBackend:
         canvases: np.ndarray,
         labels: np.ndarray,
         rng_key: jax.Array,
+        progress_callback: ProgressCallback | None = None,
         progress_desc: str | None = None,
     ) -> dict[str, float]:
         if canvases.shape[0] > self.train_config.eval_batch_size:
-            return self._evaluate_batched(params, canvases, labels, rng_key, progress_desc)
-        return self._evaluate_unbatched(params, canvases, labels, rng_key)
+            return self._evaluate_batched(params, canvases, labels, rng_key, progress_desc, progress_callback)
+        metrics = self._evaluate_unbatched(params, canvases, labels, rng_key)
+        if progress_callback is not None:
+            progress_callback()
+        return metrics
 
     def _evaluate_batched(
         self,
@@ -207,6 +222,7 @@ class FabricPcBackend:
         labels: np.ndarray,
         rng_key: jax.Array,
         progress_desc: str | None,
+        progress_callback: ProgressCallback | None = None,
     ) -> dict[str, float]:
         batch_starts = range(0, canvases.shape[0], self.train_config.eval_batch_size)
         batch_iterable = _progress(
@@ -231,6 +247,8 @@ class FabricPcBackend:
                 loss=metrics["loss"],
                 acc=metrics["energy_classifier_accuracy"],
             )
+            if progress_callback is not None:
+                progress_callback()
         return _weighted_metric_average(weighted_rows)
 
     def _evaluate_unbatched(
@@ -277,10 +295,53 @@ class FabricPcBackend:
         params: Any,
         canvases: np.ndarray,
         rng_key: jax.Array,
+        progress_callback: ProgressCallback | None = None,
     ) -> np.ndarray:
         parts = _canvas_parts(canvases)
+        if parts["digit"].shape[0] > self.train_config.eval_batch_size:
+            return self._observed_digit_energy_batched(params, parts["digit"], rng_key, progress_callback)
+        energies = self._observed_digit_energy_unbatched(params, parts["digit"], rng_key)
+        if progress_callback is not None:
+            progress_callback()
+        return energies
+
+    def _observed_digit_energy_batched(
+        self,
+        params: Any,
+        digits: np.ndarray,
+        rng_key: jax.Array,
+        progress_callback: ProgressCallback | None = None,
+    ) -> np.ndarray:
+        batch_starts = range(0, digits.shape[0], self.train_config.eval_batch_size)
+        batch_iterable = _progress(
+            batch_starts,
+            enabled=self.train_config.show_progress,
+            desc="FabricPC observed energy",
+            total=len(batch_starts),
+            leave=False,
+        )
+        batches: list[np.ndarray] = []
+        for batch_index, start in enumerate(batch_iterable):
+            end = min(start + self.train_config.eval_batch_size, digits.shape[0])
+            energies = self._observed_digit_energy_unbatched(
+                params,
+                digits[start:end],
+                jax.random.fold_in(rng_key, batch_index),
+            )
+            batches.append(energies)
+            _set_progress_postfix(batch_iterable, energy=float(np.mean(energies)))
+            if progress_callback is not None:
+                progress_callback()
+        return np.concatenate(batches, axis=0).astype(np.float32)
+
+    def _observed_digit_energy_unbatched(
+        self,
+        params: Any,
+        digits: np.ndarray,
+        rng_key: jax.Array,
+    ) -> np.ndarray:
         return np.asarray(
-            self._observed_digit_energy(params, jnp.asarray(parts["digit"], dtype=jnp.float32), rng_key),
+            self._observed_digit_energy(params, jnp.asarray(digits, dtype=jnp.float32), rng_key),
             dtype=np.float32,
         )
 
@@ -377,6 +438,7 @@ class FabricPcBackend:
         parts: dict[str, np.ndarray],
         rng_key: jax.Array,
         epoch: int,
+        progress_callback: ProgressCallback | None = None,
     ) -> tuple[Any, Any, dict[str, float]]:
         permutation = np.asarray(jax.random.permutation(rng_key, parts["digit"].shape[0]))
         energies: list[float] = []
@@ -402,6 +464,8 @@ class FabricPcBackend:
             )
             energies.append(float(energy) / float(indices.shape[0]))
             _set_progress_postfix(batch_iterable, train_loss=energies[-1])
+            if progress_callback is not None:
+                progress_callback()
         return params, opt_state, {"loss": float(np.mean(energies)), "normal_energy": float(np.mean(energies))}
 
     def _evaluate_batch_jax(

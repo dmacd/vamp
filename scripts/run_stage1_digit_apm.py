@@ -52,6 +52,7 @@ def main() -> None:
         report_canvas_count=args.report_canvas_count,
         model_kind=args.model_kind,
         show_progress=not args.no_progress,
+        include_baselines=args.include_baselines,
     )
 
 
@@ -66,6 +67,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=TASK_EPOCHS)
     parser.add_argument("--parent-probe-count", type=int, default=PARENT_PROBE_COUNT)
     parser.add_argument("--report-canvas-count", type=int, default=REPORT_CANVAS_COUNT)
+    parser.add_argument("--include-baselines", action="store_true", help="Also run online_sgd and replay_sgd baselines.")
     parser.add_argument("--no-progress", action="store_true")
     return parser.parse_args()
 

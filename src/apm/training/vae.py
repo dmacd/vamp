@@ -24,6 +24,7 @@ from apm.models.vae_losses import (
 Array: TypeAlias = jax.Array
 MetricsRow: TypeAlias = dict[str, int | float]
 EpochCallback: TypeAlias = Callable[[int, VaeParams, Array, MetricsRow], None]
+ProgressCallback: TypeAlias = Callable[[], None]
 
 
 class TrainConfig(PClass):
@@ -90,6 +91,7 @@ def continue_train_epochs(
     train_config: TrainConfig,
     epoch_callback: EpochCallback | None = None,
     collect_epoch_metrics: bool = True,
+    progress_callback: ProgressCallback | None = None,
 ) -> tuple[TrainState, list[MetricsRow]]:
     """Continue VAE training from an existing train state."""
     train_targets = flatten_canvases(train_canvases)
@@ -107,6 +109,7 @@ def continue_train_epochs(
             train_targets,
             epoch_key,
             train_config,
+            progress_callback,
         )
         if not collect_epoch_metrics:
             continue
@@ -125,19 +128,29 @@ def continue_train_epochs(
     return TrainState(params=params, opt_state=opt_state, rng_key=rng_key), metrics_rows
 
 
-def evaluate_vae(params: VaeParams, targets: np.ndarray, labels: np.ndarray, rng_key: Array, config: TrainConfig) -> dict[str, float]:
+def evaluate_vae(
+    params: VaeParams,
+    targets: np.ndarray,
+    labels: np.ndarray,
+    rng_key: Array,
+    config: TrainConfig,
+    progress_callback: ProgressCallback | None = None,
+) -> dict[str, float]:
     """Evaluate reconstruction and label diagnostics for flattened canvases."""
     label_array = np.asarray(labels, dtype=np.int64)
-    batch_rows = [
-        _evaluate_batch(
-            params,
-            jnp.asarray(targets[start : start + config.batch_size], dtype=jnp.float32),
-            label_array[start : start + config.batch_size],
-            jax.random.fold_in(rng_key, start),
-            config,
+    batch_rows = []
+    for start in range(0, targets.shape[0], config.batch_size):
+        batch_rows.append(
+            _evaluate_batch(
+                params,
+                jnp.asarray(targets[start : start + config.batch_size], dtype=jnp.float32),
+                label_array[start : start + config.batch_size],
+                jax.random.fold_in(rng_key, start),
+                config,
+            )
         )
-        for start in range(0, targets.shape[0], config.batch_size)
-    ]
+        if progress_callback is not None:
+            progress_callback()
     return _weighted_mean_metrics(batch_rows)
 
 
@@ -251,6 +264,7 @@ def _train_epoch(
     targets: np.ndarray,
     rng_key: Array,
     config: TrainConfig,
+    progress_callback: ProgressCallback | None = None,
 ) -> tuple[VaeParams, optax.OptState, dict[str, float]]:
     permutation = np.asarray(jax.random.permutation(rng_key, targets.shape[0]))
     batches = tuple(
@@ -270,6 +284,8 @@ def _train_epoch(
             config.label_mask_probability,
         )
         batch_metrics.append({name: float(value) for name, value in metrics.items()})
+        if progress_callback is not None:
+            progress_callback()
     return params, opt_state, _mean_metrics(batch_metrics)
 
 

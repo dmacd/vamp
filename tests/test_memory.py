@@ -68,6 +68,7 @@ def test_addressed_evaluation_reports_counts_and_metrics(synthetic_mnist_arrays)
 
     assert sum(result.selected_counts.values()) == task.test_labels.shape[0]
     assert len(result.selected_node_ids) == task.test_labels.shape[0]
+    assert set(result.candidate_mean_energies) == {"root", "node_1_ALL_P0"}
     assert "energy_classifier_accuracy" in result.metrics
 
 
@@ -94,6 +95,7 @@ def test_addressed_evaluation_can_use_train_arrays(synthetic_mnist_arrays) -> No
     )
 
     assert sum(result.selected_counts.values()) == task.train_labels.shape[0]
+    assert set(result.candidate_mean_energies) == {"root", "node_1_ALL_P0"}
     assert "loss" in result.metrics
 
 

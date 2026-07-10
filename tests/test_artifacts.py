@@ -40,7 +40,7 @@ def test_write_svg_line_chart_renders_metric_series(tmp_path) -> None:
     )
 
     svg_text = output_path.read_text(encoding="utf-8")
-    assert svg_text.startswith('<svg xmlns="http://www.w3.org/2000/svg"')
+    assert "<svg" in svg_text
     assert "train" in svg_text
     assert "test" in svg_text
 
@@ -74,3 +74,5 @@ def test_write_html_report_links_charts_snapshots_and_samples(tmp_path) -> None:
     assert "loss.svg" in report_text
     assert "recon_epoch_001.png" in report_text
     assert "sample_grid.png" in report_text
+    assert "report-lightbox" in report_text
+    assert 'data-lightbox-src="loss.svg"' in report_text

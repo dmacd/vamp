@@ -35,6 +35,46 @@ def test_vae_backend_evaluate_reconstruct_and_score_shapes() -> None:
     assert energies.shape == (2,)
 
 
+def test_vae_backend_progress_callbacks_fire_per_batch() -> None:
+    backend = VaeBackend(
+        VaeConfig(latent_dim=4, encoder_widths=(8,), decoder_widths=(8,)),
+        TrainConfig(batch_size=1, epochs=1),
+    )
+    canvases = _synthetic_canvases()
+    labels = np.asarray([0, 1], dtype=np.int64)
+    state = backend.init_state(jax.random.PRNGKey(0))
+    train_calls = [0]
+    eval_calls = [0]
+    energy_calls = [0]
+
+    backend.continue_train(
+        state,
+        canvases,
+        canvases,
+        labels,
+        labels,
+        collect_epoch_metrics=False,
+        progress_callback=lambda: train_calls.__setitem__(0, train_calls[0] + 1),
+    )
+    backend.evaluate(
+        state.params,
+        canvases,
+        labels,
+        jax.random.PRNGKey(1),
+        progress_callback=lambda: eval_calls.__setitem__(0, eval_calls[0] + 1),
+    )
+    backend.per_example_observed_energy(
+        state.params,
+        canvases,
+        jax.random.PRNGKey(2),
+        progress_callback=lambda: energy_calls.__setitem__(0, energy_calls[0] + 1),
+    )
+
+    assert train_calls[0] == 2
+    assert eval_calls[0] == 2
+    assert energy_calls[0] == 2
+
+
 def test_fabricpc_backend_reports_optional_dependency_when_missing() -> None:
     from apm.models.fabricpc_backend import FabricPcBackend, FabricPcTrainConfig
 

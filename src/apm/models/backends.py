@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, NamedTuple, Protocol
 
@@ -21,6 +22,9 @@ from apm.training.vae import (
     per_example_observed_energy,
     reconstruct,
 )
+
+
+ProgressCallback = Callable[[], None]
 
 
 class BackendTrainState(NamedTuple):
@@ -55,6 +59,7 @@ class ModelBackend(Protocol):
         train_labels: np.ndarray,
         test_labels: np.ndarray,
         collect_epoch_metrics: bool = True,
+        progress_callback: ProgressCallback | None = None,
     ) -> tuple[BackendTrainState | TrainState, list[dict[str, int | float]]]:
         """Continue training on one task."""
 
@@ -64,6 +69,7 @@ class ModelBackend(Protocol):
         canvases: np.ndarray,
         labels: np.ndarray,
         rng_key: jax.Array,
+        progress_callback: ProgressCallback | None = None,
     ) -> dict[str, float]:
         """Evaluate params on a canvas batch."""
 
@@ -81,6 +87,7 @@ class ModelBackend(Protocol):
         params: Any,
         canvases: np.ndarray,
         rng_key: jax.Array,
+        progress_callback: ProgressCallback | None = None,
     ) -> np.ndarray:
         """Return raw per-example energy using only observed digit pixels."""
 
@@ -115,6 +122,7 @@ class VaeBackend:
         train_labels: np.ndarray,
         test_labels: np.ndarray,
         collect_epoch_metrics: bool = True,
+        progress_callback: ProgressCallback | None = None,
     ) -> tuple[TrainState, list[dict[str, int | float]]]:
         return continue_train_epochs(
             state,
@@ -124,6 +132,7 @@ class VaeBackend:
             test_labels,
             self.train_config,
             collect_epoch_metrics=collect_epoch_metrics,
+            progress_callback=progress_callback,
         )
 
     def evaluate(
@@ -132,8 +141,9 @@ class VaeBackend:
         canvases: np.ndarray,
         labels: np.ndarray,
         rng_key: jax.Array,
+        progress_callback: ProgressCallback | None = None,
     ) -> dict[str, float]:
-        return evaluate_vae(params, flatten_canvases(canvases), labels, rng_key, self.train_config)
+        return evaluate_vae(params, flatten_canvases(canvases), labels, rng_key, self.train_config, progress_callback)
 
     def reconstruct(
         self,
@@ -149,11 +159,20 @@ class VaeBackend:
         params: VaeParams,
         canvases: np.ndarray,
         rng_key: jax.Array,
+        progress_callback: ProgressCallback | None = None,
     ) -> np.ndarray:
-        return np.asarray(
-            per_example_observed_energy(params, canvases, rng_key, self.train_config.beta),
-            dtype=np.float32,
-        )
+        batches = []
+        for batch_index, start in enumerate(range(0, canvases.shape[0], self.train_config.batch_size)):
+            batch = canvases[start : start + self.train_config.batch_size]
+            batches.append(
+                np.asarray(
+                    per_example_observed_energy(params, batch, jax.random.fold_in(rng_key, batch_index), self.train_config.beta),
+                    dtype=np.float32,
+                )
+            )
+            if progress_callback is not None:
+                progress_callback()
+        return np.concatenate(batches, axis=0)
 
 
 def make_model_backend(model_kind: str, task_epochs: int, show_progress: bool = False) -> ModelBackend:

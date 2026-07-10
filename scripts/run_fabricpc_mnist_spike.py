@@ -165,7 +165,12 @@ def _write_report(run_dir: Path, metrics_rows: list[dict[str, int | float]]) -> 
                     )
                 ),
                 "</section>",
-                "</main></body></html>",
+                "</main>",
+                _report_lightbox(),
+                "<script>",
+                _report_script(),
+                "</script>",
+                "</body></html>",
             ]
         )
         + "\n",
@@ -183,9 +188,77 @@ def _metrics_table(metrics: dict[str, int | float]) -> str:
 
 def _figure_grid(filenames: tuple[str, ...]) -> str:
     return '<div class="grid">' + "\n".join(
-        f'<figure><img src="{html.escape(filename)}" alt="{html.escape(filename)}"><figcaption>{html.escape(filename)}</figcaption></figure>'
+        (
+            f'<figure class="figure-card" role="button" tabindex="0" '
+            f'data-lightbox-src="{html.escape(filename)}" data-lightbox-caption="{html.escape(filename)}">'
+            f'<img src="{html.escape(filename)}" alt="{html.escape(filename)}">'
+            f"<figcaption>{html.escape(filename)}</figcaption>"
+            "</figure>"
+        )
         for filename in filenames
     ) + "</div>"
+
+
+def _report_lightbox() -> str:
+    return "\n".join(
+        [
+            '<div id="report-lightbox" class="lightbox" hidden>',
+            '<button type="button" class="lightbox-close" aria-label="Close">Close</button>',
+            '<figure class="lightbox-figure">',
+            '<img id="report-lightbox-image" alt="">',
+            '<figcaption id="report-lightbox-caption"></figcaption>',
+            "</figure>",
+            "</div>",
+        ]
+    )
+
+
+def _report_script() -> str:
+    return r"""
+const lightbox = document.getElementById("report-lightbox");
+const lightboxImage = document.getElementById("report-lightbox-image");
+const lightboxCaption = document.getElementById("report-lightbox-caption");
+const closeButton = lightbox.querySelector(".lightbox-close");
+
+function openLightbox(card) {
+  const src = card.dataset.lightboxSrc;
+  const caption = card.dataset.lightboxCaption || src;
+  lightboxImage.src = src;
+  lightboxImage.alt = caption;
+  lightboxCaption.textContent = caption;
+  lightbox.hidden = false;
+  document.body.classList.add("modal-open");
+  closeButton.focus();
+}
+
+function closeLightbox() {
+  lightbox.hidden = true;
+  document.body.classList.remove("modal-open");
+  lightboxImage.removeAttribute("src");
+}
+
+document.querySelectorAll(".figure-card").forEach((card) => {
+  card.addEventListener("click", () => openLightbox(card));
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openLightbox(card);
+    }
+  });
+});
+
+closeButton.addEventListener("click", closeLightbox);
+lightbox.addEventListener("click", (event) => {
+  if (event.target === lightbox) {
+    closeLightbox();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !lightbox.hidden) {
+    closeLightbox();
+  }
+});
+""".strip()
 
 
 def _report_css() -> str:
@@ -200,8 +273,20 @@ th, td { border: 1px solid #d1d5db; padding: 7px 9px; text-align: left; vertical
 th { width: 280px; background: #f3f4f6; font-weight: 650; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
 figure { margin: 0; background: #ffffff; border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; }
-img { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+.figure-card { cursor: zoom-in; transition: border-color 120ms ease, box-shadow 120ms ease; }
+.figure-card:focus { outline: 2px solid #2563eb; outline-offset: 2px; }
+.figure-card:hover { border-color: #94a3b8; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08); }
+img { display: block; width: 100%; height: auto; image-rendering: auto; }
+img[src$=".png"] { image-rendering: pixelated; }
 figcaption { margin-top: 8px; color: #374151; font-size: 13px; }
+body.modal-open { overflow: hidden; }
+.lightbox[hidden] { display: none; }
+.lightbox { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 28px; background: rgba(15, 23, 42, 0.88); }
+.lightbox-close { position: fixed; top: 18px; right: 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #111827; border-radius: 6px; padding: 8px 12px; font: inherit; cursor: pointer; }
+.lightbox-figure { width: min(96vw, 1600px); max-height: 92vh; margin: 0; padding: 14px; display: flex; flex-direction: column; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34); }
+.lightbox-figure img { width: 100%; height: auto; max-height: calc(92vh - 72px); object-fit: contain; }
+.lightbox-figure img[src$=".png"] { image-rendering: pixelated; }
+.lightbox-figure figcaption { margin-top: 10px; color: #111827; font-size: 14px; overflow-wrap: anywhere; }
 """.strip()
 
 

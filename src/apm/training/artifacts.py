@@ -5,12 +5,16 @@ from __future__ import annotations
 import binascii
 import html
 import json
+import os
 import struct
+import tempfile
 import zlib
 from typing import NamedTuple, Sequence, TypeAlias
 from pathlib import Path
 
 import numpy as np
+
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "apm-matplotlib-cache"))
 
 MetricsRow: TypeAlias = dict[str, int | float]
 LineSeries: TypeAlias = tuple[str, str]
@@ -71,44 +75,45 @@ def write_svg_line_chart(
     available_series = tuple((key, label) for key, label in series if all(key in row for row in rows))
     if not available_series:
         raise ValueError("cannot write a chart without matching metric series")
-    x_values = np.asarray([float(row["epoch"]) for row in rows], dtype=np.float32)
-    y_values_by_key = {
-        key: np.asarray([float(row[key]) for row in rows], dtype=np.float32)
-        for key, _ in available_series
-    }
-    y_values = np.concatenate(tuple(y_values_by_key.values()))
-    margins = (64, 42, 24, 52)
-    left, top, right, bottom = margins
-    chart_width, chart_height = width - left - right, height - top - bottom
-    x_min, x_max = float(np.min(x_values)), float(np.max(x_values))
-    y_min, y_max = _expanded_range(float(np.min(y_values)), float(np.max(y_values)))
-    point_x = lambda value: left + _range_fraction(float(value), x_min, x_max) * chart_width
-    point_y = lambda value: top + (1.0 - _range_fraction(float(value), y_min, y_max)) * chart_height
-    axis_markup = _chart_axes(title, y_label, width, height, margins, x_min, x_max, y_min, y_max)
-    line_markup = "\n".join(
-        _line_series_markup(
-            color=CHART_COLORS[index % len(CHART_COLORS)],
-            label=label,
-            points=tuple((point_x(x_value), point_y(y_value)) for x_value, y_value in zip(x_values, y_values_by_key[key])),
-            legend_y=top + 18 + index * 18,
-            legend_x=left + 16,
-        )
-        for index, (key, label) in enumerate(available_series)
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+        import matplotlib.pyplot as plt
+        from matplotlib.ticker import MaxNLocator
+    except ImportError as exc:
+        raise ImportError("matplotlib is required to write report line charts") from exc
+
+    x_values = np.asarray([float(row["epoch"]) for row in rows], dtype=np.float64)
+    fig_width = max(width / 96.0, 8.5)
+    fig_height = max(height / 96.0, 3.8)
+    figure, axis = plt.subplots(figsize=(fig_width, fig_height), constrained_layout=True)
+    for key, label in available_series:
+        y_values = np.asarray([float(row[key]) for row in rows], dtype=np.float64)
+        axis.plot(x_values, y_values, marker="o", linewidth=2.0, markersize=4.5, label=label)
+
+    axis.set_title(title, fontsize=13, fontweight="bold", pad=12)
+    axis.set_xlabel("stage")
+    axis.set_ylabel(y_label)
+    axis.xaxis.set_major_locator(MaxNLocator(integer=True))
+    axis.grid(True, which="major", color="#d1d5db", linewidth=0.8, alpha=0.8)
+    axis.spines["top"].set_visible(False)
+    axis.spines["right"].set_visible(False)
+    axis.tick_params(axis="both", labelsize=9)
+    if "accuracy" in y_label.lower():
+        all_y = np.concatenate([np.asarray([float(row[key]) for row in rows], dtype=np.float64) for key, _ in available_series])
+        if np.all((0.0 <= all_y) & (all_y <= 1.0)):
+            axis.set_ylim(-0.02, 1.02)
+    axis.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1.0),
+        borderaxespad=0.0,
+        frameon=False,
+        fontsize=9,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        "\n".join(
-            [
-                f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
-                "<style>text{font-family:Inter,Arial,sans-serif;fill:#111827} .muted{fill:#6b7280;font-size:12px}</style>",
-                axis_markup,
-                line_markup,
-                "</svg>",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    figure.savefig(path, format="svg", bbox_inches="tight", facecolor="white")
+    plt.close(figure)
 
 
 def write_svg_heatmap(
@@ -220,6 +225,10 @@ def write_html_report(
             f"<pre>{html.escape(json.dumps(config_payload, indent=2, sort_keys=True))}</pre>",
             "</section>",
             "</main>",
+            _lightbox_markup(),
+            "<script>",
+            _lightbox_script(),
+            "</script>",
             "</body>",
             "</html>",
         ]
@@ -400,7 +409,8 @@ def _image_grid_markup(images: Sequence[ReportImage]) -> str:
 
 def _image_card(image: ReportImage) -> str:
     return (
-        '<figure class="image-card">'
+        f'<figure class="image-card" role="button" tabindex="0" data-lightbox-src="{html.escape(image.filename)}" '
+        f'data-lightbox-caption="{html.escape(image.title)}">'
         f'<img src="{html.escape(image.filename)}" alt="{html.escape(image.title)}">'
         f"<figcaption>{html.escape(image.title)}</figcaption>"
         "</figure>"
@@ -423,6 +433,68 @@ def _snapshot_markup(snapshots: Sequence[ReconstructionSnapshot]) -> str:
     return f'<div class="snapshots">{snapshot_cards}</div>'
 
 
+def _lightbox_markup() -> str:
+    return "\n".join(
+        [
+            '<div id="report-lightbox" class="lightbox" hidden>',
+            '<button type="button" class="lightbox-close" aria-label="Close">Close</button>',
+            '<figure class="lightbox-figure">',
+            '<img id="report-lightbox-image" alt="">',
+            '<figcaption id="report-lightbox-caption"></figcaption>',
+            "</figure>",
+            "</div>",
+        ]
+    )
+
+
+def _lightbox_script() -> str:
+    return r"""
+const lightbox = document.getElementById("report-lightbox");
+const lightboxImage = document.getElementById("report-lightbox-image");
+const lightboxCaption = document.getElementById("report-lightbox-caption");
+const closeButton = lightbox.querySelector(".lightbox-close");
+
+function openLightbox(card) {
+  const src = card.dataset.lightboxSrc;
+  const caption = card.dataset.lightboxCaption || src;
+  lightboxImage.src = src;
+  lightboxImage.alt = caption;
+  lightboxCaption.textContent = caption;
+  lightbox.hidden = false;
+  document.body.classList.add("modal-open");
+  closeButton.focus();
+}
+
+function closeLightbox() {
+  lightbox.hidden = true;
+  document.body.classList.remove("modal-open");
+  lightboxImage.removeAttribute("src");
+}
+
+document.querySelectorAll("[data-lightbox-src]").forEach((card) => {
+  card.addEventListener("click", () => openLightbox(card));
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openLightbox(card);
+    }
+  });
+});
+
+closeButton.addEventListener("click", closeLightbox);
+lightbox.addEventListener("click", (event) => {
+  if (event.target === lightbox) {
+    closeLightbox();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !lightbox.hidden) {
+    closeLightbox();
+  }
+});
+""".strip()
+
+
 def _report_css() -> str:
     return """
 body { margin: 0; background: #f8fafc; color: #111827; font: 15px/1.45 Inter, Arial, sans-serif; }
@@ -436,9 +508,20 @@ th, td { border: 1px solid #d1d5db; padding: 7px 9px; text-align: left; }
 th { width: 260px; background: #f3f4f6; font-weight: 650; }
 pre { overflow-x: auto; background: #111827; color: #f9fafb; padding: 16px; border-radius: 6px; }
 .image-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
-.image-card { margin: 0; background: #ffffff; border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; }
-.image-card img { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+.image-card { margin: 0; background: #ffffff; border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; cursor: zoom-in; transition: border-color 120ms ease, box-shadow 120ms ease; }
+.image-card:focus { outline: 2px solid #2563eb; outline-offset: 2px; }
+.image-card:hover { border-color: #94a3b8; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08); }
+.image-card img { display: block; width: 100%; height: auto; image-rendering: auto; }
+.image-card img[src$=".png"] { image-rendering: pixelated; }
 .image-card figcaption { margin-top: 8px; color: #374151; font-size: 13px; }
 .snapshots { display: grid; gap: 18px; }
 .snapshot { border-top: 1px solid #d1d5db; padding-top: 16px; }
+body.modal-open { overflow: hidden; }
+.lightbox[hidden] { display: none; }
+.lightbox { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 28px; background: rgba(15, 23, 42, 0.88); }
+.lightbox-close { position: fixed; top: 18px; right: 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #111827; border-radius: 6px; padding: 8px 12px; font: inherit; cursor: pointer; }
+.lightbox-figure { width: min(96vw, 1600px); max-height: 92vh; margin: 0; padding: 14px; display: flex; flex-direction: column; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34); }
+.lightbox-figure img { width: 100%; height: auto; max-height: calc(92vh - 72px); object-fit: contain; }
+.lightbox-figure img[src$=".png"] { image-rendering: pixelated; }
+.lightbox-figure figcaption { margin-top: 10px; color: #111827; font-size: 14px; overflow-wrap: anywhere; }
 """.strip()
