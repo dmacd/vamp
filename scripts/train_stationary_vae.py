@@ -10,7 +10,7 @@ import numpy as np
 from apm.data import load_mnist
 from apm.data.mnist import identity_permutation, make_permuted_task
 from apm.models import VaeConfig, VaeParams
-from apm.training import TrainConfig, config_to_dict, reconstruct, sample, train_epochs
+from apm.training import FixedEpochSchedule, TrainConfig, config_to_dict, reconstruct, sample, schedule_payload, train_epochs
 from apm.training.artifacts import (
     ReconstructionSnapshot,
     ReportImage,
@@ -30,6 +30,7 @@ def main() -> None:
     """Train the default stationary VAE and write metrics, visual grids, charts, and an HTML report."""
     vae_config = VaeConfig()
     train_config = TrainConfig()
+    training_schedule = FixedEpochSchedule(train_config.epochs)
     task = make_permuted_task(load_mnist(allow_download=True), identity_permutation(), "P0")
     train_canvases, test_canvases = task.train_canvases(), task.test_canvases()
     report_canvases = test_canvases[:REPORT_CANVAS_COUNT]
@@ -38,6 +39,7 @@ def main() -> None:
     config_payload = {
         "vae": config_to_dict(vae_config),
         "train": config_to_dict(train_config),
+        "training_schedule": schedule_payload(training_schedule),
         "task": task.spec.serialize(),
     }
 
@@ -45,7 +47,7 @@ def main() -> None:
         if epoch in snapshot_epochs:
             _write_reconstruction_pair(epoch, params, rng_key, report_canvases)
 
-    state, metrics_rows = train_epochs(
+    state, trace = train_epochs(
         train_canvases=train_canvases,
         test_canvases=test_canvases,
         train_labels=task.train_labels,
@@ -53,7 +55,9 @@ def main() -> None:
         vae_config=vae_config,
         train_config=train_config,
         epoch_callback=capture_snapshot,
+        training_schedule=training_schedule,
     )
+    metrics_rows = list(trace.rows)
     metrics_path = RUN_DIR / "metrics.jsonl"
     metrics_path.unlink(missing_ok=True)
     write_json(RUN_DIR / "config.json", config_payload)

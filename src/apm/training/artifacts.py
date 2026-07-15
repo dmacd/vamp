@@ -68,6 +68,7 @@ def write_svg_line_chart(
     y_label: str,
     width: int = 820,
     height: int = 320,
+    x_label: str = "stage",
 ) -> None:
     """Write an SVG line chart for one or more metrics sharing an epoch axis."""
     if not rows:
@@ -93,7 +94,7 @@ def write_svg_line_chart(
         axis.plot(x_values, y_values, marker="o", linewidth=2.0, markersize=4.5, label=label)
 
     axis.set_title(title, fontsize=13, fontweight="bold", pad=12)
-    axis.set_xlabel("stage")
+    axis.set_xlabel(x_label)
     axis.set_ylabel(y_label)
     axis.xaxis.set_major_locator(MaxNLocator(integer=True))
     axis.grid(True, which="major", color="#d1d5db", linewidth=0.8, alpha=0.8)
@@ -225,9 +226,9 @@ def write_html_report(
             f"<pre>{html.escape(json.dumps(config_payload, indent=2, sort_keys=True))}</pre>",
             "</section>",
             "</main>",
-            _lightbox_markup(),
+            report_lightbox_markup(),
             "<script>",
-            _lightbox_script(),
+            report_lightbox_script(),
             "</script>",
             "</body>",
             "</html>",
@@ -433,13 +434,25 @@ def _snapshot_markup(snapshots: Sequence[ReconstructionSnapshot]) -> str:
     return f'<div class="snapshots">{snapshot_cards}</div>'
 
 
-def _lightbox_markup() -> str:
+def report_lightbox_markup() -> str:
+    """Return the shared zoomable report lightbox markup."""
     return "\n".join(
         [
-            '<div id="report-lightbox" class="lightbox" hidden>',
-            '<button type="button" class="lightbox-close" aria-label="Close">Close</button>',
+            '<div id="report-lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Image viewer" hidden>',
             '<figure class="lightbox-figure">',
-            '<img id="report-lightbox-image" alt="">',
+            '<div class="lightbox-toolbar">',
+            '<div class="lightbox-zoom-controls">',
+            '<button type="button" class="lightbox-tool" data-lightbox-action="zoom-out" aria-label="Zoom out" title="Zoom out">-</button>',
+            '<output id="report-lightbox-zoom" class="lightbox-zoom" aria-live="polite">Fit</output>',
+            '<button type="button" class="lightbox-tool" data-lightbox-action="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>',
+            '<button type="button" class="lightbox-tool lightbox-fit" data-lightbox-action="fit" aria-label="Fit to window" title="Fit to window">Fit</button>',
+            '<a id="report-lightbox-open" class="lightbox-tool lightbox-open" target="_blank" rel="noopener" title="Open original image">Open</a>',
+            '</div>',
+            '<button type="button" class="lightbox-tool lightbox-close" aria-label="Close" title="Close">x</button>',
+            '</div>',
+            '<div id="report-lightbox-viewport" class="lightbox-viewport" tabindex="0">',
+            '<img id="report-lightbox-image" alt="" draggable="false">',
+            '</div>',
             '<figcaption id="report-lightbox-caption"></figcaption>',
             "</figure>",
             "</div>",
@@ -447,30 +460,102 @@ def _lightbox_markup() -> str:
     )
 
 
-def _lightbox_script() -> str:
+def report_lightbox_script() -> str:
+    """Return shared zoom, pan, and keyboard behavior for report images."""
     return r"""
 const lightbox = document.getElementById("report-lightbox");
 const lightboxImage = document.getElementById("report-lightbox-image");
 const lightboxCaption = document.getElementById("report-lightbox-caption");
+const lightboxViewport = document.getElementById("report-lightbox-viewport");
+const lightboxZoom = document.getElementById("report-lightbox-zoom");
+const openButton = document.getElementById("report-lightbox-open");
 const closeButton = lightbox.querySelector(".lightbox-close");
+const zoomInButton = lightbox.querySelector('[data-lightbox-action="zoom-in"]');
+const zoomOutButton = lightbox.querySelector('[data-lightbox-action="zoom-out"]');
+const fitButton = lightbox.querySelector('[data-lightbox-action="fit"]');
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 8;
+const ZOOM_STEP = 1.25;
+let zoom = 1;
+let fitScale = 1;
+let dragging = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let dragScrollLeft = 0;
+let dragScrollTop = 0;
+
+function imageSize() {
+  return {
+    width: lightboxImage.naturalWidth || 1,
+    height: lightboxImage.naturalHeight || 1,
+  };
+}
+
+function calculateFitScale() {
+  const size = imageSize();
+  const availableWidth = Math.max(1, lightboxViewport.clientWidth - 32);
+  const availableHeight = Math.max(1, lightboxViewport.clientHeight - 32);
+  fitScale = Math.min(availableWidth / size.width, availableHeight / size.height);
+}
+
+function renderZoom(preserveCenter = true) {
+  const oldWidth = Math.max(1, lightboxViewport.scrollWidth);
+  const oldHeight = Math.max(1, lightboxViewport.scrollHeight);
+  const centerX = (lightboxViewport.scrollLeft + lightboxViewport.clientWidth / 2) / oldWidth;
+  const centerY = (lightboxViewport.scrollTop + lightboxViewport.clientHeight / 2) / oldHeight;
+  const size = imageSize();
+  lightboxImage.style.width = `${Math.max(1, size.width * fitScale * zoom)}px`;
+  lightboxZoom.value = zoom === 1 ? "Fit" : `${Math.round(zoom * 100)}%`;
+  lightboxZoom.textContent = lightboxZoom.value;
+  zoomOutButton.disabled = zoom <= MIN_ZOOM;
+  zoomInButton.disabled = zoom >= MAX_ZOOM;
+  lightboxViewport.classList.toggle("is-zoomed", zoom > 1);
+  if (preserveCenter) {
+    requestAnimationFrame(() => {
+      lightboxViewport.scrollLeft = centerX * lightboxViewport.scrollWidth - lightboxViewport.clientWidth / 2;
+      lightboxViewport.scrollTop = centerY * lightboxViewport.scrollHeight - lightboxViewport.clientHeight / 2;
+    });
+  }
+}
+
+function setZoom(nextZoom, preserveCenter = true) {
+  zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+  renderZoom(preserveCenter);
+}
+
+function fitImage() {
+  zoom = 1;
+  calculateFitScale();
+  renderZoom(false);
+  lightboxViewport.scrollLeft = 0;
+  lightboxViewport.scrollTop = 0;
+}
 
 function openLightbox(card) {
   const src = card.dataset.lightboxSrc;
   const caption = card.dataset.lightboxCaption || src;
-  lightboxImage.src = src;
   lightboxImage.alt = caption;
   lightboxCaption.textContent = caption;
+  openButton.href = src;
   lightbox.hidden = false;
   document.body.classList.add("modal-open");
-  closeButton.focus();
+  lightboxImage.src = src;
+  if (lightboxImage.complete) {
+    fitImage();
+  }
+  lightboxViewport.focus();
 }
 
 function closeLightbox() {
   lightbox.hidden = true;
   document.body.classList.remove("modal-open");
   lightboxImage.removeAttribute("src");
+  lightboxImage.removeAttribute("style");
+  openButton.removeAttribute("href");
+  dragging = false;
 }
 
+lightboxImage.addEventListener("load", fitImage);
 document.querySelectorAll("[data-lightbox-src]").forEach((card) => {
   card.addEventListener("click", () => openLightbox(card));
   card.addEventListener("keydown", (event) => {
@@ -481,22 +566,106 @@ document.querySelectorAll("[data-lightbox-src]").forEach((card) => {
   });
 });
 
+zoomInButton.addEventListener("click", () => setZoom(zoom * ZOOM_STEP));
+zoomOutButton.addEventListener("click", () => setZoom(zoom / ZOOM_STEP));
+fitButton.addEventListener("click", fitImage);
 closeButton.addEventListener("click", closeLightbox);
 lightbox.addEventListener("click", (event) => {
   if (event.target === lightbox) {
     closeLightbox();
   }
 });
+lightboxViewport.addEventListener("wheel", (event) => {
+  if (!event.ctrlKey && !event.metaKey) {
+    return;
+  }
+  event.preventDefault();
+  setZoom(event.deltaY < 0 ? zoom * ZOOM_STEP : zoom / ZOOM_STEP);
+}, { passive: false });
+lightboxViewport.addEventListener("dblclick", () => setZoom(zoom === 1 ? 2 : 1));
+lightboxViewport.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0 || zoom <= 1) {
+    return;
+  }
+  dragging = true;
+  dragStartX = event.clientX;
+  dragStartY = event.clientY;
+  dragScrollLeft = lightboxViewport.scrollLeft;
+  dragScrollTop = lightboxViewport.scrollTop;
+  lightboxViewport.classList.add("is-dragging");
+  lightboxViewport.setPointerCapture(event.pointerId);
+});
+lightboxViewport.addEventListener("pointermove", (event) => {
+  if (!dragging) {
+    return;
+  }
+  lightboxViewport.scrollLeft = dragScrollLeft - (event.clientX - dragStartX);
+  lightboxViewport.scrollTop = dragScrollTop - (event.clientY - dragStartY);
+});
+function finishDrag(event) {
+  dragging = false;
+  lightboxViewport.classList.remove("is-dragging");
+  if (lightboxViewport.hasPointerCapture(event.pointerId)) {
+    lightboxViewport.releasePointerCapture(event.pointerId);
+  }
+}
+lightboxViewport.addEventListener("pointerup", finishDrag);
+lightboxViewport.addEventListener("pointercancel", finishDrag);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !lightbox.hidden) {
     closeLightbox();
+  } else if (!lightbox.hidden && (event.key === "+" || event.key === "=")) {
+    event.preventDefault();
+    setZoom(zoom * ZOOM_STEP);
+  } else if (!lightbox.hidden && event.key === "-") {
+    event.preventDefault();
+    setZoom(zoom / ZOOM_STEP);
+  } else if (!lightbox.hidden && event.key === "0") {
+    event.preventDefault();
+    fitImage();
   }
 });
 """.strip()
 
 
-def _report_css() -> str:
+def report_lightbox_css() -> str:
+    """Return shared styling for the zoomable report lightbox."""
     return """
+body.modal-open { overflow: hidden; }
+.lightbox[hidden] { display: none; }
+.lightbox { box-sizing: border-box; position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; background: rgba(15, 23, 42, 0.9); }
+.lightbox-figure { box-sizing: border-box; width: min(96vw, 1800px); height: min(94vh, 1100px); min-height: 320px; margin: 0; padding: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34); }
+.lightbox-toolbar { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-bottom: 1px solid #d1d5db; background: #f8fafc; }
+.lightbox-zoom-controls { display: flex; align-items: center; gap: 6px; }
+.lightbox-tool { box-sizing: border-box; min-width: 34px; height: 32px; display: inline-grid; place-items: center; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0 9px; background: #ffffff; color: #111827; font: 600 14px/1 Inter, Arial, sans-serif; text-decoration: none; cursor: pointer; }
+.lightbox-tool:hover { border-color: #64748b; background: #f1f5f9; }
+.lightbox-tool:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.lightbox-tool:disabled { color: #94a3b8; cursor: default; }
+.lightbox-fit, .lightbox-open { min-width: 48px; }
+.lightbox-close { min-width: 32px; flex: 0 0 32px; padding: 0; font-size: 16px; }
+.lightbox-zoom { width: 54px; color: #334155; font: 600 12px/1 Inter, Arial, sans-serif; text-align: center; }
+.lightbox-viewport { min-width: 0; min-height: 0; overflow: auto; padding: 16px; overscroll-behavior: contain; background: #e2e8f0; outline: none; }
+.lightbox-viewport:focus-visible { box-shadow: inset 0 0 0 2px #2563eb; }
+.lightbox-viewport.is-zoomed { cursor: grab; }
+.lightbox-viewport.is-dragging { cursor: grabbing; user-select: none; }
+.lightbox-viewport img { width: auto; max-width: none; max-height: none; height: auto; margin: 0 auto; object-fit: initial; }
+.lightbox-viewport img[src$=".png"] { image-rendering: pixelated; }
+.lightbox-figure figcaption { min-height: 20px; margin: 0; padding: 8px 12px; border-top: 1px solid #d1d5db; color: #334155; font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .lightbox { padding: 8px; }
+  .lightbox-figure { width: 100%; height: 100%; }
+  .lightbox-toolbar { gap: 6px; }
+  .lightbox-tool { padding: 0 7px; }
+}
+@media (max-width: 420px) {
+  .lightbox-open { display: none; }
+  .lightbox-zoom { width: 44px; }
+}
+""".strip()
+
+
+def _report_css() -> str:
+    base_css = """
 body { margin: 0; background: #f8fafc; color: #111827; font: 15px/1.45 Inter, Arial, sans-serif; }
 main { max-width: 1120px; margin: 0 auto; padding: 32px 24px 48px; }
 h1 { margin: 0 0 24px; font-size: 28px; }
@@ -516,12 +685,5 @@ pre { overflow-x: auto; background: #111827; color: #f9fafb; padding: 16px; bord
 .image-card figcaption { margin-top: 8px; color: #374151; font-size: 13px; }
 .snapshots { display: grid; gap: 18px; }
 .snapshot { border-top: 1px solid #d1d5db; padding-top: 16px; }
-body.modal-open { overflow: hidden; }
-.lightbox[hidden] { display: none; }
-.lightbox { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 28px; background: rgba(15, 23, 42, 0.88); }
-.lightbox-close { position: fixed; top: 18px; right: 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #111827; border-radius: 6px; padding: 8px 12px; font: inherit; cursor: pointer; }
-.lightbox-figure { width: min(96vw, 1600px); max-height: 92vh; margin: 0; padding: 14px; display: flex; flex-direction: column; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34); }
-.lightbox-figure img { width: 100%; height: auto; max-height: calc(92vh - 72px); object-fit: contain; }
-.lightbox-figure img[src$=".png"] { image-rendering: pixelated; }
-.lightbox-figure figcaption { margin-top: 10px; color: #111827; font-size: 14px; overflow-wrap: anywhere; }
 """.strip()
+    return f"{base_css}\n{report_lightbox_css()}"

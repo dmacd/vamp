@@ -1,5 +1,14 @@
 """Dataset-agnostic training loops, optimizers, and evaluation helpers."""
 
+from apm.training.convergence import (
+    EnergyConvergenceSchedule,
+    EnergyConvergenceTracker,
+    FixedEpochSchedule,
+    TrainingSchedule,
+    TrainingTrace,
+    schedule_payload,
+)
+
 from apm.training.vae import (
     EpochCallback,
     TrainConfig,
@@ -21,9 +30,14 @@ from apm.training.vae import (
 )
 
 __all__ = [
+    "EnergyConvergenceSchedule",
+    "EnergyConvergenceTracker",
     "EpochCallback",
+    "FixedEpochSchedule",
     "TrainConfig",
     "TrainState",
+    "TrainingSchedule",
+    "TrainingTrace",
     "candidate_label_patch_batch",
     "config_to_dict",
     "continue_train_epochs",
@@ -36,6 +50,7 @@ __all__ = [
     "per_example_observed_energy",
     "reconstruct",
     "sample",
+    "schedule_payload",
     "stochastic_label_mask",
     "train_epochs",
 ]

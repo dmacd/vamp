@@ -37,12 +37,14 @@ def test_write_svg_line_chart_renders_metric_series(tmp_path) -> None:
         (("train_loss", "train"), ("test_loss", "test")),
         "Loss",
         "loss",
+        x_label="epoch",
     )
 
     svg_text = output_path.read_text(encoding="utf-8")
     assert "<svg" in svg_text
     assert "train" in svg_text
     assert "test" in svg_text
+    assert "epoch" in svg_text
 
 
 def test_write_svg_heatmap_renders_labels_and_values(tmp_path) -> None:
@@ -76,3 +78,8 @@ def test_write_html_report_links_charts_snapshots_and_samples(tmp_path) -> None:
     assert "sample_grid.png" in report_text
     assert "report-lightbox" in report_text
     assert 'data-lightbox-src="loss.svg"' in report_text
+    assert 'id="report-lightbox-viewport"' in report_text
+    assert 'data-lightbox-action="zoom-in"' in report_text
+    assert 'data-lightbox-action="zoom-out"' in report_text
+    assert 'id="report-lightbox-open"' in report_text
+    assert "function setZoom" in report_text

@@ -41,7 +41,17 @@ from apm.memory import (
 )
 from apm.memory.dense import ParamTree
 from apm.models.backends import ModelBackend, make_model_backend
-from apm.training.artifacts import append_jsonl, write_json, write_png_grid, write_svg_heatmap, write_svg_line_chart
+from apm.training import EnergyConvergenceSchedule, FixedEpochSchedule, TrainingSchedule, TrainingTrace
+from apm.training.artifacts import (
+    append_jsonl,
+    report_lightbox_css,
+    report_lightbox_markup,
+    report_lightbox_script,
+    write_json,
+    write_png_grid,
+    write_svg_heatmap,
+    write_svg_line_chart,
+)
 
 RUN_DIR = Path("results") / "stage1_apm" / "permuted_mnist_dense_delta"
 TASK_SEEDS = (0, 1, 2)
@@ -53,8 +63,8 @@ REPORT_CANVAS_COUNT = 32
 PARENT_PROBE_COUNT = 1024
 ACCURACY_KEY = "energy_classifier_accuracy"
 SUMMARY_WORK_UNITS = 1
-METADATA_WORK_UNITS = 6
-CURVE_WORK_UNITS = 5
+METADATA_WORK_UNITS = 7
+CURVE_WORK_UNITS = 6
 HEATMAP_WORK_UNITS = 3
 REPORT_WORK_UNITS = 1
 
@@ -74,6 +84,7 @@ class BaselineRun:
     """Sequential baseline metrics plus the final parameter state."""
 
     rows: list[dict[str, object]]
+    training_rows: list[dict[str, object]]
     final_params: ParamTree
 
 
@@ -145,7 +156,7 @@ def main() -> None:
             "task_names": tuple(task.spec.name for task in tasks),
         },
         "Stage 1 PermutedMNIST Dense-Delta APM",
-        task_epochs=TASK_EPOCHS,
+        training_schedule=FixedEpochSchedule(TASK_EPOCHS),
         replay_examples_per_task=REPLAY_EXAMPLES_PER_TASK,
         parent_probe_count=PARENT_PROBE_COUNT,
         report_canvas_count=REPORT_CANVAS_COUNT,
@@ -158,7 +169,7 @@ def run_stage1_benchmark(
     tasks: tuple[TaskDataset, ...],
     stream_payload: dict[str, object],
     report_title: str,
-    task_epochs: int,
+    training_schedule: TrainingSchedule,
     replay_examples_per_task: int,
     parent_probe_count: int,
     report_canvas_count: int,
@@ -173,7 +184,7 @@ def run_stage1_benchmark(
     PARENT_PROBE_COUNT = parent_probe_count
     REPORT_CANVAS_COUNT = report_canvas_count
     RUN_DIR.mkdir(parents=True, exist_ok=True)
-    backend = make_model_backend(model_kind, task_epochs=task_epochs, show_progress=False)
+    backend = make_model_backend(model_kind, training_schedule=training_schedule, show_progress=False)
     config_payload = {
         **_config_payload(backend, tasks, stream_payload),
         "benchmark": {"include_baselines": include_baselines},
@@ -181,7 +192,7 @@ def run_stage1_benchmark(
     total_units = _benchmark_work_units(
         tasks,
         backend,
-        task_epochs,
+        training_schedule,
         replay_examples_per_task,
         parent_probe_count,
         report_canvas_count,
@@ -190,6 +201,7 @@ def run_stage1_benchmark(
     with BenchmarkProgress(total_units, show_progress) as progress:
         baseline_params: dict[str, ParamTree] = {}
         metrics_rows: list[dict[str, object]] = []
+        training_rows: list[dict[str, object]] = []
         if include_baselines:
             online_run = _run_sequential_baseline("online_sgd", tasks, backend, replay=False, progress=progress)
             replay_run = _run_sequential_baseline("replay_sgd", tasks, backend, replay=True, progress=progress)
@@ -198,8 +210,14 @@ def run_stage1_benchmark(
                 "replay_sgd": replay_run.final_params,
             }
             metrics_rows.extend(online_run.rows + replay_run.rows)
-        graph, memory_rows, address_rows, energy_rows, graph_snapshots = _run_dense_memory(tasks, backend, progress)
+            training_rows.extend(online_run.training_rows + replay_run.training_rows)
+        graph, memory_rows, address_rows, energy_rows, memory_training_rows, graph_snapshots = _run_dense_memory(
+            tasks,
+            backend,
+            progress,
+        )
         metrics_rows.extend(memory_rows)
+        training_rows.extend(memory_training_rows)
         final_train_rows = _final_split_rows(
             tasks,
             graph,
@@ -210,7 +228,15 @@ def run_stage1_benchmark(
             energy_rows=energy_rows,
             progress=progress,
         )
-        final_summary = _summary_payload(config_payload, graph, metrics_rows, address_rows, graph_snapshots, final_train_rows)
+        final_summary = _summary_payload(
+            config_payload,
+            graph,
+            metrics_rows,
+            address_rows,
+            graph_snapshots,
+            final_train_rows,
+            training_rows,
+        )
         progress.advance(SUMMARY_WORK_UNITS, "summarize final metrics")
 
         metrics_path = RUN_DIR / "metrics.jsonl"
@@ -221,20 +247,29 @@ def run_stage1_benchmark(
         address_diagnostics_path.unlink(missing_ok=True)
         energy_diagnostics_path = RUN_DIR / "observed_energy_diagnostics.jsonl"
         energy_diagnostics_path.unlink(missing_ok=True)
+        training_convergence_path = RUN_DIR / "training_convergence.jsonl"
+        training_convergence_path.unlink(missing_ok=True)
         append_jsonl(metrics_path, metrics_rows)
         append_jsonl(final_train_metrics_path, final_train_rows)
         append_jsonl(address_diagnostics_path, address_rows)
         append_jsonl(energy_diagnostics_path, energy_rows)
+        append_jsonl(training_convergence_path, training_rows)
         write_json(RUN_DIR / "config.json", config_payload)
         write_json(RUN_DIR / "summary.json", final_summary)
         progress.advance(METADATA_WORK_UNITS, "write metrics/config")
 
-        _write_curves(metrics_rows, address_rows, graph_snapshots)
+        _write_curves(metrics_rows, address_rows, training_rows, graph_snapshots)
         progress.advance(CURVE_WORK_UNITS, "write curves")
         _write_heatmaps(tasks, graph, metrics_rows, final_train_rows, address_rows, energy_rows)
         progress.advance(HEATMAP_WORK_UNITS, "write heatmaps")
         _write_reconstruction_grids(tasks, graph, backend, progress)
-        _write_report(tasks, graph, final_summary, graph_snapshots, report_title)
+        _write_report(
+            tuple(task.spec.name for task in tasks),
+            final_summary,
+            training_rows,
+            graph_snapshots,
+            report_title,
+        )
         progress.advance(REPORT_WORK_UNITS, "write report")
     print(RUN_DIR)
 
@@ -248,6 +283,7 @@ def _run_sequential_baseline(
 ) -> BaselineRun:
     state = backend.init_state(jax.random.PRNGKey(backend.train_config.seed))
     rows: list[dict[str, object]] = []
+    training_rows: list[dict[str, object]] = []
     replay_canvases: list[np.ndarray] = []
     replay_labels: list[np.ndarray] = []
     for stage, task in enumerate(tasks, start=1):
@@ -258,7 +294,7 @@ def _run_sequential_baseline(
             train_canvases = np.concatenate((train_canvases, *replay_canvases), axis=0)
             train_labels = np.concatenate((train_labels, *replay_labels), axis=0)
         _progress_phase(progress, f"{phase_prefix}: train")
-        state, _ = backend.continue_train(
+        state, trace = backend.continue_train(
             state,
             train_canvases,
             task.test_canvases(),
@@ -267,7 +303,8 @@ def _run_sequential_baseline(
             collect_epoch_metrics=False,
             progress_callback=_progress_callback(progress, 1, f"{phase_prefix}: train"),
         )
-        _progress_phase(progress, f"{phase_prefix}: train complete")
+        training_rows.extend(_training_trace_rows(trace, algorithm, stage, task.spec.name))
+        _complete_training_progress(progress, backend, train_canvases.shape[0], trace, phase_prefix)
         rows.extend(
             _evaluate_params_across_tasks(
                 algorithm,
@@ -284,7 +321,7 @@ def _run_sequential_baseline(
             indices = _balanced_indices(task.train_labels, REPLAY_EXAMPLES_PER_TASK, seed=stage * 10_000)
             replay_canvases.append(task.train_canvases()[indices])
             replay_labels.append(task.train_labels[indices])
-    return BaselineRun(rows=rows, final_params=state.params)
+    return BaselineRun(rows=rows, training_rows=training_rows, final_params=state.params)
 
 
 def _run_dense_memory(
@@ -296,6 +333,7 @@ def _run_dense_memory(
     list[dict[str, object]],
     list[dict[str, object]],
     list[dict[str, object]],
+    list[dict[str, object]],
     tuple[GraphSnapshot, ...],
 ]:
     root_state = backend.init_state(jax.random.PRNGKey(backend.train_config.seed))
@@ -303,6 +341,7 @@ def _run_dense_memory(
     rows: list[dict[str, object]] = []
     address_rows: list[dict[str, object]] = []
     energy_rows: list[dict[str, object]] = []
+    training_rows: list[dict[str, object]] = []
     graph_snapshots: list[GraphSnapshot] = []
     for stage, task in enumerate(tasks, start=1):
         phase_prefix = f"dense memory stage {stage}/{len(tasks)} {task.spec.name}"
@@ -323,7 +362,7 @@ def _run_dense_memory(
         parent_params = effective_params(graph, parent_id)
         child_state = backend.init_state_from_params(parent_params, jax.random.fold_in(root_state.rng_key, 100 + stage))
         _progress_phase(progress, f"{phase_prefix}: train from {parent_id}")
-        child_state, _ = backend.continue_train(
+        child_state, trace = backend.continue_train(
             child_state,
             task.train_canvases(),
             task.test_canvases(),
@@ -332,7 +371,8 @@ def _run_dense_memory(
             collect_epoch_metrics=False,
             progress_callback=_progress_callback(progress, 1, f"{phase_prefix}: train from {parent_id}"),
         )
-        _progress_phase(progress, f"{phase_prefix}: train complete")
+        training_rows.extend(_training_trace_rows(trace, "dense_memory", stage, task.spec.name))
+        _complete_training_progress(progress, backend, task.train_labels.shape[0], trace, phase_prefix)
         child_id = f"node_{stage}_{task.spec.name}"
         graph = add_dense_delta_node(graph, child_id, parent_id, child_state.params, task.spec.name, stage)
         rows.extend(
@@ -348,7 +388,7 @@ def _run_dense_memory(
             )
         )
         graph_snapshots.append(_write_graph_snapshot(graph, tasks[:stage], stage, backend, progress))
-    return graph, rows, address_rows, energy_rows, tuple(graph_snapshots)
+    return graph, rows, address_rows, energy_rows, training_rows, tuple(graph_snapshots)
 
 
 def _evaluate_params_across_tasks(
@@ -565,7 +605,7 @@ def _edge_eval_gain(
 def _benchmark_work_units(
     tasks: tuple[TaskDataset, ...],
     backend: ModelBackend,
-    task_epochs: int,
+    training_schedule: TrainingSchedule,
     replay_examples_per_task: int,
     parent_probe_count: int,
     report_canvas_count: int,
@@ -574,13 +614,13 @@ def _benchmark_work_units(
     total = 0
     if include_baselines:
         for stage, task in enumerate(tasks, start=1):
-            total += _training_work_units(backend, task.train_labels.shape[0], task_epochs)
+            total += _training_work_units(backend, task.train_labels.shape[0], training_schedule)
             total += sum(_eval_work_units(backend, eval_task.test_labels.shape[0]) for eval_task in tasks[:stage])
 
         for stage, task in enumerate(tasks, start=1):
             replay_count = sum(min(replay_examples_per_task, previous_task.train_labels.shape[0]) for previous_task in tasks[: stage - 1])
             train_count = task.train_labels.shape[0] + replay_count
-            total += _training_work_units(backend, train_count, task_epochs)
+            total += _training_work_units(backend, train_count, training_schedule)
             total += sum(_eval_work_units(backend, eval_task.test_labels.shape[0]) for eval_task in tasks[:stage])
 
     for stage, task in enumerate(tasks, start=1):
@@ -588,7 +628,7 @@ def _benchmark_work_units(
         graph_candidates = stage + 1
         probe_count = min(parent_probe_count, task.train_labels.shape[0])
         total += parent_candidates * _eval_work_units(backend, probe_count)
-        total += _training_work_units(backend, task.train_labels.shape[0], task_epochs)
+        total += _training_work_units(backend, task.train_labels.shape[0], training_schedule)
         total += sum(
             _eval_work_units(backend, eval_task.test_labels.shape[0])
             + graph_candidates * _eval_work_units(backend, eval_task.test_labels.shape[0])
@@ -610,8 +650,47 @@ def _benchmark_work_units(
     return total + SUMMARY_WORK_UNITS + METADATA_WORK_UNITS + CURVE_WORK_UNITS + HEATMAP_WORK_UNITS + REPORT_WORK_UNITS
 
 
-def _training_work_units(backend: ModelBackend, example_count: int, epochs: int) -> int:
-    return max(1, epochs) * _batched_work_units(example_count, _batch_size(backend))
+def _training_work_units(
+    backend: ModelBackend,
+    example_count: int,
+    schedule: TrainingSchedule,
+) -> int:
+    return schedule.epoch_limit * _training_epoch_work_units(backend, example_count, schedule)
+
+
+def _training_epoch_work_units(
+    backend: ModelBackend,
+    example_count: int,
+    schedule: TrainingSchedule,
+) -> int:
+    units = _batched_work_units(example_count, _batch_size(backend))
+    if isinstance(schedule, EnergyConvergenceSchedule):
+        probe_count = min(schedule.probe_count, example_count)
+        units += _eval_work_units(backend, probe_count)
+    return units
+
+
+def _complete_training_progress(
+    progress: BenchmarkProgress | None,
+    backend: ModelBackend,
+    example_count: int,
+    trace: TrainingTrace,
+    phase_prefix: str,
+) -> None:
+    unused_epochs = backend.training_schedule.epoch_limit - trace.epochs_run
+    unused_units = unused_epochs * _training_epoch_work_units(
+        backend,
+        example_count,
+        backend.training_schedule,
+    )
+    if trace.selected_energy is None:
+        detail = f"{trace.stop_reason} after {trace.epochs_run} epochs"
+    else:
+        detail = (
+            f"{trace.stop_reason} after {trace.epochs_run} epochs; "
+            f"selected epoch {trace.selected_epoch}, energy {trace.selected_energy:.6g}"
+        )
+    _progress_advance(progress, unused_units, f"{phase_prefix}: {detail}")
 
 
 def _eval_work_units(backend: ModelBackend, example_count: int) -> int:
@@ -714,6 +793,7 @@ def _observed_energy_heatmap(
 def _write_curves(
     metrics_rows: list[dict[str, object]],
     address_rows: list[dict[str, object]],
+    training_rows: list[dict[str, object]],
     graph_snapshots: tuple[GraphSnapshot, ...],
 ) -> None:
     write_svg_line_chart(
@@ -758,6 +838,19 @@ def _write_curves(
         "Memory Growth",
         "count / MB",
     )
+    convergence_path = RUN_DIR / "training_convergence_curves.svg"
+    convergence_rows, convergence_series = _training_convergence_chart(training_rows)
+    if convergence_rows:
+        write_svg_line_chart(
+            convergence_path,
+            convergence_rows,
+            convergence_series,
+            "Per-Task Digit-Only Energy Convergence",
+            "mean observed-digit energy",
+            x_label="epoch",
+        )
+    else:
+        convergence_path.unlink(missing_ok=True)
 
 
 def _write_heatmaps(
@@ -1053,19 +1146,35 @@ def _addressed_reconstructions(
 
 
 def _write_report(
-    tasks: tuple[TaskDataset, ...],
-    graph: DenseMemoryGraph,
+    task_names: tuple[str, ...],
     summary: dict[str, object],
+    training_rows: list[dict[str, object]],
     graph_snapshots: tuple[GraphSnapshot, ...],
     report_title: str,
 ) -> None:
-    task_names = tuple(task.spec.name for task in tasks)
     graph_images = tuple(snapshot.filename for snapshot in graph_snapshots)
     recon_images = tuple(
         image_name
         for task_name in task_names
         for image_name in (f"oracle_recon_{_slug(task_name)}.png", f"addressed_recon_{_slug(task_name)}.png")
     )
+    curve_images = (
+        "average_accuracy_curves.svg",
+        "average_loss_curves.svg",
+        "forgetting_curves.svg",
+        "addressing_cost_curves.svg",
+        "memory_growth_curves.svg",
+    )
+    convergence_section = ""
+    if training_rows:
+        curve_images += ("training_convergence_curves.svg",)
+        convergence_section = "\n".join(
+            (
+                "<section><h2>Task Training Convergence</h2>",
+                _convergence_summary_table(training_rows),
+                "</section>",
+            )
+        )
     RUN_DIR.joinpath("report.html").write_text(
         "\n".join(
             [
@@ -1085,8 +1194,9 @@ def _write_report(
                 _summary_table(summary),
                 "</section>",
                 "<section><h2>Curves</h2>",
-                _figure_grid(("average_accuracy_curves.svg", "average_loss_curves.svg", "forgetting_curves.svg", "addressing_cost_curves.svg", "memory_growth_curves.svg")),
+                _figure_grid(curve_images),
                 "</section>",
+                convergence_section,
                 "<section><h2>Heatmaps</h2>",
                 _figure_grid(
                     (
@@ -1109,9 +1219,9 @@ def _write_report(
                 f"<pre>{html.escape(json.dumps(summary, indent=2, sort_keys=True))}</pre>",
                 "</section>",
                 "</main>",
-                _report_lightbox(),
+                report_lightbox_markup(),
                 "<script>",
-                _report_script(),
+                report_lightbox_script(),
                 "</script>",
                 "</body></html>",
             ]
@@ -1137,6 +1247,59 @@ def _metric_row(
         **metrics,
         **({} if extras is None else extras),
     }
+
+
+def _training_trace_rows(
+    trace: TrainingTrace,
+    algorithm: str,
+    stage: int,
+    train_task: str,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "algorithm": algorithm,
+            "stage": stage,
+            "train_task": train_task,
+            **row,
+            "stop_reason": trace.stop_reason,
+            "epochs_run": trace.epochs_run,
+            "selected_epoch": trace.selected_epoch,
+            "selected_energy": trace.selected_energy,
+            "run_converged": trace.converged,
+        }
+        for row in trace.rows
+        if "monitor_energy" in row
+    ]
+
+
+def _training_convergence_chart(
+    training_rows: list[dict[str, object]],
+) -> tuple[tuple[dict[str, int | float], ...], tuple[tuple[str, str], ...]]:
+    memory_rows = [row for row in training_rows if row["algorithm"] == "dense_memory"]
+    if not memory_rows:
+        return (), ()
+    stages = sorted({int(row["stage"]) for row in memory_rows})
+    max_epoch = max(int(row["epoch"]) for row in memory_rows)
+    energy_by_stage_epoch = {
+        (int(row["stage"]), int(row["epoch"])): float(row["monitor_energy"])
+        for row in memory_rows
+    }
+    task_by_stage = {
+        int(row["stage"]): str(row["train_task"])
+        for row in memory_rows
+    }
+    rows = tuple(
+        {
+            "epoch": epoch,
+            **{
+                f"stage_{stage}": energy_by_stage_epoch.get((stage, epoch), float("nan"))
+                for stage in stages
+            },
+        }
+        for epoch in range(1, max_epoch + 1)
+    )
+    series = tuple((f"stage_{stage}", task_by_stage[stage]) for stage in stages)
+    return rows, series
 
 
 def _stage_algorithm_chart_rows(metrics_rows: list[dict[str, object]], metric_name: str) -> tuple[dict[str, int | float], ...]:
@@ -1209,6 +1372,7 @@ def _summary_payload(
     address_rows: list[dict[str, object]],
     graph_snapshots: tuple[GraphSnapshot, ...],
     final_train_rows: list[dict[str, object]],
+    training_rows: list[dict[str, object]],
 ) -> dict[str, object]:
     final_stage = max(int(row["stage"]) for row in metrics_rows)
     final_rows = [row for row in metrics_rows if int(row["stage"]) == final_stage]
@@ -1239,6 +1403,7 @@ def _summary_payload(
             for row in address_rows
             if int(row["stage"]) == final_stage
         },
+        "training_runs": _training_run_summaries(training_rows),
     }
 
 
@@ -1298,6 +1463,44 @@ def _summary_table(summary: dict[str, object]) -> str:
     return "<table>" + "\n".join(f"<tr><th>{html.escape(key)}</th><td>{html.escape(str(value))}</td></tr>" for key, value in rows) + "</table>"
 
 
+def _training_run_summaries(training_rows: list[dict[str, object]]) -> tuple[dict[str, object], ...]:
+    final_rows: dict[tuple[str, int, str], dict[str, object]] = {}
+    for row in training_rows:
+        key = (str(row["algorithm"]), int(row["stage"]), str(row["train_task"]))
+        if key not in final_rows or int(row["epoch"]) > int(final_rows[key]["epoch"]):
+            final_rows[key] = row
+    return tuple(
+        {
+            "algorithm": algorithm,
+            "stage": stage,
+            "train_task": train_task,
+            "epochs_run": int(row["epochs_run"]),
+            "selected_epoch": int(row["selected_epoch"]),
+            "selected_energy": float(row["selected_energy"]),
+            "stop_reason": str(row["stop_reason"]),
+            "converged": bool(row["run_converged"]),
+        }
+        for (algorithm, stage, train_task), row in final_rows.items()
+    )
+
+
+def _convergence_summary_table(training_rows: list[dict[str, object]]) -> str:
+    summaries = _training_run_summaries(training_rows)
+    header = "<tr><th>algorithm</th><th>task</th><th>epochs</th><th>selected epoch</th><th>energy</th><th>status</th></tr>"
+    body = "\n".join(
+        "<tr>"
+        f"<td>{html.escape(str(row['algorithm']))}</td>"
+        f"<td>{html.escape(str(row['train_task']))}</td>"
+        f"<td>{int(row['epochs_run'])}</td>"
+        f"<td>{int(row['selected_epoch'])}</td>"
+        f"<td>{float(row['selected_energy']):.6g}</td>"
+        f"<td>{html.escape(str(row['stop_reason']))}</td>"
+        "</tr>"
+        for row in summaries
+    )
+    return f"<table>{header}{body}</table>"
+
+
 def _figure_grid(filenames: tuple[str, ...]) -> str:
     return '<div class="grid">' + "\n".join(
         (
@@ -1311,70 +1514,8 @@ def _figure_grid(filenames: tuple[str, ...]) -> str:
     ) + "</div>"
 
 
-def _report_lightbox() -> str:
-    return "\n".join(
-        [
-            '<div id="report-lightbox" class="lightbox" hidden>',
-            '<button type="button" class="lightbox-close" aria-label="Close">Close</button>',
-            '<figure class="lightbox-figure">',
-            '<img id="report-lightbox-image" alt="">',
-            '<figcaption id="report-lightbox-caption"></figcaption>',
-            "</figure>",
-            "</div>",
-        ]
-    )
-
-
-def _report_script() -> str:
-    return r"""
-const lightbox = document.getElementById("report-lightbox");
-const lightboxImage = document.getElementById("report-lightbox-image");
-const lightboxCaption = document.getElementById("report-lightbox-caption");
-const closeButton = lightbox.querySelector(".lightbox-close");
-
-function openLightbox(card) {
-  const src = card.dataset.lightboxSrc;
-  const caption = card.dataset.lightboxCaption || src;
-  lightboxImage.src = src;
-  lightboxImage.alt = caption;
-  lightboxCaption.textContent = caption;
-  lightbox.hidden = false;
-  document.body.classList.add("modal-open");
-  closeButton.focus();
-}
-
-function closeLightbox() {
-  lightbox.hidden = true;
-  document.body.classList.remove("modal-open");
-  lightboxImage.removeAttribute("src");
-}
-
-document.querySelectorAll(".figure-card").forEach((card) => {
-  card.addEventListener("click", () => openLightbox(card));
-  card.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      openLightbox(card);
-    }
-  });
-});
-
-closeButton.addEventListener("click", closeLightbox);
-lightbox.addEventListener("click", (event) => {
-  if (event.target === lightbox) {
-    closeLightbox();
-  }
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !lightbox.hidden) {
-    closeLightbox();
-  }
-});
-""".strip()
-
-
 def _report_css() -> str:
-    return """
+    base_css = """
 body { margin: 0; background: #f8fafc; color: #111827; font: 15px/1.45 Inter, Arial, sans-serif; }
 main { max-width: 1240px; margin: 0 auto; padding: 32px 24px 48px; }
 h1 { margin: 0 0 24px; font-size: 28px; }
@@ -1392,14 +1533,8 @@ figure { margin: 0; background: #ffffff; border: 1px solid #d1d5db; border-radiu
 img { display: block; width: 100%; height: auto; image-rendering: auto; }
 img[src$=".png"] { image-rendering: pixelated; }
 figcaption { margin-top: 8px; color: #374151; font-size: 13px; }
-body.modal-open { overflow: hidden; }
-.lightbox[hidden] { display: none; }
-.lightbox { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 28px; background: rgba(15, 23, 42, 0.88); }
-.lightbox-close { position: fixed; top: 18px; right: 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #111827; border-radius: 6px; padding: 8px 12px; font: inherit; cursor: pointer; }
-.lightbox-figure { width: min(96vw, 1600px); max-height: 92vh; margin: 0; padding: 14px; display: flex; flex-direction: column; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34); }
-.lightbox-figure img { width: 100%; height: auto; max-height: calc(92vh - 72px); object-fit: contain; }
-.lightbox-figure figcaption { margin-top: 10px; color: #111827; font-size: 14px; overflow-wrap: anywhere; }
 """.strip()
+    return f"{base_css}\n{report_lightbox_css()}"
 
 
 def _slug(value: str) -> str:

@@ -82,6 +82,28 @@ The default digit-incremental run writes the same report/artifact set under:
 results/stage1_apm/digit_mnist_dense_delta/
 ```
 
+Run the FabricPC digit benchmark until each task's observed-digit energy
+converges with:
+
+```bash
+env XLA_PYTHON_CLIENT_PREALLOCATE=false ve/bin/python scripts/run_stage1_digit_apm.py \
+  --model-kind fabricpc \
+  --training-mode energy-convergence \
+  --digits 0 1 2 3 4 5 6 7 8 9 \
+  --train-count 6000 \
+  --test-count 1000 \
+  --replay-count 1000 \
+  --parent-probe-count 1024 \
+  --report-canvas-count 32
+```
+
+The convergence defaults are 10 minimum epochs, 100 maximum epochs, a 0.1%
+relative improvement threshold, five stale epochs, and a fixed 1,024-example
+training probe. The default output is
+`results/stage1_apm/digit_mnist_dense_delta_fabricpc_energy_converged/` and
+includes `training_convergence.jsonl` plus convergence curves and summaries in
+the HTML report. Use `--help` to override each stopping parameter.
+
 Run the FabricPC MNIST generative spike with:
 
 ```bash

@@ -20,6 +20,14 @@ from apm.data.mnist.label_canvas import (
     LABEL_PATCH_ROWS,
 )
 from apm.models.backends import BackendTrainState
+from apm.training.convergence import (
+    EnergyConvergenceSchedule,
+    EnergyConvergenceTracker,
+    FixedEpochSchedule,
+    TrainingSchedule,
+    TrainingTrace,
+    schedule_payload,
+)
 
 ProgressCallback = Callable[[], None]
 
@@ -63,9 +71,11 @@ class FabricPcBackend:
         self,
         model_config: FabricPcConfig | None = None,
         train_config: FabricPcTrainConfig | None = None,
+        training_schedule: TrainingSchedule | None = None,
     ) -> None:
         self.model_config = FabricPcConfig() if model_config is None else model_config
         self.train_config = FabricPcTrainConfig() if train_config is None else train_config
+        self.training_schedule = training_schedule or FixedEpochSchedule(self.train_config.epochs)
         self._fabricpc = _import_fabricpc()
         self.structure = self._build_structure()
         self.optimizer = optax.adamw(
@@ -117,6 +127,7 @@ class FabricPcBackend:
             "model": {"kind": self.kind},
             "fabricpc": asdict(self.model_config),
             "train": asdict(self.train_config),
+            "training_schedule": schedule_payload(self.training_schedule),
         }
 
     def init_state(self, rng_key: jax.Array) -> BackendTrainState:
@@ -135,16 +146,31 @@ class FabricPcBackend:
         test_labels: np.ndarray,
         collect_epoch_metrics: bool = True,
         progress_callback: ProgressCallback | None = None,
-    ) -> tuple[BackendTrainState, list[dict[str, int | float]]]:
+    ) -> tuple[BackendTrainState, TrainingTrace]:
+        schedule = self.training_schedule
         train_parts = _canvas_parts(train_canvases)
         params, opt_state, rng_key = state
-        metrics_rows: list[dict[str, int | float]] = []
+        metrics_rows: list[dict[str, int | float | str | bool]] = []
+        tracker: EnergyConvergenceTracker | None = None
+        monitor_canvases: np.ndarray | None = None
+        monitor_key: jax.Array | None = None
+        best_params = params
+        best_opt_state = opt_state
+        if isinstance(schedule, EnergyConvergenceSchedule):
+            rng_key, probe_index_key, monitor_key = jax.random.split(rng_key, 3)
+            probe_count = min(schedule.probe_count, train_canvases.shape[0])
+            probe_indices = np.asarray(jax.random.permutation(probe_index_key, train_canvases.shape[0]))[:probe_count]
+            monitor_canvases = train_canvases[probe_indices]
+            tracker = EnergyConvergenceTracker(schedule)
+
         epoch_iterable = _progress(
-            range(self.train_config.epochs),
+            range(schedule.epoch_limit),
             enabled=self.train_config.show_progress,
             desc="FabricPC epochs",
-            total=self.train_config.epochs,
+            total=schedule.epoch_limit,
         )
+        epochs_run = 0
+        stop_reason = "fixed_epochs"
         for epoch in epoch_iterable:
             rng_key, epoch_key = jax.random.split(rng_key)
             params, opt_state, train_metrics = self._train_epoch(
@@ -155,6 +181,11 @@ class FabricPcBackend:
                 epoch + 1,
                 progress_callback,
             )
+            epochs_run = epoch + 1
+            metrics_row: dict[str, int | float | str | bool] = {
+                "epoch": epochs_run,
+                **{f"train_{name}": value for name, value in train_metrics.items()},
+            }
             if collect_epoch_metrics:
                 train_eval_key, test_eval_key, rng_key = jax.random.split(rng_key, 3)
                 train_eval_canvases, train_eval_labels = _evaluation_subset(
@@ -181,10 +212,8 @@ class FabricPcBackend:
                     test_eval_key,
                     progress_desc=f"epoch {epoch + 1} test eval",
                 )
-                metrics_rows.append(
+                metrics_row.update(
                     {
-                        "epoch": epoch + 1,
-                        **{f"train_{name}": value for name, value in train_metrics.items()},
                         **{f"train_eval_{name}": value for name, value in train_eval.items()},
                         **{f"test_{name}": value for name, value in test_eval.items()},
                     }
@@ -197,7 +226,57 @@ class FabricPcBackend:
                 )
             else:
                 _set_progress_postfix(epoch_iterable, train_loss=train_metrics["loss"])
-        return BackendTrainState(params=params, opt_state=opt_state, rng_key=rng_key), metrics_rows
+
+            observation = None
+            if tracker is not None:
+                assert monitor_canvases is not None
+                assert monitor_key is not None
+                monitor_energy = float(
+                    np.mean(
+                        self.per_example_observed_energy(
+                            params,
+                            monitor_canvases,
+                            monitor_key,
+                            progress_callback,
+                        )
+                    )
+                )
+                observation = tracker.observe(epochs_run, monitor_energy)
+                metrics_row.update(observation.as_metrics())
+                if observation.is_best:
+                    best_params = params
+                    best_opt_state = opt_state
+                _set_progress_postfix(
+                    epoch_iterable,
+                    energy=monitor_energy,
+                    patience=f"{observation.stale_epochs}/{schedule.patience}",
+                )
+
+            if collect_epoch_metrics or tracker is not None:
+                metrics_rows.append(metrics_row)
+            if observation is not None and observation.converged:
+                stop_reason = "converged"
+                break
+
+        if tracker is not None:
+            if stop_reason != "converged":
+                stop_reason = "max_epochs"
+            params = best_params
+            opt_state = best_opt_state
+            selected_epoch = tracker.best_epoch
+            selected_energy = tracker.best_energy
+        else:
+            selected_epoch = epochs_run
+            selected_energy = None
+        trace = TrainingTrace(
+            rows=tuple(metrics_rows),
+            stop_reason=stop_reason,
+            epochs_run=epochs_run,
+            selected_epoch=selected_epoch,
+            selected_energy=selected_energy,
+            converged=stop_reason == "converged",
+        )
+        return BackendTrainState(params=params, opt_state=opt_state, rng_key=rng_key), trace
 
     def evaluate(
         self,
@@ -462,7 +541,7 @@ class FabricPcBackend:
                 batch,
                 jax.random.fold_in(rng_key, batch_index),
             )
-            energies.append(float(energy) / float(indices.shape[0]))
+            energies.append(float(energy))
             _set_progress_postfix(batch_iterable, train_loss=energies[-1])
             if progress_callback is not None:
                 progress_callback()

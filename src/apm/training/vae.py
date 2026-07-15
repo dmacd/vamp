@@ -20,9 +20,16 @@ from apm.models.vae_losses import (
     per_example_negative_elbo,
     standard_normal_kl,
 )
+from apm.training.convergence import (
+    EnergyConvergenceSchedule,
+    EnergyConvergenceTracker,
+    FixedEpochSchedule,
+    MetricsRow,
+    TrainingSchedule,
+    TrainingTrace,
+)
 
 Array: TypeAlias = jax.Array
-MetricsRow: TypeAlias = dict[str, int | float]
 EpochCallback: TypeAlias = Callable[[int, VaeParams, Array, MetricsRow], None]
 ProgressCallback: TypeAlias = Callable[[], None]
 
@@ -65,7 +72,8 @@ def train_epochs(
     vae_config: VaeConfig,
     train_config: TrainConfig,
     epoch_callback: EpochCallback | None = None,
-) -> tuple[TrainState, list[MetricsRow]]:
+    training_schedule: TrainingSchedule | None = None,
+) -> tuple[TrainState, TrainingTrace]:
     """Train the VAE for the configured number of epochs and collect epoch metrics."""
     rng_key = jax.random.PRNGKey(train_config.seed)
     init_key, rng_key = jax.random.split(rng_key)
@@ -79,6 +87,7 @@ def train_epochs(
         train_config,
         epoch_callback=epoch_callback,
         collect_epoch_metrics=True,
+        training_schedule=training_schedule,
     )
 
 
@@ -92,15 +101,31 @@ def continue_train_epochs(
     epoch_callback: EpochCallback | None = None,
     collect_epoch_metrics: bool = True,
     progress_callback: ProgressCallback | None = None,
-) -> tuple[TrainState, list[MetricsRow]]:
+    training_schedule: TrainingSchedule | None = None,
+) -> tuple[TrainState, TrainingTrace]:
     """Continue VAE training from an existing train state."""
+    schedule = training_schedule or FixedEpochSchedule(train_config.epochs)
     train_targets = flatten_canvases(train_canvases)
     test_targets = flatten_canvases(test_canvases)
     optimizer = optax.adam(train_config.learning_rate)
     params, opt_state, rng_key = state
     train_step = _make_train_step(optimizer)
     metrics_rows: list[MetricsRow] = []
-    for epoch in range(train_config.epochs):
+    tracker: EnergyConvergenceTracker | None = None
+    monitor_targets: np.ndarray | None = None
+    monitor_key: Array | None = None
+    best_params = params
+    best_opt_state = opt_state
+    if isinstance(schedule, EnergyConvergenceSchedule):
+        rng_key, probe_index_key, monitor_key = jax.random.split(rng_key, 3)
+        probe_count = min(schedule.probe_count, train_targets.shape[0])
+        probe_indices = np.asarray(jax.random.permutation(probe_index_key, train_targets.shape[0]))[:probe_count]
+        monitor_targets = train_targets[probe_indices]
+        tracker = EnergyConvergenceTracker(schedule)
+
+    epochs_run = 0
+    stop_reason = "fixed_epochs"
+    for epoch in range(schedule.epoch_limit):
         rng_key, epoch_key = jax.random.split(rng_key)
         params, opt_state, train_metrics = _train_epoch(
             train_step,
@@ -111,21 +136,68 @@ def continue_train_epochs(
             train_config,
             progress_callback,
         )
-        if not collect_epoch_metrics:
-            continue
-        train_eval_key, eval_key, rng_key = jax.random.split(rng_key, 3)
-        train_eval_metrics = evaluate_vae(params, train_targets, train_labels, train_eval_key, train_config)
-        eval_metrics = evaluate_vae(params, test_targets, test_labels, eval_key, train_config)
+        epochs_run = epoch + 1
         metrics_row = {
-            "epoch": epoch + 1,
+            "epoch": epochs_run,
             **{f"train_{name}": value for name, value in train_metrics.items()},
-            **{f"train_eval_{name}": value for name, value in train_eval_metrics.items()},
-            **{f"test_{name}": value for name, value in eval_metrics.items()},
         }
-        metrics_rows.append(metrics_row)
+        callback_key = epoch_key
+        if collect_epoch_metrics:
+            train_eval_key, eval_key, rng_key = jax.random.split(rng_key, 3)
+            train_eval_metrics = evaluate_vae(params, train_targets, train_labels, train_eval_key, train_config)
+            eval_metrics = evaluate_vae(params, test_targets, test_labels, eval_key, train_config)
+            metrics_row.update(
+                {
+                    **{f"train_eval_{name}": value for name, value in train_eval_metrics.items()},
+                    **{f"test_{name}": value for name, value in eval_metrics.items()},
+                }
+            )
+            callback_key = eval_key
+
+        observation = None
+        if tracker is not None:
+            assert monitor_targets is not None
+            assert monitor_key is not None
+            monitor_energy = _mean_observed_energy(
+                params,
+                monitor_targets,
+                monitor_key,
+                train_config,
+                progress_callback,
+            )
+            observation = tracker.observe(epochs_run, monitor_energy)
+            metrics_row.update(observation.as_metrics())
+            if observation.is_best:
+                best_params = params
+                best_opt_state = opt_state
+
+        if collect_epoch_metrics or tracker is not None:
+            metrics_rows.append(metrics_row)
         if epoch_callback is not None:
-            epoch_callback(epoch + 1, params, eval_key, metrics_row)
-    return TrainState(params=params, opt_state=opt_state, rng_key=rng_key), metrics_rows
+            epoch_callback(epochs_run, params, callback_key, metrics_row)
+        if observation is not None and observation.converged:
+            stop_reason = "converged"
+            break
+
+    if tracker is not None:
+        if stop_reason != "converged":
+            stop_reason = "max_epochs"
+        params = best_params
+        opt_state = best_opt_state
+        selected_epoch = tracker.best_epoch
+        selected_energy = tracker.best_energy
+    else:
+        selected_epoch = epochs_run
+        selected_energy = None
+    trace = TrainingTrace(
+        rows=tuple(metrics_rows),
+        stop_reason=stop_reason,
+        epochs_run=epochs_run,
+        selected_epoch=selected_epoch,
+        selected_energy=selected_energy,
+        converged=stop_reason == "converged",
+    )
+    return TrainState(params=params, opt_state=opt_state, rng_key=rng_key), trace
 
 
 def evaluate_vae(
@@ -211,6 +283,32 @@ def per_example_observed_energy(params: VaeParams, targets: np.ndarray | Array, 
     masked_inputs = mask_label_patch_flat(target_array)
     outputs = vae_forward(params, masked_inputs, rng_key, training=False)
     return digit_region_bce(outputs["logits"], target_array) + beta * standard_normal_kl(outputs["mu"], outputs["logvar"])
+
+
+def _mean_observed_energy(
+    params: VaeParams,
+    targets: np.ndarray,
+    rng_key: Array,
+    config: TrainConfig,
+    progress_callback: ProgressCallback | None,
+) -> float:
+    batches = []
+    for batch_index, start in enumerate(range(0, targets.shape[0], config.batch_size)):
+        batch = targets[start : start + config.batch_size]
+        batches.append(
+            np.asarray(
+                per_example_observed_energy(
+                    params,
+                    batch,
+                    jax.random.fold_in(rng_key, batch_index),
+                    config.beta,
+                ),
+                dtype=np.float32,
+            )
+        )
+        if progress_callback is not None:
+            progress_callback()
+    return float(np.mean(np.concatenate(batches, axis=0)))
 
 
 def candidate_label_patch_batch(targets: Array) -> Array:

@@ -16,7 +16,16 @@ import jax
 from apm.data import load_mnist
 from apm.data.mnist import balanced_task_subset, identity_permutation, make_permuted_task
 from apm.models.fabricpc_backend import FabricPcBackend, FabricPcConfig, FabricPcTrainConfig
-from apm.training.artifacts import append_jsonl, write_json, write_png_grid, write_svg_line_chart
+from apm.training import schedule_payload
+from apm.training.artifacts import (
+    append_jsonl,
+    report_lightbox_css,
+    report_lightbox_markup,
+    report_lightbox_script,
+    write_json,
+    write_png_grid,
+    write_svg_line_chart,
+)
 
 DEFAULT_RUN_DIR = Path("results") / "fabricpc_mnist_spike"
 
@@ -48,7 +57,7 @@ def main() -> None:
     model_config = FabricPcConfig(latent_dim=args.latent_dim, hidden_widths=tuple(args.hidden_widths))
     backend = FabricPcBackend(model_config=model_config, train_config=train_config)
     state = backend.init_state(jax.random.PRNGKey(args.seed))
-    state, metrics_rows = backend.continue_train(
+    state, trace = backend.continue_train(
         state,
         task.train_canvases(),
         task.test_canvases(),
@@ -56,6 +65,7 @@ def main() -> None:
         task.test_labels,
         collect_epoch_metrics=True,
     )
+    metrics_rows = list(trace.rows)
     _write_outputs(args.output_dir, backend, state.params, task, metrics_rows, args.sample_count)
     print(args.output_dir)
 
@@ -77,6 +87,7 @@ def _write_outputs(
             "model": {"kind": backend.kind},
             "fabricpc": asdict(backend.model_config),
             "train": asdict(backend.train_config),
+            "training_schedule": schedule_payload(backend.training_schedule),
             "stream": {
                 "kind": "mnist_label_canvas_identity",
                 "train_examples": int(task.train_labels.shape[0]),
@@ -166,9 +177,9 @@ def _write_report(run_dir: Path, metrics_rows: list[dict[str, int | float]]) -> 
                 ),
                 "</section>",
                 "</main>",
-                _report_lightbox(),
+                report_lightbox_markup(),
                 "<script>",
-                _report_script(),
+                report_lightbox_script(),
                 "</script>",
                 "</body></html>",
             ]
@@ -199,70 +210,8 @@ def _figure_grid(filenames: tuple[str, ...]) -> str:
     ) + "</div>"
 
 
-def _report_lightbox() -> str:
-    return "\n".join(
-        [
-            '<div id="report-lightbox" class="lightbox" hidden>',
-            '<button type="button" class="lightbox-close" aria-label="Close">Close</button>',
-            '<figure class="lightbox-figure">',
-            '<img id="report-lightbox-image" alt="">',
-            '<figcaption id="report-lightbox-caption"></figcaption>',
-            "</figure>",
-            "</div>",
-        ]
-    )
-
-
-def _report_script() -> str:
-    return r"""
-const lightbox = document.getElementById("report-lightbox");
-const lightboxImage = document.getElementById("report-lightbox-image");
-const lightboxCaption = document.getElementById("report-lightbox-caption");
-const closeButton = lightbox.querySelector(".lightbox-close");
-
-function openLightbox(card) {
-  const src = card.dataset.lightboxSrc;
-  const caption = card.dataset.lightboxCaption || src;
-  lightboxImage.src = src;
-  lightboxImage.alt = caption;
-  lightboxCaption.textContent = caption;
-  lightbox.hidden = false;
-  document.body.classList.add("modal-open");
-  closeButton.focus();
-}
-
-function closeLightbox() {
-  lightbox.hidden = true;
-  document.body.classList.remove("modal-open");
-  lightboxImage.removeAttribute("src");
-}
-
-document.querySelectorAll(".figure-card").forEach((card) => {
-  card.addEventListener("click", () => openLightbox(card));
-  card.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      openLightbox(card);
-    }
-  });
-});
-
-closeButton.addEventListener("click", closeLightbox);
-lightbox.addEventListener("click", (event) => {
-  if (event.target === lightbox) {
-    closeLightbox();
-  }
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !lightbox.hidden) {
-    closeLightbox();
-  }
-});
-""".strip()
-
-
 def _report_css() -> str:
-    return """
+    base_css = """
 body { margin: 0; background: #f8fafc; color: #111827; font: 15px/1.45 Inter, Arial, sans-serif; }
 main { max-width: 1180px; margin: 0 auto; padding: 32px 24px 48px; }
 h1 { margin: 0 0 24px; font-size: 28px; }
@@ -279,15 +228,8 @@ figure { margin: 0; background: #ffffff; border: 1px solid #d1d5db; border-radiu
 img { display: block; width: 100%; height: auto; image-rendering: auto; }
 img[src$=".png"] { image-rendering: pixelated; }
 figcaption { margin-top: 8px; color: #374151; font-size: 13px; }
-body.modal-open { overflow: hidden; }
-.lightbox[hidden] { display: none; }
-.lightbox { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 28px; background: rgba(15, 23, 42, 0.88); }
-.lightbox-close { position: fixed; top: 18px; right: 20px; border: 1px solid #cbd5e1; background: #ffffff; color: #111827; border-radius: 6px; padding: 8px 12px; font: inherit; cursor: pointer; }
-.lightbox-figure { width: min(96vw, 1600px); max-height: 92vh; margin: 0; padding: 14px; display: flex; flex-direction: column; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34); }
-.lightbox-figure img { width: 100%; height: auto; max-height: calc(92vh - 72px); object-fit: contain; }
-.lightbox-figure img[src$=".png"] { image-rendering: pixelated; }
-.lightbox-figure figcaption { margin-top: 10px; color: #111827; font-size: 14px; overflow-wrap: anywhere; }
 """.strip()
+    return f"{base_css}\n{report_lightbox_css()}"
 
 
 def _parse_args() -> argparse.Namespace:

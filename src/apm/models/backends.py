@@ -11,6 +11,7 @@ import numpy as np
 
 from apm.models.mlp_vae import VaeConfig, VaeParams
 from apm.models.vae_losses import flatten_canvases
+from apm.training.convergence import FixedEpochSchedule, TrainingSchedule, TrainingTrace, schedule_payload
 from apm.training.vae import (
     TrainConfig,
     TrainState,
@@ -41,6 +42,7 @@ class ModelBackend(Protocol):
     kind: str
     accuracy_key: str
     train_config: Any
+    training_schedule: TrainingSchedule
 
     def config_payload(self) -> dict[str, object]:
         """Return JSON-serializable backend config."""
@@ -60,7 +62,7 @@ class ModelBackend(Protocol):
         test_labels: np.ndarray,
         collect_epoch_metrics: bool = True,
         progress_callback: ProgressCallback | None = None,
-    ) -> tuple[BackendTrainState | TrainState, list[dict[str, int | float]]]:
+    ) -> tuple[BackendTrainState | TrainState, TrainingTrace]:
         """Continue training on one task."""
 
     def evaluate(
@@ -98,6 +100,7 @@ class VaeBackend:
 
     vae_config: VaeConfig
     train_config: TrainConfig
+    training_schedule: TrainingSchedule
     kind: str = "vae"
     accuracy_key: str = "energy_classifier_accuracy"
 
@@ -106,6 +109,7 @@ class VaeBackend:
             "model": {"kind": self.kind},
             "vae": config_to_dict(self.vae_config),
             "train": config_to_dict(self.train_config),
+            "training_schedule": schedule_payload(self.training_schedule),
         }
 
     def init_state(self, rng_key: jax.Array) -> TrainState:
@@ -123,7 +127,7 @@ class VaeBackend:
         test_labels: np.ndarray,
         collect_epoch_metrics: bool = True,
         progress_callback: ProgressCallback | None = None,
-    ) -> tuple[TrainState, list[dict[str, int | float]]]:
+    ) -> tuple[TrainState, TrainingTrace]:
         return continue_train_epochs(
             state,
             train_canvases,
@@ -133,6 +137,7 @@ class VaeBackend:
             self.train_config,
             collect_epoch_metrics=collect_epoch_metrics,
             progress_callback=progress_callback,
+            training_schedule=self.training_schedule,
         )
 
     def evaluate(
@@ -175,15 +180,23 @@ class VaeBackend:
         return np.concatenate(batches, axis=0)
 
 
-def make_model_backend(model_kind: str, task_epochs: int, show_progress: bool = False) -> ModelBackend:
+def make_model_backend(
+    model_kind: str,
+    training_schedule: TrainingSchedule,
+    show_progress: bool = False,
+) -> ModelBackend:
     """Create the configured model backend for a benchmark run."""
     if model_kind == "vae":
         return VaeBackend(
             vae_config=VaeConfig(architecture="conv"),
-            train_config=TrainConfig(epochs=task_epochs, beta=0.01),
+            train_config=TrainConfig(epochs=training_schedule.epoch_limit, beta=0.01),
+            training_schedule=training_schedule,
         )
     if model_kind == "fabricpc":
         from apm.models.fabricpc_backend import FabricPcBackend, FabricPcTrainConfig
 
-        return FabricPcBackend(train_config=FabricPcTrainConfig(epochs=task_epochs, show_progress=show_progress))
+        return FabricPcBackend(
+            train_config=FabricPcTrainConfig(epochs=training_schedule.epoch_limit, show_progress=show_progress),
+            training_schedule=training_schedule,
+        )
     raise ValueError(f"unknown model_kind: {model_kind}")

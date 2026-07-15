@@ -52,7 +52,7 @@ def test_train_epochs_updates_and_reports_metrics() -> None:
         callback_epochs.append(epoch)
         assert metrics_row["epoch"] == epoch
 
-    state, metrics_rows = train_epochs(
+    state, trace = train_epochs(
         canvases,
         canvases,
         labels,
@@ -62,12 +62,14 @@ def test_train_epochs_updates_and_reports_metrics() -> None:
         epoch_callback=record_epoch,
     )
 
+    metrics_rows = trace.rows
     assert len(metrics_rows) == 1
     assert callback_epochs == [1]
     assert "train_loss" in metrics_rows[0]
     assert "train_eval_label_patch_accuracy" in metrics_rows[0]
     assert "test_label_patch_accuracy" in metrics_rows[0]
     assert state.params["mu"]["bias"].shape == (64,)
+    assert trace.stop_reason == "fixed_epochs"
 
 
 def test_config_to_dict_serializes_pclass_configs() -> None:

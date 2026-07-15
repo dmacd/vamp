@@ -11,7 +11,7 @@ import numpy as np
 from apm.data.mnist.task_specs import TaskDataset
 from apm.models.backends import ModelBackend, VaeBackend
 from apm.models.mlp_vae import VaeConfig
-from apm.training import TrainConfig
+from apm.training import FixedEpochSchedule, TrainConfig
 from apm.memory.dense import DenseMemoryGraph, effective_params, node_ids
 
 
@@ -234,4 +234,8 @@ def _weighted_metrics(metrics_by_node: tuple[tuple[str, int, dict[str, float]], 
 
 
 def _backend_or_default(backend: ModelBackend | None, train_config: TrainConfig) -> ModelBackend:
-    return backend if backend is not None else VaeBackend(VaeConfig(), train_config)
+    return backend if backend is not None else VaeBackend(
+        VaeConfig(),
+        train_config,
+        FixedEpochSchedule(train_config.epochs),
+    )
