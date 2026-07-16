@@ -6,7 +6,7 @@ import html
 from dataclasses import dataclass
 from pathlib import Path
 
-from apm.memory.dense import DenseMemoryGraph, node_ids
+from apm.memory.graph import MemoryGraph, memory_node_ids
 
 TASK_COLORS = ("#2563eb", "#dc2626", "#059669", "#7c3aed", "#ca8a04", "#0891b2")
 NODE_WIDTH = 280
@@ -43,7 +43,7 @@ class EdgeVisualStats:
 
 def write_memory_graph_svg(
     path: Path,
-    graph: DenseMemoryGraph,
+    graph: MemoryGraph[object],
     node_stats: dict[str, NodeVisualStats],
     edge_stats: dict[tuple[str, str], EdgeVisualStats],
     title: str,
@@ -62,7 +62,7 @@ def write_memory_graph_svg(
     )
     nodes = "\n".join(
         _node_markup(positions[node_id], node_stats[node_id], _task_color_map(node_stats))
-        for node_id in node_ids(graph)
+        for node_id in memory_node_ids(graph)
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -82,7 +82,7 @@ def write_memory_graph_svg(
     )
 
 
-def _node_positions(graph: DenseMemoryGraph) -> dict[str, tuple[int, int]]:
+def _node_positions(graph: MemoryGraph[object]) -> dict[str, tuple[int, int]]:
     grouped_ids = {
         depth: tuple(node.node_id for node in graph.nodes if node.depth == depth)
         for depth in sorted({node.depth for node in graph.nodes})

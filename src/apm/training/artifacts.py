@@ -80,6 +80,7 @@ def write_svg_line_chart(
         import matplotlib
 
         matplotlib.use("Agg", force=True)
+        matplotlib.rcParams["svg.hashsalt"] = "apm-report-v1"
         import matplotlib.pyplot as plt
         from matplotlib.ticker import MaxNLocator
     except ImportError as exc:
@@ -113,7 +114,13 @@ def write_svg_line_chart(
         fontsize=9,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(path, format="svg", bbox_inches="tight", facecolor="white")
+    figure.savefig(
+        path,
+        format="svg",
+        bbox_inches="tight",
+        facecolor="white",
+        metadata={"Date": None},
+    )
     plt.close(figure)
 
 

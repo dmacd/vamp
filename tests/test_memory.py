@@ -8,12 +8,12 @@ from apm.data.mnist.task_specs import make_permuted_task
 from apm.memory import (
     EdgeVisualStats,
     NodeVisualStats,
-    add_dense_delta_node,
-    edge_memory_stats,
-    effective_params,
+    add_dense_delta,
+    dense_edge_memory_stats,
+    effective_dense_params,
     evaluate_addressed_on_arrays,
     evaluate_addressed_on_task,
-    init_dense_memory_graph,
+    init_dense_parameter_memory,
     observed_energy_matrix,
     write_memory_graph_svg,
 )
@@ -26,20 +26,20 @@ def test_dense_delta_graph_reconstructs_child_params() -> None:
     root_params = init_mlp_vae_params(jax.random.PRNGKey(0), config)
     child_params = jax.tree_util.tree_map(lambda leaf: leaf + 0.125, root_params)
 
-    graph = add_dense_delta_node(init_dense_memory_graph(root_params), "node_1_ALL_P0", "root", child_params, "ALL_P0", 1)
-    reconstructed_params = effective_params(graph, "node_1_ALL_P0")
+    graph = add_dense_delta(init_dense_parameter_memory(root_params), "node_1_ALL_P0", "root", child_params, "ALL_P0", 1)
+    reconstructed_params = effective_dense_params(graph, "node_1_ALL_P0")
 
     for reconstructed_leaf, child_leaf in zip(
         jax.tree_util.tree_leaves(reconstructed_params),
         jax.tree_util.tree_leaves(child_params),
     ):
         np.testing.assert_allclose(np.asarray(reconstructed_leaf), np.asarray(child_leaf))
-    assert edge_memory_stats(graph)[0].delta_l2_norm > 0.0
+    assert dense_edge_memory_stats(graph)[0].delta_l2_norm > 0.0
 
 
 def test_observed_energy_ignores_label_patch_targets() -> None:
     config = VaeConfig(latent_dim=4, encoder_widths=(8,), decoder_widths=(8,))
-    graph = init_dense_memory_graph(init_mlp_vae_params(jax.random.PRNGKey(1), config))
+    graph = init_dense_parameter_memory(init_mlp_vae_params(jax.random.PRNGKey(1), config))
     image = np.eye(28, dtype=np.float32)
     canvases = embed_batch_digits_and_labels(
         np.stack((image, image), axis=0),
@@ -55,7 +55,7 @@ def test_addressed_evaluation_reports_counts_and_metrics(synthetic_mnist_arrays)
     config = VaeConfig(latent_dim=4, encoder_widths=(8,), decoder_widths=(8,))
     root_params = init_mlp_vae_params(jax.random.PRNGKey(3), config)
     child_params = jax.tree_util.tree_map(lambda leaf: leaf + 0.01, root_params)
-    graph = add_dense_delta_node(init_dense_memory_graph(root_params), "node_1_ALL_P0", "root", child_params, "ALL_P0", 1)
+    graph = add_dense_delta(init_dense_parameter_memory(root_params), "node_1_ALL_P0", "root", child_params, "ALL_P0", 1)
     task = make_permuted_task(synthetic_mnist_arrays, identity_permutation(), "P0")
 
     result = evaluate_addressed_on_task(
@@ -75,8 +75,8 @@ def test_addressed_evaluation_reports_counts_and_metrics(synthetic_mnist_arrays)
 def test_addressed_evaluation_can_use_train_arrays(synthetic_mnist_arrays) -> None:
     config = VaeConfig(latent_dim=4, encoder_widths=(8,), decoder_widths=(8,))
     root_params = init_mlp_vae_params(jax.random.PRNGKey(13), config)
-    graph = add_dense_delta_node(
-        init_dense_memory_graph(root_params),
+    graph = add_dense_delta(
+        init_dense_parameter_memory(root_params),
         "node_1_ALL_P0",
         "root",
         jax.tree_util.tree_map(lambda leaf: leaf + 0.01, root_params),
@@ -102,8 +102,8 @@ def test_addressed_evaluation_can_use_train_arrays(synthetic_mnist_arrays) -> No
 def test_memory_graph_svg_contains_node_edge_stats(tmp_path) -> None:
     config = VaeConfig(latent_dim=4, encoder_widths=(8,), decoder_widths=(8,))
     root_params = init_mlp_vae_params(jax.random.PRNGKey(5), config)
-    graph = add_dense_delta_node(
-        init_dense_memory_graph(root_params),
+    graph = add_dense_delta(
+        init_dense_parameter_memory(root_params),
         "node_1_ALL_P0",
         "root",
         jax.tree_util.tree_map(lambda leaf: leaf + 0.01, root_params),
@@ -114,7 +114,7 @@ def test_memory_graph_svg_contains_node_edge_stats(tmp_path) -> None:
 
     write_memory_graph_svg(
         output_path,
-        graph,
+        graph.graph,
         {
             "root": NodeVisualStats("root", "root", 0, 128, (), 0.1),
             "node_1_ALL_P0": NodeVisualStats("node_1_ALL_P0", "ALL_P0", 1, 256, ("ALL_P0",), 0.9),

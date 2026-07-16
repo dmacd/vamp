@@ -27,6 +27,15 @@ pc = [
 gpu = [
     "jax[cuda12]>=0.6.2",
 ]
+lm = [
+    "huggingface_hub",
+    "tokenizers",
+    "safetensors",
+]
+hf-convert = [
+    "torch",
+    "transformers==4.28.1",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -34,4 +43,8 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q"
+addopts = "-q -m 'not integration and not benchmark'"
+markers = [
+    "integration: tests that require prepared datasets, checkpoints, or extended training",
+    "benchmark: resource-intensive end-to-end, accelerator, memory, or timing tests",
+]

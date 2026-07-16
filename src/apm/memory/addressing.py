@@ -12,7 +12,8 @@ from apm.data.mnist.task_specs import TaskDataset
 from apm.models.backends import ModelBackend, VaeBackend
 from apm.models.mlp_vae import VaeConfig
 from apm.training import FixedEpochSchedule, TrainConfig
-from apm.memory.dense import DenseMemoryGraph, effective_params, node_ids
+from apm.memory.dense import DenseParameterMemory, effective_dense_params
+from apm.memory.graph import memory_node_ids
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class AddressedEvaluation:
 
 
 def observed_energy_matrix(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     canvases: np.ndarray,
     rng_key: jax.Array,
     train_config: TrainConfig,
@@ -37,14 +38,14 @@ def observed_energy_matrix(
     progress_callback: Callable[[], None] | None = None,
 ) -> np.ndarray:
     """Return [examples, candidates] raw observed-digit energies."""
-    candidates = node_ids(graph) if candidate_node_ids is None else candidate_node_ids
+    candidates = memory_node_ids(graph.graph) if candidate_node_ids is None else candidate_node_ids
     model_backend = _backend_or_default(backend, train_config)
     energy_columns = []
     for candidate_index, candidate_id in enumerate(candidates):
         energy_columns.append(
             np.asarray(
                 model_backend.per_example_observed_energy(
-                    effective_params(graph, candidate_id),
+                    effective_dense_params(graph, candidate_id),
                     canvases,
                     jax.random.fold_in(rng_key, candidate_index),
                     progress_callback,
@@ -55,7 +56,7 @@ def observed_energy_matrix(
 
 
 def select_addresses(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     canvases: np.ndarray,
     rng_key: jax.Array,
     train_config: TrainConfig,
@@ -64,14 +65,14 @@ def select_addresses(
     progress_callback: Callable[[], None] | None = None,
 ) -> tuple[tuple[str, ...], np.ndarray]:
     """Select the lowest observed-energy address for each example."""
-    candidates = node_ids(graph) if candidate_node_ids is None else candidate_node_ids
+    candidates = memory_node_ids(graph.graph) if candidate_node_ids is None else candidate_node_ids
     score_matrix = observed_energy_matrix(graph, canvases, rng_key, train_config, candidates, backend, progress_callback)
     winner_indices = np.argmin(score_matrix, axis=1)
     return tuple(candidates[int(index)] for index in winner_indices), score_matrix
 
 
 def best_parent_by_observed_energy(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     canvases: np.ndarray,
     rng_key: jax.Array,
     train_config: TrainConfig,
@@ -81,13 +82,13 @@ def best_parent_by_observed_energy(
 ) -> str:
     """Pick the node with lowest mean observed-digit energy on a train probe."""
     probe_canvases = canvases[: min(probe_count, canvases.shape[0])]
-    candidates = node_ids(graph)
+    candidates = memory_node_ids(graph.graph)
     score_matrix = observed_energy_matrix(graph, probe_canvases, rng_key, train_config, candidates, backend, progress_callback)
     return candidates[int(np.argmin(np.mean(score_matrix, axis=0)))]
 
 
 def evaluate_node_on_task(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     node_id: str,
     task: TaskDataset,
     rng_key: jax.Array,
@@ -109,7 +110,7 @@ def evaluate_node_on_task(
 
 
 def evaluate_node_on_arrays(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     node_id: str,
     canvases: np.ndarray,
     labels: np.ndarray,
@@ -120,7 +121,7 @@ def evaluate_node_on_arrays(
 ) -> dict[str, float]:
     """Evaluate one graph node on explicit canvas and label arrays."""
     return _backend_or_default(backend, train_config).evaluate(
-        effective_params(graph, node_id),
+        effective_dense_params(graph, node_id),
         canvases,
         labels,
         rng_key,
@@ -129,7 +130,7 @@ def evaluate_node_on_arrays(
 
 
 def evaluate_addressed_on_task(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     task: TaskDataset,
     oracle_node_id: str,
     rng_key: jax.Array,
@@ -155,7 +156,7 @@ def evaluate_addressed_on_task(
 
 
 def evaluate_addressed_on_arrays(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     canvases: np.ndarray,
     labels: np.ndarray,
     oracle_node_id: str,
@@ -168,7 +169,7 @@ def evaluate_addressed_on_arrays(
 ) -> AddressedEvaluation:
     """Evaluate addressed memory on explicit arrays by grouping examples under selected nodes."""
     model_backend = _backend_or_default(backend, train_config)
-    candidates = node_ids(graph) if candidate_node_ids is None else candidate_node_ids
+    candidates = memory_node_ids(graph.graph) if candidate_node_ids is None else candidate_node_ids
     selected_node_ids, score_matrix = select_addresses(
         graph,
         canvases,
@@ -184,7 +185,7 @@ def evaluate_addressed_on_arrays(
             node_id,
             int(np.sum(selected_array == node_id)),
             model_backend.evaluate(
-                effective_params(graph, node_id),
+                effective_dense_params(graph, node_id),
                 canvases[selected_array == node_id],
                 labels[selected_array == node_id],
                 jax.random.fold_in(rng_key, node_index + 10_000),

@@ -19,27 +19,26 @@ import numpy as np
 from apm.data import load_mnist
 from apm.data.mnist import TaskDataset, make_permuted_mnist_stream
 from apm.memory import (
-    DenseMemoryGraph,
+    DenseParameterMemory,
     EdgeVisualStats,
     NodeVisualStats,
-    add_dense_delta_node,
+    add_dense_delta,
     address_confusion_matrix,
     best_parent_by_observed_energy,
-    edge_memory_stats,
-    effective_params,
+    dense_edge_memory_stats,
+    dense_graph_memory_bytes,
+    dense_node_memory_bytes,
+    dense_task_node_ids,
+    effective_dense_params,
     evaluate_addressed_on_arrays,
     evaluate_addressed_on_task,
     evaluate_node_on_arrays,
     evaluate_node_on_task,
-    graph_memory_bytes,
-    init_dense_memory_graph,
-    node_ids,
-    node_memory_bytes,
+    init_dense_parameter_memory,
+    memory_node_ids,
     select_addresses,
-    task_node_ids,
     write_memory_graph_svg,
 )
-from apm.memory.dense import ParamTree
 from apm.models.backends import ModelBackend, make_model_backend
 from apm.training import EnergyConvergenceSchedule, FixedEpochSchedule, TrainingSchedule, TrainingTrace
 from apm.training.artifacts import (
@@ -85,7 +84,7 @@ class BaselineRun:
 
     rows: list[dict[str, object]]
     training_rows: list[dict[str, object]]
-    final_params: ParamTree
+    final_params: object
 
 
 class BenchmarkProgress:
@@ -199,7 +198,7 @@ def run_stage1_benchmark(
         include_baselines,
     )
     with BenchmarkProgress(total_units, show_progress) as progress:
-        baseline_params: dict[str, ParamTree] = {}
+        baseline_params: dict[str, object] = {}
         metrics_rows: list[dict[str, object]] = []
         training_rows: list[dict[str, object]] = []
         if include_baselines:
@@ -329,7 +328,7 @@ def _run_dense_memory(
     backend: ModelBackend,
     progress: BenchmarkProgress | None = None,
 ) -> tuple[
-    DenseMemoryGraph,
+    DenseParameterMemory,
     list[dict[str, object]],
     list[dict[str, object]],
     list[dict[str, object]],
@@ -337,7 +336,7 @@ def _run_dense_memory(
     tuple[GraphSnapshot, ...],
 ]:
     root_state = backend.init_state(jax.random.PRNGKey(backend.train_config.seed))
-    graph = init_dense_memory_graph(root_state.params)
+    graph = init_dense_parameter_memory(root_state.params)
     rows: list[dict[str, object]] = []
     address_rows: list[dict[str, object]] = []
     energy_rows: list[dict[str, object]] = []
@@ -359,7 +358,7 @@ def _run_dense_memory(
                 f"{phase_prefix}: parent probe",
             ),
         )
-        parent_params = effective_params(graph, parent_id)
+        parent_params = effective_dense_params(graph, parent_id)
         child_state = backend.init_state_from_params(parent_params, jax.random.fold_in(root_state.rng_key, 100 + stage))
         _progress_phase(progress, f"{phase_prefix}: train from {parent_id}")
         child_state, trace = backend.continue_train(
@@ -374,7 +373,7 @@ def _run_dense_memory(
         training_rows.extend(_training_trace_rows(trace, "dense_memory", stage, task.spec.name))
         _complete_training_progress(progress, backend, task.train_labels.shape[0], trace, phase_prefix)
         child_id = f"node_{stage}_{task.spec.name}"
-        graph = add_dense_delta_node(graph, child_id, parent_id, child_state.params, task.spec.name, stage)
+        graph = add_dense_delta(graph, child_id, parent_id, child_state.params, task.spec.name, stage)
         rows.extend(
             _evaluate_memory_across_tasks(
                 graph,
@@ -395,7 +394,7 @@ def _evaluate_params_across_tasks(
     algorithm: str,
     stage: int,
     train_task: str,
-    params: ParamTree,
+    params: object,
     tasks: tuple[TaskDataset, ...],
     backend: ModelBackend,
     progress: BenchmarkProgress | None = None,
@@ -417,7 +416,7 @@ def _evaluate_params_across_tasks(
 
 
 def _evaluate_memory_across_tasks(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     tasks: tuple[TaskDataset, ...],
     stage: int,
     train_task: str,
@@ -426,9 +425,9 @@ def _evaluate_memory_across_tasks(
     energy_rows: list[dict[str, object]],
     progress: BenchmarkProgress | None = None,
 ) -> list[dict[str, object]]:
-    oracle_nodes = task_node_ids(graph)
+    oracle_nodes = dense_task_node_ids(graph)
     rows: list[dict[str, object]] = []
-    candidate_count = len(node_ids(graph))
+    candidate_count = len(memory_node_ids(graph.graph))
     for task_index, task in enumerate(tasks):
         phase_prefix = f"dense memory stage {stage}: eval {task.spec.name}"
         oracle_node_id = oracle_nodes[task.spec.name]
@@ -473,7 +472,7 @@ def _evaluate_memory_across_tasks(
                         "oracle_node_id": oracle_node_id,
                         "address_accuracy": addressed_eval.address_accuracy,
                         "mean_selected_energy": addressed_eval.mean_selected_energy,
-                        "candidates_scored": len(node_ids(graph)),
+                        "candidates_scored": len(memory_node_ids(graph.graph)),
                     },
                 ),
             )
@@ -490,7 +489,7 @@ def _evaluate_memory_across_tasks(
 
 
 def _write_graph_snapshot(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     tasks: tuple[TaskDataset, ...],
     stage: int,
     backend: ModelBackend,
@@ -501,23 +500,23 @@ def _write_graph_snapshot(
     filename = f"memory_graph_stage_{stage}.svg"
     write_memory_graph_svg(
         RUN_DIR / filename,
-        graph,
+        graph.graph,
         _node_visual_stats(graph, tasks, eval_by_node, winner_by_task, backend.accuracy_key),
         _edge_visual_stats(graph, eval_by_node),
         f"Memory Graph After Stage {stage}",
     )
-    return GraphSnapshot(stage=stage, filename=filename, node_count=len(node_ids(graph)), memory_bytes=graph_memory_bytes(graph))
+    return GraphSnapshot(stage=stage, filename=filename, node_count=len(memory_node_ids(graph.graph)), memory_bytes=dense_graph_memory_bytes(graph))
 
 
 def _evaluate_graph_nodes(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     tasks: tuple[TaskDataset, ...],
     backend: ModelBackend,
     stage: int,
     progress: BenchmarkProgress | None = None,
 ) -> dict[tuple[str, str], dict[str, float]]:
     eval_by_node: dict[tuple[str, str], dict[str, float]] = {}
-    for node_index, node_id in enumerate(node_ids(graph)):
+    for node_index, node_id in enumerate(memory_node_ids(graph.graph)):
         for task_index, task in enumerate(tasks):
             phase = f"dense memory stage {stage}: graph eval {node_id} on {task.spec.name}"
             _progress_phase(progress, phase)
@@ -534,14 +533,14 @@ def _evaluate_graph_nodes(
 
 
 def _winning_nodes_by_task(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     tasks: tuple[TaskDataset, ...],
     eval_by_node: dict[tuple[str, str], dict[str, float]],
     accuracy_key: str,
 ) -> dict[str, str]:
     return {
         task.spec.name: max(
-            node_ids(graph),
+            memory_node_ids(graph.graph),
             key=lambda node_id: (
                 eval_by_node[(node_id, task.spec.name)][accuracy_key],
                 -eval_by_node[(node_id, task.spec.name)]["loss"],
@@ -552,7 +551,7 @@ def _winning_nodes_by_task(
 
 
 def _node_visual_stats(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     tasks: tuple[TaskDataset, ...],
     eval_by_node: dict[tuple[str, str], dict[str, float]],
     winner_by_task: dict[str, str],
@@ -563,19 +562,19 @@ def _node_visual_stats(
             node_id=node.node_id,
             trained_task=node.trained_task,
             depth=node.depth,
-            memory_bytes=node_memory_bytes(graph, node.node_id),
+            memory_bytes=dense_node_memory_bytes(graph, node.node_id),
             eval_wins=tuple(task_name for task_name, winner_id in winner_by_task.items() if winner_id == node.node_id),
             best_task_accuracy=max(
                 (eval_by_node[(node.node_id, task.spec.name)][accuracy_key] for task in tasks),
                 default=0.0,
             ),
         )
-        for node in graph.nodes
+        for node in graph.graph.nodes
     }
 
 
 def _edge_visual_stats(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     eval_by_node: dict[tuple[str, str], dict[str, float]],
 ) -> dict[tuple[str, str], EdgeVisualStats]:
     return {
@@ -587,7 +586,7 @@ def _edge_visual_stats(
             delta_bytes=stats.delta_bytes,
             eval_gain=_edge_eval_gain(stats.parent_id, stats.child_id, stats.child_task, eval_by_node),
         )
-        for stats in edge_memory_stats(graph)
+        for stats in dense_edge_memory_stats(graph)
     }
 
 
@@ -855,14 +854,14 @@ def _write_curves(
 
 def _write_heatmaps(
     tasks: tuple[TaskDataset, ...],
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     metrics_rows: list[dict[str, object]],
     final_train_rows: list[dict[str, object]],
     address_rows: list[dict[str, object]],
     energy_rows: list[dict[str, object]],
 ) -> None:
     task_names = tuple(task.spec.name for task in tasks)
-    memory_node_ids = node_ids(graph)
+    memory_node_id_order = memory_node_ids(graph.graph)
     final_stage = len(tasks)
     algorithms = _algorithms(metrics_rows)
     test_retention = np.asarray(
@@ -904,41 +903,41 @@ def _write_heatmaps(
     )
     write_svg_heatmap(
         RUN_DIR / "address_confusion_heatmap.svg",
-        address_confusion_matrix(final_test_address_rows, task_names, memory_node_ids),
+        address_confusion_matrix(final_test_address_rows, task_names, memory_node_id_order),
         task_names,
-        memory_node_ids,
+        memory_node_id_order,
         "Final Test Address Confusion",
         value_format=".0f",
     )
     write_svg_heatmap(
         RUN_DIR / "final_test_address_confusion_heatmap.svg",
-        address_confusion_matrix(final_test_address_rows, task_names, memory_node_ids),
+        address_confusion_matrix(final_test_address_rows, task_names, memory_node_id_order),
         task_names,
-        memory_node_ids,
+        memory_node_id_order,
         "Final Test Address Confusion",
         value_format=".0f",
     )
     write_svg_heatmap(
         RUN_DIR / "final_train_address_confusion_heatmap.svg",
-        address_confusion_matrix(final_train_address_rows, task_names, memory_node_ids),
+        address_confusion_matrix(final_train_address_rows, task_names, memory_node_id_order),
         task_names,
-        memory_node_ids,
+        memory_node_id_order,
         "Final Train Address Confusion",
         value_format=".0f",
     )
     write_svg_heatmap(
         RUN_DIR / "final_test_observed_energy_heatmap.svg",
-        _observed_energy_heatmap(energy_rows, final_stage, "test", task_names, memory_node_ids),
+        _observed_energy_heatmap(energy_rows, final_stage, "test", task_names, memory_node_id_order),
         task_names,
-        memory_node_ids,
+        memory_node_id_order,
         "Final Test Mean Observed Energy (Lower Better)",
         value_format=".3f",
     )
     write_svg_heatmap(
         RUN_DIR / "final_train_observed_energy_heatmap.svg",
-        _observed_energy_heatmap(energy_rows, final_stage, "train", task_names, memory_node_ids),
+        _observed_energy_heatmap(energy_rows, final_stage, "train", task_names, memory_node_id_order),
         task_names,
-        memory_node_ids,
+        memory_node_id_order,
         "Final Train Mean Observed Energy (Lower Better)",
         value_format=".3f",
     )
@@ -946,8 +945,8 @@ def _write_heatmaps(
 
 def _final_split_rows(
     tasks: tuple[TaskDataset, ...],
-    graph: DenseMemoryGraph,
-    baseline_params: dict[str, ParamTree],
+    graph: DenseParameterMemory,
+    baseline_params: dict[str, object],
     backend: ModelBackend,
     split: str,
     address_rows: list[dict[str, object]],
@@ -985,7 +984,7 @@ def _final_split_rows(
                     {"split": split},
                 )
             )
-    oracle_nodes = task_node_ids(graph)
+    oracle_nodes = dense_task_node_ids(graph)
     memory_rows = [
         row
         for task_index, task in enumerate(tasks)
@@ -1008,7 +1007,7 @@ def _final_split_rows(
 
 
 def _final_memory_split_rows(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     task: TaskDataset,
     canvases: np.ndarray,
     labels: np.ndarray,
@@ -1034,7 +1033,7 @@ def _final_memory_split_rows(
         backend,
         progress_callback=_progress_callback(progress, 1, oracle_phase),
     )
-    address_phase = f"{phase_prefix}: address {len(node_ids(graph))} nodes"
+    address_phase = f"{phase_prefix}: address {len(memory_node_ids(graph.graph))} nodes"
     eval_phase = f"{phase_prefix}: addressed metrics"
     _progress_phase(progress, address_phase)
     addressed_eval = evaluate_addressed_on_arrays(
@@ -1079,7 +1078,7 @@ def _final_memory_split_rows(
                 "oracle_node_id": oracle_node_id,
                 "address_accuracy": addressed_eval.address_accuracy,
                 "mean_selected_energy": addressed_eval.mean_selected_energy,
-                "candidates_scored": len(node_ids(graph)),
+                "candidates_scored": len(memory_node_ids(graph.graph)),
                 "split": split,
             },
         ),
@@ -1088,15 +1087,15 @@ def _final_memory_split_rows(
 
 def _write_reconstruction_grids(
     tasks: tuple[TaskDataset, ...],
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     backend: ModelBackend,
     progress: BenchmarkProgress | None = None,
 ) -> None:
-    oracle_nodes = task_node_ids(graph)
+    oracle_nodes = dense_task_node_ids(graph)
     for task_index, task in enumerate(tasks):
         task_slug = _slug(task.spec.name)
         canvases = task.test_canvases()[:REPORT_CANVAS_COUNT]
-        oracle_params = effective_params(graph, oracle_nodes[task.spec.name])
+        oracle_params = effective_dense_params(graph, oracle_nodes[task.spec.name])
         write_png_grid(
             RUN_DIR / f"oracle_recon_{task_slug}.png",
             backend.reconstruct(oracle_params, canvases, jax.random.PRNGKey(50_000 + task_index), mask_label=True),
@@ -1117,7 +1116,7 @@ def _write_reconstruction_grids(
 
 
 def _addressed_reconstructions(
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     canvases: np.ndarray,
     rng_key: jax.Array,
     backend: ModelBackend,
@@ -1137,7 +1136,7 @@ def _addressed_reconstructions(
     for node_index, node_id in enumerate(sorted(set(selected_node_ids))):
         mask = selected_array == node_id
         reconstructions[mask] = backend.reconstruct(
-            effective_params(graph, node_id),
+            effective_dense_params(graph, node_id),
             canvases[mask],
             jax.random.fold_in(rng_key, node_index),
             mask_label=True,
@@ -1367,7 +1366,7 @@ def _mean_forgetting(metrics_rows: list[dict[str, object]], algorithm: str, stag
 
 def _summary_payload(
     config_payload: dict[str, object],
-    graph: DenseMemoryGraph,
+    graph: DenseParameterMemory,
     metrics_rows: list[dict[str, object]],
     address_rows: list[dict[str, object]],
     graph_snapshots: tuple[GraphSnapshot, ...],
@@ -1379,8 +1378,8 @@ def _summary_payload(
     return {
         "config": config_payload,
         "final_stage": final_stage,
-        "graph_node_count": len(node_ids(graph)),
-        "graph_memory_bytes": graph_memory_bytes(graph),
+        "graph_node_count": len(memory_node_ids(graph.graph)),
+        "graph_memory_bytes": dense_graph_memory_bytes(graph),
         "graph_snapshots": tuple(
             {
                 "stage": snapshot.stage,
