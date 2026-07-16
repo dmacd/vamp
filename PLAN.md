@@ -2,7 +2,10 @@
 
 ## Current Milestone
 
-- Stage 1 supports dense-delta addressed memory over PermutedMNIST and
+- The architectural continual-learning paradigm is named Virtually Addressed
+  Memory for Parameters (VAMP). Its canonical manuscript was lightly revised
+  and renamed to `docs/Virtually_Addressed_Memory_for_Parameters.pdf`.
+- Stage 1 VAMP supports dense-delta addressed memory over PermutedMNIST and
   digit-incremental MNIST with VAE and FabricPC model backends.
 - Benchmark reports include train/test retention, address confusion, raw
   observed-energy diagnostics, memory graphs, reconstructions, and clickable

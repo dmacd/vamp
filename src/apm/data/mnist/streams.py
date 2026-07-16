@@ -33,7 +33,7 @@ def make_permuted_mnist_stream(
     train_count: int = 10_000,
     test_count: int = 2_000,
 ) -> tuple[TaskDataset, ...]:
-    """Build the default all-digit PermutedMNIST stream for Stage 1 APM runs."""
+    """Build the default all-digit PermutedMNIST stream for Stage 1 VAMP runs."""
     tasks = tuple(
         make_permuted_task(
             arrays,

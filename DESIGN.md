@@ -1,4 +1,12 @@
-# Technical Design
+# VAMP Technical Design
+
+## Scope and Terminology
+
+Virtually Addressed Memory for Parameters (VAMP) is the name of the
+architectural continual-learning paradigm developed in this repository. Its
+canonical reference is the lightly revised and renamed
+[Virtually Addressed Memory for Parameters](docs/Virtually_Addressed_Memory_for_Parameters.pdf)
+manuscript, which replaces `docs/Addressed_Parameter_Memories.pdf`.
 
 ## Task Training Schedules
 

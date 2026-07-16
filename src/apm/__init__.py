@@ -1,4 +1,4 @@
-"""Addressed Parameter Memory research prototype."""
+"""VAMP architectural continual-learning research prototype."""
 
 __all__ = ["__version__"]
 

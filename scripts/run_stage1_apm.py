@@ -1,4 +1,4 @@
-"""Run the Stage 1 dense-delta addressed-parameter-memory benchmark."""
+"""Run the Stage 1 dense-delta VAMP benchmark."""
 
 from __future__ import annotations
 
@@ -155,7 +155,7 @@ def main() -> None:
             "replay_examples_per_task": REPLAY_EXAMPLES_PER_TASK,
             "task_names": tuple(task.spec.name for task in tasks),
         },
-        "Stage 1 PermutedMNIST Dense-Delta APM",
+        "Stage 1 PermutedMNIST Dense-Delta VAMP",
         training_schedule=FixedEpochSchedule(TASK_EPOCHS),
         replay_examples_per_task=REPLAY_EXAMPLES_PER_TASK,
         parent_probe_count=PARENT_PROBE_COUNT,

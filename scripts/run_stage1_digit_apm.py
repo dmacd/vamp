@@ -1,4 +1,4 @@
-"""Run Stage 1 dense-delta APM on one MNIST digit task at a time."""
+"""Run Stage 1 dense-delta VAMP on one MNIST digit task at a time."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def main() -> None:
             "test_examples_per_digit": args.test_count,
             "replay_examples_per_task": args.replay_count,
         },
-        f"Stage 1 DigitMNIST Dense-Delta APM ({args.model_kind}, {args.training_mode})",
+        f"Stage 1 DigitMNIST Dense-Delta VAMP ({args.model_kind}, {args.training_mode})",
         training_schedule=training_schedule,
         replay_examples_per_task=args.replay_count,
         parent_probe_count=args.parent_probe_count,

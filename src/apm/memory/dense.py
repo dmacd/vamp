@@ -1,4 +1,4 @@
-"""Dense parameter-delta memory graphs for Stage 1 APM experiments."""
+"""Dense parameter-delta memory graphs for Stage 1 VAMP experiments."""
 
 from __future__ import annotations
 

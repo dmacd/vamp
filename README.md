@@ -1,10 +1,15 @@
-# Addressed Parameter Memory Prototype
+# VAMP Research Prototype
 
-This repository contains research prototypes for addressed parameter memories
-on continual-learning tasks. The first data module provides deterministic
-SplitMNIST, PermutedMNIST, and SplitPermutedMNIST construction over a 32x32
-label-embedded canvas; later modules should reuse `apm.models` and
-`apm.training` across datasets.
+This repository contains research prototypes for **Virtually Addressed Memory
+for Parameters (VAMP)**, an architectural continual-learning paradigm built
+around virtually addressed parameter memories. The project reference
+manuscript was lightly revised and renamed from
+`docs/Addressed_Parameter_Memories.pdf` to
+[Virtually Addressed Memory for Parameters](docs/Virtually_Addressed_Memory_for_Parameters.pdf).
+
+The first data module provides deterministic SplitMNIST, PermutedMNIST, and
+SplitPermutedMNIST construction over a 32x32 label-embedded canvas; later
+modules should reuse `apm.models` and `apm.training` across datasets.
 
 Create and install the local development environment with:
 
@@ -56,7 +61,7 @@ raw metrics, and PGM grids under:
 results/stationary_vae/default/
 ```
 
-Run the Stage 1 dense-delta addressed-parameter-memory benchmark with:
+Run the Stage 1 dense-delta VAMP benchmark with:
 
 ```bash
 ve/bin/python scripts/run_stage1_apm.py
