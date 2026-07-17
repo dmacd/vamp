@@ -236,9 +236,21 @@ def test_all_initializations_return_soft_and_hard_outputs_without_mutation() -> 
         assert result.soft_mixture_nll.shape == (2,)
         assert result.hard_node_nll.shape == (2,)
         assert result.objective_trace.shape == (3, 2)
+        assert result.node_probability_trace.shape == (3, 2, 4)
+        assert result.edge_coefficient_trace.shape == (3, 2, 3)
         assert np.all(np.isfinite(np.asarray(result.objective_trace)))
+        assert np.all(np.isfinite(np.asarray(result.node_probability_trace)))
+        assert np.all(np.isfinite(np.asarray(result.edge_coefficient_trace)))
         assert np.all(np.isfinite(np.asarray(result.soft_mixture_nll)))
         assert np.all(np.isfinite(np.asarray(result.hard_node_nll)))
+        np.testing.assert_allclose(
+            result.node_probability_trace[-1],
+            result.node_probabilities,
+        )
+        np.testing.assert_allclose(
+            result.edge_coefficient_trace[-1],
+            result.edge_coefficients,
+        )
         np.testing.assert_array_equal(result.node_probabilities[:, 3], 0.0)
         assert np.all(np.isneginf(np.asarray(result.final_node_logits)[:, 3]))
         if initialization == "hopfield_top_k":
@@ -307,6 +319,19 @@ def test_sum_gradient_adam_updates_are_independent_across_batch_rows() -> None:
         rtol=2e-5,
         atol=2e-6,
     )
+    for field_name in ("node_probability_trace", "edge_coefficient_trace"):
+        np.testing.assert_allclose(
+            getattr(batched, field_name),
+            np.concatenate(
+                tuple(
+                    np.asarray(getattr(result, field_name))
+                    for result in separate
+                ),
+                axis=1,
+            ),
+            rtol=2e-5,
+            atol=2e-6,
+        )
 
 
 def test_constructed_refinement_has_finite_gradient_and_decreasing_nll(
@@ -404,6 +429,8 @@ def test_config_result_and_router_signature_are_frozen_and_task_free() -> None:
         "soft_mixture_nll",
         "hard_node_nll",
         "objective_trace",
+        "node_probability_trace",
+        "edge_coefficient_trace",
     )
     signature_names = tuple(inspect.signature(refine_ebt_address).parameters)
     assert signature_names == (

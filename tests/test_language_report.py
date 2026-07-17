@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from apm.continual.language_benchmarks import (
+    AddressingCoefficientTrace,
     GeneratedLanguageSample,
     ROUTER_BASELINE_NAMES,
     STORED_BASELINE_NAMES,
@@ -115,6 +117,36 @@ def _bundle() -> LanguageReportBundle:
             _record(stage=0, persistent_bytes=80, runtime_bytes=120),
             _record(stage=1, persistent_bytes=100, runtime_bytes=200),
         ),
+        addressing_traces=(
+            AddressingCoefficientTrace(
+                router="vamp_ebt_uniform",
+                task_id="task_0",
+                prefix_length=32,
+                example_index=0,
+                node_labels=("root", "task_0"),
+                edge_labels=("root → task_0",),
+                objective_trace=np.asarray((2.0, 1.0), dtype=np.float32),
+                node_probabilities=np.asarray(
+                    ((0.5, 0.5), (0.2, 0.8)),
+                    dtype=np.float32,
+                ),
+                edge_coefficients=np.asarray(((0.5,), (0.8,)), dtype=np.float32),
+            ),
+            AddressingCoefficientTrace(
+                router="vamp_ebt_hopfield",
+                task_id="task_0",
+                prefix_length=32,
+                example_index=0,
+                node_labels=("root", "task_0"),
+                edge_labels=("root → task_0",),
+                objective_trace=np.asarray((1.5, 0.9), dtype=np.float32),
+                node_probabilities=np.asarray(
+                    ((0.1, 0.9), (0.15, 0.85)),
+                    dtype=np.float32,
+                ),
+                edge_coefficients=np.asarray(((0.9,), (0.85,)), dtype=np.float32),
+            ),
+        ),
         address_confusion=AddressConfusion(
             ("root", "task_0"),
             np.asarray(((1, 0), (0, 2)), dtype=np.int32),
@@ -145,10 +177,16 @@ def test_language_report_writes_complete_idempotent_artifact_set(tmp_path) -> No
         "transfer_metrics.jsonl",
         "memory_metrics.jsonl",
         "addressing_cost.jsonl",
+        "addressing_trace.jsonl",
         "address_confusion.svg",
         "competence_curves.svg",
         "routing_curves.svg",
         "memory_curves.svg",
+        "ebt_uniform_node_coefficients.svg",
+        "ebt_uniform_edge_coefficients.svg",
+        "ebt_hopfield_node_coefficients.svg",
+        "ebt_hopfield_edge_coefficients.svg",
+        "ebt_objective_trace.svg",
         "graph.svg",
         "report.html",
         "samples.md",
@@ -174,7 +212,14 @@ def test_language_report_writes_complete_idempotent_artifact_set(tmp_path) -> No
 
     html_text = (output_directory / "report.html").read_text(encoding="utf-8")
     samples_text = (output_directory / "samples.md").read_text(encoding="utf-8")
+    manifest = json.loads(
+        (output_directory / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["schema_version"] == 2
     assert "graph.svg" in html_text
+    assert "addressing_trace.jsonl" in html_text
+    assert "ebt_uniform_node_coefficients.svg" in html_text
+    assert "EBT routing dynamics" in html_text
     assert "samples.md" in html_text
     assert "Once" in html_text and "upon a time" in samples_text
     assert "report-lightbox" in html_text
@@ -185,6 +230,26 @@ def test_language_report_writes_complete_idempotent_artifact_set(tmp_path) -> No
     for method_name in (*STORED_BASELINE_NAMES, *ROUTER_BASELINE_NAMES):
         assert method_name in html_text
         assert method_name in samples_text
+    trace_rows = tuple(
+        json.loads(line)
+        for line in (output_directory / "addressing_trace.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    assert len(trace_rows) == 12
+    assert {row["coefficient_type"] for row in trace_rows} == {
+        "node_probability",
+        "path_edge",
+    }
+    node_trace_svg = (
+        output_directory / "ebt_uniform_node_coefficients.svg"
+    ).read_text(encoding="utf-8")
+    edge_trace_svg = (
+        output_directory / "ebt_uniform_edge_coefficients.svg"
+    ).read_text(encoding="utf-8")
+    assert "step 0" in node_trace_svg and "step 1" in node_trace_svg
+    assert "n0 root" in node_trace_svg and "n1 task_0" in node_trace_svg
+    assert "e0 n0→n1" in edge_trace_svg
 
 
 def test_language_report_rejects_missing_method_coverage_and_unsafe_identity() -> None:

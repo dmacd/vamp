@@ -221,14 +221,21 @@ reported separately. Address timing measures the first synchronized call and
 then repeated synchronized calls at a fixed shape; reports include both wall
 time and router-specific logical operation counts rather than treating a
 Hopfield dot product and a full model candidate evaluation as equivalent.
+Each EBT refinement result also retains aligned step-zero-through-final traces
+of its objective, node-address probabilities, and induced path-edge
+coefficients. The canonical benchmark records both EBT initializations for test
+example zero of the final task at the primary prefix length. This deterministic
+representative trace is diagnostic rather than an aggregate performance metric;
+reports preserve it as JSONL and render node/edge heatmaps plus an objective
+curve so initialization and routing convergence can be inspected directly.
 When a peak-device-memory target is configured, the runner requires allocator
 peak statistics from the active JAX backend and fails the run if the observed
-peak exceeds the target. The completed benchmark owns its generated samples:
-all sample routing and generation finishes before the final allocator read, so
-the enforced and reported peak covers that work as well as training,
-evaluation, and timing. Successful reports record the observed peak, backend
-limit, target, platform, and device kind; CPU smoke runs without a target may
-report those allocator fields as unavailable.
+peak exceeds the target. The completed benchmark owns its addressing traces
+and generated samples: trace capture, sample routing, and generation all finish
+before the final allocator read, so the enforced and reported peak covers that
+work as well as training, evaluation, and timing. Successful reports record the
+observed peak, backend limit, target, platform, and device kind; CPU smoke runs
+without a target may report those allocator fields as unavailable.
 
 Language reports are deterministic projections of a completed benchmark,
 including its already-generated samples; report building performs no sample

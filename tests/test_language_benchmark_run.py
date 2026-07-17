@@ -140,6 +140,17 @@ def test_bounded_language_benchmark_emits_every_baseline_metric_family(
     assert len(result.transfer) == 1
     assert len(result.memory) == 1
     assert len(result.addressing_cost) == 5
+    assert len(result.addressing_traces) == 2
+    assert {trace.router for trace in result.addressing_traces} == {
+        "vamp_ebt_uniform",
+        "vamp_ebt_hopfield",
+    }
+    assert all(trace.objective_trace.shape == (2,) for trace in result.addressing_traces)
+    assert all(
+        trace.node_probabilities.shape == (2, 2)
+        and trace.edge_coefficients.shape == (2, 1)
+        for trace in result.addressing_traces
+    )
     assert len(result.samples) == 9
     assert int(np.sum(result.final_confusion)) == 1
     assert all(row.base_checksum_stable for row in result.stored_competence)
@@ -182,10 +193,12 @@ def test_bounded_language_benchmark_emits_every_baseline_metric_family(
     )
     assert lifecycle_events == ["samples", "peak"]
     assert bundle.samples is result.samples
+    assert bundle.addressing_traces is result.addressing_traces
     output_directory = write_language_report(tmp_path, bundle)
     assert len(bundle.samples) == 9
     assert (output_directory / "report.html").is_file()
     assert (output_directory / "graph.svg").is_file()
+    assert (output_directory / "ebt_objective_trace.svg").is_file()
     routing_record = next(
         json.loads(line)
         for line in (output_directory / "routing_metrics.jsonl")

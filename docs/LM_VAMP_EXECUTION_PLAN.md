@@ -248,7 +248,9 @@ all pass.
   baselines with identical adapter budgets.
 - Report stored versus routing forgetting, routing regret, transfer,
   persistent versus runtime memory, and synchronized cold/warm addressing
-  cost.
+  cost. Preserve a deterministic final-task representative trace for both EBT
+  initializations and visualize each refinement step's node probabilities,
+  induced path-edge coefficients, and objective.
 - Write reports beneath
   `results/language_cl/<dataset>/<curriculum>/<preset>-seed0-<config_hash>/`,
   reusing low-level JSON/JSONL/SVG/lightbox utilities rather than the

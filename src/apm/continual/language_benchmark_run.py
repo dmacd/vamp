@@ -21,6 +21,7 @@ from apm.continual.language_benchmark_metrics import (
     account_language_memory,
 )
 from apm.continual.language_benchmarks import (
+    AddressingCoefficientTrace,
     AddressingOperationCounts,
     AddressingTiming,
     GeneratedLanguageSample,
@@ -34,6 +35,7 @@ from apm.continual.language_routing import (
     competence_nll_by_node,
     evaluate_language_router,
     route_language_prefix,
+    trace_ebt_language_prefix,
 )
 from apm.continual.language_tasks import (
     AddressBook,
@@ -195,11 +197,22 @@ class LanguageBenchmarkResult:
     transfer: tuple[TransferMeasurement, ...]
     memory: tuple[StageMemoryMeasurement, ...]
     addressing_cost: tuple[RouterTimingMeasurement, ...]
+    addressing_traces: tuple[AddressingCoefficientTrace, ...]
     samples: tuple[GeneratedLanguageSample, ...]
     peak_device_memory: PeakDeviceMemoryMeasurement
     final_confusion: np.ndarray
 
     def __post_init__(self) -> None:
+        if (
+            len(self.addressing_traces) != 2
+            or any(
+                not isinstance(trace, AddressingCoefficientTrace)
+                for trace in self.addressing_traces
+            )
+            or {trace.router for trace in self.addressing_traces}
+            != {"vamp_ebt_uniform", "vamp_ebt_hopfield"}
+        ):
+            raise ValueError("benchmark results require both EBT addressing traces")
         confusion = np.array(self.final_confusion, dtype=np.int64, copy=True)
         if confusion.ndim != 2 or confusion.shape[0] != confusion.shape[1]:
             raise ValueError("final_confusion must be square")
@@ -476,6 +489,14 @@ def run_language_benchmark(
         lora_config,
         settings,
     )
+    addressing_traces = _measure_addressing_coefficient_traces(
+        prepared,
+        adaptations,
+        settings,
+        base_params,
+        model_config,
+        lora_config,
+    )
     samples = _generate_language_samples(
         prepared,
         adaptations,
@@ -496,9 +517,80 @@ def run_language_benchmark(
         transfer=transfer,
         memory=tuple(memory_rows),
         addressing_cost=addressing_cost,
+        addressing_traces=addressing_traces,
         samples=samples,
         peak_device_memory=peak_device_memory,
         final_confusion=final_confusion,
+    )
+
+
+def _measure_addressing_coefficient_traces(
+    prepared: PreparedLanguageCurriculum,
+    adaptations: LanguageAdaptationBaselines,
+    settings: LanguageBenchmarkSettings,
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    lora_config: LoraConfig,
+) -> tuple[AddressingCoefficientTrace, ...]:
+    """Trace both EBT initializations on one deterministic final-task example."""
+    final_graph = adaptations.vamp.graph
+    final_memory = pack_lora_memory(
+        final_graph,
+        model_config,
+        lora_config,
+        adaptations.vamp.max_nodes,
+        adaptations.vamp.max_edges,
+    )
+    final_task = prepared.curriculum.tasks[-1]
+    prefix_length = prepared.build_config.primary_prefix_length
+    sweep = next(
+        sweep
+        for sweep in prepared.evaluation_sweeps
+        if sweep.task_id == final_task.task_id
+        and sweep.prefix_length == prefix_length
+    )
+    example_index = 0
+    prefix_batch = sweep.test_examples[example_index].router_batch
+    node_labels = tuple(str(node.node_id) for node in final_graph.nodes)
+    edge_labels = tuple(
+        f"{node.parent_id} → {node.node_id}"
+        for node in final_graph.nodes
+        if node.parent_id is not None
+    )
+    refinements = tuple(
+        (
+            router,
+            trace_ebt_language_prefix(
+                router,
+                base_params,
+                model_config,
+                final_memory,
+                lora_config,
+                adaptations.vamp.address_book,
+                prefix_batch,
+                hopfield_config=settings.hopfield,
+                ebt_config=settings.ebt,
+            ),
+        )
+        for router in ("vamp_ebt_uniform", "vamp_ebt_hopfield")
+    )
+    return tuple(
+        AddressingCoefficientTrace(
+            router=router,
+            task_id=str(final_task.task_id),
+            prefix_length=prefix_length,
+            example_index=example_index,
+            node_labels=node_labels,
+            edge_labels=edge_labels,
+            objective_trace=np.asarray(refinement.objective_trace)[:, 0],
+            node_probabilities=np.asarray(refinement.node_probability_trace)[
+                :, 0, : len(node_labels)
+            ],
+            edge_coefficients=np.asarray(refinement.edge_coefficient_trace)[
+                :, 0, : len(edge_labels)
+            ],
+        )
+        for router, refinement in refinements
     )
 
 

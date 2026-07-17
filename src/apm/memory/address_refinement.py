@@ -78,7 +78,7 @@ class EbtConfig:
 
 
 class EbtAddressResult(NamedTuple):
-    """Final soft/hard addresses and every per-example refinement objective."""
+    """Final addresses plus aligned objective, node, and edge step traces."""
 
     final_node_logits: jax.Array
     node_probabilities: jax.Array
@@ -87,6 +87,8 @@ class EbtAddressResult(NamedTuple):
     soft_mixture_nll: jax.Array
     hard_node_nll: jax.Array
     objective_trace: jax.Array
+    node_probability_trace: jax.Array
+    edge_coefficient_trace: jax.Array
 
 
 _PrefixNllFunction = Callable[
@@ -180,7 +182,7 @@ def _optimize_node_logits(
     lora_config: LoraConfig,
     config: EbtConfig,
     objective_dependencies: _ObjectiveDependencies,
-) -> tuple[jax.Array, jax.Array]:
+) -> tuple[jax.Array, jax.Array, jax.Array]:
     """Run one shape-stable compiled Adam refinement over node logits."""
     prefix_nll_function, _model_application_cache_token = objective_dependencies
     optimizer = optax.adam(config.learning_rate)
@@ -224,21 +226,26 @@ def _optimize_node_logits(
             optimizer_state,
             current_logits,
         )
-        return (
-            optax.apply_updates(current_logits, updates),
-            next_optimizer_state,
-        ), objectives
+        next_logits = optax.apply_updates(current_logits, updates)
+        return (next_logits, next_optimizer_state), (objectives, next_logits)
 
-    (final_logits, _), pre_update_trace = jax.lax.scan(
+    (final_logits, _), (pre_update_trace, post_update_logits) = jax.lax.scan(
         update_logits,
         (starting_logits, starting_optimizer_state),
         xs=None,
         length=config.steps,
     )
     final_objective = per_example_objective(final_logits)
-    return final_logits, jnp.concatenate(
-        (pre_update_trace, final_objective[None, :]),
-        axis=0,
+    return (
+        final_logits,
+        jnp.concatenate(
+            (pre_update_trace, final_objective[None, :]),
+            axis=0,
+        ),
+        jnp.concatenate(
+            (starting_logits[None, :, :], post_update_logits),
+            axis=0,
+        ),
     )
 
 
@@ -272,7 +279,7 @@ def refine_ebt_address(
     frozen_base = jax.tree_util.tree_map(jax.lax.stop_gradient, base_params)
     frozen_memory = jax.tree_util.tree_map(jax.lax.stop_gradient, packed_memory)
     candidate_mask = jnp.asarray(candidate_node_mask, dtype=jnp.bool_)
-    optimized_logits, objective_trace = _optimize_node_logits(
+    optimized_logits, objective_trace, node_logit_trace = _optimize_node_logits(
         jnp.asarray(initial_logits, dtype=jnp.float32),
         candidate_mask,
         frozen_base,
@@ -288,15 +295,19 @@ def refine_ebt_address(
         optimized_logits,
         jnp.asarray(-jnp.inf, dtype=jnp.float32),
     ).astype(jnp.float32)
-    node_probabilities = masked_node_probabilities(
-        final_node_logits,
-        candidate_mask,
-        config.tau,
-    )
-    edge_coefficients = node_weights_to_edge_coefficients(
-        node_probabilities,
+    node_probability_trace = jax.vmap(
+        lambda node_logits: masked_node_probabilities(
+            node_logits,
+            candidate_mask,
+            config.tau,
+        )
+    )(node_logit_trace).astype(jnp.float32)
+    edge_coefficient_trace = node_weights_to_edge_coefficients(
+        node_probability_trace,
         frozen_memory,
     ).astype(jnp.float32)
+    node_probabilities = node_probability_trace[-1]
+    edge_coefficients = edge_coefficient_trace[-1]
     selected_indices = jnp.argmax(node_probabilities, axis=-1).astype(jnp.int32)
     soft_mixture_nll = soft_mixture_prefix_nll(
         frozen_base,
@@ -327,6 +338,8 @@ def refine_ebt_address(
         soft_mixture_nll=soft_mixture_nll,
         hard_node_nll=hard_node_nll,
         objective_trace=objective_trace.astype(jnp.float32),
+        node_probability_trace=node_probability_trace,
+        edge_coefficient_trace=edge_coefficient_trace,
     )
 
 

@@ -161,6 +161,53 @@ def route_language_prefix(
     )
 
 
+def trace_ebt_language_prefix(
+    router: RouterBaselineName,
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    packed_memory: PackedLoraMemory,
+    lora_config: LoraConfig,
+    address_book: AddressBook,
+    prefix_batch: RouterBatch,
+    *,
+    hopfield_config: HopfieldConfig = HopfieldConfig(),
+    ebt_config: EbtConfig = EbtConfig(),
+) -> EbtAddressResult:
+    """Return the full EBT coefficient trajectory for one prefix batch."""
+    if router not in ("vamp_ebt_uniform", "vamp_ebt_hopfield"):
+        raise ValueError(f"coefficient traces require an EBT router: {router}")
+    if not isinstance(prefix_batch, RouterBatch):
+        raise TypeError("task-free routers accept RouterBatch prefix data only")
+    if np.any(np.sum(prefix_batch.attention_mask, axis=-1) == 0):
+        raise ValueError("every router row must contain active prefix tokens")
+    _validate_address_alignment(packed_memory, address_book)
+    hopfield_result = (
+        _hopfield_prefix_address(
+            base_params,
+            model_config,
+            address_book,
+            prefix_batch,
+            hopfield_config,
+        )
+        if router == "vamp_ebt_hopfield"
+        else None
+    )
+    return refine_ebt_address(
+        base_params,
+        model_config,
+        packed_memory,
+        lora_config,
+        prefix_batch,
+        replace(
+            ebt_config,
+            initialization=(
+                "uniform" if router == "vamp_ebt_uniform" else "hopfield"
+            ),
+        ),
+        hopfield_result=hopfield_result,
+    )
+
+
 def _route_language_prefix_batch(
     router: RouterBaselineName,
     base_params: GptNeoParams,
@@ -198,24 +245,23 @@ def _route_language_prefix_batch(
                 prefix_batch,
                 hopfield_config,
             )
-            if router in ("vamp_hopfield", "vamp_ebt_hopfield")
+            if router == "vamp_hopfield"
             else None
         )
         if router == "vamp_hopfield":
             assert hopfield_result is not None
             decision = LanguageAddressDecision(*hopfield_result)
         elif router in ("vamp_ebt_uniform", "vamp_ebt_hopfield"):
-            initialization = (
-                "uniform" if router == "vamp_ebt_uniform" else "hopfield"
-            )
-            refinement = refine_ebt_address(
+            refinement = trace_ebt_language_prefix(
+                router,
                 base_params,
                 model_config,
                 packed_memory,
                 lora_config,
+                address_book,
                 prefix_batch,
-                replace(ebt_config, initialization=initialization),
-                hopfield_result=hopfield_result,
+                hopfield_config=hopfield_config,
+                ebt_config=ebt_config,
             )
             decision = _decision_from_ebt(
                 refinement,

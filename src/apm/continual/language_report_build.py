@@ -193,6 +193,7 @@ def build_language_report_bundle(
             )
             for row in benchmark.memory
         ),
+        addressing_traces=benchmark.addressing_traces,
         address_confusion=AddressConfusion(
             tuple(str(node.node_id) for node in final_graph.nodes),
             benchmark.final_confusion,

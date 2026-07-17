@@ -25,6 +25,7 @@ RouterBaselineName = Literal[
     "vamp_ebt_hopfield",
     "deterministic_random_node",
 ]
+EbtRouterName = Literal["vamp_ebt_uniform", "vamp_ebt_hopfield"]
 BaselineName = StoredBaselineName | RouterBaselineName
 BaselineCategory = Literal["stored", "router"]
 
@@ -58,6 +59,76 @@ class GeneratedLanguageSample:
             raise ValueError("sample baseline and task_id must not be empty")
         if not self.prefix or not self.continuation:
             raise ValueError("sample prefix and continuation must not be empty")
+
+
+@dataclass(frozen=True, eq=False)
+class AddressingCoefficientTrace:
+    """One deterministic EBT example's aligned optimization trajectory."""
+
+    router: EbtRouterName
+    task_id: str
+    prefix_length: int
+    example_index: int
+    node_labels: tuple[str, ...]
+    edge_labels: tuple[str, ...]
+    objective_trace: np.ndarray
+    node_probabilities: np.ndarray
+    edge_coefficients: np.ndarray
+
+    def __post_init__(self) -> None:
+        if self.router not in ("vamp_ebt_uniform", "vamp_ebt_hopfield"):
+            raise ValueError("addressing traces require an EBT router")
+        if not self.task_id:
+            raise ValueError("addressing trace task_id must not be empty")
+        if type(self.prefix_length) is not int or self.prefix_length <= 0:
+            raise ValueError("addressing trace prefix_length must be positive")
+        if type(self.example_index) is not int or self.example_index < 0:
+            raise ValueError("addressing trace example_index must be nonnegative")
+        if (
+            not self.node_labels
+            or len(set(self.node_labels)) != len(self.node_labels)
+            or any(not label for label in self.node_labels)
+        ):
+            raise ValueError("addressing trace node labels must be nonempty and unique")
+        if (
+            not self.edge_labels
+            or len(set(self.edge_labels)) != len(self.edge_labels)
+            or any(not label for label in self.edge_labels)
+        ):
+            raise ValueError("addressing trace edge labels must be nonempty and unique")
+        objective = np.array(self.objective_trace, dtype=np.float32, copy=True)
+        node_probabilities = np.array(
+            self.node_probabilities,
+            dtype=np.float32,
+            copy=True,
+        )
+        edge_coefficients = np.array(
+            self.edge_coefficients,
+            dtype=np.float32,
+            copy=True,
+        )
+        if objective.ndim != 1 or objective.size < 2:
+            raise ValueError("addressing objective trace must contain at least two steps")
+        if node_probabilities.shape != (objective.size, len(self.node_labels)):
+            raise ValueError("node coefficient trace must be [steps, node labels]")
+        if edge_coefficients.shape != (objective.size, len(self.edge_labels)):
+            raise ValueError("edge coefficient trace must be [steps, edge labels]")
+        if not all(
+            np.all(np.isfinite(values))
+            for values in (objective, node_probabilities, edge_coefficients)
+        ):
+            raise ValueError("addressing coefficient traces must be finite")
+        if np.any((node_probabilities < 0.0) | (node_probabilities > 1.0)):
+            raise ValueError("node probabilities must lie in [0, 1]")
+        if not np.allclose(np.sum(node_probabilities, axis=1), 1.0, atol=1e-6):
+            raise ValueError("node probability trace rows must sum to one")
+        if np.any((edge_coefficients < 0.0) | (edge_coefficients > 1.0)):
+            raise ValueError("edge coefficients must lie in [0, 1]")
+        for values in (objective, node_probabilities, edge_coefficients):
+            values.flags.writeable = False
+        object.__setattr__(self, "objective_trace", objective)
+        object.__setattr__(self, "node_probabilities", node_probabilities)
+        object.__setattr__(self, "edge_coefficients", edge_coefficients)
 
 
 @dataclass(frozen=True)

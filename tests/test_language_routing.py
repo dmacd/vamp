@@ -502,6 +502,14 @@ def test_ebt_padding_logits_cannot_enter_scores_or_top_k(
             soft_mixture_nll=jnp.zeros((1,), dtype=jnp.float32),
             hard_node_nll=jnp.zeros((1,), dtype=jnp.float32),
             objective_trace=jnp.zeros((2, 1), dtype=jnp.float32),
+            node_probability_trace=jnp.asarray(
+                (
+                    ((0.4, 0.3, 0.2, 0.1, 0.0, 0.0),),
+                    ((0.4, 0.3, 0.2, 0.1, 0.0, 0.0),),
+                ),
+                dtype=jnp.float32,
+            ),
+            edge_coefficient_trace=jnp.zeros((2, 1, 5), dtype=jnp.float32),
         )
 
     monkeypatch.setattr(

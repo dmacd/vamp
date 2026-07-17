@@ -14,6 +14,7 @@ from typing import TypeAlias
 import numpy as np
 
 from apm.continual.language_benchmarks import (
+    AddressingCoefficientTrace,
     GeneratedLanguageSample,
     ROUTER_BASELINE_NAMES,
     STORED_BASELINE_NAMES,
@@ -36,6 +37,10 @@ from apm.training.artifacts import (
 ReportScalar: TypeAlias = str | int | float | bool | None
 _PATH_COMPONENT = re.compile(r"[a-z0-9][a-z0-9_-]*\Z")
 _CONFIG_HASH_LENGTH = 12
+_EBT_TRACE_PRESENTATION = (
+    ("vamp_ebt_uniform", "ebt_uniform", "EBT uniform start"),
+    ("vamp_ebt_hopfield", "ebt_hopfield", "EBT Hopfield start"),
+)
 
 
 @dataclass(frozen=True)
@@ -134,6 +139,7 @@ class LanguageReportBundle:
     competence_curve: tuple[ReportRecord, ...]
     routing_curve: tuple[ReportRecord, ...]
     memory_curve: tuple[ReportRecord, ...]
+    addressing_traces: tuple[AddressingCoefficientTrace, ...]
     address_confusion: AddressConfusion
     graph: MemoryGraph[object]
     node_stats: tuple[NodeVisualStats, ...]
@@ -184,7 +190,7 @@ def write_language_report(
     output_directory = language_report_directory(results_root, bundle.manifest)
     output_directory.mkdir(parents=True, exist_ok=True)
     manifest_payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "dataset": bundle.manifest.dataset,
         "curriculum": bundle.manifest.curriculum,
         "preset": bundle.manifest.preset,
@@ -226,6 +232,10 @@ def write_language_report(
         "Memory accounting",
         "bytes",
     )
+    _write_addressing_trace_charts(
+        output_directory,
+        bundle.addressing_traces,
+    )
     write_memory_graph_svg(
         output_directory / "graph.svg",
         bundle.graph,
@@ -251,6 +261,37 @@ def _jsonl_families(
         ("transfer_metrics.jsonl", bundle.transfer_metrics),
         ("memory_metrics.jsonl", bundle.memory_metrics),
         ("addressing_cost.jsonl", bundle.addressing_cost),
+        (
+            "addressing_trace.jsonl",
+            _addressing_trace_records(bundle.addressing_traces),
+        ),
+    )
+
+
+def _addressing_trace_records(
+    traces: tuple[AddressingCoefficientTrace, ...],
+) -> tuple[ReportRecord, ...]:
+    return tuple(
+        ReportRecord(
+            (
+                ("router", trace.router),
+                ("task_id", trace.task_id),
+                ("prefix_length", trace.prefix_length),
+                ("example_index", trace.example_index),
+                ("step", step),
+                ("objective", float(trace.objective_trace[step])),
+                ("coefficient_type", coefficient_type),
+                ("coefficient_label", label),
+                ("coefficient", float(values[step, coefficient_index])),
+            )
+        )
+        for trace in traces
+        for step in range(trace.objective_trace.size)
+        for coefficient_type, labels, values in (
+            ("node_probability", trace.node_labels, trace.node_probabilities),
+            ("path_edge", trace.edge_labels, trace.edge_coefficients),
+        )
+        for coefficient_index, label in enumerate(labels)
     )
 
 
@@ -295,6 +336,65 @@ def _write_curve(
     )
 
 
+def _write_addressing_trace_charts(
+    output_directory: Path,
+    traces: tuple[AddressingCoefficientTrace, ...],
+) -> None:
+    trace_by_router = {trace.router: trace for trace in traces}
+    for router, filename_stem, title in _EBT_TRACE_PRESENTATION:
+        trace = trace_by_router[router]
+        node_index_by_label = {
+            label: index for index, label in enumerate(trace.node_labels)
+        }
+        node_display_labels = tuple(
+            f"n{index} {label.rsplit('-', 1)[-1]}"
+            for index, label in enumerate(trace.node_labels)
+        )
+        edge_display_labels = tuple(
+            f"e{index} n{node_index_by_label[label.split(' → ', 1)[0]]}"
+            f"→n{node_index_by_label[label.split(' → ', 1)[1]]}"
+            for index, label in enumerate(trace.edge_labels)
+        )
+        step_labels = tuple(
+            f"step {step}" for step in range(trace.objective_trace.size)
+        )
+        write_svg_heatmap(
+            output_directory / f"{filename_stem}_node_coefficients.svg",
+            trace.node_probabilities,
+            step_labels,
+            node_display_labels,
+            f"{title}: node address probabilities",
+        )
+        write_svg_heatmap(
+            output_directory / f"{filename_stem}_edge_coefficients.svg",
+            trace.edge_coefficients,
+            step_labels,
+            edge_display_labels,
+            f"{title}: path-edge coefficients",
+        )
+    step_count = traces[0].objective_trace.size
+    write_svg_line_chart(
+        output_directory / "ebt_objective_trace.svg",
+        tuple(
+            {
+                "epoch": step,
+                **{
+                    router: float(trace_by_router[router].objective_trace[step])
+                    for router, _, _ in _EBT_TRACE_PRESENTATION
+                },
+            }
+            for step in range(step_count)
+        ),
+        tuple(
+            (router, title)
+            for router, _, title in _EBT_TRACE_PRESENTATION
+        ),
+        "EBT routing objective by refinement step",
+        "prefix NLL + entropy penalty",
+        x_label="refinement step",
+    )
+
+
 def _curve_row(record: ReportRecord) -> dict[str, int | float]:
     stage = record.require("stage")
     if type(stage) is not int or stage < 0:
@@ -328,7 +428,7 @@ def _write_samples(path: Path, samples: tuple[GeneratedLanguageSample, ...]) -> 
 
 
 def _write_language_html(path: Path, bundle: LanguageReportBundle) -> None:
-    images = (
+    metric_images = (
         ("Memory graph", "graph.svg"),
         ("Address confusion", "address_confusion.svg"),
         ("Competence curves", "competence_curves.svg"),
@@ -340,7 +440,35 @@ def _write_language_html(path: Path, bundle: LanguageReportBundle) -> None:
         f'data-lightbox-src="{filename}" data-lightbox-caption="{html.escape(title)}">'
         f'<img src="{filename}" alt="{html.escape(title)}">'
         f"<figcaption>{html.escape(title)}</figcaption></figure>"
-        for title, filename in images
+        for title, filename in metric_images
+    )
+    trace_images = (
+        ("EBT routing objective", "ebt_objective_trace.svg"),
+        *tuple(
+            (f"{title}: node probabilities", f"{filename_stem}_node_coefficients.svg")
+            for _, filename_stem, title in _EBT_TRACE_PRESENTATION
+        ),
+        *tuple(
+            (f"{title}: path-edge coefficients", f"{filename_stem}_edge_coefficients.svg")
+            for _, filename_stem, title in _EBT_TRACE_PRESENTATION
+        ),
+    )
+    trace_image_cards = "\n".join(
+        '<figure class="image-card" role="button" tabindex="0" '
+        f'data-lightbox-src="{filename}" data-lightbox-caption="{html.escape(title)}">'
+        f'<img src="{filename}" alt="{html.escape(title)}">'
+        f"<figcaption>{html.escape(title)}</figcaption></figure>"
+        for title, filename in trace_images
+    )
+    representative_trace = bundle.addressing_traces[0]
+    trace_context = (
+        f"These traces use deterministic test example "
+        f"{representative_trace.example_index} from task "
+        f"{representative_trace.task_id} at prefix length "
+        f"{representative_trace.prefix_length}. Step 0 is the initial address; "
+        "later rows show each Adam update. Node probabilities induce the "
+        "path-edge coefficients applied to the LoRA memory. The n/e labels "
+        "follow graph insertion order; the raw JSONL retains full identities."
     )
     sample_cards = "\n".join(
         "<article class=\"sample\">"
@@ -393,6 +521,7 @@ def _write_language_html(path: Path, bundle: LanguageReportBundle) -> None:
             "<section><h2>Baseline matrix</h2><table><thead><tr><th>Method</th><th>Role</th></tr></thead>",
             f"<tbody>{baseline_rows}</tbody></table><p>{negative_control_status}</p></section>",
             f'<section><h2>Graph and metrics</h2><div class="image-grid">{image_cards}</div></section>',
+            f'<section><h2>EBT routing dynamics</h2><p>{html.escape(trace_context)}</p><p><a href="addressing_trace.jsonl">Raw coefficient trace</a></p><div class="image-grid">{trace_image_cards}</div></section>',
             f'<section><h2>Generated samples</h2><p><a href="samples.md">Raw sample record</a></p>{sample_cards}</section>',
             f"<section><h2>Configuration</h2><pre>{config_pre}</pre></section>",
             "</main>",
@@ -423,6 +552,19 @@ def _language_report_css() -> str:
 def _validate_report_bundle(bundle: LanguageReportBundle) -> None:
     if not isinstance(bundle.manifest, LanguageReportManifest):
         raise TypeError("manifest must be a LanguageReportManifest")
+    expected_trace_routers = tuple(
+        router for router, _, _ in _EBT_TRACE_PRESENTATION
+    )
+    if len(bundle.addressing_traces) != len(expected_trace_routers) or any(
+        not isinstance(trace, AddressingCoefficientTrace)
+        for trace in bundle.addressing_traces
+    ):
+        raise ValueError("addressing traces must contain both EBT routers in order")
+    if (
+        tuple(trace.router for trace in bundle.addressing_traces)
+        != expected_trace_routers
+    ):
+        raise ValueError("addressing traces must contain both EBT routers in order")
     for family_name, records in _jsonl_families(bundle):
         if not records or any(not isinstance(record, ReportRecord) for record in records):
             raise ValueError(f"{family_name} requires nonempty ReportRecord values")
@@ -447,6 +589,20 @@ def _validate_report_bundle(bundle: LanguageReportBundle) -> None:
         (bundle.transfer_metrics, ("stage", "task_id", "transfer")),
         (bundle.memory_metrics, ("stage", "persistent_bytes", "runtime_bytes")),
         (bundle.addressing_cost, ("stage", "router", "cold_seconds", "warm_seconds")),
+        (
+            _addressing_trace_records(bundle.addressing_traces),
+            (
+                "router",
+                "task_id",
+                "prefix_length",
+                "example_index",
+                "step",
+                "objective",
+                "coefficient_type",
+                "coefficient_label",
+                "coefficient",
+            ),
+        ),
     ):
         _require_record_fields(records, required_fields)
     for name, records in (
@@ -475,6 +631,26 @@ def _validate_report_bundle(bundle: LanguageReportBundle) -> None:
     if not isinstance(bundle.graph, MemoryGraph):
         raise TypeError("graph must be a MemoryGraph")
     graph_node_ids = memory_node_ids(bundle.graph)
+    representative_metadata = {
+        (trace.task_id, trace.prefix_length, trace.example_index)
+        for trace in bundle.addressing_traces
+    }
+    if len(representative_metadata) != 1:
+        raise ValueError("EBT traces must describe the same representative example")
+    if len({trace.objective_trace.size for trace in bundle.addressing_traces}) != 1:
+        raise ValueError("EBT traces must contain the same refinement steps")
+    expected_node_labels = tuple(str(node_id) for node_id in graph_node_ids)
+    expected_edge_labels = tuple(
+        f"{node.parent_id} → {node.node_id}"
+        for node in bundle.graph.nodes
+        if node.parent_id is not None
+    )
+    if any(
+        trace.node_labels != expected_node_labels
+        or trace.edge_labels != expected_edge_labels
+        for trace in bundle.addressing_traces
+    ):
+        raise ValueError("addressing trace labels must follow graph insertion order")
     if tuple(stats.node_id for stats in bundle.node_stats) != graph_node_ids:
         raise ValueError("node visual stats must follow graph insertion order")
     expected_edges = tuple(

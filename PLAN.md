@@ -40,7 +40,10 @@
   stories and 128 probes/examples while preserving the source, split, topic,
   and deterministic hash-selection contracts.
   Report samples are now completed before the final allocator peak is enforced
-  and are reused by the report-only projection.
+  and are reused by the report-only projection. EBT refinement now retains
+  aligned node-probability, path-edge-coefficient, and objective trajectories;
+  reports preserve a deterministic final-task representative trace as JSONL
+  and render four coefficient heatmaps plus an objective curve.
 - The target is a shared plain-JAX GPT-Neo base with immutable pathwise LoRA
   memory, a TinyShakespeare smoke path, converted TinyStories-8M weights,
   exhaustive/Hopfield/EBT task-free addressing, and reproducible continual-
@@ -82,14 +85,15 @@ Measured status on 2026-07-16:
   RTX 4090. On completion, inspect its content-addressed output and enforced
   12 GiB peak across benchmark and sample generation.
 
-Both canonical runners now emit the manifest, six JSONL metric families,
-address confusion, three metric charts, graph, samples, and standalone HTML
-under a content-addressed run directory. Offline bounded tests exercise the
-same training, all nine methods, measurement, sample generation, and report
-writer without substituting for the full-resource measurements. The latest
-default CPU gate passes 376 tests with one expected optional-dependency-boundary
-skip and two resource-marked tests deselected. Running those two integration
-tests explicitly also passes both against the prepared local artifacts.
+Both canonical runners now emit the manifest, seven JSONL metric families,
+address confusion, three aggregate metric charts, graph, five EBT routing-
+dynamics charts, samples, and standalone HTML under a content-addressed run
+directory. Offline bounded tests exercise the same training, all nine methods,
+measurement, trace capture, sample generation, and report writer without
+substituting for the full-resource measurements. The latest default CPU gate
+passes 376 tests with one expected optional-dependency-boundary skip and two
+resource-marked tests deselected. Running those two integration tests
+explicitly also passes both against the prepared local artifacts.
 
 ## Deferred Stage-1 FabricPC Work
 

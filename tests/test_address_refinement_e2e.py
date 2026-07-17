@@ -211,6 +211,19 @@ def _assert_batch_matches_single_results(
         rtol=1e-5,
         atol=1e-5,
     )
+    for field_name in ("node_probability_trace", "edge_coefficient_trace"):
+        np.testing.assert_allclose(
+            getattr(batched, field_name),
+            np.concatenate(
+                tuple(
+                    np.asarray(getattr(single, field_name))
+                    for single in singles
+                ),
+                axis=1,
+            ),
+            rtol=1e-5,
+            atol=1e-5,
+        )
 
 
 def test_uniform_and_hopfield_ebt_refine_independent_branch_addresses(
@@ -293,6 +306,8 @@ def test_uniform_and_hopfield_ebt_refine_independent_branch_addresses(
     ):
         np.testing.assert_array_equal(result.selected_indices, expected_nodes)
         assert result.objective_trace.shape == (21, 2)
+        assert result.node_probability_trace.shape == (21, 2, 5)
+        assert result.edge_coefficient_trace.shape == (21, 2, 4)
         assert np.all(np.isfinite(np.asarray(result.objective_trace)))
         assert np.all(
             np.asarray(result.objective_trace[-1])
