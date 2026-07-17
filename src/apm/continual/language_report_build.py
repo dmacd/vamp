@@ -6,10 +6,8 @@ from pathlib import Path
 from typing import cast
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 
-from apm.continual.language_baseline_training import pack_root_adapter
 from apm.continual.language_benchmark_run import LanguageBenchmarkResult
 from apm.continual.language_benchmarks import (
     ROUTER_BASELINE_NAMES,
@@ -17,22 +15,15 @@ from apm.continual.language_benchmarks import (
 )
 from apm.continual.language_report import (
     AddressConfusion,
-    GeneratedLanguageSample,
     LanguageReportBundle,
     LanguageReportManifest,
     ReportRecord,
     write_language_report,
 )
-from apm.continual.language_routing import route_language_prefix
 from apm.data.text.language_tasks import PreparedLanguageCurriculum
-from apm.lm.config import GptNeoConfig
-from apm.lm.generation import greedy_generate
-from apm.lm.lora import LoraConfig, LoraEdge
-from apm.lm.lora_memory import pack_lora_memory
 from apm.lm.parameters import GptNeoParams
-from apm.lm.text import TextTokenizer
 from apm.memory.dense import tree_nbytes
-from apm.memory.graph import MemoryGraph, NodeId
+from apm.memory.graph import MemoryGraph
 from apm.memory.visualization import EdgeVisualStats, NodeVisualStats
 
 
@@ -41,23 +32,9 @@ def build_language_report_bundle(
     prepared: PreparedLanguageCurriculum,
     benchmark: LanguageBenchmarkResult,
     base_params: GptNeoParams,
-    model_config: GptNeoConfig,
-    lora_config: LoraConfig,
-    tokenizer: TextTokenizer,
-    *,
-    sample_new_tokens: int = 32,
 ) -> LanguageReportBundle:
-    """Build every JSON, chart, graph, and generated-sample report input."""
-    if sample_new_tokens <= 0:
-        raise ValueError("sample_new_tokens must be positive")
+    """Project one completed benchmark into every standard report input."""
     final_graph = benchmark.adaptations.vamp.graph
-    final_memory = pack_lora_memory(
-        final_graph,
-        model_config,
-        lora_config,
-        benchmark.adaptations.vamp.max_nodes,
-        benchmark.adaptations.vamp.max_edges,
-    )
     node_stats, edge_stats = _graph_visual_stats(
         prepared,
         benchmark,
@@ -223,20 +200,7 @@ def build_language_report_bundle(
         graph=cast(MemoryGraph[object], final_graph),
         node_stats=node_stats,
         edge_stats=edge_stats,
-        samples=_generated_samples(
-            prepared,
-            benchmark,
-            base_params,
-            model_config,
-            lora_config,
-            tokenizer,
-            final_memory,
-            min(
-                sample_new_tokens,
-                model_config.max_position_embeddings
-                - prepared.build_config.primary_prefix_length,
-            ),
-        ),
+        samples=benchmark.samples,
     )
 
 
@@ -246,11 +210,8 @@ def write_language_benchmark_report(
     prepared: PreparedLanguageCurriculum,
     benchmark: LanguageBenchmarkResult,
     base_params: GptNeoParams,
-    model_config: GptNeoConfig,
-    lora_config: LoraConfig,
-    tokenizer: TextTokenizer,
 ) -> Path:
-    """Build and emit the complete standard report for one measured run."""
+    """Emit the deterministic report projection of one completed benchmark."""
     return write_language_report(
         results_root,
         build_language_report_bundle(
@@ -258,9 +219,6 @@ def write_language_benchmark_report(
             prepared,
             benchmark,
             base_params,
-            model_config,
-            lora_config,
-            tokenizer,
         ),
     )
 
@@ -413,132 +371,6 @@ def _graph_visual_stats(
         if node.incoming_edge is not None
     )
     return node_stats, edge_stats
-
-
-def _generated_samples(
-    prepared: PreparedLanguageCurriculum,
-    benchmark: LanguageBenchmarkResult,
-    base_params: GptNeoParams,
-    model_config: GptNeoConfig,
-    lora_config: LoraConfig,
-    tokenizer: TextTokenizer,
-    final_memory,
-    sample_new_tokens: int,
-) -> tuple[GeneratedLanguageSample, ...]:
-    if sample_new_tokens <= 0:
-        raise ValueError("model context leaves no room for generated samples")
-    final_task = prepared.curriculum.tasks[-1]
-    sweep = next(
-        sweep
-        for sweep in prepared.evaluation_sweeps
-        if sweep.task_id == final_task.task_id
-        and sweep.prefix_length == prepared.build_config.primary_prefix_length
-    )
-    example = sweep.test_examples[0]
-    prefix_length = prepared.build_config.primary_prefix_length
-    prompt_ids = jnp.asarray(
-        example.competence_batch.input_ids[:, :prefix_length],
-        dtype=jnp.int32,
-    )
-    prompt_mask = jnp.ones_like(prompt_ids, dtype=jnp.bool_)
-    sequential_adapter = benchmark.adaptations.sequential_single_lora.stages[-1].adapter
-    _, sequential_memory = pack_root_adapter(
-        sequential_adapter,
-        model_config,
-        lora_config,
-    )
-    independent_adapter = next(
-        adapter.adapter
-        for adapter in benchmark.adaptations.independent_root_lora.adapters
-        if adapter.task_id == final_task.task_id
-    )
-    _, independent_memory = pack_root_adapter(
-        independent_adapter,
-        model_config,
-        lora_config,
-    )
-    oracle_index = next(
-        index
-        for index, node in enumerate(benchmark.adaptations.vamp.graph.nodes)
-        if node.node_id == NodeId(str(final_task.task_id))
-    )
-    router_indices = {
-        router: int(
-            route_language_prefix(
-                router,
-                base_params,
-                model_config,
-                final_memory,
-                lora_config,
-                benchmark.adaptations.vamp.address_book,
-                example.router_batch,
-                random_seed=benchmark.settings.random_router_seed,
-                hopfield_config=benchmark.settings.hopfield,
-                ebt_config=benchmark.settings.ebt,
-            ).selected_indices[0]
-        )
-        for router in ROUTER_BASELINE_NAMES
-    }
-    generation_specs = (
-        ("frozen_base", None, None),
-        ("sequential_single_lora", sequential_memory, 1),
-        ("independent_root_lora", independent_memory, 1),
-        ("vamp_oracle", final_memory, oracle_index),
-        *tuple(
-            (router, final_memory, router_indices[router])
-            for router in ROUTER_BASELINE_NAMES
-        ),
-    )
-    prefix_text = tokenizer.decode(tuple(int(value) for value in prompt_ids[0]))
-    return tuple(
-        GeneratedLanguageSample(
-            baseline=name,
-            task_id=str(final_task.task_id),
-            prefix=prefix_text,
-            continuation=_generate_continuation(
-                base_params,
-                model_config,
-                tokenizer,
-                prompt_ids,
-                prompt_mask,
-                sample_new_tokens,
-                lora_config,
-                memory,
-                node_index,
-            ),
-        )
-        for name, memory, node_index in generation_specs
-    )
-
-
-def _generate_continuation(
-    base_params: GptNeoParams,
-    model_config: GptNeoConfig,
-    tokenizer: TextTokenizer,
-    prompt_ids: jax.Array,
-    prompt_mask: jax.Array,
-    sample_new_tokens: int,
-    lora_config: LoraConfig,
-    memory,
-    node_index,
-) -> str:
-    generated = greedy_generate(
-        base_params,
-        model_config,
-        prompt_ids,
-        prompt_mask,
-        sample_new_tokens,
-        eos_token_id=tokenizer.eos_token_id,
-        pad_token_id=tokenizer.pad_token_id,
-        lora_memory=memory,
-        lora_config=None if memory is None else lora_config,
-        node_index=node_index,
-    )
-    continuation_ids = tuple(
-        int(value) for value in generated[0, prompt_ids.shape[1] :]
-    )
-    decoded = tokenizer.decode(continuation_ids)
-    return decoded or tokenizer.decode(continuation_ids, skip_special_tokens=False) or "<EOS>"
 
 
 def _tree_l2_norm(tree) -> float:

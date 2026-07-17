@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import apm.data.text.language_tasks as language_tasks
 from apm.data.text.curricula import (
     CorpusCurriculum,
     CorpusDocumentSplits,
@@ -37,6 +38,43 @@ def _config() -> LanguageDataBuildConfig:
         suffix_length=2,
         examples_per_task_and_prefix=2,
         primary_prefix_length=4,
+    )
+
+
+def _full_sort_evaluation_sequences(
+    texts: tuple[str, ...],
+    tokenizer: CharTokenizer,
+    config: LanguageDataBuildConfig,
+    *,
+    split_identity: str,
+) -> tuple[tuple[int, ...], ...]:
+    maximum_length = max(config.prefix_lengths) + config.suffix_length
+    minimum_length = max(config.prefix_lengths) + 1
+    evaluation_stride = max(1, maximum_length // 4)
+    candidates = tuple(
+        (
+            language_tasks._sequence_identity(
+                split_identity,
+                text_index,
+                start,
+                sequence,
+            ),
+            sequence,
+        )
+        for text_index, text in enumerate(texts)
+        for tokens in (tokenizer.encode(text, add_eos=True),)
+        for start in range(
+            0,
+            max(len(tokens) - minimum_length + 1, 0),
+            evaluation_stride,
+        )
+        for sequence in (tokens[start : start + maximum_length],)
+    )
+    return tuple(
+        sequence
+        for _, sequence in sorted(candidates, key=lambda candidate: candidate[0])[
+            : config.examples_per_task_and_prefix
+        ]
     )
 
 
@@ -154,7 +192,7 @@ def test_corpus_curriculum_adapter_preserves_every_raw_document_boundary() -> No
     )
 
 
-def test_language_data_builder_is_deterministic_and_requires_full_spans() -> None:
+def test_language_data_builder_is_deterministic_and_requires_suffix_tokens() -> None:
     task = _task("task_0", 0)
     tokenizer = CharTokenizer.from_training_text("abcdefghijklmnopqrstuvwxyz")
     first = prepare_language_curriculum(
@@ -179,7 +217,7 @@ def test_language_data_builder_is_deterministic_and_requires_full_spans() -> Non
             first_sweep.test_examples[0].router_batch.input_ids,
             second_sweep.test_examples[0].router_batch.input_ids,
         )
-    with pytest.raises(ValueError, match="full evaluation spans"):
+    with pytest.raises(ValueError, match="evaluation spans"):
         prepare_language_curriculum(
             "too-short",
             (
@@ -194,3 +232,110 @@ def test_language_data_builder_is_deterministic_and_requires_full_spans() -> Non
             tokenizer,
             _config(),
         )
+
+
+def test_evaluation_sequences_right_pad_a_shorter_suffix() -> None:
+    tokenizer = CharTokenizer.from_training_text("abcdefgh")
+    config = LanguageDataBuildConfig(
+        context_length=8,
+        batch_size=2,
+        stride=8,
+        prefix_lengths=(4, 6),
+        suffix_length=2,
+        examples_per_task_and_prefix=1,
+        primary_prefix_length=4,
+    )
+    task = RawTextTask(
+        task_id="short-suffix",
+        train_texts=("abcdefgh" * 2,),
+        validation_texts=("abcdef",),
+        test_texts=("abcdef",),
+    )
+
+    prepared = prepare_language_curriculum(
+        "short-suffix",
+        (task,),
+        ("abcdef",),
+        tokenizer,
+        config,
+    )
+    longest_prefix_sweep = prepared.evaluation_sweeps[1]
+    competence = longest_prefix_sweep.validation_examples[0].competence_batch
+
+    assert competence.input_ids.shape == (1, 7)
+    assert np.sum(competence.attention_mask) == 6
+    assert np.sum(competence.loss_mask) == 1
+    assert not competence.attention_mask[0, -1]
+
+
+def test_bounded_evaluation_selection_matches_full_sort_for_unicode_duplicates() -> None:
+    texts = (
+        "åβ🙂漢字abc" * 4,
+        "åβ🙂漢字abc" * 4,
+        "Ωé🦊defgh" * 4,
+    )
+    tokenizer = CharTokenizer.from_training_text("".join(texts))
+    config = LanguageDataBuildConfig(
+        context_length=8,
+        batch_size=2,
+        stride=8,
+        prefix_lengths=(4, 6),
+        suffix_length=2,
+        examples_per_task_and_prefix=5,
+        primary_prefix_length=4,
+    )
+    split_identity = "验证:評価:🌱"
+
+    expected = _full_sort_evaluation_sequences(
+        texts,
+        tokenizer,
+        config,
+        split_identity=split_identity,
+    )
+    actual = language_tasks._select_evaluation_sequences(
+        texts,
+        tokenizer,
+        config,
+        split_identity=split_identity,
+    )
+
+    assert actual == expected
+
+
+def test_bounded_evaluation_selection_preserves_stable_identity_ties(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    texts = (
+        "abcdefghijklmnopqrstuvwx",
+        "zyxwvutsrqponmlkjihgfedcba",
+    )
+    tokenizer = CharTokenizer.from_training_text("".join(texts))
+    config = LanguageDataBuildConfig(
+        context_length=8,
+        batch_size=2,
+        stride=8,
+        prefix_lengths=(4, 6),
+        suffix_length=2,
+        examples_per_task_and_prefix=5,
+        primary_prefix_length=4,
+    )
+    monkeypatch.setattr(
+        language_tasks,
+        "_sequence_identity",
+        lambda split_identity, text_index, start, sequence: "same-identity",
+    )
+
+    expected = _full_sort_evaluation_sequences(
+        texts,
+        tokenizer,
+        config,
+        split_identity="tie-boundary",
+    )
+    actual = language_tasks._select_evaluation_sequences(
+        texts,
+        tokenizer,
+        config,
+        split_identity="tie-boundary",
+    )
+
+    assert actual == expected

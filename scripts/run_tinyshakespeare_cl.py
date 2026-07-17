@@ -115,6 +115,7 @@ def main() -> None:
         checkpoint.config,
         lora_config,
         EDGE_TRAINING_PRESET,
+        tokenizer,
         settings,
     )
     manifest = LanguageReportManifest(
@@ -161,9 +162,6 @@ def main() -> None:
         prepared,
         benchmark,
         checkpoint.params,
-        checkpoint.config,
-        lora_config,
-        tokenizer,
     )
     print(output_directory)
 

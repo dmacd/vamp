@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 import math
-from typing import Literal, NamedTuple
+from typing import Callable, Literal, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -88,6 +89,20 @@ class EbtAddressResult(NamedTuple):
     objective_trace: jax.Array
 
 
+_PrefixNllFunction = Callable[
+    [
+        GptNeoParams,
+        GptNeoConfig,
+        PackedLoraMemory,
+        LoraConfig,
+        RouterBatch,
+        jax.Array,
+    ],
+    jax.Array,
+]
+_ObjectiveDependencies = tuple[_PrefixNllFunction, Callable[..., object]]
+
+
 def masked_node_probabilities(
     node_logits: jax.Array,
     candidate_node_mask: jax.Array,
@@ -145,6 +160,88 @@ def soft_mixture_prefix_nll(
     )
 
 
+@partial(
+    jax.jit,
+    static_argnames=(
+        "model_config",
+        "lora_config",
+        "config",
+        "objective_dependencies",
+    ),
+)
+def _optimize_node_logits(
+    starting_logits: jax.Array,
+    candidate_mask: jax.Array,
+    current_base: GptNeoParams,
+    current_memory: PackedLoraMemory,
+    current_batch: RouterBatch,
+    *,
+    model_config: GptNeoConfig,
+    lora_config: LoraConfig,
+    config: EbtConfig,
+    objective_dependencies: _ObjectiveDependencies,
+) -> tuple[jax.Array, jax.Array]:
+    """Run one shape-stable compiled Adam refinement over node logits."""
+    prefix_nll_function, _model_application_cache_token = objective_dependencies
+    optimizer = optax.adam(config.learning_rate)
+
+    def per_example_objective(node_logits: jax.Array) -> jax.Array:
+        probabilities = masked_node_probabilities(
+            node_logits,
+            candidate_mask,
+            config.tau,
+        )
+        prefix_nll = prefix_nll_function(
+            current_base,
+            model_config,
+            current_memory,
+            lora_config,
+            current_batch,
+            probabilities,
+        )
+        entropy = _masked_entropy(probabilities, candidate_mask)
+        return prefix_nll + jnp.asarray(
+            config.entropy_penalty,
+            dtype=jnp.float32,
+        ) * entropy
+
+    starting_optimizer_state = optimizer.init(starting_logits)
+
+    def update_logits(carry, unused_step):
+        del unused_step
+        current_logits, optimizer_state = carry
+
+        def summed_objective(logits):
+            objectives = per_example_objective(logits)
+            return jnp.sum(objectives), objectives
+
+        (_, objectives), gradients = jax.value_and_grad(
+            summed_objective,
+            has_aux=True,
+        )(current_logits)
+        updates, next_optimizer_state = optimizer.update(
+            gradients,
+            optimizer_state,
+            current_logits,
+        )
+        return (
+            optax.apply_updates(current_logits, updates),
+            next_optimizer_state,
+        ), objectives
+
+    (final_logits, _), pre_update_trace = jax.lax.scan(
+        update_logits,
+        (starting_logits, starting_optimizer_state),
+        xs=None,
+        length=config.steps,
+    )
+    final_objective = per_example_objective(final_logits)
+    return final_logits, jnp.concatenate(
+        (pre_update_trace, final_objective[None, :]),
+        axis=0,
+    )
+
+
 def refine_ebt_address(
     base_params: GptNeoParams,
     model_config: GptNeoConfig,
@@ -175,90 +272,16 @@ def refine_ebt_address(
     frozen_base = jax.tree_util.tree_map(jax.lax.stop_gradient, base_params)
     frozen_memory = jax.tree_util.tree_map(jax.lax.stop_gradient, packed_memory)
     candidate_mask = jnp.asarray(candidate_node_mask, dtype=jnp.bool_)
-    optimizer = optax.adam(config.learning_rate)
-
-    def per_example_objective(
-        node_logits: jax.Array,
-        current_base: GptNeoParams,
-        current_memory: PackedLoraMemory,
-        current_batch: RouterBatch,
-    ) -> jax.Array:
-        probabilities = masked_node_probabilities(
-            node_logits,
-            candidate_mask,
-            config.tau,
-        )
-        prefix_nll = soft_mixture_prefix_nll(
-            current_base,
-            model_config,
-            current_memory,
-            lora_config,
-            current_batch,
-            probabilities,
-        )
-        entropy = _masked_entropy(probabilities, candidate_mask)
-        return prefix_nll + jnp.asarray(
-            config.entropy_penalty,
-            dtype=jnp.float32,
-        ) * entropy
-
-    def optimize_node_logits(
-        starting_logits: jax.Array,
-        current_base: GptNeoParams,
-        current_memory: PackedLoraMemory,
-        current_batch: RouterBatch,
-    ) -> tuple[jax.Array, jax.Array]:
-        starting_optimizer_state = optimizer.init(starting_logits)
-
-        def update_logits(carry, unused_step):
-            del unused_step
-            current_logits, optimizer_state = carry
-
-            def summed_objective(logits):
-                objectives = per_example_objective(
-                    logits,
-                    current_base,
-                    current_memory,
-                    current_batch,
-                )
-                return jnp.sum(objectives), objectives
-
-            (_, objectives), gradients = jax.value_and_grad(
-                summed_objective,
-                has_aux=True,
-            )(current_logits)
-            updates, next_optimizer_state = optimizer.update(
-                gradients,
-                optimizer_state,
-                current_logits,
-            )
-            return (
-                optax.apply_updates(current_logits, updates),
-                next_optimizer_state,
-            ), objectives
-
-        (final_logits, _), pre_update_trace = jax.lax.scan(
-            update_logits,
-            (starting_logits, starting_optimizer_state),
-            xs=None,
-            length=config.steps,
-        )
-        final_objective = per_example_objective(
-            final_logits,
-            current_base,
-            current_memory,
-            current_batch,
-        )
-        return final_logits, jnp.concatenate(
-            (pre_update_trace, final_objective[None, :]),
-            axis=0,
-        )
-
-    optimized_logits, objective_trace = jax.jit(optimize_node_logits)(
+    optimized_logits, objective_trace = _optimize_node_logits(
         jnp.asarray(initial_logits, dtype=jnp.float32),
+        candidate_mask,
         frozen_base,
         frozen_memory,
         prefix_batch,
+        model_config=model_config,
+        lora_config=lora_config,
+        config=config,
+        objective_dependencies=(soft_mixture_prefix_nll, apply_gpt_neo),
     )
     final_node_logits = jnp.where(
         candidate_mask,

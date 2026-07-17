@@ -102,6 +102,7 @@ def init_language_vamp_run(
     max_edges: int,
     key_probe_count: int = 256,
     root_id: NodeId = NodeId("root"),
+    evaluation_microbatch_size: int | None = None,
 ) -> LanguageVampRun:
     """Initialize a root-only run and derive its key from frozen-base probes."""
     _validate_capacities(max_nodes, max_edges)
@@ -118,6 +119,7 @@ def init_language_vamp_run(
         jnp.asarray(probes.input_ids),
         jnp.asarray(probes.attention_mask),
         expected_probe_count=key_probe_count,
+        evaluation_microbatch_size=evaluation_microbatch_size,
     )
     address_book = add_address_key(
         AddressBook(
@@ -150,6 +152,7 @@ def advance_language_vamp_run(
     train_config: LmTrainConfig,
     *,
     key_probe_count: int = 256,
+    evaluation_microbatch_size: int | None = None,
 ) -> LanguageVampRun:
     """Train and commit exactly one candidate edge without mutating prior state."""
     if not isinstance(run, LanguageVampRun):
@@ -191,6 +194,7 @@ def advance_language_vamp_run(
         packed_memory,
         lora_config,
         validation_probes,
+        evaluation_microbatch_size=evaluation_microbatch_size,
     )
     parent_mean_node_nll = _mean_parent_node_nll(
         parent_result.node_scores,
@@ -235,6 +239,7 @@ def advance_language_vamp_run(
         jnp.asarray(validation_probes.input_ids),
         jnp.asarray(validation_probes.attention_mask),
         expected_probe_count=key_probe_count,
+        evaluation_microbatch_size=evaluation_microbatch_size,
     )
     address_book = add_address_key(
         run.address_book,
@@ -261,6 +266,7 @@ def advance_language_vamp_run(
                     committed_memory,
                     lora_config,
                     example,
+                    evaluation_microbatch_size=evaluation_microbatch_size,
                 )
                 for example in completed_task.test_examples
             ),

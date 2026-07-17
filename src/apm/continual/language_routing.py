@@ -26,6 +26,10 @@ from apm.continual.language_tasks import (
 )
 from apm.continual.language_metrics import resolve_node_index
 from apm.lm.config import GptNeoConfig
+from apm.lm.evaluation import (
+    evaluation_microbatch_slices,
+    validate_evaluation_microbatch_size,
+)
 from apm.lm.gpt_neo import apply_gpt_neo
 from apm.lm.lora import LoraConfig, LoraEdge
 from apm.lm.lora_memory import PackedLoraMemory, edge_coefficients_for_node
@@ -112,6 +116,7 @@ def route_language_prefix(
     random_seed: int = 0,
     hopfield_config: HopfieldConfig = HopfieldConfig(),
     ebt_config: EbtConfig = EbtConfig(),
+    evaluation_microbatch_size: int | None = None,
 ) -> LanguageAddressDecision:
     """Route from prefix arrays only; task and suffix identity are unavailable."""
     if router not in ROUTER_BASELINE_NAMES:
@@ -121,6 +126,56 @@ def route_language_prefix(
     if np.any(np.sum(prefix_batch.attention_mask, axis=-1) == 0):
         raise ValueError("every router row must contain active prefix tokens")
     _validate_address_alignment(packed_memory, address_book)
+    microbatch_size = validate_evaluation_microbatch_size(
+        evaluation_microbatch_size
+    )
+    slices = evaluation_microbatch_slices(
+        prefix_batch.input_ids.shape[0],
+        microbatch_size,
+    )
+    decisions = tuple(
+        _route_language_prefix_batch(
+            router,
+            base_params,
+            model_config,
+            packed_memory,
+            lora_config,
+            address_book,
+            _slice_router_batch(prefix_batch, row_slice),
+            random_seed=random_seed,
+            hopfield_config=hopfield_config,
+            ebt_config=ebt_config,
+            evaluation_microbatch_size=microbatch_size,
+        )
+        for row_slice in slices
+    )
+    decision = (
+        decisions[0]
+        if len(decisions) == 1
+        else _concatenate_address_decisions(decisions)
+    )
+    return _validated_decision(
+        decision,
+        packed_memory.valid_node_mask,
+        prefix_batch.input_ids.shape[0],
+    )
+
+
+def _route_language_prefix_batch(
+    router: RouterBaselineName,
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    packed_memory: PackedLoraMemory,
+    lora_config: LoraConfig,
+    address_book: AddressBook,
+    prefix_batch: RouterBatch,
+    *,
+    random_seed: int,
+    hopfield_config: HopfieldConfig,
+    ebt_config: EbtConfig,
+    evaluation_microbatch_size: int | None,
+) -> LanguageAddressDecision:
+    """Route one evaluation microbatch with unchanged per-example semantics."""
     if router == "vamp_exhaustive":
         result = exhaustive_prefix_nll_address(
             base_params,
@@ -128,6 +183,7 @@ def route_language_prefix(
             packed_memory,
             lora_config,
             prefix_batch,
+            evaluation_microbatch_size=evaluation_microbatch_size,
         )
         decision = _decision_from_exhaustive(
             result,
@@ -171,11 +227,7 @@ def route_language_prefix(
                 packed_memory.valid_node_mask,
                 random_seed,
             )
-    return _validated_decision(
-        decision,
-        packed_memory.valid_node_mask,
-        prefix_batch.input_ids.shape[0],
-    )
+    return decision
 
 
 def evaluate_language_router(
@@ -191,6 +243,8 @@ def evaluate_language_router(
     random_seed: int = 0,
     hopfield_config: HopfieldConfig = HopfieldConfig(),
     ebt_config: EbtConfig = EbtConfig(),
+    evaluation_microbatch_size: int | None = None,
+    suffix_nll_by_node: np.ndarray | None = None,
 ) -> LanguageRouterEvaluation:
     """Route on stacked prefixes, then score every valid node on suffixes."""
     if not examples:
@@ -217,13 +271,23 @@ def evaluate_language_router(
         random_seed=random_seed,
         hopfield_config=hopfield_config,
         ebt_config=ebt_config,
+        evaluation_microbatch_size=evaluation_microbatch_size,
     )
-    suffix_nll = competence_nll_by_node(
-        base_params,
-        model_config,
-        packed_memory,
-        lora_config,
-        competence_batch,
+    suffix_nll = (
+        competence_nll_by_node(
+            base_params,
+            model_config,
+            packed_memory,
+            lora_config,
+            competence_batch,
+            evaluation_microbatch_size=evaluation_microbatch_size,
+        )
+        if suffix_nll_by_node is None
+        else _validated_suffix_nll_by_node(
+            suffix_nll_by_node,
+            competence_batch.input_ids.shape[0],
+            packed_memory.valid_node_mask,
+        )
     )
     oracle_indices = np.asarray(
         tuple(resolve_node_index(graph, example.oracle_node_id) for example in examples),
@@ -262,6 +326,8 @@ def competence_nll_by_node(
     packed_memory: PackedLoraMemory,
     lora_config: LoraConfig,
     competence_batch: CompetenceBatch,
+    *,
+    evaluation_microbatch_size: int | None = None,
 ) -> np.ndarray:
     """Return per-example suffix NLL for every fixed-capacity node."""
     if not isinstance(competence_batch, CompetenceBatch):
@@ -269,6 +335,19 @@ def competence_nll_by_node(
     loss_mask = jnp.asarray(competence_batch.loss_mask, dtype=jnp.float32)
     if np.any(np.sum(competence_batch.loss_mask, axis=-1) == 0):
         raise ValueError("every competence row must contain suffix loss tokens")
+
+    microbatch_size = validate_evaluation_microbatch_size(
+        evaluation_microbatch_size
+    )
+    if microbatch_size is not None:
+        return _microbatched_competence_nll_by_node(
+            base_params,
+            model_config,
+            packed_memory,
+            lora_config,
+            competence_batch,
+            microbatch_size,
+        )
 
     def score_node(node_index: jax.Array) -> jax.Array:
         coefficients = edge_coefficients_for_node(packed_memory, node_index)
@@ -298,6 +377,100 @@ def competence_nll_by_node(
     result = np.asarray(masked, dtype=np.float32)
     result.flags.writeable = False
     return result
+
+
+def _microbatched_competence_nll_by_node(
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    packed_memory: PackedLoraMemory,
+    lora_config: LoraConfig,
+    competence_batch: CompetenceBatch,
+    evaluation_microbatch_size: int,
+) -> np.ndarray:
+    """Score one node and bounded row slice at a time."""
+    row_count = competence_batch.input_ids.shape[0]
+    node_capacity = packed_memory.node_path_matrix.shape[0]
+    valid_node_mask = np.asarray(packed_memory.valid_node_mask, dtype=np.bool_)
+    result = np.full((row_count, node_capacity), np.inf, dtype=np.float32)
+    for row_slice in evaluation_microbatch_slices(
+        row_count,
+        evaluation_microbatch_size,
+    ):
+        input_ids = jnp.asarray(
+            competence_batch.input_ids[row_slice],
+            dtype=jnp.int32,
+        )
+        attention_mask = jnp.asarray(
+            competence_batch.attention_mask[row_slice],
+            dtype=jnp.bool_,
+        )
+        target_ids = jnp.asarray(
+            competence_batch.target_ids[row_slice],
+            dtype=jnp.int32,
+        )
+        loss_mask = jnp.asarray(
+            competence_batch.loss_mask[row_slice],
+            dtype=jnp.float32,
+        )
+        active_token_counts = jnp.sum(loss_mask, axis=-1)
+        for node_index in np.flatnonzero(valid_node_mask):
+            coefficients = edge_coefficients_for_node(packed_memory, node_index)
+            logits = apply_gpt_neo(
+                base_params,
+                model_config,
+                input_ids,
+                attention_mask,
+                lora_memory=packed_memory,
+                edge_coefficients=coefficients,
+                lora_config=lora_config,
+                training=False,
+            ).logits
+            token_nll = per_token_nll(logits, target_ids)
+            node_nll = jnp.sum(token_nll * loss_mask, axis=-1) / active_token_counts
+            result[row_slice, node_index] = np.asarray(
+                node_nll,
+                dtype=np.float32,
+            )
+    result.flags.writeable = False
+    return result
+
+
+def _validated_suffix_nll_by_node(
+    values: np.ndarray,
+    batch_size: int,
+    valid_node_mask: jax.Array,
+) -> np.ndarray:
+    """Validate evaluator-provided suffix scores before baseline reuse."""
+    valid_mask = np.asarray(valid_node_mask, dtype=np.bool_)
+    suffix_nll = np.array(values, dtype=np.float32, copy=True)
+    expected_shape = (batch_size, valid_mask.shape[0])
+    if suffix_nll.shape != expected_shape:
+        raise ValueError(f"suffix_nll_by_node must have shape {expected_shape}")
+    if np.any(~np.isfinite(suffix_nll[:, valid_mask])) or np.any(
+        suffix_nll[:, valid_mask] < 0.0
+    ):
+        raise ValueError("valid-node suffix NLL values must be finite and nonnegative")
+    if np.any(~np.isposinf(suffix_nll[:, ~valid_mask])):
+        raise ValueError("invalid-node suffix NLL values must be positive infinity")
+    suffix_nll.flags.writeable = False
+    return suffix_nll
+
+
+def _slice_router_batch(batch: RouterBatch, row_slice: slice) -> RouterBatch:
+    return RouterBatch(
+        input_ids=batch.input_ids[row_slice],
+        attention_mask=batch.attention_mask[row_slice],
+        target_ids=batch.target_ids[row_slice],
+        loss_mask=batch.loss_mask[row_slice],
+    )
+
+
+def _concatenate_address_decisions(
+    decisions: tuple[LanguageAddressDecision, ...],
+) -> LanguageAddressDecision:
+    return LanguageAddressDecision(
+        *(jnp.concatenate(values, axis=0) for values in zip(*decisions))
+    )
 
 
 def _hopfield_prefix_address(

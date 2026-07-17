@@ -167,6 +167,7 @@ def test_content_query_key_and_hopfield_apis_exclude_identity_and_adapters() -> 
         "base_config",
         "prefix_input_ids",
         "prefix_attention_mask",
+        "evaluation_microbatch_size",
     )
     assert parameter_names[derive_node_content_key] == (
         "base_params",
@@ -174,6 +175,7 @@ def test_content_query_key_and_hopfield_apis_exclude_identity_and_adapters() -> 
         "probe_input_ids",
         "probe_attention_mask",
         "expected_probe_count",
+        "evaluation_microbatch_size",
     )
     assert parameter_names[hopfield_address] == (
         "query_embeddings",

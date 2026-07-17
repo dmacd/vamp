@@ -8,6 +8,7 @@ import numpy as np
 
 from apm.continual.language_tasks import AddressBook, NodeId
 from apm.lm.config import GptNeoConfig
+from apm.lm.evaluation import evaluation_microbatch_slices
 from apm.lm.gpt_neo import apply_gpt_neo
 from apm.lm.parameters import GptNeoParams
 
@@ -20,9 +21,44 @@ def encode_frozen_base_content(
     base_config: GptNeoConfig,
     prefix_input_ids: jax.Array,
     prefix_attention_mask: jax.Array,
+    *,
+    evaluation_microbatch_size: int | None = None,
 ) -> jax.Array:
     """Return normalized masked-mean final states from the adapter-free base."""
     _validate_prefix_shapes(prefix_input_ids, prefix_attention_mask)
+    slices = evaluation_microbatch_slices(
+        prefix_input_ids.shape[0],
+        evaluation_microbatch_size,
+    )
+    if len(slices) > 1:
+        encoded = tuple(
+            np.asarray(
+                _encode_frozen_base_content_batch(
+                    base_params,
+                    base_config,
+                    prefix_input_ids[row_slice],
+                    prefix_attention_mask[row_slice],
+                ),
+                dtype=np.float32,
+            )
+            for row_slice in slices
+        )
+        return jnp.asarray(np.concatenate(encoded, axis=0), dtype=jnp.float32)
+    return _encode_frozen_base_content_batch(
+        base_params,
+        base_config,
+        prefix_input_ids,
+        prefix_attention_mask,
+    )
+
+
+def _encode_frozen_base_content_batch(
+    base_params: GptNeoParams,
+    base_config: GptNeoConfig,
+    prefix_input_ids: jax.Array,
+    prefix_attention_mask: jax.Array,
+) -> jax.Array:
+    """Encode one already-bounded batch without retaining its vocabulary logits."""
     final_hidden = jax.lax.stop_gradient(
         apply_gpt_neo(
             base_params,
@@ -47,6 +83,7 @@ def derive_node_content_key(
     probe_attention_mask: jax.Array,
     *,
     expected_probe_count: int = DEFAULT_CONTENT_KEY_PROBE_COUNT,
+    evaluation_microbatch_size: int | None = None,
 ) -> jax.Array:
     """Return the normalized centroid of an exact deterministic probe batch."""
     if type(expected_probe_count) is not int or expected_probe_count <= 0:
@@ -62,6 +99,7 @@ def derive_node_content_key(
         base_config,
         probe_input_ids,
         probe_attention_mask,
+        evaluation_microbatch_size=evaluation_microbatch_size,
     )
     return _l2_normalize(jnp.mean(query_embeddings, axis=0, keepdims=True))[0]
 

@@ -5,6 +5,7 @@ import math
 import numpy as np
 import pytest
 
+import apm.continual.language_benchmarks as language_benchmarks_module
 from apm.continual.language_benchmarks import (
     CANONICAL_BASELINE_MATRIX,
     ROUTER_BASELINE_NAMES,
@@ -166,6 +167,60 @@ def test_address_timing_synchronizes_cold_and_each_warm_result() -> None:
     assert timing.warm_latency_seconds == pytest.approx(3.0)
     assert timing.warm_throughput_examples_per_second == pytest.approx(2.0)
     assert timing.operations is operations
+
+
+def test_address_timing_retraces_after_prewarming_then_reuses_warm_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pending = _PendingResult()
+    cache_is_warm = False
+    clear_count = 0
+    invocation_count = 0
+    trace_count = 0
+
+    def address() -> _PendingResult:
+        nonlocal cache_is_warm, invocation_count, trace_count
+        invocation_count += 1
+        if not cache_is_warm:
+            trace_count += 1
+            cache_is_warm = True
+        return pending
+
+    def clear_caches() -> None:
+        nonlocal cache_is_warm, clear_count
+        clear_count += 1
+        cache_is_warm = False
+
+    address()
+    assert trace_count == 1
+    monkeypatch.setattr(
+        language_benchmarks_module.jax,
+        "clear_caches",
+        clear_caches,
+    )
+    time_synchronized_addressing(
+        address,
+        AddressingOperationCounts(
+            prefix_tokens=8,
+            candidates_available=2,
+            candidates_scored=2,
+            full_model_forward_equivalent_tokens=16,
+            base_forwards=2,
+            edge_evaluations=2,
+            hopfield_dot_products=0,
+            ebt_steps=0,
+            ebt_mask_size=0,
+            selected_execution_cost=1,
+        ),
+        batch_size=2,
+        warm_repetitions=3,
+        clock=_FakeClock((0.0, 5.0, 10.0, 12.0, 20.0, 23.0, 30.0, 34.0)),
+    )
+
+    assert clear_count == 1
+    assert invocation_count == 5
+    assert trace_count == 2
+    assert pending.block_count == 4
 
 
 def test_operation_counts_distinguish_logical_candidates_and_ebt_mask() -> None:

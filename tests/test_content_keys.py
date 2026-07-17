@@ -79,6 +79,7 @@ def test_content_encoder_signature_structurally_excludes_adapters_and_identity()
         "base_config",
         "prefix_input_ids",
         "prefix_attention_mask",
+        "evaluation_microbatch_size",
     )
     assert key_parameters == (
         "base_params",
@@ -86,11 +87,12 @@ def test_content_encoder_signature_structurally_excludes_adapters_and_identity()
         "probe_input_ids",
         "probe_attention_mask",
         "expected_probe_count",
+        "evaluation_microbatch_size",
     )
     forbidden_fragments = ("lora", "adapter", "memory", "task", "node")
     assert not any(
         fragment in parameter
-        for parameter in encoder_parameters + key_parameters[:-1]
+        for parameter in encoder_parameters[:-1] + key_parameters[:-2]
         for fragment in forbidden_fragments
     )
 
@@ -195,6 +197,37 @@ def test_node_key_is_deterministic_normalized_centroid_of_normalized_queries() -
     np.testing.assert_array_equal(first, repeated)
     np.testing.assert_allclose(first, expected, rtol=1e-6, atol=1e-6)
     np.testing.assert_allclose(np.linalg.norm(np.asarray(first)), 1.0, atol=1e-6)
+
+
+def test_content_encoding_microbatches_without_changing_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    params = _params()
+    probe_ids, probe_mask = _probe_batch(5)
+    expected = encode_frozen_base_content(
+        params,
+        _config(),
+        probe_ids,
+        probe_mask,
+    )
+    original_apply = content_keys_module.apply_gpt_neo
+    observed_batch_sizes: list[int] = []
+
+    def counted_apply(*args, **kwargs):
+        observed_batch_sizes.append(int(args[2].shape[0]))
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(content_keys_module, "apply_gpt_neo", counted_apply)
+    actual = encode_frozen_base_content(
+        params,
+        _config(),
+        probe_ids,
+        probe_mask,
+        evaluation_microbatch_size=2,
+    )
+
+    np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
+    assert observed_batch_sizes == [2, 2, 1]
 
 
 def test_default_key_derivation_requires_exactly_256_probes() -> None:

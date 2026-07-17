@@ -6,12 +6,12 @@ import numpy as np
 import pytest
 
 from apm.continual.language_benchmarks import (
+    GeneratedLanguageSample,
     ROUTER_BASELINE_NAMES,
     STORED_BASELINE_NAMES,
 )
 from apm.continual.language_report import (
     AddressConfusion,
-    GeneratedLanguageSample,
     LanguageReportBundle,
     LanguageReportManifest,
     ReportRecord,

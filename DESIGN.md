@@ -124,9 +124,10 @@ routing returns fixed-capacity per-example NLL scores, masked probabilities,
 hard indices, margins, and entropy.
 
 Content addresses never execute adapters. They are L2-normalized masked means
-of frozen-base final hidden states; node keys are normalized centroids of 256
-deterministic prefix probes. The root uses the same derivation path on a base
-validation probe and occupies address-book slot zero.
+of frozen-base final hidden states; node keys are normalized centroids of a
+fixed, preset-defined deterministic probe set. The canonical TinyStories
+preset uses 128 probes and TinyShakespeare uses 64. The root uses the same
+derivation path on a base validation probe and occupies address-book slot zero.
 
 Hopfield routing operates only on those normalized values. Invalid address
 rows receive `-inf` similarity and exactly zero probability; valid rows use
@@ -138,6 +139,19 @@ computed only in evaluator code.
 The root remains addressable and receives a content key derived from a frozen
 base validation probe. Hopfield output may initialize EBT, including a masked
 top-k variant. Routing never uses competence suffix tokens.
+
+Evaluation microbatching is an execution boundary, not a change to routing or
+competence semantics. General library paths retain their vectorized default;
+the canonical TinyStories runner records and uses a row microbatch size of
+eight independently of training batches. It preserves input order and exact
+per-example values, scores valid nodes sequentially within each chunk, and
+applies the same bound to parent probes, frozen content keys, stored
+competence, all task-free routers, report samples, and final timing. Suffix
+competence is computed once for each stage/task/prefix sweep and reused across
+the five router evaluations because it is router-independent. Timing still
+covers the complete logical evaluation batch and reports operation counts for
+that complete batch, while the microbatch setting participates in report
+identity.
 
 EBT owns only a `[batch, max_nodes]` float32 logit value. A masked,
 temperature-one softmax produces node probabilities, and multiplication by the
@@ -209,13 +223,17 @@ time and router-specific logical operation counts rather than treating a
 Hopfield dot product and a full model candidate evaluation as equivalent.
 When a peak-device-memory target is configured, the runner requires allocator
 peak statistics from the active JAX backend and fails the run if the observed
-peak exceeds the target. Successful reports record the observed peak, backend
+peak exceeds the target. The completed benchmark owns its generated samples:
+all sample routing and generation finishes before the final allocator read, so
+the enforced and reported peak covers that work as well as training,
+evaluation, and timing. Successful reports record the observed peak, backend
 limit, target, platform, and device kind; CPU smoke runs without a target may
 report those allocator fields as unavailable.
 
-Language reports are deterministic projections of a completed benchmark, not
-authoritative training state. Their identity is the canonical configuration
-JSON hash beneath
+Language reports are deterministic projections of a completed benchmark,
+including its already-generated samples; report building performs no sample
+routing or generation. Reports are not authoritative training state. Their
+identity is the canonical configuration JSON hash beneath
 `results/language_cl/<dataset>/<curriculum>/<preset>-seed0-<hash>/`. Rewriting
 the same bundle replaces JSONL files rather than appending and produces the
 same manifest, charts, graph, samples, and HTML bytes. Every report must cover
@@ -252,12 +270,30 @@ topic/split bucket takes the lowest content hashes to obtain exact equal
 counts. These choices make the bounded topic benchmark in-domain continual
 adaptation rather than an out-of-domain generalization claim.
 
+Pinned-file verification precedes TinyStories decoding. The official
+validation aggregate is small enough to retain as normalized documents, while
+the train aggregate is parsed through separator-safe text chunks and is never
+materialized as one Python string. During that pass the loader excludes
+official-validation identities, retains a compact set of seen SHA-256
+identities so the first normalized occurrence wins globally, and keeps only
+each topic's requested lowest-content-hash story payloads. For the pinned
+source, content hashes are authoritative identities; unlike the small
+in-memory helper, the streaming path does not retain every story merely to
+diagnose a hypothetical SHA-256 collision. This boundary reproduces selection
+semantics without retaining the 2.2 GB raw train aggregate or every normalized
+train story.
+
 Tokenization happens after document selection. TinyStories uses the tokenizer
 artifact bound to the converted checkpoint, while TinyShakespeare constructs
 its character vocabulary from training text only. Evaluation span selection
 is deterministic and shared across prefix-length sweeps: a selected maximum
 span is shortened at the prefix/suffix boundary, so routers at different
-prefix lengths are compared on the same underlying document material.
+prefix lengths are compared on the same underlying document material. The
+lowest required span identities are selected from a lazy candidate stream with
+bounded storage; original candidate ordinals preserve the former stable-sort
+behavior when identities tie. The configured suffix length is a fixed capacity:
+an eligible sequence must contain the maximum prefix plus at least one suffix
+target, and any unused suffix capacity is right padded and masked out of NLL.
 
 ## Checkpoints and the PyTorch Boundary
 

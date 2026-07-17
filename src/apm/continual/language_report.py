@@ -14,6 +14,7 @@ from typing import TypeAlias
 import numpy as np
 
 from apm.continual.language_benchmarks import (
+    GeneratedLanguageSample,
     ROUTER_BASELINE_NAMES,
     STORED_BASELINE_NAMES,
 )
@@ -117,22 +118,6 @@ class AddressConfusion:
         immutable_counts = np.array(counts, dtype=np.int64, copy=True)
         immutable_counts.flags.writeable = False
         object.__setattr__(self, "counts", immutable_counts)
-
-
-@dataclass(frozen=True)
-class GeneratedLanguageSample:
-    """One report-facing prefix and generated continuation."""
-
-    baseline: str
-    task_id: str
-    prefix: str
-    continuation: str
-
-    def __post_init__(self) -> None:
-        if not self.baseline or not self.task_id:
-            raise ValueError("sample baseline and task_id must not be empty")
-        if not self.prefix or not self.continuation:
-            raise ValueError("sample prefix and continuation must not be empty")
 
 
 @dataclass(frozen=True)

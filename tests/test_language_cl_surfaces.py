@@ -92,9 +92,7 @@ def test_phase10_script_import_is_offline_and_does_not_start_work(
         (
             TINYSTORIES_RUNNER,
             {
-                "load_pinned_dataset_text",
-                "prepare_tinystories_splits",
-                "build_tinystories_topic_curriculum",
+                "load_tinystories_topic_dataset",
                 "load_tinystories_artifact",
                 "from_file",
                 "prepare_language_curriculum",
@@ -269,6 +267,7 @@ def test_runner_config_hash_covers_execution_identity(
     assert "asdict(settings)" in source_text
     assert "asdict(lora_config)" in source_text
     if script_path == TINYSTORIES_RUNNER:
+        assert "evaluation_microbatch_size=8" in source_text
         assert "peak_device_memory_target_bytes" in source_text
         assert "preset.peak_device_memory_gib * 1024**3" in source_text
 

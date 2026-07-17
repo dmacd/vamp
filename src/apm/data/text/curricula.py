@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
+import heapq
 import math
 from pathlib import Path
 from string import ascii_lowercase
@@ -23,6 +24,7 @@ _GIT_REVISION_PATTERN = re.compile(r"[0-9a-f]{40}")
 _WORD_PATTERN = re.compile(r"[^\W_]+", flags=re.UNICODE)
 _WHITESPACE_PATTERN = re.compile(r"\s+", flags=re.UNICODE)
 _PINNED_FILE_READ_CHUNK_SIZE = 1024 * 1024
+_TINYSTORIES_TEXT_READ_CHUNK_SIZE = 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -325,6 +327,30 @@ class DocumentCurriculum:
 
 
 @dataclass(frozen=True)
+class TinyStoriesTopicDataset:
+    """Selected topic curriculum plus the complete root-validation half."""
+
+    curriculum: DocumentCurriculum
+    root_validation: tuple[TextDocument, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.curriculum, DocumentCurriculum):
+            raise TypeError("curriculum must be a DocumentCurriculum")
+        if not isinstance(self.root_validation, tuple) or not self.root_validation:
+            raise ValueError("root_validation must be a nonempty document tuple")
+        if any(
+            not isinstance(document, TextDocument)
+            for document in self.root_validation
+        ):
+            raise TypeError("root_validation must contain TextDocument values")
+        content_ids = tuple(
+            document.content_id for document in self.root_validation
+        )
+        if len(set(content_ids)) != len(content_ids):
+            raise ValueError("root_validation documents must be unique")
+
+
+@dataclass(frozen=True)
 class StorySplitCounts:
     """Exact per-task story counts requested for all three splits."""
 
@@ -428,15 +454,15 @@ TINYSTORIES_EVALUATION_PRESET = EvaluationSpanPreset(
 )
 TINYSTORIES_SINGLE_GPU_PRESET = TinyStoriesSingleGpuPreset(
     task_count=4,
-    stories_per_task=StorySplitCounts(10_000, 1_000, 1_000),
+    stories_per_task=StorySplitCounts(10_000, 128, 128),
     context_length=256,
     lora_rank=8,
     lora_alpha=8.0,
     batch_size=32,
     adapter_steps_per_task=2_000,
-    parent_probe_count=256,
-    content_key_probe_count=256,
-    evaluation_examples_per_task_and_prefix=256,
+    parent_probe_count=128,
+    content_key_probe_count=128,
+    evaluation_examples_per_task_and_prefix=128,
     max_nodes=5,
     max_edges=4,
     peak_device_memory_gib=12,
@@ -622,13 +648,14 @@ def normalized_documents(texts: Sequence[str]) -> tuple[TextDocument, ...]:
     """Normalize and deterministically deduplicate supplied documents in order."""
     documents_by_id: dict[str, TextDocument] = {}
     for text in texts:
-        normalized = normalize_text(text)
-        if not normalized:
+        document = _normalized_document(text)
+        if document is None:
             continue
-        document = TextDocument(sha256_content_id(normalized), normalized)
         existing = documents_by_id.get(document.content_id)
         if existing is not None and existing.text != document.text:
-            raise RuntimeError("SHA-256 collision between distinct normalized documents")
+            raise RuntimeError(
+                "SHA-256 collision between distinct normalized documents"
+            )
         documents_by_id.setdefault(document.content_id, document)
     return tuple(documents_by_id.values())
 
@@ -1006,6 +1033,143 @@ def build_tinystories_topic_curriculum(
     )
 
 
+def load_tinystories_topic_dataset(
+    train_path: str | Path,
+    official_validation_path: str | Path,
+    source: TinyStoriesSourceContract,
+    counts: StorySplitCounts,
+) -> TinyStoriesTopicDataset:
+    """Verify pinned aggregates and build the topic dataset with bounded train text."""
+    if not isinstance(source, TinyStoriesSourceContract):
+        raise TypeError("source must be a TinyStoriesSourceContract")
+    if not isinstance(counts, StorySplitCounts):
+        raise TypeError("counts must be StorySplitCounts")
+    verified_train_path, verified_validation_path = (
+        verify_pinned_dataset_file(path, expected_file)
+        for path, expected_file in (
+            (train_path, source.train_file),
+            (official_validation_path, source.validation_file),
+        )
+    )
+    evaluation_documents = _load_unique_tinystories_documents(
+        verified_validation_path
+    )
+    if len(evaluation_documents) % 2 != 0:
+        raise ValueError(
+            "deduplicated official validation stories must divide exactly 50/50"
+        )
+    ordered_evaluation = tuple(
+        sorted(evaluation_documents, key=lambda document: document.content_id)
+    )
+    midpoint = len(ordered_evaluation) // 2
+    source_splits = DocumentSplits(
+        train=_select_tinystories_train_documents(
+            verified_train_path,
+            frozenset(document.content_id for document in evaluation_documents),
+            counts.train,
+        ),
+        validation=ordered_evaluation[:midpoint],
+        test=ordered_evaluation[midpoint:],
+    )
+    return TinyStoriesTopicDataset(
+        curriculum=build_tinystories_topic_curriculum(source_splits, counts),
+        root_validation=source_splits.validation,
+    )
+
+
+def _normalized_document(text: str) -> TextDocument | None:
+    normalized = normalize_text(text)
+    return (
+        TextDocument(sha256(normalized.encode("utf-8")).hexdigest(), normalized)
+        if normalized
+        else None
+    )
+
+
+def _iter_tinystories_document_texts(path: Path) -> Iterator[str]:
+    """Yield aggregate spans while retaining at most one incomplete story."""
+    pending_text = ""
+    with path.open("r", encoding="utf-8", newline="") as source:
+        while chunk := source.read(_TINYSTORIES_TEXT_READ_CHUNK_SIZE):
+            document_texts = (pending_text + chunk).split(
+                TINYSTORIES_DOCUMENT_SEPARATOR
+            )
+            yield from document_texts[:-1]
+            pending_text = document_texts[-1]
+    yield pending_text
+
+
+def _load_unique_tinystories_documents(path: Path) -> tuple[TextDocument, ...]:
+    """Load one small aggregate as normalized documents without raw aggregation."""
+    documents_by_id: dict[str, TextDocument] = {}
+    for text in _iter_tinystories_document_texts(path):
+        document = _normalized_document(text)
+        if document is None:
+            continue
+        existing = documents_by_id.get(document.content_id)
+        if existing is not None and existing.text != document.text:
+            raise RuntimeError(
+                "SHA-256 collision between distinct normalized documents"
+            )
+        documents_by_id.setdefault(document.content_id, document)
+    return tuple(documents_by_id.values())
+
+
+def _select_tinystories_train_documents(
+    path: Path,
+    evaluation_ids: frozenset[str],
+    requested_count: int,
+) -> tuple[TextDocument, ...]:
+    """Keep only each topic's requested lowest-hash unique train stories."""
+    selected_by_topic: dict[str, dict[str, TextDocument]] = {
+        topic.name: {} for topic in TINYSTORIES_TOPICS
+    }
+    seen_content_ids: set[str] = set()
+    largest_hash_heaps: dict[str, list[tuple[int, str]]] = {
+        topic.name: [] for topic in TINYSTORIES_TOPICS
+    }
+    for text in _iter_tinystories_document_texts(path):
+        document = _normalized_document(text)
+        if document is None or document.content_id in seen_content_ids:
+            continue
+        seen_content_ids.add(document.content_id)
+        if document.content_id in evaluation_ids:
+            continue
+        assignment = classify_tinystory_topic(document.text)
+        if assignment is None:
+            continue
+        selected = selected_by_topic[assignment.topic]
+        largest_hash_heap = largest_hash_heaps[assignment.topic]
+        if len(selected) < requested_count:
+            selected[document.content_id] = document
+            heapq.heappush(
+                largest_hash_heap,
+                (-int(document.content_id, 16), document.content_id),
+            )
+        elif document.content_id < largest_hash_heap[0][1]:
+            _, removed_content_id = heapq.heapreplace(
+                largest_hash_heap,
+                (-int(document.content_id, 16), document.content_id),
+            )
+            del selected[removed_content_id]
+            selected[document.content_id] = document
+    for topic in TINYSTORIES_TOPICS:
+        selected_count = len(selected_by_topic[topic.name])
+        if selected_count < requested_count:
+            raise ValueError(
+                f"topic {topic.name!r} has {selected_count} train stories; "
+                f"requested exactly {requested_count}"
+            )
+    return tuple(
+        document
+        for topic in TINYSTORIES_TOPICS
+        for document in sorted(
+            selected_by_topic[topic.name].values(),
+            key=lambda selected_document: selected_document.content_id,
+        )
+    )
+
+
 def _contiguous_text_chunks(text: str) -> tuple[str, ...]:
     if not isinstance(text, str):
         raise TypeError("corpus text must be a string")
@@ -1079,6 +1243,7 @@ __all__ = [
     "TINY_SHAKESPEARE_EVALUATION_EXAMPLES_PER_TASK_AND_PREFIX",
     "TINY_SHAKESPEARE_MACRO_DOCUMENT_CHARACTERS",
     "TextDocument",
+    "TinyStoriesTopicDataset",
     "TinyStoriesSingleGpuPreset",
     "TinyStoriesSourceContract",
     "TopicAssignment",
@@ -1101,6 +1266,7 @@ __all__ = [
     "prepare_tinystories_splits",
     "raw_text_sha256",
     "load_pinned_dataset_text",
+    "load_tinystories_topic_dataset",
     "seeded_token_permutation",
     "sha256_content_id",
     "stable_hash_task_index",

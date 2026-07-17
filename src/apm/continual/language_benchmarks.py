@@ -45,6 +45,22 @@ ROUTER_BASELINE_NAMES: tuple[RouterBaselineName, ...] = (
 
 
 @dataclass(frozen=True)
+class GeneratedLanguageSample:
+    """One benchmark-facing prefix and generated continuation."""
+
+    baseline: str
+    task_id: str
+    prefix: str
+    continuation: str
+
+    def __post_init__(self) -> None:
+        if not self.baseline or not self.task_id:
+            raise ValueError("sample baseline and task_id must not be empty")
+        if not self.prefix or not self.continuation:
+            raise ValueError("sample prefix and continuation must not be empty")
+
+
+@dataclass(frozen=True)
 class BaselineSpec:
     """One canonical benchmark identifier, category, and scientific purpose."""
 
@@ -544,7 +560,7 @@ def time_synchronized_addressing(
     warm_repetitions: int = 5,
     clock: Callable[[], float] = time.perf_counter,
 ) -> AddressingTiming:
-    """Measure one synchronized cold call separately from synchronized warm calls."""
+    """Clear JAX caches, then time one cold call and repeated warm calls."""
     if not callable(address):
         raise TypeError("address must be callable")
     if not isinstance(operations, AddressingOperationCounts):
@@ -554,6 +570,7 @@ def time_synchronized_addressing(
     if type(warm_repetitions) is not int or warm_repetitions <= 0:
         raise ValueError("warm_repetitions must be a positive integer")
 
+    jax.clear_caches()
     cold_start = clock()
     _block_until_ready(address())
     cold_seconds = clock() - cold_start

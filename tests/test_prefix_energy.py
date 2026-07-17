@@ -253,6 +253,51 @@ def test_scores_normalize_valid_tokens_and_ignore_masked_padding(
     )
 
 
+def test_microbatched_router_matches_full_scores_and_bounds_every_forward(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_path_sensitive_model(monkeypatch)
+    config = _model_config()
+    params = init_gpt_neo_params(jax.random.PRNGKey(0), config)
+    packed_memory = _packed_memory()
+    lora_config = _lora_config()
+    batch = _router_batch((2, 0, 1, 2, 1))
+    expected = exhaustive_prefix_nll_address(
+        params,
+        config,
+        packed_memory,
+        lora_config,
+        batch,
+    )
+    original_apply = prefix_energy.apply_gpt_neo
+    observed_batch_sizes: list[int] = []
+
+    def counted_apply(*args, **kwargs):
+        observed_batch_sizes.append(int(args[2].shape[0]))
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(prefix_energy, "apply_gpt_neo", counted_apply)
+    actual = exhaustive_prefix_nll_address(
+        params,
+        config,
+        packed_memory,
+        lora_config,
+        batch,
+        evaluation_microbatch_size=2,
+    )
+
+    for expected_field, actual_field in zip(expected, actual):
+        np.testing.assert_allclose(
+            actual_field,
+            expected_field,
+            rtol=1e-6,
+            atol=1e-6,
+        )
+    assert observed_batch_sizes
+    assert max(observed_batch_sizes) == 2
+    assert len(observed_batch_sizes) == 9
+
+
 def test_router_rejects_a_row_without_loss_tokens() -> None:
     empty_mask = np.zeros((1, 3), dtype=np.bool_)
     malformed_batch = SimpleNamespace(
@@ -334,6 +379,7 @@ def test_router_api_contains_only_frozen_state_and_prefix_batch() -> None:
         "packed_memory",
         "lora_config",
         "prefix_batch",
+        "evaluation_microbatch_size",
     )
     assert all(
         parameter.kind

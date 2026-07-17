@@ -18,9 +18,7 @@ from apm.data.text.curricula import (
     TINYSTORIES_SINGLE_GPU_PRESET,
     TINYSTORIES_TOPICS,
     TINYSTORIES_V2_SOURCE,
-    build_tinystories_topic_curriculum,
-    load_pinned_dataset_text,
-    prepare_tinystories_splits,
+    load_tinystories_topic_dataset,
 )
 from apm.data.text.language_tasks import (
     LanguageDataBuildConfig,
@@ -41,17 +39,10 @@ RESULTS_ROOT = REPOSITORY_ROOT / "results"
 def main() -> None:
     """Verify local data/model artifacts, run the topic benchmark, and report."""
     preset = TINYSTORIES_SINGLE_GPU_PRESET
-    train_text = load_pinned_dataset_text(
+    topic_dataset = load_tinystories_topic_dataset(
         DATA_DIRECTORY / TINYSTORIES_V2_SOURCE.train_file.filename,
-        TINYSTORIES_V2_SOURCE.train_file,
-    )
-    validation_text = load_pinned_dataset_text(
         DATA_DIRECTORY / TINYSTORIES_V2_SOURCE.validation_file.filename,
-        TINYSTORIES_V2_SOURCE.validation_file,
-    )
-    source_splits = prepare_tinystories_splits(train_text, validation_text)
-    topic_curriculum = build_tinystories_topic_curriculum(
-        source_splits,
+        TINYSTORIES_V2_SOURCE,
         preset.stories_per_task,
     )
     artifact = load_tinystories_artifact(ARTIFACT_DIRECTORY)
@@ -70,9 +61,9 @@ def main() -> None:
         primary_prefix_length=64,
     )
     prepared = prepare_language_curriculum(
-        topic_curriculum.curriculum_id,
-        raw_tasks_from_document_curriculum(topic_curriculum),
-        tuple(document.text for document in source_splits.validation),
+        topic_dataset.curriculum.curriculum_id,
+        raw_tasks_from_document_curriculum(topic_dataset.curriculum),
+        tuple(document.text for document in topic_dataset.root_validation),
         tokenizer,
         build_config,
     )
@@ -87,6 +78,7 @@ def main() -> None:
     settings = LanguageBenchmarkSettings(
         seed=0,
         random_router_seed=0,
+        evaluation_microbatch_size=8,
         peak_device_memory_target_bytes=(
             preset.peak_device_memory_gib * 1024**3
         ),
@@ -98,6 +90,7 @@ def main() -> None:
         artifact.checkpoint.config,
         lora_config,
         train_config,
+        tokenizer,
         settings,
     )
     manifest = LanguageReportManifest(
@@ -153,9 +146,6 @@ def main() -> None:
         prepared,
         benchmark,
         artifact.checkpoint.params,
-        artifact.checkpoint.config,
-        lora_config,
-        tokenizer,
     )
     print(output_directory)
 

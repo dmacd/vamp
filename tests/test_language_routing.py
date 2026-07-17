@@ -5,6 +5,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import apm.continual.language_routing as language_routing_module
+import apm.memory.address_refinement as address_refinement_module
 from apm.continual.language_routing import (
     LANGUAGE_ROUTER_TOP_K,
     competence_nll_by_node,
@@ -143,6 +145,188 @@ def test_every_router_returns_valid_task_free_decisions_and_suffix_metrics() -> 
         assert len(result.examples) == 2
         assert int(np.sum(result.confusion_counts)) == 2
         assert all(example.task_oracle_index == 1 for example in result.examples)
+
+
+@pytest.mark.parametrize(
+    "router",
+    (
+        "vamp_exhaustive",
+        "vamp_hopfield",
+        "vamp_ebt_uniform",
+        "vamp_ebt_hopfield",
+        "deterministic_random_node",
+    ),
+)
+def test_router_microbatching_preserves_every_decision_field(router: str) -> None:
+    setup = _setup()
+    prefix = RouterBatch(
+        input_ids=np.concatenate(
+            tuple(example.router_batch.input_ids for example in setup[6])
+        ),
+        attention_mask=np.concatenate(
+            tuple(example.router_batch.attention_mask for example in setup[6])
+        ),
+        target_ids=np.concatenate(
+            tuple(example.router_batch.target_ids for example in setup[6])
+        ),
+        loss_mask=np.concatenate(
+            tuple(example.router_batch.loss_mask for example in setup[6])
+        ),
+    )
+    kwargs = {
+        "random_seed": 7,
+        "ebt_config": EbtConfig(steps=2, learning_rate=0.1),
+    }
+    expected = route_language_prefix(
+        router,
+        *setup[:2],
+        setup[3],
+        setup[4],
+        setup[5],
+        prefix,
+        **kwargs,
+    )
+    actual = route_language_prefix(
+        router,
+        *setup[:2],
+        setup[3],
+        setup[4],
+        setup[5],
+        prefix,
+        evaluation_microbatch_size=1,
+        **kwargs,
+    )
+
+    for expected_field, actual_field in zip(expected, actual):
+        np.testing.assert_allclose(
+            actual_field,
+            expected_field,
+            rtol=1e-5,
+            atol=1e-5,
+        )
+
+
+def test_ebt_microbatches_and_repeated_calls_reuse_optimizer_compilation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    setup = _setup()
+    prefix = RouterBatch(
+        input_ids=np.concatenate(
+            tuple(example.router_batch.input_ids for example in setup[6])
+        ),
+        attention_mask=np.concatenate(
+            tuple(example.router_batch.attention_mask for example in setup[6])
+        ),
+        target_ids=np.concatenate(
+            tuple(example.router_batch.target_ids for example in setup[6])
+        ),
+        loss_mask=np.concatenate(
+            tuple(example.router_batch.loss_mask for example in setup[6])
+        ),
+    )
+    original_adam = address_refinement_module.optax.adam
+    optimizer_constructions = 0
+
+    def counted_adam(learning_rate: float):
+        nonlocal optimizer_constructions
+        optimizer_constructions += 1
+        return original_adam(learning_rate)
+
+    address_refinement_module._optimize_node_logits.clear_cache()
+    monkeypatch.setattr(address_refinement_module.optax, "adam", counted_adam)
+    config = EbtConfig(steps=2, learning_rate=0.1)
+    results = tuple(
+        route_language_prefix(
+            "vamp_ebt_uniform",
+            *setup[:2],
+            setup[3],
+            setup[4],
+            setup[5],
+            prefix,
+            ebt_config=config,
+            evaluation_microbatch_size=1,
+        )
+        for _ in range(2)
+    )
+    jax.block_until_ready(results[-1].node_probabilities)
+
+    assert optimizer_constructions == 1
+    for first_field, second_field in zip(*results):
+        np.testing.assert_array_equal(first_field, second_field)
+
+
+def test_competence_microbatching_and_router_suffix_reuse_are_equivalent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    setup = _setup()
+    competence_batch = language_routing_module._stack_competence_batches(
+        tuple(example.competence_batch for example in setup[6])
+    )
+    expected = competence_nll_by_node(
+        setup[0],
+        setup[1],
+        setup[3],
+        setup[4],
+        competence_batch,
+    )
+    original_apply = language_routing_module.apply_gpt_neo
+    observed_batch_sizes: list[int] = []
+
+    def counted_apply(*args, **kwargs):
+        observed_batch_sizes.append(int(args[2].shape[0]))
+        return original_apply(*args, **kwargs)
+
+    monkeypatch.setattr(
+        language_routing_module,
+        "apply_gpt_neo",
+        counted_apply,
+    )
+    microbatched = competence_nll_by_node(
+        setup[0],
+        setup[1],
+        setup[3],
+        setup[4],
+        competence_batch,
+        evaluation_microbatch_size=1,
+    )
+    np.testing.assert_allclose(microbatched, expected, rtol=1e-6, atol=1e-6)
+    assert observed_batch_sizes
+    assert max(observed_batch_sizes) == 1
+
+    def reject_duplicate_scoring(*args, **kwargs):
+        del args, kwargs
+        raise AssertionError("precomputed suffix NLL should be reused")
+
+    monkeypatch.setattr(
+        language_routing_module,
+        "competence_nll_by_node",
+        reject_duplicate_scoring,
+    )
+    reused = evaluate_language_router(
+        "deterministic_random_node",
+        *setup,
+        evaluation_microbatch_size=1,
+        suffix_nll_by_node=microbatched,
+    )
+
+    np.testing.assert_array_equal(reused.suffix_nll_by_node, microbatched)
+
+
+def test_evaluation_microbatch_and_reused_suffix_values_are_validated() -> None:
+    setup = _setup()
+
+    with pytest.raises(ValueError, match="positive integer"):
+        evaluate_language_router(
+            "deterministic_random_node",
+            *setup,
+            evaluation_microbatch_size=0,
+        )
+    with pytest.raises(ValueError, match="must have shape"):
+        evaluate_language_router(
+            "deterministic_random_node",
+            *setup,
+            suffix_nll_by_node=np.zeros((1, 6), dtype=np.float32),
+        )
 
 
 def test_random_router_is_repeatable_and_router_cannot_observe_changed_suffix() -> None:

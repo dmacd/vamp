@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
+from heapq import nsmallest
 from typing import Sequence
 
 import numpy as np
@@ -350,30 +351,45 @@ def _select_evaluation_sequences(
     *,
     split_identity: str,
 ) -> tuple[tuple[int, ...], ...]:
-    required_length = max(config.prefix_lengths) + config.suffix_length
-    evaluation_stride = max(1, required_length // 4)
-    candidates = tuple(
-        (
-            _sequence_identity(split_identity, text_index, start, sequence),
-            sequence,
-        )
+    maximum_length = max(config.prefix_lengths) + config.suffix_length
+    minimum_length = max(config.prefix_lengths) + 1
+    evaluation_stride = max(1, maximum_length // 4)
+    candidate_sequences = (
+        (text_index, start, sequence)
         for text_index, text in enumerate(texts)
         for tokens in (tokenizer.encode(text, add_eos=True),)
         for start in range(
             0,
-            max(len(tokens) - required_length + 1, 0),
+            max(len(tokens) - minimum_length + 1, 0),
             evaluation_stride,
         )
-        for sequence in (tokens[start : start + required_length],)
+        for sequence in (tokens[start : start + maximum_length],)
     )
-    ordered = tuple(sequence for _, sequence in sorted(candidates, key=lambda item: item[0]))
+    candidates = (
+        (
+            _sequence_identity(split_identity, text_index, start, sequence),
+            candidate_index,
+            sequence,
+        )
+        for candidate_index, (text_index, start, sequence) in enumerate(
+            candidate_sequences
+        )
+    )
     required_count = config.examples_per_task_and_prefix
+    ordered = tuple(
+        sequence
+        for _, _, sequence in nsmallest(
+            required_count,
+            candidates,
+            key=lambda candidate: (candidate[0], candidate[1]),
+        )
+    )
     if len(ordered) < required_count:
         raise ValueError(
-            f"{split_identity} has {len(ordered)} full evaluation spans; "
+            f"{split_identity} has {len(ordered)} evaluation spans; "
             f"requires exactly {required_count}"
         )
-    return ordered[:required_count]
+    return ordered
 
 
 def _sequence_identity(

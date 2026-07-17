@@ -293,8 +293,16 @@ def test_evaluator_metadata_never_enters_the_router(
         packed_memory: PackedLoraMemory,
         lora_config: LoraConfig,
         prefix_batch: RouterBatch,
+        *,
+        evaluation_microbatch_size: int | None = None,
     ) -> AddressResult:
-        del base_params, model_config, packed_memory, lora_config
+        del (
+            base_params,
+            model_config,
+            packed_memory,
+            lora_config,
+            evaluation_microbatch_size,
+        )
         routed_batches.append(prefix_batch)
         assert set(prefix_batch.__dataclass_fields__) == {
             "input_ids",

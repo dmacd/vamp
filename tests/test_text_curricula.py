@@ -7,6 +7,7 @@ from string import ascii_lowercase
 
 import pytest
 
+import apm.data.text.curricula as text_curricula
 from apm.data.text.curricula import (
     CorpusCurriculum,
     CorpusSplits,
@@ -20,6 +21,7 @@ from apm.data.text.curricula import (
     TINYSTORIES_V2_SOURCE,
     TINY_SHAKESPEARE_MACRO_DOCUMENT_CHARACTERS,
     TINY_SHAKESPEARE_EVALUATION_PRESET,
+    TinyStoriesSourceContract,
     apply_ascii_letter_permutation,
     apply_token_permutation,
     ascii_letter_permutation,
@@ -31,6 +33,7 @@ from apm.data.text.curricula import (
     build_tinystories_topic_curriculum,
     classify_tinystory_topic,
     load_pinned_dataset_text,
+    load_tinystories_topic_dataset,
     normalized_documents,
     normalize_text,
     parse_tinystories,
@@ -47,6 +50,41 @@ from apm.data.text.curricula import (
 
 def _aggregate(*stories: str) -> str:
     return TINYSTORIES_DOCUMENT_SEPARATOR.join(stories) + TINYSTORIES_DOCUMENT_SEPARATOR
+
+
+def _pinned_tinystories_fixture(
+    tmp_path: Path,
+    train_text: str,
+    validation_text: str,
+) -> tuple[Path, Path, TinyStoriesSourceContract]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    paths = tuple(
+        tmp_path / filename
+        for filename in ("fixture-train.txt", "fixture-valid.txt")
+    )
+    payloads = tuple(
+        text.encode("utf-8") for text in (train_text, validation_text)
+    )
+    for path, payload in zip(paths, payloads):
+        path.write_bytes(payload)
+    pinned_files = tuple(
+        PinnedDatasetFile(
+            filename=path.name,
+            size_bytes=len(payload),
+            sha256=sha256(payload).hexdigest(),
+        )
+        for path, payload in zip(paths, payloads)
+    )
+    return (
+        paths[0],
+        paths[1],
+        TinyStoriesSourceContract(
+            dataset_id="fixture/tinystories",
+            revision="0" * 40,
+            train_file=pinned_files[0],
+            validation_file=pinned_files[1],
+        ),
+    )
 
 
 def _document_splits(
@@ -188,6 +226,179 @@ def test_official_validation_is_overlap_free_and_hash_split_exactly_in_half() ->
         prepare_tinystories_splits(
             _aggregate("Train"),
             _aggregate("One", "Two", "Three"),
+        )
+
+
+def test_streamed_topic_dataset_matches_in_memory_selection_semantics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    topic_phrases = (
+        "Dogs and cats",
+        "Cars and trucks",
+        "Moms and dads",
+        "Kings and dragons",
+    )
+    train_stories = tuple(
+        f"{phrase} train example {index}"
+        for phrase in topic_phrases
+        for index in range(6)
+    )
+    validation_stories = tuple(
+        f"{phrase} official example {index}"
+        for phrase in topic_phrases
+        for index in range(8)
+    )
+    train_text = _aggregate(
+        *train_stories,
+        "  Dogs  and cats train example 2\n",
+        validation_stories[0],
+        "A story without a classifiable topic.",
+    )
+    validation_text = _aggregate(
+        *validation_stories,
+        "Moms  and dads official example 0",
+    )
+    train_path, validation_path, source = _pinned_tinystories_fixture(
+        tmp_path,
+        train_text,
+        validation_text,
+    )
+    counts = StorySplitCounts(train=2, validation=1, test=1)
+    source_splits = prepare_tinystories_splits(train_text, validation_text)
+    expected_curriculum = build_tinystories_topic_curriculum(
+        source_splits,
+        counts,
+    )
+    monkeypatch.setattr(
+        text_curricula,
+        "_TINYSTORIES_TEXT_READ_CHUNK_SIZE",
+        7,
+    )
+
+    streamed = load_tinystories_topic_dataset(
+        train_path,
+        validation_path,
+        source,
+        counts,
+    )
+
+    assert streamed.curriculum == expected_curriculum
+    assert streamed.root_validation == source_splits.validation
+
+
+def test_streamed_train_selection_uses_first_content_hash_as_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_collision = "Dogs and cats collision"
+    later_collision = "Cars and trucks collision"
+    train_path = tmp_path / "train.txt"
+    train_path.write_text(
+        _aggregate(
+            first_collision,
+            later_collision,
+            "Buses and trains replacement",
+            "Moms and dads family",
+            "Kings and dragons fantasy",
+        ),
+        encoding="utf-8",
+    )
+    collision_texts = {
+        normalize_text(first_collision),
+        normalize_text(later_collision),
+    }
+    collision_aware_content_id = lambda text: (
+        "0" * 64
+        if normalize_text(text) in collision_texts
+        else sha256_content_id(text)
+    )
+    monkeypatch.setattr(
+        text_curricula,
+        "sha256_content_id",
+        collision_aware_content_id,
+    )
+    monkeypatch.setattr(
+        text_curricula,
+        "_normalized_document",
+        lambda text: (
+            text_curricula.TextDocument(
+                collision_aware_content_id(normalize_text(text)),
+                normalize_text(text),
+            )
+            if normalize_text(text)
+            else None
+        ),
+    )
+
+    selected = text_curricula._select_tinystories_train_documents(
+        train_path,
+        frozenset(),
+        requested_count=1,
+    )
+    selected_texts = {document.text for document in selected}
+
+    assert normalize_text(first_collision) in selected_texts
+    assert normalize_text(later_collision) not in selected_texts
+    assert "Buses and trains replacement" in selected_texts
+
+
+def test_streamed_topic_dataset_verifies_pins_before_decoding(
+    tmp_path: Path,
+) -> None:
+    train_path, validation_path, source = _pinned_tinystories_fixture(
+        tmp_path,
+        _aggregate("Dogs and cats"),
+        _aggregate("Cars and trucks", "Moms and dads"),
+    )
+    train_path.write_bytes(b"x" * source.train_file.size_bytes)
+
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        load_tinystories_topic_dataset(
+            train_path,
+            validation_path,
+            source,
+            StorySplitCounts(train=1, validation=1, test=1),
+        )
+
+
+def test_streamed_topic_dataset_preserves_split_and_topic_count_failures(
+    tmp_path: Path,
+) -> None:
+    train_path, validation_path, source = _pinned_tinystories_fixture(
+        tmp_path / "odd",
+        _aggregate("Dogs and cats"),
+        _aggregate("Cars and trucks", "Moms and dads", "Kings and dragons"),
+    )
+    with pytest.raises(ValueError, match="exactly 50/50"):
+        load_tinystories_topic_dataset(
+            train_path,
+            validation_path,
+            source,
+            StorySplitCounts(train=1, validation=1, test=1),
+        )
+
+    validation_stories = tuple(
+        f"{phrase} official example {index}"
+        for phrase in (
+            "Dogs and cats",
+            "Cars and trucks",
+            "Moms and dads",
+            "Kings and dragons",
+        )
+        for index in range(8)
+    )
+    train_path, validation_path, source = _pinned_tinystories_fixture(
+        tmp_path / "insufficient",
+        _aggregate("Dogs and cats train story"),
+        _aggregate(*validation_stories),
+    )
+    with pytest.raises(ValueError, match="vehicles_tools.*0 train stories"):
+        load_tinystories_topic_dataset(
+            train_path,
+            validation_path,
+            source,
+            StorySplitCounts(train=1, validation=1, test=1),
         )
 
 
@@ -487,8 +698,8 @@ def test_evaluation_and_single_gpu_presets_are_exact() -> None:
     assert TINYSTORIES_SINGLE_GPU_PRESET.task_count == 4
     assert TINYSTORIES_SINGLE_GPU_PRESET.stories_per_task == StorySplitCounts(
         10_000,
-        1_000,
-        1_000,
+        128,
+        128,
     )
     assert (
         TINYSTORIES_SINGLE_GPU_PRESET.context_length,
@@ -501,7 +712,7 @@ def test_evaluation_and_single_gpu_presets_are_exact() -> None:
         TINYSTORIES_SINGLE_GPU_PRESET.parent_probe_count,
         TINYSTORIES_SINGLE_GPU_PRESET.content_key_probe_count,
         TINYSTORIES_SINGLE_GPU_PRESET.evaluation_examples_per_task_and_prefix,
-    ) == (256, 256, 256)
+    ) == (128, 128, 128)
     assert (
         TINYSTORIES_SINGLE_GPU_PRESET.max_nodes,
         TINYSTORIES_SINGLE_GPU_PRESET.max_edges,

@@ -158,8 +158,8 @@ prepared artifacts with network access disabled.
 - Implement normalized exhaustive prefix NLL and convert node scores to
   probabilities with temperature-one `softmax(-NLL)`.
 - Implement the shared frozen-base content encoder: masked-mean final hidden
-  states followed by L2 normalization. Build node keys from 256 deterministic
-  probes using a 64-token/character prefix.
+  states followed by L2 normalization. Build node keys from a fixed,
+  preset-defined deterministic probe set using a 64-token/character prefix.
 - Give the root a key derived from the base validation probe, so it remains a
   valid Hopfield candidate.
 
@@ -232,13 +232,17 @@ all pass.
 - Include listed plurals, require at least two distinct hits and a one-hit
   margin over the runner-up, reject ties/overlaps, and equalize buckets by
   lowest content hashes.
-- Single-GPU TinyStories preset: four tasks; 10,000/1,000/1,000
+- Single-GPU TinyStories preset: four tasks; 10,000/128/128
   train/validation/test stories per task; context 256; rank/alpha 8; batch 32;
-  2,000 adapter steps per task; 256 parent/key probes; 256 evaluation examples
+  2,000 adapter steps per task; 128 parent/key probes; 128 evaluation examples
   per task and prefix length; five-node/four-edge capacity; 12 GiB peak-device
-  memory target.
+  memory target. The pinned validation halves contain only 148 and 139
+  eligible fantasy/royalty stories under the fixed two-concept rule, so 128 is
+  the largest uniform power-of-two evaluation budget supported by the source.
 - Evaluate TinyShakespeare prefixes of 32/64/128 characters with suffix 128,
-  and TinyStories prefixes of 16/32/64/128 tokens with suffix 128.
+  and TinyStories prefixes of 16/32/64/128 tokens with suffix capacity 128.
+  TinyStories spans may right-pad unused suffix capacity but must contain at
+  least one real suffix target beyond the 128-token maximum prefix.
 - Run frozen-base, sequential-single-LoRA, independent-root-LoRA, VAMP oracle,
   exhaustive, Hopfield, EBT-uniform, EBT-Hopfield, and deterministic-random-node
   baselines with identical adapter budgets.

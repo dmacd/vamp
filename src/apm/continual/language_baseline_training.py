@@ -275,6 +275,8 @@ def train_language_adaptation_baselines(
     lora_config: LoraConfig,
     train_config: LmTrainConfig,
     rng_key: jax.Array,
+    *,
+    evaluation_microbatch_size: int | None = None,
 ) -> LanguageAdaptationBaselines:
     """Train sequential, independent-root, and inherited VAMP adapters."""
     _validate_training_contract(curriculum, train_config)
@@ -307,6 +309,7 @@ def train_language_adaptation_baselines(
         max_nodes=curriculum.max_nodes,
         max_edges=curriculum.max_edges,
         key_probe_count=_router_row_count(root_validation_probes),
+        evaluation_microbatch_size=evaluation_microbatch_size,
     )
     for task in curriculum.tasks:
         vamp = advance_language_vamp_run(
@@ -320,6 +323,7 @@ def train_language_adaptation_baselines(
                 example.router_batch.input_ids.shape[0]
                 for example in task.validation_examples
             ),
+            evaluation_microbatch_size=evaluation_microbatch_size,
         )
     _require_unchanged_base(base_checksum, base_params, model_config)
     return LanguageAdaptationBaselines(

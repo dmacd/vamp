@@ -191,6 +191,8 @@ def evaluate_language_example(
     packed_memory: PackedLoraMemory,
     lora_config: LoraConfig,
     example: LanguageEvaluationExample,
+    *,
+    evaluation_microbatch_size: int | None = None,
 ) -> LanguageExampleMetric:
     """Route on the prefix, then compare selected and oracle suffix competence."""
     _validate_graph_memory_alignment(graph, packed_memory)
@@ -202,6 +204,7 @@ def evaluate_language_example(
         packed_memory,
         lora_config,
         example.router_batch,
+        evaluation_microbatch_size=evaluation_microbatch_size,
     )
     selected_indices = np.asarray(address_result.selected_indices)
     if selected_indices.shape != (1,):

@@ -7,6 +7,7 @@ import jax
 import numpy as np
 import pytest
 
+import apm.continual.language_benchmark_run as language_benchmark_run
 from apm.continual.language_benchmark_run import (
     LanguageBenchmarkSettings,
     _peak_device_memory_from_stats,
@@ -33,7 +34,10 @@ from apm.lm.training import LmTrainConfig
 from apm.memory.address_refinement import EbtConfig
 
 
-def test_bounded_language_benchmark_emits_every_baseline_metric_family(tmp_path) -> None:
+def test_bounded_language_benchmark_emits_every_baseline_metric_family(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
     text = "abcdefghijklmnopqrstuvwxyz" * 3
     tokenizer = CharTokenizer.from_training_text(text)
     prepared = prepare_language_curriculum(
@@ -74,6 +78,28 @@ def test_bounded_language_benchmark_emits_every_baseline_metric_family(tmp_path)
         manifest_sha256="a" * 64,
         parameter_checksum=parameter_checksum(base_params, model_config),
     )
+    lifecycle_events = []
+    generate_language_samples = language_benchmark_run._generate_language_samples
+    measure_peak_device_memory = language_benchmark_run.measure_peak_device_memory
+
+    def observe_sample_generation(*args, **kwargs):
+        lifecycle_events.append("samples")
+        return generate_language_samples(*args, **kwargs)
+
+    def observe_peak_measurement(*args, **kwargs):
+        lifecycle_events.append("peak")
+        return measure_peak_device_memory(*args, **kwargs)
+
+    monkeypatch.setattr(
+        language_benchmark_run,
+        "_generate_language_samples",
+        observe_sample_generation,
+    )
+    monkeypatch.setattr(
+        language_benchmark_run,
+        "measure_peak_device_memory",
+        observe_peak_measurement,
+    )
     result = run_language_benchmark(
         prepared,
         checkpoint,
@@ -86,15 +112,18 @@ def test_bounded_language_benchmark_emits_every_baseline_metric_family(tmp_path)
             batch_size=1,
             weight_decay=0.0,
         ),
+        tokenizer,
         LanguageBenchmarkSettings(
             seed=0,
             random_router_seed=1,
             ebt=EbtConfig(steps=1, learning_rate=0.1),
             timing_warm_repetitions=1,
+            sample_new_tokens=1,
             negative_control_curriculum=True,
         ),
     )
 
+    assert lifecycle_events == ["samples", "peak"]
     assert {row.baseline for row in result.stored_competence} == {
         "frozen_base",
         "sequential_single_lora",
@@ -111,6 +140,7 @@ def test_bounded_language_benchmark_emits_every_baseline_metric_family(tmp_path)
     assert len(result.transfer) == 1
     assert len(result.memory) == 1
     assert len(result.addressing_cost) == 5
+    assert len(result.samples) == 9
     assert int(np.sum(result.final_confusion)) == 1
     assert all(row.base_checksum_stable for row in result.stored_competence)
     assert result.memory[0].accounting.persistent_bytes > 0
@@ -149,11 +179,9 @@ def test_bounded_language_benchmark_emits_every_baseline_metric_family(tmp_path)
         prepared,
         result,
         base_params,
-        model_config,
-        LoraConfig(rank=1, alpha=1.0),
-        tokenizer,
-        sample_new_tokens=1,
     )
+    assert lifecycle_events == ["samples", "peak"]
+    assert bundle.samples is result.samples
     output_directory = write_language_report(tmp_path, bundle)
     assert len(bundle.samples) == 9
     assert (output_directory / "report.html").is_file()
@@ -201,3 +229,17 @@ def test_peak_device_memory_target_is_validated_enforced_and_reportable() -> Non
             memory_stats=None,
             target_bytes=10,
         )
+
+
+def test_benchmark_evaluation_microbatch_setting_is_optional_and_validated() -> None:
+    assert LanguageBenchmarkSettings().evaluation_microbatch_size is None
+    assert (
+        LanguageBenchmarkSettings(
+            evaluation_microbatch_size=8
+        ).evaluation_microbatch_size
+        == 8
+    )
+    with pytest.raises(ValueError, match="positive integer"):
+        LanguageBenchmarkSettings(evaluation_microbatch_size=0)
+    with pytest.raises(ValueError, match="sample_new_tokens must be positive"):
+        LanguageBenchmarkSettings(sample_new_tokens=0)

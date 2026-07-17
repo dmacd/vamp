@@ -23,6 +23,7 @@ from apm.continual.language_benchmark_metrics import (
 from apm.continual.language_benchmarks import (
     AddressingOperationCounts,
     AddressingTiming,
+    GeneratedLanguageSample,
     ROUTER_BASELINE_NAMES,
     RouterBaselineName,
     StoredBaselineName,
@@ -45,11 +46,17 @@ from apm.continual.language_tasks import (
 )
 from apm.data.text.language_tasks import PreparedLanguageCurriculum
 from apm.lm.config import GptNeoConfig
+from apm.lm.evaluation import (
+    evaluation_microbatch_slices,
+    validate_evaluation_microbatch_size,
+)
 from apm.lm.gpt_neo import apply_gpt_neo
+from apm.lm.generation import greedy_generate
 from apm.lm.lora import LoraConfig, LoraEdge
 from apm.lm.lora_memory import PackedLoraMemory, pack_lora_memory
 from apm.lm.losses import per_token_nll
 from apm.lm.parameters import GptNeoParams
+from apm.lm.text import TextTokenizer
 from apm.lm.training import LmTrainConfig, init_candidate_lora_train_state
 from apm.memory.address_refinement import EbtConfig
 from apm.memory.content_addressing import HopfieldConfig
@@ -188,6 +195,7 @@ class LanguageBenchmarkResult:
     transfer: tuple[TransferMeasurement, ...]
     memory: tuple[StageMemoryMeasurement, ...]
     addressing_cost: tuple[RouterTimingMeasurement, ...]
+    samples: tuple[GeneratedLanguageSample, ...]
     peak_device_memory: PeakDeviceMemoryMeasurement
     final_confusion: np.ndarray
 
@@ -209,7 +217,9 @@ class LanguageBenchmarkSettings:
     random_router_seed: int = 0
     hopfield: HopfieldConfig = HopfieldConfig()
     ebt: EbtConfig = EbtConfig()
+    evaluation_microbatch_size: int | None = None
     timing_warm_repetitions: int = 5
+    sample_new_tokens: int = 32
     peak_device_memory_target_bytes: int | None = None
     negative_control_curriculum: bool = False
 
@@ -220,6 +230,9 @@ class LanguageBenchmarkSettings:
             raise ValueError("random router seed must be nonnegative")
         if type(self.timing_warm_repetitions) is not int or self.timing_warm_repetitions <= 0:
             raise ValueError("timing_warm_repetitions must be positive")
+        if type(self.sample_new_tokens) is not int or self.sample_new_tokens <= 0:
+            raise ValueError("sample_new_tokens must be positive")
+        validate_evaluation_microbatch_size(self.evaluation_microbatch_size)
         if self.peak_device_memory_target_bytes is not None and (
             type(self.peak_device_memory_target_bytes) is not int
             or self.peak_device_memory_target_bytes <= 0
@@ -236,9 +249,10 @@ def run_language_benchmark(
     model_config: GptNeoConfig,
     lora_config: LoraConfig,
     train_config: LmTrainConfig,
+    tokenizer: TextTokenizer,
     settings: LanguageBenchmarkSettings = LanguageBenchmarkSettings(),
 ) -> LanguageBenchmarkResult:
-    """Train every adapter baseline, evaluate all stages, and time final routers."""
+    """Train, measure, and sample every language continual-learning baseline."""
     if not isinstance(prepared, PreparedLanguageCurriculum):
         raise TypeError("prepared must be a PreparedLanguageCurriculum")
     adaptations = train_language_adaptation_baselines(
@@ -250,6 +264,7 @@ def run_language_benchmark(
         lora_config,
         train_config,
         jax.random.PRNGKey(settings.seed),
+        evaluation_microbatch_size=settings.evaluation_microbatch_size,
     )
     base_checksum = _tree_checksum(base_params)
     raw_stored: list[StoredCompetenceMeasurement] = []
@@ -294,6 +309,9 @@ def run_language_benchmark(
                         base_params,
                         model_config,
                         competence_batch,
+                        evaluation_microbatch_size=(
+                            settings.evaluation_microbatch_size
+                        ),
                     ),
                     token_weights,
                 )
@@ -304,6 +322,9 @@ def run_language_benchmark(
                         sequential_memory,
                         lora_config,
                         competence_batch,
+                        evaluation_microbatch_size=(
+                            settings.evaluation_microbatch_size
+                        ),
                     )[:, 1],
                     token_weights,
                 )
@@ -314,6 +335,9 @@ def run_language_benchmark(
                         independent_memory,
                         lora_config,
                         competence_batch,
+                        evaluation_microbatch_size=(
+                            settings.evaluation_microbatch_size
+                        ),
                     )[:, 1],
                     token_weights,
                 )
@@ -323,6 +347,7 @@ def run_language_benchmark(
                     packed_memory,
                     lora_config,
                     competence_batch,
+                    evaluation_microbatch_size=settings.evaluation_microbatch_size,
                 )
                 oracle_index = next(
                     index
@@ -375,6 +400,10 @@ def run_language_benchmark(
                         random_seed=settings.random_router_seed,
                         hopfield_config=settings.hopfield,
                         ebt_config=settings.ebt,
+                        evaluation_microbatch_size=(
+                            settings.evaluation_microbatch_size
+                        ),
+                        suffix_nll_by_node=vamp_nll_by_node,
                     )
                     for router in ROUTER_BASELINE_NAMES
                 )
@@ -447,6 +476,15 @@ def run_language_benchmark(
         lora_config,
         settings,
     )
+    samples = _generate_language_samples(
+        prepared,
+        adaptations,
+        settings,
+        base_params,
+        model_config,
+        lora_config,
+        tokenizer,
+    )
     peak_device_memory = measure_peak_device_memory(
         settings.peak_device_memory_target_bytes
     )
@@ -458,9 +496,151 @@ def run_language_benchmark(
         transfer=transfer,
         memory=tuple(memory_rows),
         addressing_cost=addressing_cost,
+        samples=samples,
         peak_device_memory=peak_device_memory,
         final_confusion=final_confusion,
     )
+
+
+def _generate_language_samples(
+    prepared: PreparedLanguageCurriculum,
+    adaptations: LanguageAdaptationBaselines,
+    settings: LanguageBenchmarkSettings,
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    lora_config: LoraConfig,
+    tokenizer: TextTokenizer,
+) -> tuple[GeneratedLanguageSample, ...]:
+    final_graph = adaptations.vamp.graph
+    final_memory = pack_lora_memory(
+        final_graph,
+        model_config,
+        lora_config,
+        adaptations.vamp.max_nodes,
+        adaptations.vamp.max_edges,
+    )
+    final_task = prepared.curriculum.tasks[-1]
+    sweep = next(
+        sweep
+        for sweep in prepared.evaluation_sweeps
+        if sweep.task_id == final_task.task_id
+        and sweep.prefix_length == prepared.build_config.primary_prefix_length
+    )
+    example = sweep.test_examples[0]
+    prefix_length = prepared.build_config.primary_prefix_length
+    sample_new_tokens = min(
+        settings.sample_new_tokens,
+        model_config.max_position_embeddings - prefix_length,
+    )
+    if sample_new_tokens <= 0:
+        raise ValueError("model context leaves no room for generated samples")
+    prompt_ids = jnp.asarray(
+        example.competence_batch.input_ids[:, :prefix_length],
+        dtype=jnp.int32,
+    )
+    prompt_mask = jnp.ones_like(prompt_ids, dtype=jnp.bool_)
+    sequential_adapter = adaptations.sequential_single_lora.stages[-1].adapter
+    _, sequential_memory = pack_root_adapter(
+        sequential_adapter,
+        model_config,
+        lora_config,
+    )
+    independent_adapter = next(
+        adapter.adapter
+        for adapter in adaptations.independent_root_lora.adapters
+        if adapter.task_id == final_task.task_id
+    )
+    _, independent_memory = pack_root_adapter(
+        independent_adapter,
+        model_config,
+        lora_config,
+    )
+    oracle_index = next(
+        index
+        for index, node in enumerate(final_graph.nodes)
+        if node.node_id == NodeId(str(final_task.task_id))
+    )
+    router_indices = {
+        router: int(
+            route_language_prefix(
+                router,
+                base_params,
+                model_config,
+                final_memory,
+                lora_config,
+                adaptations.vamp.address_book,
+                example.router_batch,
+                random_seed=settings.random_router_seed,
+                hopfield_config=settings.hopfield,
+                ebt_config=settings.ebt,
+                evaluation_microbatch_size=settings.evaluation_microbatch_size,
+            ).selected_indices[0]
+        )
+        for router in ROUTER_BASELINE_NAMES
+    }
+    generation_specs = (
+        ("frozen_base", None, None),
+        ("sequential_single_lora", sequential_memory, 1),
+        ("independent_root_lora", independent_memory, 1),
+        ("vamp_oracle", final_memory, oracle_index),
+        *tuple(
+            (router, final_memory, router_indices[router])
+            for router in ROUTER_BASELINE_NAMES
+        ),
+    )
+    prefix_text = tokenizer.decode(tuple(int(value) for value in prompt_ids[0]))
+    return tuple(
+        GeneratedLanguageSample(
+            baseline=name,
+            task_id=str(final_task.task_id),
+            prefix=prefix_text,
+            continuation=_generate_continuation(
+                base_params,
+                model_config,
+                tokenizer,
+                prompt_ids,
+                prompt_mask,
+                sample_new_tokens,
+                lora_config,
+                memory,
+                node_index,
+            ),
+        )
+        for name, memory, node_index in generation_specs
+    )
+
+
+def _generate_continuation(
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    tokenizer: TextTokenizer,
+    prompt_ids: jax.Array,
+    prompt_mask: jax.Array,
+    sample_new_tokens: int,
+    lora_config: LoraConfig,
+    memory: PackedLoraMemory | None,
+    node_index: int | None,
+) -> str:
+    generated = greedy_generate(
+        base_params,
+        model_config,
+        prompt_ids,
+        prompt_mask,
+        sample_new_tokens,
+        eos_token_id=tokenizer.eos_token_id,
+        pad_token_id=tokenizer.pad_token_id,
+        lora_memory=memory,
+        lora_config=None if memory is None else lora_config,
+        node_index=node_index,
+    )
+    continuation_ids = tuple(
+        int(value) for value in generated[0, prompt_ids.shape[1] :]
+    )
+    decoded = tokenizer.decode(continuation_ids)
+    return decoded or tokenizer.decode(
+        continuation_ids,
+        skip_special_tokens=False,
+    ) or "<EOS>"
 
 
 def measure_peak_device_memory(
@@ -590,16 +770,32 @@ def _frozen_competence_nll(
     base_params: GptNeoParams,
     model_config: GptNeoConfig,
     batch: CompetenceBatch,
+    *,
+    evaluation_microbatch_size: int | None = None,
 ) -> np.ndarray:
-    logits = apply_gpt_neo(
-        base_params,
-        model_config,
-        jnp.asarray(batch.input_ids),
-        jnp.asarray(batch.attention_mask),
-    ).logits
-    losses = per_token_nll(logits, jnp.asarray(batch.target_ids))
-    mask = jnp.asarray(batch.loss_mask, dtype=jnp.float32)
-    result = np.asarray(jnp.sum(losses * mask, axis=1) / jnp.sum(mask, axis=1))
+    chunks: list[np.ndarray] = []
+    for row_slice in evaluation_microbatch_slices(
+        batch.input_ids.shape[0],
+        evaluation_microbatch_size,
+    ):
+        logits = apply_gpt_neo(
+            base_params,
+            model_config,
+            jnp.asarray(batch.input_ids[row_slice]),
+            jnp.asarray(batch.attention_mask[row_slice]),
+        ).logits
+        losses = per_token_nll(
+            logits,
+            jnp.asarray(batch.target_ids[row_slice]),
+        )
+        mask = jnp.asarray(batch.loss_mask[row_slice], dtype=jnp.float32)
+        chunks.append(
+            np.asarray(
+                jnp.sum(losses * mask, axis=1) / jnp.sum(mask, axis=1),
+                dtype=np.float32,
+            )
+        )
+    result = np.concatenate(chunks, axis=0)
     result.flags.writeable = False
     return result
 
@@ -828,6 +1024,7 @@ def _time_final_stage_routers(
                     random_seed=settings.random_router_seed,
                     hopfield_config=settings.hopfield,
                     ebt_config=settings.ebt,
+                    evaluation_microbatch_size=settings.evaluation_microbatch_size,
                 ),
                 _operation_counts(
                     router,
