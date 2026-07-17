@@ -51,8 +51,9 @@
 
 ## Current Phase and Immediate Gate
 
-The engineering implementation is complete. Resource-backed Phase 10
-validation is active on the local RTX 4090.
+The engineering implementation and resource-backed Phase 10 validation are
+complete on the local RTX 4090. Scientific follow-up is now focused on transfer
+and routing quality rather than feasibility.
 
 Measured status on 2026-07-16:
 
@@ -81,9 +82,19 @@ Measured status on 2026-07-16:
   under the prescribed four-task aggregation; two also occur in the
   deterministic random control. The audit found no cross-split macro-document
   overlap and no above-chance aggregate leakage signal; and
-- the full `scripts/run_tinystories_cl.py` topic report is running on the local
-  RTX 4090. On completion, inspect its content-addressed output and enforced
-  12 GiB peak across benchmark and sample generation.
+- the full TinyStories topic report is at
+  `results/language_cl/tinystories-v2-gpt4/topic/single-gpu-seed0-9f715620e7c2`.
+  It completed all four 2,000-step tasks and the benchmark/sample workload in
+  about 55 minutes. The final allocator peak was 8,349,717,248 bytes (7.776
+  GiB), below the enforced 12 GiB target. At the primary 64-token prefix,
+  independent root LoRAs were best at 1.33617 NLL; sequential LoRA reached
+  1.35269 with 0.02031 forgetting; and VAMP oracle reached 1.36035 with zero
+  stored forgetting. Exhaustive and Hopfield routing reached 46.48% and 45.90%
+  exact task-node accuracy, while Hopfield was 8.9x faster warm. Both inherited
+  children finished about 0.05 NLL behind independent training, and EBT did not
+  improve on plain Hopfield. The process loaded the schema-1 report surface
+  before commit `95e0cf4`, so its aggregate metrics are complete but the newer
+  stepwise EBT coefficient traces require a rerun if they are needed.
 
 Both canonical runners now emit the manifest, seven JSONL metric families,
 address confusion, three aggregate metric charts, graph, five EBT routing-
@@ -119,10 +130,14 @@ addressing only. Reaching the epoch limit retains the best state and reports
 
 ## Known LM VAMP Gaps
 
-No known engineering surface from the execution plan remains unimplemented.
-The remaining gap is operational: allow the running full TinyStories topic
-report to complete, then inspect its enforced single-process 12 GiB allocator
-measurement. The validated public routing wrapper performs host-side
-postcondition checks and is intentionally timed directly; extracting a
-separate outer-JIT-compatible validated factory is optional future
-optimization, not a Phase 10 requirement.
+No required engineering surface or resource-backed gate from the execution
+plan remains incomplete. Research priorities are to replace prefix-NLL-only
+parent selection or add a root fallback for negative transfer; measure whether
+whole-story topic cues are visible in each evaluated prefix; correct the
+fantasy-biased content keys; and explain why EBT sharpens its addressing while
+losing suffix quality, especially at prefix 128. Add incremental progress
+events before another long resource run. Rerun the full TinyStories report only
+if the post-`95e0cf4` stepwise EBT coefficient artifacts are required. The
+validated public routing wrapper performs host-side postcondition checks and is
+intentionally timed directly; extracting a separate outer-JIT-compatible
+validated factory remains optional optimization.

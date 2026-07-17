@@ -7,6 +7,16 @@
   you cannot answer the question "do I absolutely need this for a known or 
   anticipated use case", dont add extra options.
 
+- For any long-running scripts (estimated to take more than 10s) please include 
+  human-friendly phasing lines in the output along with a progbar that 
+  shows an ETA for the phase and overall task.
+
+- If any sequential, log-like data is generated and used in a report, it 
+  should be written to disk in a temporary directory as generated 
+  (batches are acceptable to avoid slowing down a loop) instead of 
+  constructed in memory and dumped out only at the end. The script should report 
+  the temporary artifact directory to stdout.
+
 
 ## typing
 
