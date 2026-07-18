@@ -68,8 +68,8 @@ class LanguageStageMetrics:
             raise ValueError("candidate_step_losses must be a nonempty tuple")
         if any(not math.isfinite(loss) or loss < 0.0 for loss in self.candidate_step_losses):
             raise ValueError("candidate step losses must be finite and nonnegative")
-        if not isinstance(self.task_metrics, tuple) or not self.task_metrics:
-            raise ValueError("task_metrics must be a nonempty tuple")
+        if not isinstance(self.task_metrics, tuple):
+            raise ValueError("task_metrics must be a tuple")
         if any(not isinstance(metric, LanguageTaskMetrics) for metric in self.task_metrics):
             raise TypeError("task_metrics must contain LanguageTaskMetrics values")
 
@@ -89,6 +89,87 @@ class LanguageVampRun:
 
     def __post_init__(self) -> None:
         _validate_run(self)
+
+
+@dataclass(frozen=True)
+class ParentSearchResult:
+    """Insertion-ordered parent scores and their deterministic selected node."""
+
+    node_ids: tuple[NodeId, ...]
+    mean_candidate_nll: tuple[float, ...]
+    selected_node_index: int
+    selected_node_id: NodeId
+    scoring_basis: str
+
+    def __post_init__(self) -> None:
+        if not self.node_ids or len(set(self.node_ids)) != len(self.node_ids):
+            raise ValueError("parent search node IDs must be nonempty and unique")
+        if len(self.mean_candidate_nll) != len(self.node_ids) or any(
+            not math.isfinite(score) or score < 0.0
+            for score in self.mean_candidate_nll
+        ):
+            raise ValueError("parent search scores must be finite nonnegative NLLs")
+        if (
+            type(self.selected_node_index) is not int
+            or not 0 <= self.selected_node_index < len(self.node_ids)
+        ):
+            raise ValueError("selected parent index is outside the candidate nodes")
+        expected_index = int(np.argmin(np.asarray(self.mean_candidate_nll)))
+        if self.selected_node_index != expected_index:
+            raise ValueError("parent selection must use insertion-order argmin ties")
+        if self.selected_node_id != self.node_ids[self.selected_node_index]:
+            raise ValueError("selected parent node ID must match its index")
+        if not self.scoring_basis:
+            raise ValueError("parent search scoring_basis must not be empty")
+
+
+def score_parent_nodes(
+    run: LanguageVampRun,
+    probes: tuple[RouterBatch, ...],
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    lora_config: LoraConfig,
+    *,
+    evaluation_microbatch_size: int | None = None,
+) -> ParentSearchResult:
+    """Score every current node by mean prefix NLL without changing run state."""
+    if not isinstance(run, LanguageVampRun):
+        raise TypeError("run must be a LanguageVampRun")
+    _validate_base_checksum(run.base_checkpoint, base_params, model_config)
+    aggregate = _aggregate_router_batches(
+        probes,
+        expected_row_count=sum(probe.input_ids.shape[0] for probe in probes),
+    )
+    packed_memory = pack_lora_memory(
+        run.graph,
+        model_config,
+        lora_config,
+        run.max_nodes,
+        run.max_edges,
+    )
+    scores = exhaustive_prefix_nll_address(
+        base_params,
+        model_config,
+        packed_memory,
+        lora_config,
+        aggregate,
+        evaluation_microbatch_size=evaluation_microbatch_size,
+    )
+    padded_means = _mean_parent_node_nll(
+        scores.node_scores,
+        len(run.graph.nodes),
+        run.max_nodes,
+    )
+    valid_means = padded_means[: len(run.graph.nodes)]
+    selected_index = int(np.argmin(np.asarray(valid_means)))
+    node_ids = memory_node_ids(run.graph)
+    return ParentSearchResult(
+        node_ids=node_ids,
+        mean_candidate_nll=valid_means,
+        selected_node_index=selected_index,
+        selected_node_id=node_ids[selected_index],
+        scoring_basis="mean_prefix_nll",
+    )
 
 
 def init_language_vamp_run(
@@ -150,6 +231,7 @@ def advance_language_vamp_run(
     model_config: GptNeoConfig,
     lora_config: LoraConfig,
     train_config: LmTrainConfig,
+    parent_selection: ParentSearchResult,
     *,
     key_probe_count: int = 256,
     evaluation_microbatch_size: int | None = None,
@@ -177,10 +259,6 @@ def advance_language_vamp_run(
     ):
         raise ValueError("task evaluation oracle IDs must equal NodeId(str(task.task_id))")
 
-    validation_probes = _aggregate_router_batches(
-        tuple(example.router_batch for example in task.validation_examples),
-        expected_row_count=key_probe_count,
-    )
     packed_memory = pack_lora_memory(
         run.graph,
         model_config,
@@ -188,21 +266,15 @@ def advance_language_vamp_run(
         run.max_nodes,
         run.max_edges,
     )
-    parent_result = exhaustive_prefix_nll_address(
-        base_params,
-        model_config,
-        packed_memory,
-        lora_config,
-        validation_probes,
-        evaluation_microbatch_size=evaluation_microbatch_size,
+    if not isinstance(parent_selection, ParentSearchResult):
+        raise TypeError("parent_selection must be a ParentSearchResult")
+    if parent_selection.node_ids != memory_node_ids(run.graph):
+        raise ValueError("parent selection candidates do not match the current graph")
+    parent_node_index = parent_selection.selected_node_index
+    parent_node_id = parent_selection.selected_node_id
+    parent_mean_node_nll = parent_selection.mean_candidate_nll + (
+        (math.inf,) * (run.max_nodes - len(run.graph.nodes))
     )
-    parent_mean_node_nll = _mean_parent_node_nll(
-        parent_result.node_scores,
-        len(run.graph.nodes),
-        run.max_nodes,
-    )
-    parent_node_index = int(np.argmin(np.asarray(parent_mean_node_nll)))
-    parent_node_id = run.graph.nodes[parent_node_index].node_id
 
     candidate_index = len(run.graph.nodes) - 1
     candidate_rng_key, training_rng_key = jax.random.split(run.rng_key)
@@ -233,12 +305,18 @@ def advance_language_vamp_run(
         train_stage=stage_index,
         incoming_edge=trained_state.trainable,
     )
+    content_key_probes = _aggregate_router_batches(
+        task.content_key_probes,
+        expected_row_count=sum(
+            probe.input_ids.shape[0] for probe in task.content_key_probes
+        ),
+    )
     content_key = derive_node_content_key(
         base_params,
         model_config,
-        jnp.asarray(validation_probes.input_ids),
-        jnp.asarray(validation_probes.attention_mask),
-        expected_probe_count=key_probe_count,
+        jnp.asarray(content_key_probes.input_ids),
+        jnp.asarray(content_key_probes.attention_mask),
+        expected_probe_count=content_key_probes.input_ids.shape[0],
         evaluation_microbatch_size=evaluation_microbatch_size,
     )
     address_book = add_address_key(
@@ -272,6 +350,7 @@ def advance_language_vamp_run(
             ),
         )
         for completed_task in completed_tasks
+        if completed_task.test_examples
     )
     metrics = LanguageStageMetrics(
         stage_index=stage_index,

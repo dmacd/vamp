@@ -20,6 +20,7 @@ from apm.lm.workflow import (
     evaluate_normalized_nll,
     run_base_updates,
     run_candidate_edge_updates,
+    run_resumable_candidate_edge_updates,
     tiny_shakespeare_model_config,
     tiny_shakespeare_unit_model_config,
 )
@@ -231,3 +232,65 @@ def test_candidate_workflow_is_deterministic_exact_budget_and_reduces_nll() -> N
     assert final_nll < initial_nll
     assert first_trace == second_trace
     _assert_trees_equal(first_state, second_state)
+
+
+def test_candidate_updates_resume_at_identical_batches_and_power_two_checkpoints() -> None:
+    config = _tiny_config()
+    batches = (
+        _batch((2, 3, 2, 3), (3, 2, 3, 1)),
+        _batch((3, 2, 3, 2), (2, 3, 2, 1)),
+    )
+    train_config = LmTrainConfig(
+        learning_rate=1e-2,
+        steps=4,
+        batch_size=1,
+        weight_decay=0.0,
+    )
+    base_params = init_gpt_neo_params(jax.random.PRNGKey(30), config)
+    lora_config = LoraConfig(rank=1, alpha=1.0)
+    initial = init_candidate_lora_train_state(
+        init_lora_edge(jax.random.PRNGKey(31), config, lora_config),
+        jax.random.PRNGKey(32),
+        train_config,
+    )
+    packed = pack_lora_memory(
+        init_memory_graph(),
+        config,
+        lora_config,
+        max_nodes=2,
+        max_edges=1,
+    )
+    arguments = (
+        batches,
+        base_params,
+        config,
+        packed,
+        lora_config,
+        jnp.zeros((1,), dtype=jnp.float32),
+        0,
+        train_config,
+    )
+    validate = lambda adapter, update: (update / 4.0, 2.0 - update / 4.0)
+
+    full_state, full_trace, full_checkpoints = run_resumable_candidate_edge_updates(
+        initial,
+        *arguments,
+        validation_function=validate,
+    )
+    partial_state, partial_trace, _ = run_resumable_candidate_edge_updates(
+        initial,
+        *arguments,
+        stop_update=2,
+        validation_function=validate,
+    )
+    resumed_state, resumed_trace, resumed_checkpoints = run_resumable_candidate_edge_updates(
+        partial_state,
+        *arguments,
+        validation_function=validate,
+    )
+
+    _assert_trees_equal(full_state, resumed_state)
+    assert partial_trace.step_losses + resumed_trace.step_losses == full_trace.step_losses
+    assert tuple(checkpoint.update for checkpoint in full_checkpoints) == (0, 1, 2, 4)
+    assert tuple(checkpoint.update for checkpoint in resumed_checkpoints) == (2, 4)
+    assert full_checkpoints[-1].validation_candidate_accuracy == 1.0

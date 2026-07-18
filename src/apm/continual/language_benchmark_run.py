@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 import math
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
@@ -16,10 +17,12 @@ from apm.continual.language_baseline_training import (
     pack_root_adapter,
     train_language_adaptation_baselines,
 )
+from apm.continual.language_adaptation_artifact import LanguageAdaptationArtifact
 from apm.continual.language_benchmark_metrics import (
     LanguageMemoryAccounting,
     account_language_memory,
 )
+from apm.continual.language_evaluation import LanguageEvaluationSuite
 from apm.continual.language_benchmarks import (
     AddressingCoefficientTrace,
     AddressingOperationCounts,
@@ -63,6 +66,9 @@ from apm.lm.training import LmTrainConfig, init_candidate_lora_train_state
 from apm.memory.address_refinement import EbtConfig
 from apm.memory.content_addressing import HopfieldConfig
 from apm.memory.graph import MemoryGraph, memory_node_path
+
+if TYPE_CHECKING:
+    from apm.continual.language_evaluation_run import LanguageEvaluationBenchmark
 
 
 @dataclass(frozen=True)
@@ -521,6 +527,29 @@ def run_language_benchmark(
         samples=samples,
         peak_device_memory=peak_device_memory,
         final_confusion=final_confusion,
+    )
+
+
+def evaluate_language_benchmark(
+    adaptations: LanguageAdaptationBaselines | LanguageAdaptationArtifact,
+    suite: LanguageEvaluationSuite,
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    lora_config: LoraConfig,
+    settings: LanguageBenchmarkSettings = LanguageBenchmarkSettings(),
+) -> LanguageEvaluationBenchmark:
+    """Evaluate already-trained adapters without entering any training path."""
+    from apm.continual.language_evaluation_run import (
+        evaluate_language_benchmark as evaluate_adaptations,
+    )
+
+    return evaluate_adaptations(
+        adaptations,
+        suite,
+        base_params,
+        model_config,
+        lora_config,
+        settings,
     )
 
 

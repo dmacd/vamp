@@ -1,5 +1,246 @@
 # VAMP Technical Design
 
+## TinyWorlds Benchmark Boundary
+
+TinyWorlds is a deterministic, knowledge-graph-first continual-learning
+benchmark. Its symbolic graph, typed facts, positive safe Horn rules, proofs,
+task dependencies, and candidate answers are authoritative. Natural-language
+stories and queries are deterministic projections of those records. External
+text-generation models are outside the benchmark through Phase 5.
+
+TinyStories language specialization remains a separate historical benchmark.
+Its post-mortem is labeled exactly `in-domain topic specialization`; that
+interpretation is never reused by a TinyWorlds report.
+
+## Training Artifacts and Report-Time Evaluation
+
+Language training and report-time evaluation are separate interfaces.
+Training tasks own batches plus fixed parent and content-key probes.
+`LanguageEvaluationSuite` owns explicit report conditions, paired examples,
+source provenance, and visible-prefix cue metadata. Adding or changing a suite
+cannot change training probes, parent choices, content keys, RNG evolution, or
+adapter tensors. `evaluate_language_benchmark` accepts already-trained
+adaptations and a suite and performs no training transition.
+
+The reusable adaptation boundary is a checksummed safetensors
+`LanguageAdaptationArtifact`. It stores sequential, independent, and VAMP
+LoRAs; immutable graph topology; address keys; RNG state; parent scores;
+training traces and task order; and model, LoRA, training, and run hashes. The
+frozen base is referenced by its checkpoint identity and is never copied into
+the artifact. Loading is strict over schema, names, shapes, dtypes, hashes, and
+the frozen-base reference.
+
+The TinyStories post-mortem uses 128 deterministic 256-token anchor spans per
+task, selected with stride 32 and source-story round robin from the complete
+classified official test half. The 64/128, 128/128, and 192/64 conditions are
+nested views of the same ordered span-level pair identities. Provenance records
+the source document, token offset, pair hash, and unique-story count; the
+benchmark does not interpret the spans as independent stories.
+
+Cue strata are derived from visible prefix text only. A prefix is
+`cue_sufficient` when the existing topic classifier returns its assigned task,
+`cue_present` when an assigned-topic concept is visible without satisfying the
+classifier, and `cue_hidden_or_ambiguous` otherwise. Examples are never
+filtered by cue stratum, and `all` is a derived aggregate. A completed report
+is a deterministic projection of its completed evaluation object and must
+reproduce byte-for-byte without training or mutating the adaptation artifact.
+
+## TinyWorlds Symbolic Generation
+
+The master seed is SHA-256-derived from the canonical benchmark version,
+public seed, frozen-base manifest SHA-256, and frozen-base parameter checksum.
+Every stochastic choice uses a named SHA-256 namespace plus stable record
+identifiers. Adding a record or an unrelated namespace therefore cannot
+reshuffle existing entities, facts, rules, proofs, queries, or split choices.
+Calibration and pilot worlds share the derivation contract but occupy disjoint
+namespaces and generated vocabularies.
+
+The symbolic layer uses immutable typed IDs, typed entities, a predicate
+registry, ground atoms, positive-safe Horn rules, canonical query ASTs, and
+proof records. Ordinary predicates are unary or binary; contextual revision
+predicates use an explicit third context argument. Predicate dependencies must
+be acyclic. Closure is deterministic and limited to depth two; canonical proof
+selection is independent of input ordering. An inferred conclusion may not
+also be a direct training statement.
+
+The fixed calibration topology is seed, extension, revision, bridge. The
+pilot contains willow and sunny families in interleaved seed, extension,
+revision, and bridge stages. Extensions and revisions are seed children;
+bridges descend from revisions but their queries require seed, extension,
+revision, and bridge edge support. Cross-branch queries therefore have an
+empty hard-node oracle and explicit required edges. No single hard path may
+claim complete bridge support.
+
+Every semantic query has one graph answer, one canonical proof, four unique
+same-type candidates, and explicit task/edge support. Hard distractors are
+selected deterministically in incompatible-revision, competing-task,
+partial-proof, then filler priority. The predefined standard calibration mix
+is the only alternative policy. A bundle must globally replay exactly one of
+those policies; arbitrary per-query mixing or role relabeling is invalid.
+
+Symbolic train, validation, and test plans are split before rendering. Template
+family, plot, query phrasing, entity combination, proof-chain, and symbolic
+text-hash axes are mutually disjoint. Story slices are canonical per task:
+training contains all direct facts and task rules, validation contains the
+first eight direct facts, and test contains the next eight, with no evaluation
+rules stated directly.
+
+## TinyWorlds Persistence and Novelty
+
+Symbolic bundles are canonical JSON/JSONL plus a dependency-free
+MeTTa/Atomese text projection. Manifests bind every artifact's path, count,
+size, digest, bundle/world identity, version, and master seed. Loaders reject
+unknown fields or files, noncanonical encoding, dangling references, digest or
+count mismatches, split overlap, noncanonical proofs, story slices, topology,
+edge ownership, revision provenance, bridge quantities, mixed fact capacity,
+or fabricated candidate provenance. The text export is regenerated from the
+authoritative records and compared byte-for-byte.
+
+The original pretraining novelty boundary is exactly
+`TinyStories-train.txt` at revision
+`f54c09fd23315a6f9c86f9dc80f725de7d8f9c64`, size 1,924,281,556, and SHA-256
+`c5cf5e22ff13614e830afbe61a99fbcbe8bcb7dd72252b989fa1117a368d401f`.
+Only the marked novelty audit streams this file. It audits every generated
+name, class, role, and inflection by case-folded exact lexical words. Ordinary
+tests use offline fixtures.
+
+## TinyWorlds Deterministic Rendering
+
+Natural-language data is a deterministic projection of the symbolic bundle
+through `tinyworlds-templates-v1`. Every predicate, rule, query kind, and plot
+target has train-, validation-, and test-specific template identities. Story
+records retain the realized template occurrence order plus exact character
+spans aligned to authoritative fact and rule IDs. Root-validation stories are
+task-neutral and claim no symbolic knowledge.
+
+The 256 validation and 512 test semantic groups per task are immutable
+`QueryGroupPlan` instances. A source symbolic query or proof may repeat because
+the finite world cannot supply hundreds of distinct proof graphs; repetition
+is explicit through source-query, source-proof, occurrence, and replication
+provenance. Each instance has a unique group and holdout identity, fixed four-
+candidate order and correct position, and one accepted template family. It is
+rendered exactly once into paired 64-, 128-, and 192-token variants. Ordered
+fallback attempts are expanded before rendering, only expected rendering
+rejections advance to the next attempt, and the accepted plan is stored on the
+rendered group rather than inferred from modulo cycling.
+
+The final 64 tokens are one shared query core. Preceding 64-token blocks carry
+hash-balanced task, family, ambiguous, or cue-free-control text without answer
+facts. Cue metadata is replayed from the visible prefix: sufficient cues admit
+exactly the intended task, present cues admit its family, and hidden/control
+cues admit all tasks. Closed-book prefixes are rejected when they contain a
+candidate string or candidate-token subsequence.
+
+Prefix-plus-candidate tokenization is authoritative. A record is accepted only
+when standalone prefix tokens are an exact prefix of all four combined
+sequences, all candidate suffixes have equal positive token counts, and every
+sequence fits the fixed 256-token context. Neutral fragments are searched with
+a deterministic closest-under-target traversal and an exhaustive deterministic
+fallback; words are never truncated. Training adapters consume whole rendered
+stories with exact fact-exposure accounting, while knowledge evaluation uses
+the explicit semantic candidate boundary and never a sliding-span selector.
+
+Rendered persistence schema 2 stores accepted-plan provenance and canonical
+story/query JSONL while reconstructing token arrays on load. Strict loading
+replays every story and query from the symbolic bundle and pinned tokenizer,
+including text, templates, plots, alignment spans and IDs, cues, candidates,
+proof/support metadata, masks, and accepted fallback choice. Plot IDs and text
+hashes are split-isolated. Canonical materialization publishes only after this
+validation and a reuse invocation must reproduce the completed content-only
+result byte-for-byte without changing the artifact tree.
+
+## TinyWorlds Candidate Scoring and Knowledge Evaluation
+
+Knowledge competence is an exact four-candidate comparison. Each candidate
+stores its own prefix-plus-answer `CompetenceBatch`, while one separate
+`RouterBatch` contains only the common visible prefix. Candidate text may
+change neither that router batch nor any routing result. NLL is normalized
+only over active answer tokens, so context length and padding do not alter the
+candidate comparison.
+
+Frozen-base, hard-node, and arbitrary per-example edge-coefficient scoring
+share one execution contract. Queries are flattened as `query x 4`, grouped
+only when tensor shapes require it, microbatched through the same model path,
+and restored in original order. Hard evaluation produces one
+`[query, candidate, node-capacity]` tensor; VAMP oracle and every hard router
+reuse it. A one-hot continuous edge vector is numerically equivalent to its
+corresponding hard path.
+
+Uniform- and Hopfield-initialized EBT each refine the prefix once per execution
+shape. The final trace supplies both the hard argmax decision and the
+continuous edge coefficients used by its paired soft candidate scorer. Soft
+regret is measured against the best hard-node correct-answer NLL and may be
+negative. Hard required-edge support is the fraction present on the selected
+path; soft support is the mean final coefficient over required edges. A future
+edge contributes zero until it exists. Cross-branch queries deliberately have
+no hard-node oracle, so task-oracle and node-accuracy values are undefined
+rather than fabricated.
+
+Every method reports candidate accuracy, wrong-minus-correct margin,
+correct-answer NLL, routed/task-oracle/best-hard regrets, routing uncertainty,
+and applicable node, top-k, and support metrics. Aggregation is deterministic
+over stage, method, task, family, query kind, prefix length, cue regime,
+reasoning type and depth, novelty regime, and open/closed-book mode.
+
+## TinyWorlds Parent Selection and Resumable Transfer
+
+TinyWorlds parent selection uses only the explicit validation suite. Every
+current hard node is scored by mean correct-candidate NLL; equal means resolve
+by graph insertion order. Each stage trains same-state counterfactuals from the
+root, true parent, selected parent, and strongest other-family parent, with
+coincident roles sharing one physical trial. Only the selected-parent edge is
+committed; all other trained states remain transfer diagnostics.
+
+Counterfactual checkpoints contain the complete trainable, optimizer, random,
+and update state. Their diagnostic schedule is exactly update zero, powers of
+two, and the final budget. Immutable chunks are atomically published, reject
+existing paths including dangling symlinks, and must form a prefix of that
+schedule. Reload binds the stored state to the recomputed plan and validation
+suite, frozen parameters, packed memory, training batches, model/LoRA/optimizer
+configuration, and current update-zero state. This identity check is mandatory
+even when a final-budget chunk needs no additional optimizer update.
+
+## TinyWorlds Calibration Boundary
+
+Calibration uses its own four-task world and the fixed one-axis ladder. Trial
+selection, optimizer randomness, and cache identity are derived only from the
+topology, training records, validation stories, and validation queries for
+both prescribed distractor policies. Held-out test records have a separate
+locked-test identity and cannot change validation execution, selected values,
+or training randomness. A stopped calibration never opens the test split. On
+the successful path, the test split is opened exactly once and only after the
+locked scratch configuration passes every validation gate.
+
+Every calibration resume chain must be the exact prefix of updates zero, one,
+two, four, and so on through the requested final budget. Loading validates all
+earlier chunks rather than trusting only the latest one, binds independent
+training to its original full initial state, and rejects symlinked chunk roots
+or targets. Committed-node stability hashes every fixed validation query ID and
+its complete logit tensor in deterministic microbatches; a change outside the
+first probe is therefore still drift.
+
+Canonical trials require the JAX GPU platform, device kind exactly
+`NVIDIA GeForce RTX 4090`, and a 12 GiB allocator-peak target. Device and peak
+evidence is captured after trial scoring and validated before the immutable
+trial artifact is published. Cache reuse revalidates the same runtime identity,
+and promotion strictly loads this evidence for every validation artifact and
+the success-only locked-test artifact.
+
+The raw trial-tree digest and execution digest are part of each observation,
+calibration result, and passing profile. A completed ladder always promotes one
+canonical, hashed `calibration_result.json`: either a successful result with a
+locked profile and one test observation, or a stopped result with the complete
+validation evidence and mechanical stop reason but no profile or test data.
+Only the successful form can authorize the eight-task pilot.
+
+A mechanically valid early stop is a completed Phase 4 outcome, not an
+implementation failure. The ladder stops at the first axis for which none of
+the fixed candidates passes, promotes every completed validation artifact and
+its mechanical stop reason, and leaves both the profile and test artifact
+absent. Such a result cannot authorize Phase 5. Gates must not be relaxed and
+test data must not be consulted to rescue the run; changing the calibration
+hypothesis requires a new versioned contract and a fresh calibration.
+
 ## Scope and Terminology
 
 Virtually Addressed Memory for Parameters (VAMP) is the name of the

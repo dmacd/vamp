@@ -9,6 +9,7 @@ import pytest
 from apm.continual.language_run import (
     advance_language_vamp_run,
     init_language_vamp_run,
+    score_parent_nodes,
 )
 from apm.continual.language_tasks import (
     LanguageEvaluationExample,
@@ -162,6 +163,13 @@ def test_two_task_transition_is_immutable_stable_and_deterministic() -> None:
         config,
         lora_config,
         train_config,
+        score_parent_nodes(
+            initial_run,
+            tasks[0].parent_probes,
+            params,
+            config,
+            lora_config,
+        ),
         key_probe_count=1,
     )
     first_logits = _node_logits(
@@ -180,6 +188,13 @@ def test_two_task_transition_is_immutable_stable_and_deterministic() -> None:
         config,
         lora_config,
         train_config,
+        score_parent_nodes(
+            first_run,
+            tasks[1].parent_probes,
+            params,
+            config,
+            lora_config,
+        ),
         key_probe_count=1,
     )
     repeated_first_run = advance_language_vamp_run(
@@ -189,6 +204,13 @@ def test_two_task_transition_is_immutable_stable_and_deterministic() -> None:
         config,
         lora_config,
         train_config,
+        score_parent_nodes(
+            initial_run,
+            tasks[0].parent_probes,
+            params,
+            config,
+            lora_config,
+        ),
         key_probe_count=1,
     )
     repeated_second_run = advance_language_vamp_run(
@@ -198,6 +220,13 @@ def test_two_task_transition_is_immutable_stable_and_deterministic() -> None:
         config,
         lora_config,
         train_config,
+        score_parent_nodes(
+            repeated_first_run,
+            tasks[1].parent_probes,
+            params,
+            config,
+            lora_config,
+        ),
         key_probe_count=1,
     )
 
@@ -277,13 +306,21 @@ def test_init_requires_exact_probe_count_and_advance_rejects_node_collisions() -
         key_probe_count=1,
     )
     train_config = LmTrainConfig(learning_rate=1e-2, steps=1, batch_size=1)
+    lora_config = LoraConfig(rank=2, alpha=2.0)
     first_run = advance_language_vamp_run(
         initial_run,
         task,
         params,
         config,
-        LoraConfig(rank=2, alpha=2.0),
+        lora_config,
         train_config,
+        score_parent_nodes(
+            initial_run,
+            task.parent_probes,
+            params,
+            config,
+            lora_config,
+        ),
         key_probe_count=1,
     )
 
@@ -293,7 +330,14 @@ def test_init_requires_exact_probe_count_and_advance_rejects_node_collisions() -
             task,
             params,
             config,
-            LoraConfig(rank=2, alpha=2.0),
+            lora_config,
             train_config,
+            score_parent_nodes(
+                first_run,
+                task.parent_probes,
+                params,
+                config,
+                lora_config,
+            ),
             key_probe_count=1,
         )

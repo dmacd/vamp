@@ -105,6 +105,14 @@ from apm.lm.training import (
     init_candidate_lora_train_state,
     make_adamw_optimizer,
 )
+from apm.lm.training_state_artifact import (
+    LM_TRAIN_STATE_ARTIFACT_FORMAT,
+    LM_TRAIN_STATE_ARTIFACT_SCHEMA_VERSION,
+    LmTrainStateArtifactManifest,
+    lm_train_state_checksum,
+    load_lm_train_state_artifact,
+    write_lm_train_state_artifact,
+)
 from apm.lm.tinystories_conversion import (
     TINYSTORIES_SOURCE,
     ConvertedGptNeoModel,
@@ -121,12 +129,21 @@ from apm.lm.tinystories_conversion import (
     validate_pinned_artifact_file,
 )
 from apm.lm.workflow import (
+    CandidateTrainingCheckpoint,
+    CandidateValidationFunction,
     LmLossTrace,
     evaluate_normalized_nll,
     run_base_updates,
     run_candidate_edge_updates,
+    run_resumable_candidate_edge_updates,
     tiny_shakespeare_model_config,
     tiny_shakespeare_unit_model_config,
+)
+from apm.lm.candidate_scoring import (
+    active_token_candidate_nll,
+    score_edge_coefficient_candidates,
+    score_frozen_base_candidates,
+    score_hard_node_candidates,
 )
 
 __all__ = [
@@ -136,6 +153,8 @@ __all__ = [
     "BaseCheckpointRef",
     "CapturePoint",
     "CaptureSpec",
+    "CandidateTrainingCheckpoint",
+    "CandidateValidationFunction",
     "CharTokenizer",
     "CheckpointFileHash",
     "CheckpointProvenance",
@@ -156,6 +175,9 @@ __all__ = [
     "LmLossTrace",
     "LmTrainConfig",
     "LmTrainState",
+    "LmTrainStateArtifactManifest",
+    "LM_TRAIN_STATE_ARTIFACT_FORMAT",
+    "LM_TRAIN_STATE_ARTIFACT_SCHEMA_VERSION",
     "LoadedGptNeoCheckpoint",
     "LoadedTinyStoriesArtifact",
     "LoraBlock",
@@ -189,6 +211,7 @@ __all__ = [
     "TokenizersTextTokenizer",
     "TransformerBlockParams",
     "apply_attention",
+    "active_token_candidate_nll",
     "apply_gpt_neo",
     "apply_gpt_neo_embeddings",
     "apply_layer_norm",
@@ -217,10 +240,12 @@ __all__ = [
     "init_lora_edge",
     "insert_lora_edge",
     "load_gpt_neo_checkpoint",
+    "load_lm_train_state_artifact",
     "load_tiny_shakespeare",
     "load_tinystories_artifact",
     "make_adamw_optimizer",
     "mean_token_nll",
+    "lm_train_state_checksum",
     "node_weights_to_edge_coefficients",
     "ordered_capture_spec",
     "pack_lora_memory",
@@ -230,6 +255,10 @@ __all__ = [
     "prepare_tiny_shakespeare",
     "run_base_updates",
     "run_candidate_edge_updates",
+    "run_resumable_candidate_edge_updates",
+    "score_edge_coefficient_candidates",
+    "score_frozen_base_candidates",
+    "score_hard_node_candidates",
     "save_gpt_neo_checkpoint",
     "save_tinystories_artifact",
     "split_text_contiguously",
@@ -240,4 +269,5 @@ __all__ = [
     "tinystories_conversion_provenance",
     "unflatten_gpt_neo_params",
     "validate_pinned_artifact_file",
+    "write_lm_train_state_artifact",
 ]

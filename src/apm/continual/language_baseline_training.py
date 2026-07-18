@@ -14,6 +14,7 @@ from apm.continual.language_run import (
     LanguageVampRun,
     advance_language_vamp_run,
     init_language_vamp_run,
+    score_parent_nodes,
 )
 from apm.continual.language_tasks import (
     LanguageCurriculum,
@@ -312,6 +313,14 @@ def train_language_adaptation_baselines(
         evaluation_microbatch_size=evaluation_microbatch_size,
     )
     for task in curriculum.tasks:
+        parent_selection = score_parent_nodes(
+            vamp,
+            task.parent_probes,
+            base_params,
+            model_config,
+            lora_config,
+            evaluation_microbatch_size=evaluation_microbatch_size,
+        )
         vamp = advance_language_vamp_run(
             vamp,
             task,
@@ -319,9 +328,10 @@ def train_language_adaptation_baselines(
             model_config,
             lora_config,
             train_config,
+            parent_selection,
             key_probe_count=sum(
-                example.router_batch.input_ids.shape[0]
-                for example in task.validation_examples
+                probe.input_ids.shape[0]
+                for probe in task.parent_probes
             ),
             evaluation_microbatch_size=evaluation_microbatch_size,
         )
@@ -482,12 +492,12 @@ def _validate_vamp_evaluation_inputs(
     if any(not isinstance(batch, RouterBatch) for batch in root_validation_probes):
         raise TypeError("VAMP root probes must contain RouterBatch values")
     if any(
-        not task.validation_examples
-        or not task.test_examples
+        not task.parent_probes
+        or not task.content_key_probes
         or any(
             example.router_batch.input_ids.shape[0] != 1
             for example in task.test_examples
         )
         for task in curriculum.tasks
     ):
-        raise ValueError("VAMP tasks require validation and single-row test examples")
+        raise ValueError("VAMP tasks require fixed probes and single-row test examples")

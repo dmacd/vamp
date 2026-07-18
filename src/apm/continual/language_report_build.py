@@ -9,6 +9,11 @@ import jax
 import numpy as np
 
 from apm.continual.language_benchmark_run import LanguageBenchmarkResult
+from apm.continual.language_evaluation import (
+    LanguageEvaluationSuite,
+    summarize_language_cue_coverage,
+)
+from apm.continual.language_evaluation_run import LanguageEvaluationBenchmark
 from apm.continual.language_benchmarks import (
     ROUTER_BASELINE_NAMES,
     STORED_BASELINE_NAMES,
@@ -32,9 +37,19 @@ def build_language_report_bundle(
     prepared: PreparedLanguageCurriculum,
     benchmark: LanguageBenchmarkResult,
     base_params: GptNeoParams,
+    evaluation_suite: LanguageEvaluationSuite | None = None,
+    evaluation_result: LanguageEvaluationBenchmark | None = None,
 ) -> LanguageReportBundle:
     """Project one completed benchmark into every standard report input."""
     final_graph = benchmark.adaptations.vamp.graph
+    if evaluation_result is not None:
+        if (
+            evaluation_suite is not None
+            and evaluation_result.suite is not evaluation_suite
+            and evaluation_result.suite.suite_id != evaluation_suite.suite_id
+        ):
+            raise ValueError("evaluation_result and evaluation_suite must describe one suite")
+        evaluation_suite = evaluation_result.suite
     node_stats, edge_stats = _graph_visual_stats(
         prepared,
         benchmark,
@@ -202,6 +217,76 @@ def build_language_report_bundle(
         node_stats=node_stats,
         edge_stats=edge_stats,
         samples=benchmark.samples,
+        evaluation_examples=(
+            tuple(
+                _record(
+                    pair_id=example.pair_id,
+                    task_id=str(example.task_id),
+                    split=example.split,
+                    condition_id=example.condition_id,
+                    prefix_tokens=next(
+                        condition.prefix_tokens
+                        for condition in evaluation_suite.conditions
+                        if condition.condition_id == example.condition_id
+                    ),
+                    suffix_tokens=next(
+                        condition.suffix_tokens
+                        for condition in evaluation_suite.conditions
+                        if condition.condition_id == example.condition_id
+                    ),
+                    source_document_id=example.provenance.source_document_id,
+                    token_offset=example.provenance.token_offset,
+                    pair_hash=example.provenance.pair_hash,
+                    cue_regime=example.cue_regime,
+                    visible_concept_count=len(example.visible_concept_ids),
+                    visible_concept_ids="|".join(example.visible_concept_ids),
+                )
+                for example in evaluation_suite.examples
+            )
+            if evaluation_suite is not None
+            else ()
+        ),
+        cue_coverage=(
+            tuple(
+                _record(
+                    task_id=str(row.task_id),
+                    split=row.split,
+                    condition_id=row.condition_id,
+                    cue_regime=row.cue_regime,
+                    example_count=row.example_count,
+                    pair_count=row.pair_count,
+                    source_story_count=row.source_story_count,
+                )
+                for row in summarize_language_cue_coverage(evaluation_suite)
+            )
+            if evaluation_suite is not None
+            else ()
+        ),
+        cue_metrics=(
+            tuple(
+                _record(
+                    stage=row.stage,
+                    method=row.method,
+                    category=row.category,
+                    task_id=str(row.task_id),
+                    condition_id=row.condition_id,
+                    prefix_tokens=row.prefix_tokens,
+                    suffix_tokens=row.suffix_tokens,
+                    cue_regime=row.cue_regime,
+                    example_count=row.example_count,
+                    pair_count=row.pair_count,
+                    source_story_count=row.source_story_count,
+                    suffix_nll=row.suffix_nll,
+                    perplexity=row.perplexity,
+                    routing_accuracy=row.routing_accuracy,
+                    routing_regret=row.routing_regret,
+                    entropy=row.entropy,
+                )
+                for row in evaluation_result.measurements
+            )
+            if evaluation_result is not None
+            else ()
+        ),
     )
 
 
@@ -211,6 +296,8 @@ def write_language_benchmark_report(
     prepared: PreparedLanguageCurriculum,
     benchmark: LanguageBenchmarkResult,
     base_params: GptNeoParams,
+    evaluation_suite: LanguageEvaluationSuite | None = None,
+    evaluation_result: LanguageEvaluationBenchmark | None = None,
 ) -> Path:
     """Emit the deterministic report projection of one completed benchmark."""
     return write_language_report(
@@ -220,6 +307,8 @@ def write_language_benchmark_report(
             prepared,
             benchmark,
             base_params,
+            evaluation_suite,
+            evaluation_result,
         ),
     )
 

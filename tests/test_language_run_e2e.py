@@ -10,6 +10,7 @@ from apm.continual.language_run import (
     LanguageVampRun,
     advance_language_vamp_run,
     init_language_vamp_run,
+    score_parent_nodes,
 )
 from apm.continual.language_tasks import (
     BaseCheckpointRef,
@@ -264,6 +265,13 @@ def test_two_task_character_permutation_run_is_immutable_and_task_free() -> None
         model_config,
         lora_config,
         train_config,
+        score_parent_nodes(
+            initial_run,
+            task_one.parent_probes,
+            base_params,
+            model_config,
+            lora_config,
+        ),
         key_probe_count=_KEY_PROBE_COUNT,
     )
     first_graph_snapshot = _graph_snapshot(first_run.graph)
@@ -291,6 +299,13 @@ def test_two_task_character_permutation_run_is_immutable_and_task_free() -> None
         model_config,
         lora_config,
         train_config,
+        score_parent_nodes(
+            first_run,
+            task_two.parent_probes,
+            base_params,
+            model_config,
+            lora_config,
+        ),
         key_probe_count=_KEY_PROBE_COUNT,
     )
 

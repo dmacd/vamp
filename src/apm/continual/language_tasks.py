@@ -126,12 +126,14 @@ class LanguageEvaluationExample:
 
 @dataclass(frozen=True)
 class LanguageTask:
-    """One immutable training task and its held-out evaluator examples."""
+    """One immutable training task with fixed parent and content-key probes."""
 
     task_id: TaskId
     train_batches: tuple[TokenBatch, ...]
     validation_examples: tuple[LanguageEvaluationExample, ...]
     test_examples: tuple[LanguageEvaluationExample, ...]
+    parent_probes: tuple[RouterBatch, ...] = ()
+    content_key_probes: tuple[RouterBatch, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.task_id:
@@ -143,6 +145,24 @@ class LanguageTask:
         examples = self.validation_examples + self.test_examples
         if any(example.task_id != self.task_id for example in examples):
             raise ValueError("evaluation example task IDs must match their LanguageTask")
+        resolved_parent_probes = self.parent_probes or tuple(
+            example.router_batch for example in self.validation_examples
+        )
+        resolved_content_key_probes = self.content_key_probes or tuple(
+            example.router_batch for example in self.validation_examples
+        )
+        for name, probes in (
+            ("parent_probes", resolved_parent_probes),
+            ("content_key_probes", resolved_content_key_probes),
+        ):
+            if any(not isinstance(probe, RouterBatch) for probe in probes):
+                raise ValueError(f"language task {name} must contain RouterBatch values")
+        object.__setattr__(self, "parent_probes", tuple(resolved_parent_probes))
+        object.__setattr__(
+            self,
+            "content_key_probes",
+            tuple(resolved_content_key_probes),
+        )
 
 
 @dataclass(frozen=True)

@@ -84,12 +84,15 @@ class LanguageReportManifest:
     preset: str
     seed: int
     config_json: str
+    interpretation: str = "in-domain continual adaptation"
 
     def __post_init__(self) -> None:
         for field_name in ("dataset", "curriculum", "preset"):
             _validate_path_component(getattr(self, field_name), field_name)
         if type(self.seed) is not int or self.seed < 0:
             raise ValueError("seed must be a nonnegative integer")
+        if not isinstance(self.interpretation, str) or not self.interpretation:
+            raise ValueError("report interpretation must not be empty")
         _canonical_config(self.config_json)
 
     @property
@@ -145,6 +148,9 @@ class LanguageReportBundle:
     node_stats: tuple[NodeVisualStats, ...]
     edge_stats: tuple[EdgeVisualStats, ...]
     samples: tuple[GeneratedLanguageSample, ...]
+    evaluation_examples: tuple[ReportRecord, ...] = ()
+    cue_coverage: tuple[ReportRecord, ...] = ()
+    cue_metrics: tuple[ReportRecord, ...] = ()
 
     def __post_init__(self) -> None:
         _validate_report_bundle(self)
@@ -200,7 +206,7 @@ def write_language_report(
         "config": json.loads(_canonical_config(bundle.manifest.config_json)),
         "stored_baselines": list(STORED_BASELINE_NAMES),
         "routers": list(ROUTER_BASELINE_NAMES),
-        "interpretation": "in-domain continual adaptation",
+        "interpretation": bundle.manifest.interpretation,
     }
     write_json(output_directory / "manifest.json", manifest_payload)
     for filename, records in _jsonl_families(bundle):
@@ -254,7 +260,7 @@ def write_language_report(
 def _jsonl_families(
     bundle: LanguageReportBundle,
 ) -> tuple[tuple[str, tuple[ReportRecord, ...]], ...]:
-    return (
+    core_families = (
         ("stage_metrics.jsonl", bundle.stage_metrics),
         ("stored_competence.jsonl", bundle.stored_competence),
         ("routing_metrics.jsonl", bundle.routing_metrics),
@@ -266,6 +272,16 @@ def _jsonl_families(
             _addressing_trace_records(bundle.addressing_traces),
         ),
     )
+    optional_families = tuple(
+        (filename, records)
+        for filename, records in (
+            ("evaluation_examples.jsonl", bundle.evaluation_examples),
+            ("cue_coverage.jsonl", bundle.cue_coverage),
+            ("cue_metrics.jsonl", bundle.cue_metrics),
+        )
+        if records
+    )
+    return core_families + optional_families
 
 
 def _addressing_trace_records(
@@ -517,7 +533,7 @@ def _write_language_html(path: Path, bundle: LanguageReportBundle) -> None:
             f"<style>{_language_report_css()}</style></head><body><main>",
             f"<h1>{html.escape(bundle.manifest.dataset)} · {html.escape(bundle.manifest.curriculum)}</h1>",
             f"<p><code>{html.escape(bundle.manifest.run_id)}</code></p>",
-            "<p>This report measures in-domain continual adaptation with prefix-only task-free routing and disjoint suffix competence.</p>",
+            f"<p>This report measures {html.escape(bundle.manifest.interpretation)} with prefix-only task-free routing and disjoint suffix competence.</p>",
             "<section><h2>Baseline matrix</h2><table><thead><tr><th>Method</th><th>Role</th></tr></thead>",
             f"<tbody>{baseline_rows}</tbody></table><p>{negative_control_status}</p></section>",
             f'<section><h2>Graph and metrics</h2><div class="image-grid">{image_cards}</div></section>',

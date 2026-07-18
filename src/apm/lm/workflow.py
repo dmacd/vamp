@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Protocol, Sequence
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from apm.lm.config import GptNeoConfig
 from apm.lm.gpt_neo import apply_gpt_neo
@@ -28,6 +29,50 @@ class LmLossTrace:
     """Immutable ordered scalar losses produced by a fixed update budget."""
 
     step_losses: tuple[float, ...]
+
+
+class CandidateValidationFunction(Protocol):
+    """Validation callback evaluated only at immutable checkpoint updates."""
+
+    def __call__(self, adapter: LoraEdge, update: int) -> tuple[float, float]:
+        """Return candidate accuracy and correct-answer NLL."""
+        ...
+
+
+@dataclass(frozen=True)
+class CandidateTrainingCheckpoint:
+    """One resumable optimizer state and its validation evidence."""
+
+    update: int
+    state: LmTrainState[LoraEdge]
+    training_loss: float | None
+    validation_candidate_accuracy: float | None
+    validation_correct_nll: float | None
+
+    def __post_init__(self) -> None:
+        if type(self.update) is not int or self.update < 0:
+            raise ValueError("candidate checkpoint update must be nonnegative")
+        if not isinstance(self.state, LmTrainState):
+            raise TypeError("candidate checkpoint state must be an LmTrainState")
+        if int(self.state.step) != self.update:
+            raise ValueError("candidate checkpoint state step must equal update")
+        if self.update == 0 and self.training_loss is not None:
+            raise ValueError("update-zero candidate checkpoints have no training loss")
+        if self.training_loss is not None and not np.isfinite(self.training_loss):
+            raise ValueError("candidate checkpoint training loss must be finite")
+        validation_values = (
+            self.validation_candidate_accuracy,
+            self.validation_correct_nll,
+        )
+        if (validation_values[0] is None) != (validation_values[1] is None):
+            raise ValueError("candidate validation accuracy and NLL are paired")
+        if validation_values[0] is not None and (
+            not 0.0 <= validation_values[0] <= 1.0
+            or validation_values[1] is None
+            or not np.isfinite(validation_values[1])
+            or validation_values[1] < 0.0
+        ):
+            raise ValueError("candidate validation values are outside their domains")
 
 
 def tiny_shakespeare_model_config(vocab_size: int) -> GptNeoConfig:
@@ -164,6 +209,85 @@ def run_candidate_edge_updates(
         )
         losses.append(float(loss))
     return current_state, LmLossTrace(step_losses=tuple(losses))
+
+
+def run_resumable_candidate_edge_updates(
+    state: LmTrainState[LoraEdge],
+    batches: Sequence[TokenBatch],
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    packed_memory: PackedLoraMemory,
+    lora_config: LoraConfig,
+    parent_edge_coefficients: jax.Array,
+    candidate_index: int,
+    train_config: LmTrainConfig,
+    *,
+    stop_update: int | None = None,
+    validation_function: CandidateValidationFunction | None = None,
+) -> tuple[LmTrainState[LoraEdge], LmLossTrace, tuple[CandidateTrainingCheckpoint, ...]]:
+    """Resume to one absolute update and retain power-of-two checkpoints."""
+    _require_training_batches(batches)
+    start_update = int(state.step)
+    target_update = train_config.steps if stop_update is None else stop_update
+    if (
+        type(target_update) is not int
+        or target_update < start_update
+        or target_update > train_config.steps
+    ):
+        raise ValueError("stop_update must lie between state.step and the budget")
+    checkpoint_updates = frozenset(
+        (start_update, target_update)
+        + tuple(
+            2**power
+            for power in range(train_config.steps.bit_length())
+            if start_update < 2**power <= target_update
+        )
+    )
+    compiled_step = jax.jit(
+        lambda current_state, batch: candidate_lora_train_step(
+            current_state,
+            batch,
+            base_params,
+            model_config,
+            packed_memory,
+            lora_config,
+            parent_edge_coefficients,
+            candidate_index,
+            train_config,
+        )
+    )
+
+    def checkpoint(
+        current_state: LmTrainState[LoraEdge],
+        training_loss: float | None,
+    ) -> CandidateTrainingCheckpoint:
+        update = int(current_state.step)
+        validation = (
+            (None, None)
+            if validation_function is None
+            else validation_function(current_state.trainable, update)
+        )
+        return CandidateTrainingCheckpoint(
+            update=update,
+            state=current_state,
+            training_loss=training_loss,
+            validation_candidate_accuracy=validation[0],
+            validation_correct_nll=validation[1],
+        )
+
+    current_state = state
+    losses: list[float] = []
+    checkpoints = [checkpoint(state, None)]
+    for update in range(start_update + 1, target_update + 1):
+        current_state, loss = compiled_step(
+            current_state,
+            batches[(update - 1) % len(batches)],
+        )
+        scalar_loss = float(loss)
+        losses.append(scalar_loss)
+        if update in checkpoint_updates:
+            checkpoints.append(checkpoint(current_state, scalar_loss))
+    return current_state, LmLossTrace(tuple(losses)), tuple(checkpoints)
 
 
 def _require_training_batches(batches: Sequence[TokenBatch]) -> None:
