@@ -120,6 +120,15 @@ word, feature, and part-of-speech evidence locally from the story and treat the
 model's output envelope as a transport concern, then rerun only a tiny finalist
 comparison. Do not spend on the full screen under the present gate.
 
+A post-run harness audit found and fixed four non-scientific safety edges:
+bounded missing-cost responses now require all four generation-stat lookups;
+complete-cache publication recovery loads neither a fresh API key nor a stale
+BYOK attestation; promotion reserves the destination before renaming; and the
+validator rederives runtime, actual, unknown, per-route, and cumulative costs
+from raw responses and the immutable journal. The focused 107-test suite and
+zero-network replay of both v1 and v3 pass after these changes; no additional
+paid request was made and both artifact manifests remain unchanged.
+
 ## Non-negotiable V2 Contract
 
 - Implement V2 in a parallel `tinyworlds_v2` package and versioned artifact

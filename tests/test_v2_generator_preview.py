@@ -7,6 +7,7 @@ import socket
 
 import pytest
 
+import apm.data.text.tinyworlds_v2.generator_preview as generator_preview
 from apm.data.text.tinyworlds_v2.bakeoff import (
     CANDIDATE_MODELS,
     SYNTHETIC_STORY_REQUEST_V3,
@@ -18,13 +19,29 @@ from apm.data.text.tinyworlds_v2.generator_preview import (
     GENERATOR_PREVIEW_RUN_CAP_USD,
     GENERATOR_PREVIEW_SELECTION_SEED,
     GENERATOR_PREVIEW_SOURCE_RECORD_IDS,
+    GENERATOR_PREVIEW_STATS_ATTEMPTS,
     GENERATOR_PREVIEW_VERSION,
     GeneratorPreviewPaths,
     _bounded_missing_cost_failure_kind,
+    _cached_byok_preflight,
+    _cost_actuals,
+    _promote_directory_no_replace,
+    _preview_client_for_cache,
+    _runtime_cost_record_from_journal,
+    _validate_current_cost_records,
     build_generator_preview_preflight,
     load_generator_preview_briefs,
 )
+from apm.data.text.tinyworlds_v2.generation_cache import (
+    CostJournalEntry,
+    ImmutableRawCache,
+)
+from apm.data.text.tinyworlds_v2.generation_costs import (
+    RuntimeCostLedger,
+    request_cost_upper_bound,
+)
 from apm.data.text.tinyworlds_v2.generation_schema import (
+    RawAttempt,
     RawGenerationStatsAttempt,
     RawGenerationStatsResponse,
     RawHttpResponse,
@@ -206,13 +223,14 @@ def test_gateway_timeout_with_only_missing_stats_is_a_bounded_preview_failure() 
         200,
         (("x-generation-id", "gen-fixture"),),
         b'{"error":{"code":504,"message":"error code: 524\\n"}}',
-        generation_stats_attempts=(
+        generation_stats_attempts=tuple(
             RawGenerationStatsAttempt(
-                1,
-                "2026-07-19T23:30:42Z",
+                attempt_number,
+                f"2026-07-19T23:30:4{attempt_number}Z",
                 missing,
                 None,
-            ),
+            )
+            for attempt_number in range(1, GENERATOR_PREVIEW_STATS_ATTEMPTS + 1)
         ),
     )
 
@@ -226,6 +244,209 @@ def test_gateway_timeout_with_only_missing_stats_is_a_bounded_preview_failure() 
         generation_stats_attempts=response.generation_stats_attempts,
     )
     assert _bounded_missing_cost_failure_kind(altered) is None
+
+    partial = RawHttpResponse(
+        response.status_code,
+        response.headers,
+        response.body,
+        generation_stats_attempts=response.generation_stats_attempts[:-1],
+    )
+    assert _bounded_missing_cost_failure_kind(partial) is None
+
+
+def test_preview_promotion_never_replaces_an_existing_empty_directory(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "evidence.txt").write_text("source", encoding="utf-8")
+    destination = tmp_path / "destination"
+    destination.mkdir()
+
+    with pytest.raises(FileExistsError, match="destination already exists"):
+        _promote_directory_no_replace(source, destination)
+
+    assert source.is_dir()
+    assert destination.is_dir()
+    assert tuple(destination.iterdir()) == ()
+
+
+def test_complete_cache_client_needs_no_fresh_key_or_attestation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_key_load(*_args: object, **_kwargs: object) -> str:
+        pytest.fail("complete-cache recovery loaded a fresh API key")
+
+    evidence = {"decision": "allowed", "source": "cached_fixture"}
+    monkeypatch.setattr(
+        generator_preview,
+        "load_openrouter_api_key",
+        unexpected_key_load,
+    )
+    monkeypatch.setattr(
+        generator_preview,
+        "_cached_byok_preflight",
+        lambda _cache: evidence,
+    )
+
+    client, recovered = _preview_client_for_cache(
+        GeneratorPreviewPaths.from_repository(tmp_path),
+        ImmutableRawCache(tmp_path / "cache"),
+        RuntimeCostLedger("0.05"),
+        cache_complete=True,
+        offline_complete=True,
+    )
+
+    assert recovered == evidence
+    assert client.require_byok_preflight is False
+    with pytest.raises(generator_preview.GeneratorPreviewError, match="HTTP POST"):
+        client.transport.post()
+
+
+def test_stats_only_cache_client_uses_key_without_new_byok_attestation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence = {
+        "checked_at_utc": "2026-07-19T23:30:42Z",
+        "decision": "allowed",
+    }
+    monkeypatch.setattr(
+        generator_preview,
+        "load_openrouter_api_key",
+        lambda _root: "stats-only-fixture-key",
+    )
+    monkeypatch.setattr(
+        generator_preview,
+        "_cached_byok_preflight",
+        lambda _cache: evidence,
+    )
+
+    client, recovered = _preview_client_for_cache(
+        GeneratorPreviewPaths.from_repository(tmp_path),
+        ImmutableRawCache(tmp_path / "cache"),
+        RuntimeCostLedger("0.05"),
+        cache_complete=True,
+        offline_complete=False,
+    )
+
+    assert recovered == evidence
+    assert client.api_key == "stats-only-fixture-key"
+    assert client.byok_attestation_path is None
+    assert client.require_byok_preflight is False
+
+
+def test_complete_cache_recovery_accepts_renewed_historical_attestations() -> None:
+    older = {
+        "checked_at_utc": "2026-07-18T23:30:42Z",
+        "decision": "allowed",
+    }
+    newer = {
+        "checked_at_utc": "2026-07-19T23:30:42Z",
+        "decision": "allowed",
+    }
+
+    def entry(index: int, authorization: dict[str, object]) -> CostJournalEntry:
+        return CostJournalEntry(
+            request_sha256=f"{index:064x}",
+            attempt_number=1,
+            upper_bound_usd="0.001",
+            charged_usd="0.0001",
+            provider_reported_actual=True,
+            cancelled_before_post=False,
+            byok_authorization=authorization,
+            byok_authorization_sha256="a" * 64,
+        )
+
+    class RenewedAuthorizationCache:
+        def load_cost_journal(self) -> tuple[CostJournalEntry, ...]:
+            return tuple(
+                entry(index, older if index < 11 else newer)
+                for index in range(21)
+            )
+
+    assert _cached_byok_preflight(RenewedAuthorizationCache()) == newer
+
+
+def test_cost_records_are_derived_from_journal_and_reject_tampering(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "prompt_metadata_sample.jsonl"
+    _write_prompt_fixture(source)
+    brief = load_generator_preview_briefs(source)[0]
+    route = _routes()[0]
+    job = build_generation_jobs(
+        (brief,),
+        (CANDIDATE_MODELS[0],),
+        (route,),
+        request_contract=GENERATOR_PREVIEW_REQUEST_CONTRACT,
+    )[0]
+    bound = request_cost_upper_bound(job.request, job.route).upper_bound_usd
+    charged = "0.000001"
+    attempt = RawAttempt(
+        job.request.request_sha256,
+        1,
+        "2026-07-19T23:30:42Z",
+        route.catalog_sha256,
+        RawHttpResponse(200, (), b"{}", billed_cost_usd=charged),
+        None,
+    )
+    entry = CostJournalEntry(
+        request_sha256=job.request.request_sha256,
+        attempt_number=1,
+        upper_bound_usd=bound,
+        charged_usd=charged,
+        provider_reported_actual=True,
+        cancelled_before_post=False,
+        byok_authorization={"decision": "allowed"},
+        byok_authorization_sha256="a" * 64,
+    )
+
+    class CostCache:
+        def load_cost_journal(self) -> tuple[CostJournalEntry, ...]:
+            return (entry,)
+
+        def load_attempts(self, _request: object) -> tuple[RawAttempt, ...]:
+            return (attempt,)
+
+    cache = CostCache()
+    jobs = (job,)
+    results = ({"billed_cost_usd": charged},)
+    runtime = _runtime_cost_record_from_journal(cache, jobs)
+    actuals = _cost_actuals(cache, jobs, runtime, (charged,))
+
+    assert (
+        _validate_current_cost_records(cache, jobs, results, runtime, actuals)
+        == charged
+    )
+    tampered_runtime = {**runtime, "charged_total_usd": "0"}
+    with pytest.raises(
+        generator_preview.GeneratorPreviewError,
+        match="runtime ledger differs",
+    ):
+        _validate_current_cost_records(
+            cache,
+            jobs,
+            results,
+            tampered_runtime,
+            actuals,
+        )
+    tampered_actuals = {
+        **actuals,
+        "conservative_unknown_charge_usd": charged,
+    }
+    with pytest.raises(
+        generator_preview.GeneratorPreviewError,
+        match="cost actuals differ",
+    ):
+        _validate_current_cost_records(
+            cache,
+            jobs,
+            results,
+            runtime,
+            tampered_actuals,
+        )
 
 
 def test_preview_script_import_is_offline(monkeypatch: pytest.MonkeyPatch) -> None:

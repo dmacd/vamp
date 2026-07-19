@@ -74,6 +74,7 @@ from apm.data.text.tinyworlds_v2.openrouter import (
     OpenRouterBillingUnknown,
     OpenRouterClient,
     RetryPolicy,
+    _response_needs_stats,
 )
 from apm.data.text.tinyworlds_v2.phase1_generation import (
     GeneratedSample,
@@ -101,6 +102,7 @@ GENERATOR_PREVIEW_HARD_CAP_USD = "0.05"
 GENERATOR_PREVIEW_PRIOR_SPEND_USD = "0.008248631"
 GENERATOR_PREVIEW_RUN_CAP_USD = "0.041751369"
 GENERATOR_PREVIEW_ATTEMPTS_PER_REQUEST = 1
+GENERATOR_PREVIEW_STATS_ATTEMPTS = 4
 GENERATOR_PREVIEW_WORKERS = 3
 GENERATOR_PREVIEW_REQUEST_CONTRACT = SYNTHETIC_STORY_REQUEST_V3
 GENERATOR_PREVIEW_FORMAT = "apm.tinyworlds-v2.generator-preview"
@@ -353,6 +355,91 @@ class _PreviewRuntimeCostLedger(RuntimeCostLedger):
             self._halted_reason = None
 
 
+def _preview_stats_retry_policy() -> RetryPolicy:
+    """Return the preview's fixed, identity-relevant billing lookup policy."""
+    return RetryPolicy(
+        max_attempts=GENERATOR_PREVIEW_STATS_ATTEMPTS,
+        initial_delay_seconds=0.25,
+        maximum_delay_seconds=2.0,
+    )
+
+
+def _preview_client_for_cache(
+    paths: GeneratorPreviewPaths,
+    cache: ImmutableRawCache,
+    ledger: RuntimeCostLedger,
+    *,
+    cache_complete: bool,
+    offline_complete: bool,
+) -> tuple[OpenRouterClient, JsonObject]:
+    """Build either a paid client or a credential-free complete-cache reader."""
+    if offline_complete:
+        return (
+            OpenRouterClient(
+                api_key="offline-complete-preview-cache-never-sent",
+                management_api_key=None,
+                transport=_NetworkForbiddenTransport(),
+                cache=cache,
+                retry_policy=RetryPolicy(max_attempts=1),
+                stats_retry_policy=_preview_stats_retry_policy(),
+                cost_ledger=ledger,
+                require_byok_preflight=False,
+            ),
+            _cached_byok_preflight(cache),
+        )
+    if cache_complete:
+        # Every completion POST is durable, so only authenticated, nonbillable
+        # generation-stats GETs can remain. No current BYOK attestation is
+        # needed because max_attempts=1 makes another completion impossible.
+        return (
+            OpenRouterClient(
+                api_key=load_openrouter_api_key(paths.repository_root),
+                management_api_key=None,
+                transport=HttpxTransport(),
+                cache=cache,
+                retry_policy=RetryPolicy(max_attempts=1),
+                stats_retry_policy=_preview_stats_retry_policy(),
+                cost_ledger=ledger,
+                require_byok_preflight=False,
+            ),
+            _cached_byok_preflight(cache),
+        )
+    client = OpenRouterClient(
+        api_key=load_openrouter_api_key(paths.repository_root),
+        management_api_key=None,
+        byok_attestation_path=paths.byok_attestation,
+        transport=HttpxTransport(),
+        cache=cache,
+        retry_policy=RetryPolicy(max_attempts=1),
+        stats_retry_policy=_preview_stats_retry_policy(),
+        cost_ledger=ledger,
+        require_byok_preflight=True,
+    )
+    return client, client.verify_no_byok().as_record()
+
+
+def _promote_directory_no_replace(source: Path, destination: Path) -> None:
+    """Atomically reserve a destination before replacing only our placeholder."""
+    if not source.is_dir() or source.is_symlink():
+        raise GeneratorPreviewError("preview promotion source is not a directory")
+    try:
+        destination.mkdir(mode=0o700)
+    except FileExistsError:
+        raise FileExistsError(
+            f"preview destination already exists: {destination}"
+        ) from None
+    try:
+        os.rename(source, destination)
+    except Exception:
+        # Remove only the empty directory created above. If another actor put
+        # anything there, preserve it and propagate the promotion failure.
+        try:
+            destination.rmdir()
+        except OSError:
+            pass
+        raise
+
+
 def load_generator_preview_briefs(path: str | Path) -> tuple[NeutralStoryBrief, ...]:
     """Select one deterministic 0-, 1-, and 2+-feature profiling record."""
     records = _jsonl_objects(Path(path))
@@ -572,24 +659,23 @@ def run_generator_preview(
     with exclusive_paid_run_lock(paths.raw_cache):
         cache = ImmutableRawCache(paths.raw_cache)
         _validate_cache_membership(cache, jobs, require_complete=False)
+        cache_complete = _cache_contains_complete_job_matrix(cache, jobs)
+        offline_complete = _cache_is_offline_complete(cache, jobs)
         ledger = _PreviewRuntimeCostLedger(GENERATOR_PREVIEW_RUN_CAP_USD)
         ledger.bootstrap(cache, initial_catalog.generator_routes)
         _enforce_resume_exposure(ledger, cache, jobs)
 
-        # The inference key is intentionally read only after both independent
-        # preflights, exact cache membership, and recovery accounting pass.
-        client = OpenRouterClient(
-            api_key=load_openrouter_api_key(paths.repository_root),
-            management_api_key=None,
-            byok_attestation_path=paths.byok_attestation,
-            transport=HttpxTransport(),
-            cache=cache,
-            retry_policy=RetryPolicy(max_attempts=1),
-            cost_ledger=ledger,
-            require_byok_preflight=True,
+        # Publication recovery from a complete paid cache reuses the exact
+        # durable authorization and a transport that forbids all network. A
+        # partial cache reads the key only after every cost and cache preflight.
+        client, byok_record = _preview_client_for_cache(
+            paths,
+            cache,
+            ledger,
+            cache_complete=cache_complete,
+            offline_complete=offline_complete,
         )
-        byok = client.verify_no_byok()
-        builder.write_json("byok_preflight.json", byok.as_record())
+        builder.write_json("byok_preflight.json", byok_record)
 
         for route_index, model in enumerate(CANDIDATE_MODELS):
             route_id = model.route_id
@@ -605,7 +691,14 @@ def run_generator_preview(
                 ledger.halt("catalog_route_drift")
                 raise
             route_jobs = tuple(
-                replace(job, route=fresh_route)
+                replace(
+                    job,
+                    route=(
+                        cache.load_route_lock(job.request.request_sha256)
+                        if cache_complete
+                        else fresh_route
+                    ),
+                )
                 for job in jobs
                 if job.route.route_id == route_id
             )
@@ -632,10 +725,21 @@ def run_generator_preview(
 
         _validate_cache_membership(cache, jobs, require_complete=True)
         runtime = ledger.snapshot()
-        builder.write_json("runtime_cost_ledger.json", runtime.as_record())
+        runtime_record = runtime.as_record()
+        expected_runtime = _runtime_cost_record_from_journal(cache, jobs)
+        if runtime_record != expected_runtime:
+            raise GeneratorPreviewError(
+                "runtime ledger differs from the immutable preview cost journal"
+            )
+        builder.write_json("runtime_cost_ledger.json", runtime_record)
         builder.write_json(
             "cost_actuals.json",
-            _cost_actuals(cache, jobs, runtime.as_record(), samples),
+            _cost_actuals(
+                cache,
+                jobs,
+                runtime_record,
+                tuple(sample.billed_cost_usd for sample in samples),
+            ),
         )
         shutil.copytree(paths.raw_cache, temporary / "raw_cache")
 
@@ -666,10 +770,7 @@ def run_generator_preview(
     )
     manifest = builder.finalize()
     validate_generator_preview(temporary)
-    try:
-        os.rename(temporary, paths.destination)
-    except FileExistsError:
-        raise FileExistsError(f"preview destination already exists: {paths.destination}")
+    _promote_directory_no_replace(temporary, paths.destination)
     validate_generator_preview(paths.destination)
     emit(
         "Generator preview promoted: "
@@ -770,16 +871,27 @@ def validate_generator_preview(root: str | Path) -> GeneratorPreviewValidation:
     }
     if status != expected_status:
         raise GeneratorPreviewError("preview status differs from derived results")
-    actuals = require_json_object(
-        canonical_json_loads(
-            (resolved / "cost_actuals.json").read_bytes(),
+    if version == GENERATOR_PREVIEW_VERSION:
+        actual_cost = _validate_current_cost_evidence(
+            resolved,
+            cache,
+            jobs,
+            results,
+        )
+    else:
+        actuals = require_json_object(
+            canonical_json_loads(
+                (resolved / "cost_actuals.json").read_bytes(),
+                label="preview cost actuals",
+            ),
             label="preview cost actuals",
-        ),
-        label="preview cost actuals",
-    )
-    actual_cost = _text(actuals.get("provider_reported_actual_usd"), "actual cost")
-    if Decimal(actual_cost) > Decimal(GENERATOR_PREVIEW_RUN_CAP_USD):
-        raise GeneratorPreviewError("preview actual cost exceeds its hard cap")
+        )
+        actual_cost = _text(
+            actuals.get("provider_reported_actual_usd"),
+            "actual cost",
+        )
+        if _usd(actual_cost, "actual cost") > Decimal(GENERATOR_PREVIEW_HARD_CAP_USD):
+            raise GeneratorPreviewError("archived preview actual cost exceeds its hard cap")
     return GeneratorPreviewValidation(
         manifest_sha256=_text(manifest["manifest_sha256"], "manifest digest"),
         briefs=briefs,
@@ -825,6 +937,7 @@ def verify_generator_preview_replay(
             transport=_NetworkForbiddenTransport(),
             cache=cache,
             retry_policy=RetryPolicy(max_attempts=1),
+            stats_retry_policy=_preview_stats_retry_policy(),
             cost_ledger=_ReplayCostLedger(),
             sleeper=lambda _seconds: None,
             require_byok_preflight=False,
@@ -1116,7 +1229,12 @@ def _bounded_missing_cost_failure_kind(response: object) -> str | None:
 def _all_generation_stats_are_missing(response: object) -> bool:
     """Recognize only a complete sequence of exact missing-generation lookups."""
     attempts = getattr(response, "generation_stats_attempts", ())
-    if not attempts:
+    if (
+        type(attempts) is not tuple
+        or len(attempts) != GENERATOR_PREVIEW_STATS_ATTEMPTS
+        or tuple(attempt.attempt_number for attempt in attempts)
+        != tuple(range(1, GENERATOR_PREVIEW_STATS_ATTEMPTS + 1))
+    ):
         return False
     try:
         for attempt in attempts:
@@ -1184,6 +1302,59 @@ def _validate_cache_membership(
             raise GeneratorPreviewError("complete preview cache must contain 21 attempts")
 
 
+def _cache_contains_complete_job_matrix(
+    cache: ImmutableRawCache,
+    jobs: tuple[GenerationJob, ...],
+) -> bool:
+    """Return whether every planned request already has its one paid attempt."""
+    cached = cache.load_all_requests()
+    planned_ids = {job.request.request_sha256 for job in jobs}
+    return (
+        {request.request_sha256 for request in cached} == planned_ids
+        and len(cached) == len(jobs)
+        and all(len(cache.load_attempts(request)) == 1 for request in cached)
+    )
+
+
+def _cache_is_offline_complete(
+    cache: ImmutableRawCache,
+    jobs: tuple[GenerationJob, ...],
+) -> bool:
+    """Return whether replay needs neither a completion POST nor a stats GET."""
+    if not _cache_contains_complete_job_matrix(cache, jobs):
+        return False
+    for job in jobs:
+        response = cache.load_attempts(job.request)[0].response
+        if response is None:
+            return False
+        if _bounded_missing_cost_failure_kind(response) is not None:
+            continue
+        try:
+            if _response_needs_stats(response):
+                return False
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
+def _cached_byok_preflight(cache: ImmutableRawCache) -> JsonObject:
+    """Recover the latest historical authorization from a complete journal."""
+    journal = cache.load_cost_journal()
+    if len(journal) != 21 or any(entry.cancelled_before_post for entry in journal):
+        raise GeneratorPreviewError(
+            "complete preview cache lacks its complete paid authorization journal"
+        )
+    return dict(
+        max(
+            (entry.byok_authorization for entry in journal),
+            key=lambda record: _text(
+                record.get("checked_at_utc"),
+                "cached BYOK checked_at_utc",
+            ),
+        )
+    )
+
+
 def _enforce_resume_exposure(
     ledger: RuntimeCostLedger,
     cache: ImmutableRawCache,
@@ -1207,11 +1378,162 @@ def _enforce_resume_exposure(
         raise CostCapExceeded("resumed preview exposure exceeds its run hard cap")
 
 
+def _runtime_cost_record_from_journal(
+    cache: ImmutableRawCache,
+    jobs: tuple[GenerationJob, ...],
+) -> JsonObject:
+    """Derive the terminal runtime ledger solely from immutable raw evidence."""
+    job_by_request = {job.request.request_sha256: job for job in jobs}
+    actual = Decimal(0)
+    unknown = Decimal(0)
+    actual_count = 0
+    unknown_count = 0
+    for entry in cache.load_cost_journal():
+        job = job_by_request.get(entry.request_sha256)
+        if job is None or entry.attempt_number != 1 or entry.cancelled_before_post:
+            raise GeneratorPreviewError("preview cost journal contains an invalid entry")
+        expected_bound = _usd(
+            request_cost_upper_bound(job.request, job.route).upper_bound_usd,
+            "expected request bound",
+        )
+        recorded_bound = _usd(entry.upper_bound_usd, "journal request bound")
+        if recorded_bound != expected_bound:
+            raise GeneratorPreviewError(
+                "preview cost journal reservation differs from its exact request bound"
+            )
+        if entry.charged_usd is None or type(entry.provider_reported_actual) is not bool:
+            raise GeneratorPreviewError("complete preview cost journal is unsettled")
+        charged = _usd(entry.charged_usd, "journal charged cost")
+        if charged > recorded_bound:
+            raise GeneratorPreviewError("preview journal charge exceeds its reservation")
+        attempt = cache.load_attempts(job.request)[0]
+        reported = _attempt_reported_cost(attempt.response)
+        if entry.provider_reported_actual:
+            if reported is None or charged != _usd(reported, "response reported cost"):
+                raise GeneratorPreviewError(
+                    "preview journal actual cost differs from its raw response"
+                )
+            actual += charged
+            actual_count += 1
+        else:
+            if reported is not None or charged != recorded_bound:
+                raise GeneratorPreviewError(
+                    "preview unknown-cost charge is not its complete request bound"
+                )
+            unknown += charged
+            unknown_count += 1
+    if actual_count + unknown_count != len(jobs):
+        raise GeneratorPreviewError("preview cost journal does not cover every request")
+    return {
+        "charged_total_usd": format(actual + unknown, "f"),
+        "cancelled_before_post_count": 0,
+        "conservative_unknown_charge_usd": format(unknown, "f"),
+        "halted_reason": None,
+        "hard_cap_usd": RuntimeCostLedger(
+            GENERATOR_PREVIEW_RUN_CAP_USD
+        ).hard_cap_usd,
+        "in_flight_attempt_count": 0,
+        "in_flight_reserved_usd": "0",
+        "provider_reported_actual_usd": format(actual, "f"),
+        "provider_reported_attempt_count": actual_count,
+        "unknown_cost_attempt_count": unknown_count,
+    }
+
+
+def _attempt_reported_cost(response: object) -> str | None:
+    if response is None:
+        return None
+    direct = getattr(response, "billed_cost_usd", None)
+    if direct is not None:
+        return _text(direct, "response billed cost")
+    return next(
+        (
+            _text(attempt.billed_cost_usd, "generation-stats billed cost")
+            for attempt in reversed(
+                getattr(response, "generation_stats_attempts", ())
+            )
+            if attempt.billed_cost_usd is not None
+        ),
+        None,
+    )
+
+
+def _validate_current_cost_evidence(
+    root: Path,
+    cache: ImmutableRawCache,
+    jobs: tuple[GenerationJob, ...],
+    results: tuple[JsonObject, ...],
+) -> str:
+    """Authenticate every current-preview cost total against the raw journal."""
+    runtime = require_json_object(
+        canonical_json_loads(
+            (root / "runtime_cost_ledger.json").read_bytes(),
+            label="preview runtime cost ledger",
+        ),
+        label="preview runtime cost ledger",
+    )
+    actuals = require_json_object(
+        canonical_json_loads(
+            (root / "cost_actuals.json").read_bytes(),
+            label="preview cost actuals",
+        ),
+        label="preview cost actuals",
+    )
+    return _validate_current_cost_records(
+        cache,
+        jobs,
+        results,
+        runtime,
+        actuals,
+    )
+
+
+def _validate_current_cost_records(
+    cache: ImmutableRawCache,
+    jobs: tuple[GenerationJob, ...],
+    results: tuple[JsonObject, ...],
+    runtime: JsonObject,
+    actuals: JsonObject,
+) -> str:
+    """Validate already parsed current-preview cost records."""
+    expected_runtime = _runtime_cost_record_from_journal(cache, jobs)
+    if runtime != expected_runtime:
+        raise GeneratorPreviewError(
+            "preview runtime ledger differs from its raw cost journal"
+        )
+    sample_costs = tuple(
+        _text(record.get("billed_cost_usd"), "sample billed cost")
+        for record in results
+    )
+    expected_actuals = _cost_actuals(
+        cache,
+        jobs,
+        expected_runtime,
+        sample_costs,
+    )
+    if actuals != expected_actuals:
+        raise GeneratorPreviewError(
+            "preview cost actuals differ from raw journal and result evidence"
+        )
+    charged = _usd(expected_runtime["charged_total_usd"], "charged total")
+    prior = _usd(GENERATOR_PREVIEW_PRIOR_SPEND_USD, "prior preview spend")
+    if charged > Decimal(GENERATOR_PREVIEW_RUN_CAP_USD):
+        raise GeneratorPreviewError("preview charged total exceeds its run hard cap")
+    if prior + charged > Decimal(GENERATOR_PREVIEW_HARD_CAP_USD):
+        raise GeneratorPreviewError(
+            "cumulative corrected-preview exposure exceeds its hard cap"
+        )
+    return _text(
+        expected_runtime["provider_reported_actual_usd"],
+        "provider-reported actual cost",
+    )
+
+
 def _cost_actuals(
     cache: ImmutableRawCache,
     jobs: tuple[GenerationJob, ...],
     runtime: JsonObject,
-    samples: Sequence[GeneratedSample],
+    sample_costs: Sequence[str],
 ) -> JsonObject:
     route_by_request = {
         job.request.request_sha256: job.route.route_id for job in jobs
@@ -1250,10 +1572,24 @@ def _cost_actuals(
             for model in CANDIDATE_MODELS
         ],
         "sample_reported_cost_sum_usd": format(
-            sum((Decimal(sample.billed_cost_usd) for sample in samples), Decimal(0)),
+            sum(
+                (_usd(cost, "sample reported cost") for cost in sample_costs),
+                Decimal(0),
+            ),
             "f",
         ),
     }
+
+
+def _usd(value: object, label: str) -> Decimal:
+    text = _text(value, label)
+    try:
+        amount = Decimal(text)
+    except Exception as error:
+        raise GeneratorPreviewError(f"{label} is not a decimal amount") from error
+    if not amount.is_finite() or amount < 0:
+        raise GeneratorPreviewError(f"{label} must be finite and nonnegative")
+    return amount
 
 
 def _preview_markdown(

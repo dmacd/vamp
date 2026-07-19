@@ -83,7 +83,12 @@ deterministic renderer or exact-token prose fitting.
   in a different JSON layout, while two strong GPT stories failed exact
   evidence-quote matching and weaker Gemini prose passed. Before any full
   funnel, separate locally derived story checks from response-metadata validity
-  and run a new tiny finalist comparison under that corrected contract.
+  and run a new tiny finalist comparison under that corrected contract. A
+  post-run safety audit also closed partial-stats, cache-only recovery,
+  no-replace promotion, and cost-evidence validation gaps without making any
+  further provider requests. The focused preview/generation suite now passes
+  107 tests, and both archived v1 and promoted v3 still validate and replay
+  byte-identically under the hardened validator.
 - **Phases 2–7: blocked by Phase 1.** Counterbalanced world bibles, natural
   training stories, probes, calibration, the eight-task pilot, and scaling are
   specified in the v2 tracker but are not authorized early. Phase 3 has a

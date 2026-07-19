@@ -174,6 +174,12 @@ are labeled `diagnostic_only`. If a preview is interrupted after paid requests,
 its exact provider-reported spend is debited before calculating a successor
 run's residual cap. A preview may inform a human decision but cannot select a
 production route, authorize a full funnel, or advance a phase gate.
+Missing generation statistics count as exhausted only after the complete fixed
+lookup schedule. A complete raw cache can be republished without loading a
+credential or refreshing its short-lived BYOK attestation, promotion first
+reserves the destination with no-replace creation, and bundle validation
+rederives actual, unknown, per-route, runtime, and cumulative exposure directly
+from the immutable response and cost journals.
 
 The same ceiling is enforced during execution by one thread-safe ledger shared
 by all eight workers while one nonblocking filesystem lease excludes a second
