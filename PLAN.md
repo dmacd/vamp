@@ -12,7 +12,8 @@ deterministic renderer or exact-token prose fitting.
 ### TinyWorlds-v2 Status
 
 - **Phase 1 — reference profile and generator bakeoff: stopped by the live
-  cost cap (2026-07-19).**
+  cost cap; corrected synthetic-author preview awaiting human review
+  (2026-07-19).**
   This phase profiles the released GPT-4 TinyStories prompt/story distribution
   and screens seven provider-locked OpenRouter routes under a `$15` hard cost
   ceiling. It generates no world data. Advancement requires automated quality
@@ -55,6 +56,34 @@ deterministic renderer or exact-token prose fitting.
   interrupted at 85% before repeating the known 20--25-minute cache fixture;
   it had no failures, no code changed after the complete pre-run pass, and the
   artifact validation/replay gates passed independently.
+  Diagnostic previews treat the external models as synthetic-story authors,
+  not as teachers whose behavior is being distilled. The original v1 preview
+  at `data/tinyworlds-v2/previews/phase1-route-preview-3x7-v1/` (manifest
+  `1ddba6e0862de3e416b4ce21538f5471723e823d6c39c5a32da27a0ea72596b6`)
+  is retained as an archived request-contract experiment because its
+  `enforce_distillable_text` restriction prevented a meaningful comparison.
+  A corrected v2 attempt removed that restriction but was interrupted after 13
+  paid requests: its first Qwen response emitted 5,138 hidden reasoning tokens
+  despite the 512-token visible-output bound, and exact provider spend reached
+  `$0.008248631`. The completed v3 preview explicitly disables optional
+  reasoning for Qwen and Gemini and uses the remaining `$0.041751369` of the
+  separately authorized `$0.05` cumulative cap. Its promoted artifact is
+  `data/tinyworlds-v2/previews/phase1-route-preview-3x7-v3/`, manifest
+  `6e1aa9697d8e62263a49c6bc8d22aa22bcb568ca4e551e68b75c727ab063d9f0`.
+  All 21 outcomes replay with zero network; 5 passed the current deterministic
+  gate (Mistral 1/3, Gemini 3/3, GPT-5.4 Mini 1/3). Provider-reported v3 cost is
+  `$0.0061824395`; one unknown-cost timeout is conservatively charged
+  `$0.00063045`, for v3 ledger exposure of `$0.0068128895`. This small preview
+  remains diagnostic-only and ineligible for route selection. No full funnel
+  is authorized before human review, and permission to use bulk outputs in a
+  training corpus will be reviewed separately for the exact selected model and
+  provider rather than inferred from preview quality. Preliminary inspection
+  also shows that the current mechanical gate confounds story quality with the
+  model's self-reported evidence schema: Qwen returned three coherent stories
+  in a different JSON layout, while two strong GPT stories failed exact
+  evidence-quote matching and weaker Gemini prose passed. Before any full
+  funnel, separate locally derived story checks from response-metadata validity
+  and run a new tiny finalist comparison under that corrected contract.
 - **Phases 2–7: blocked by Phase 1.** Counterbalanced world bibles, natural
   training stories, probes, calibration, the eight-task pilot, and scaling are
   specified in the v2 tracker but are not authorized early. Phase 3 has a
@@ -177,17 +206,24 @@ deterministic renderer or exact-token prose fitting.
 2. Preserve the valid `blocked_by_cost_cap` Phase 1 artifact and its exact
    `$3.439507` expected / `$20.020653` conservative evidence; do not overwrite
    or reinterpret it.
-3. Decide whether to keep this as the terminal v2 result or introduce a new
-   versioned cost contract. The least scientifically invasive continuation is
-   to preserve all routes, sample counts, retries, and gates while raising only
-   the inclusive ceiling to `$25`; changing verifier identity, coverage, or
-   retry policy would alter more of the experiment.
-4. If a new contract is explicitly authorized, use a new artifact identity and
-   rerun its offline gates before the provider-locked seven-model bakeoff.
-5. Stop at the blinded Phase 1 human audit. Do not generate world bibles until
+3. Review the manifested v3 3-by-7 diagnostic preview, including rejected
+   stories as well as the five mechanically accepted samples. Do not launch a
+   full funnel until that human review is complete.
+4. Correct the preview gate so model-authored evidence formatting cannot
+   override the quality or constraint validity of the story itself, then run a
+   tiny finalist check rather than repeating the complete funnel.
+5. Treat the task as synthetic-data authoring, not behavioral distillation.
+   Compare routes on TinyStories quality, constraint fidelity, reliability,
+   and cost without using `enforce_distillable_text` as a quality gate.
+6. Before bulk generation, separately review and record the output-use terms
+   for the exact selected model/provider route. Human preview approval does not
+   itself authorize generated text for a training corpus.
+7. After both reviews, authorize a new full-funnel artifact identity and cost
+   ceiling, rerun the offline gates, and launch the provider-locked bakeoff.
+8. Stop at the blinded Phase 1 human audit. Do not generate world bibles until
    the exact audit digest is explicitly approved and recorded; Phase 2 remains
    blocked even if the automated route gates pass.
-6. Record Phase 1 status and artifact hashes here and in
+9. Record Phase 1 status and artifact hashes here and in
    `docs/TW-v2_PLAN.md`; record only durable boundary changes in `DESIGN.md`.
 
 ### Deferred Alternative

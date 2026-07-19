@@ -13,3 +13,4 @@ dist/
 /checkpoints/
 /openrouter-tinyworlds-key.txt
 /openrouter-tinyworlds-no-byok-attestation.json
+/openrouter-tinyworlds-preview-no-byok-attestation.json

@@ -173,8 +173,16 @@ def _response(
     *,
     returned_model: str = "openai/gpt-5.4-mini-2026-03-17",
     provider: str = "OpenAI",
+    endpoint_model: str | None = None,
     exact_suffix: bytes = b"",
 ) -> TransportResponse:
+    selected_endpoint = {
+        "additive_endpoint_field": 7,
+        "provider": provider,
+        "selected": True,
+    }
+    if endpoint_model is not None:
+        selected_endpoint["model"] = endpoint_model
     body = canonical_json_bytes(
         {
             "choices": [
@@ -186,13 +194,7 @@ def _response(
                 "additive_future_field": {"ignored": True},
                 "is_byok": False,
                 "endpoints": {
-                    "available": [
-                        {
-                            "additive_endpoint_field": 7,
-                            "provider": provider,
-                            "selected": True,
-                        }
-                    ]
+                    "available": [selected_endpoint]
                 },
             },
             "usage": {
@@ -1376,6 +1378,25 @@ def test_malformed_or_route_mismatched_success_is_cached_but_not_retried(
         no_network = _client(case_root, ScriptedTransport([]))
         with pytest.raises(OpenRouterContractError):
             no_network.generate(request, route)
+
+
+def test_selected_endpoint_canonicalizes_a_requested_alias_response(
+    tmp_path: Path,
+) -> None:
+    request, route = _request(), _route()[0]
+    transport = ScriptedTransport(
+        [
+            _response(
+                returned_model=route.requested_model,
+                endpoint_model=route.canonical_model,
+            )
+        ]
+    )
+
+    response = _client(tmp_path, transport).generate(request, route)
+
+    assert response.provenance is not None
+    assert response.provenance.returned_model == route.canonical_model
 
 
 def test_unrecognized_transport_exception_is_not_retried_or_cached(

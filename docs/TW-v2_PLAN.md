@@ -27,7 +27,7 @@ generation end at mandatory human-approval stops.
 | Phase | State | Advancement gate |
 |---|---|---|
 | V1 stopped result | Preserved | No further v1 tuning or pilot is authorized |
-| 1. Reference profile and generator bakeoff | **Stopped — live cost cap exceeded** | A new versioned cost contract is required before another bakeoff; then reference artifacts must validate, one route must pass automated review, and the exact blinded audit digest must receive explicit human approval |
+| 1. Reference profile and generator bakeoff | **Stopped — corrected diagnostic preview awaiting human review** | Human review of the v3 preview and a separate exact-route output-use review are required before any full funnel; then reference artifacts must validate, one route must pass automated review, and the exact blinded audit digest must receive explicit human approval |
 | 2. Counterbalanced world bibles | Blocked by Phase 1 | World audit and deterministic counterbalance checks pass |
 | 3. Natural training corpus | Blocked by Phase 2 | The 150-story sample audit receives explicit human approval, then the complete corpus validates |
 | 4. Natural evaluation data | Blocked by Phase 3 | Frozen-base sensitivity, balance, semantic, leakage, and 100-probe human gates pass before adapter training |
@@ -67,12 +67,58 @@ redundant post-artifact default-suite rerun was intentionally interrupted at
 no failures, no code changed after the complete pre-run pass, and the artifact
 validation and replay gates passed independently.
 
-Phase 2 remains blocked. Another paid attempt requires an explicitly authorized
-versioned cost contract and a new artifact identity; the existing stopped tree
-must not be overwritten. The narrowest continuation is to preserve every route,
-sample count, retry rule, and quality gate while changing only the inclusive
-cap to `$25`. Changing verifier identity, verifier coverage, or retry policy
-would alter more of the scientific comparison.
+Three fixed 3-brief-by-7-route previews now record the request-contract
+corrections. The v1 artifact at
+`data/tinyworlds-v2/previews/phase1-route-preview-3x7-v1/`, manifest
+`1ddba6e0862de3e416b4ce21538f5471723e823d6c39c5a32da27a0ea72596b6`,
+is archived evidence only: it enabled OpenRouter's `enforce_distillable_text`
+switch and consequently blocked four candidate models before a useful quality
+comparison. That framing was wrong for this work. The models are being asked to
+author constrained synthetic stories, not to transfer their general behavior
+to a student through serious model distillation.
+
+The corrected v2 request contract removed that routing restriction, used signed
+31-bit seeds, and made the structured-output instruction explicit. Its live run
+was interrupted after 13 paid attempts. The thirteenth response, the first Qwen
+sample, accepted a nominal 512-token visible-output limit but returned 5,236
+output tokens, of which 5,138 were hidden reasoning tokens, and cost
+`$0.006837025`. Exact provider spend across all 13 attempts was `$0.008248631`.
+This exceeded that request's `$0.000987025` precomputed bound and exposed a
+provider-specific reasoning-control gap; the interrupted temporary tree and raw
+cache are retained as billing/protocol evidence, not promoted as a preview.
+
+The v3 request contract explicitly sets `reasoning.effort=none` for Qwen and
+Gemini, the two preview routes with relevant optional-reasoning support. It was
+authorized only for the `$0.041751369` residual of a `$0.05` cumulative cap
+after debiting the exact v2 spend. The completed artifact is
+`data/tinyworlds-v2/previews/phase1-route-preview-3x7-v3/`, manifest
+`6e1aa9697d8e62263a49c6bc8d22aa22bcb568ca4e551e68b75c727ab063d9f0`.
+All 21 outcomes strictly validate and replay without network access. Five pass
+the current deterministic screen: Mistral 1/3, Gemini 3/3, and GPT-5.4 Mini
+1/3; Ling, Gemma, DeepSeek, and Qwen are 0/3. Provider-reported v3 spend is
+`$0.0061824395`; one Gemma gateway timeout has no reported cost and is charged
+at its full `$0.00063045` bound, making v3 conservative ledger exposure
+`$0.0068128895`. Exact cumulative provider spend for v2 plus v3 is
+`$0.0144310705`, and cumulative conservative exposure including that unknown
+charge is `$0.0150615205`.
+
+Phase 2 remains blocked. The v3 artifact has `scientific_role=diagnostic_only`,
+is ineligible for route selection, and awaits human review of both accepted and
+rejected stories. No full funnel is authorized yet. After that quality review,
+the intended training-data use must be reviewed separately against the exact
+selected model/provider output terms; neither mechanical acceptance nor human
+preference grants that permission. A later paid funnel also requires a new
+artifact identity and explicit cost authorization and must not overwrite the
+stopped reference tree or any preview.
+
+Preliminary story inspection exposes a flaw in the current acceptance metric.
+All three coherent Qwen stories failed only because Qwen returned different
+evidence field names; two strong GPT stories failed because their self-reported
+feature quotes did not exactly match the prose; meanwhile weaker Gemini prose
+passed all three records. The next implementation step is therefore to derive
+word, feature, and part-of-speech evidence locally from the story and treat the
+model's output envelope as a transport concern, then rerun only a tiny finalist
+comparison. Do not spend on the full screen under the present gate.
 
 ## Non-negotiable V2 Contract
 
@@ -84,6 +130,10 @@ would alter more of the scientific comparison.
   English in the v2 data path.
 - Every training story and natural knowledge probe comes from a pinned external
   model and provider route through a content-addressed, resumable cache.
+- External models author synthetic data; this is not a claim that the benchmark
+  distills their general capabilities. Do not use a platform's broad
+  “distillable” label as a proxy for quality or scientific eligibility. Review
+  the exact model/provider output-use terms separately before bulk generation.
 - Generated text is variable length. EOS, tensor padding, and loss masks handle
   batching; filler English never does.
 - Text may not expose task/family IDs, relation names, query terminology,
@@ -172,6 +222,12 @@ must not generate any world, task, training, or probe data.
   from its unique selected endpoint, and use the authenticated generation-stats
   record as a persisted fallback when completion usage omits billed cost or
   serving provenance.
+- Use signed 31-bit deterministic seeds and say `JSON` explicitly in every
+  structured-output prompt. Do not enable `enforce_distillable_text` for route
+  comparison. Pin optional reasoning in the canonical request: Qwen and Gemini
+  story requests use `reasoning.effort=none`, while routes without a matching
+  endpoint capability omit the field. Any change to those fields creates a new
+  request-contract identity.
 - Retry only transport, rate-limit, and server failures. Schema-invalid or
   semantically invalid responses remain immutable failed observations and
   count against route reliability.
@@ -205,6 +261,12 @@ Expand the cheapest passing route, the closest-to-reference route, and
 the best remaining normalized cost/alignment trade-off. Resolve ties in table
 order. If fewer than three routes pass, expand every passer; if none pass,
 publish a stopped result.
+
+The completed v3 3-by-7 preview is too small and is explicitly ineligible for
+this screening decision. Its five deterministic acceptances are examples for
+human request/quality review, not evidence that a route meets the funnel's
+percentage gates. No 50-brief screen may begin until that review and the
+separate output-use review are recorded.
 
 ### 1.4 Cost preflight and ceilings
 

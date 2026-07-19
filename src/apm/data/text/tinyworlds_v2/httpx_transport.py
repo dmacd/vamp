@@ -151,7 +151,16 @@ def load_openrouter_api_key(
         raise PermissionError(
             f"local OpenRouter key must have mode 0600, found {mode:04o}"
         )
-    return _validate_key_text(key_path.read_text(encoding="utf-8"))
+    # A credential file is conventionally a single line terminated by one
+    # platform newline.  Remove that record terminator only; leading spaces,
+    # extra blank lines, embedded newlines, and other surrounding whitespace
+    # remain invalid and are never silently normalized.
+    value = key_path.read_text(encoding="utf-8")
+    if value.endswith("\r\n"):
+        value = value[:-2]
+    elif value.endswith("\n"):
+        value = value[:-1]
+    return _validate_key_text(value)
 
 
 def load_openrouter_management_api_key(

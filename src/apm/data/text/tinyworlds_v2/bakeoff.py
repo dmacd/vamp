@@ -85,6 +85,66 @@ class CandidateModelSpec:
             raise ValueError("candidate max-token parameter is unsupported")
 
 
+@dataclass(frozen=True, slots=True)
+class GenerationRequestContract:
+    """Version the provider-facing request semantics that determine cache identity."""
+
+    version: str
+    enforce_distillable_text: bool
+    seed_bits: int
+    explicit_json_instruction: bool
+    reasoning_disabled_routes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.version) is not str or not self.version:
+            raise ValueError("generation request contract version must be nonempty")
+        if type(self.enforce_distillable_text) is not bool:
+            raise TypeError("distillable-text routing policy must be boolean")
+        if self.seed_bits not in (31, 32):
+            raise ValueError("generation request seed width must be 31 or 32 bits")
+        if type(self.explicit_json_instruction) is not bool:
+            raise TypeError("JSON instruction policy must be boolean")
+        if (
+            type(self.reasoning_disabled_routes) is not tuple
+            or any(
+                type(route_id) is not str or not route_id
+                for route_id in self.reasoning_disabled_routes
+            )
+            or tuple(sorted(set(self.reasoning_disabled_routes)))
+            != self.reasoning_disabled_routes
+        ):
+            raise ValueError("reasoning-disabled route IDs must be sorted and unique")
+
+
+GENERATION_REQUEST_V1 = GenerationRequestContract(
+    version="tinyworlds-v2-generation-request-v1",
+    enforce_distillable_text=True,
+    seed_bits=32,
+    explicit_json_instruction=False,
+)
+
+SYNTHETIC_STORY_REQUEST_V2 = GenerationRequestContract(
+    version="tinyworlds-v2-synthetic-story-request-v2",
+    enforce_distillable_text=False,
+    seed_bits=31,
+    explicit_json_instruction=True,
+)
+
+SYNTHETIC_STORY_REQUEST_V3 = GenerationRequestContract(
+    version="tinyworlds-v2-synthetic-story-request-v3",
+    enforce_distillable_text=False,
+    seed_bits=31,
+    explicit_json_instruction=True,
+    # Qwen generated 5,138 unrequested reasoning tokens behind a 512-token
+    # visible-output limit. Gemini's catalog likewise marks reasoning on by
+    # default. Both routes support the normalized OpenRouter control.
+    reasoning_disabled_routes=(
+        "gemini-3.1-flash-lite",
+        "qwen3.5-35b-a3b",
+    ),
+)
+
+
 CANDIDATE_MODELS = (
     CandidateModelSpec(
         "ling-2.6-flash",
@@ -319,6 +379,7 @@ def neutral_story_request_body(
     provider_quantization: str,
     prompt_usd_per_token: str,
     completion_usd_per_token: str,
+    request_contract: GenerationRequestContract = GENERATION_REQUEST_V1,
 ) -> JsonObject:
     """Build one provider-locked, plugin-free strict generation request."""
     _require_route_fields(
@@ -327,8 +388,28 @@ def neutral_story_request_body(
         prompt_usd_per_token,
         completion_usd_per_token,
     )
-    seed = int(sha256(brief.brief_id.encode("utf-8")).hexdigest()[:8], 16)
-    return {
+    if type(request_contract) is not GenerationRequestContract:
+        raise TypeError("generation request contract has the wrong type")
+    seed = _deterministic_seed(brief.brief_id, request_contract)
+    json_instruction = (
+        " Return one JSON object matching the supplied response format."
+        if request_contract.explicit_json_instruction
+        else ""
+    )
+    provider: JsonObject = {
+        "allow_fallbacks": False,
+        "data_collection": "deny",
+        "max_price": {
+            "completion": _per_million_price(completion_usd_per_token),
+            "prompt": _per_million_price(prompt_usd_per_token),
+        },
+        "only": [provider_slug],
+        "quantizations": [provider_quantization],
+        "require_parameters": True,
+    }
+    if request_contract.enforce_distillable_text:
+        provider["enforce_distillable_text"] = True
+    body: JsonObject = {
         model.max_token_parameter: 512,
         "messages": [
             {
@@ -337,6 +418,7 @@ def neutral_story_request_body(
                     "3- to 4-year-old can understand. Follow the supplied released "
                     "TinyStories instruction closely. Use ordinary story prose only. "
                     "Do not mention prompts, schemas, required words, or this request."
+                    f"{json_instruction}"
                 ),
                 "role": "system",
             },
@@ -347,18 +429,7 @@ def neutral_story_request_body(
         ],
         "model": model.request_model_id,
         "plugins": [],
-        "provider": {
-            "allow_fallbacks": False,
-            "data_collection": "deny",
-            "enforce_distillable_text": True,
-            "max_price": {
-                "completion": _per_million_price(completion_usd_per_token),
-                "prompt": _per_million_price(prompt_usd_per_token),
-            },
-            "only": [provider_slug],
-            "quantizations": [provider_quantization],
-            "require_parameters": True,
-        },
+        "provider": provider,
         "response_format": {
             "json_schema": {
                 "name": "tinyworlds_v2_neutral_story_v1",
@@ -371,6 +442,9 @@ def neutral_story_request_body(
         "stream": False,
         "transforms": [],
     }
+    if model.route_id in request_contract.reasoning_disabled_routes:
+        body["reasoning"] = {"effort": "none"}
+    return body
 
 
 def verifier_request_body(
@@ -381,6 +455,7 @@ def verifier_request_body(
     provider_quantization: str,
     prompt_usd_per_token: str,
     completion_usd_per_token: str,
+    request_contract: GenerationRequestContract = GENERATION_REQUEST_V1,
 ) -> JsonObject:
     """Build one source-blind request for the pinned independent style verifier."""
     if type(story) is not str or not story.strip():
@@ -391,8 +466,28 @@ def verifier_request_body(
         prompt_usd_per_token,
         completion_usd_per_token,
     )
+    if type(request_contract) is not GenerationRequestContract:
+        raise TypeError("generation request contract has the wrong type")
     seed_material = f"verifier\0{brief.brief_id}\0{sha256(story.encode('utf-8')).hexdigest()}"
-    seed = int(sha256(seed_material.encode("utf-8")).hexdigest()[:8], 16)
+    seed = _deterministic_seed(seed_material, request_contract)
+    json_instruction = (
+        " Return one JSON object matching the supplied response format."
+        if request_contract.explicit_json_instruction
+        else ""
+    )
+    provider: JsonObject = {
+        "allow_fallbacks": False,
+        "data_collection": "deny",
+        "max_price": {
+            "completion": _per_million_price(completion_usd_per_token),
+            "prompt": _per_million_price(prompt_usd_per_token),
+        },
+        "only": [provider_slug],
+        "quantizations": [provider_quantization],
+        "require_parameters": True,
+    }
+    if request_contract.enforce_distillable_text:
+        provider["enforce_distillable_text"] = True
     return {
         VERIFIER_MODEL.max_token_parameter: 256,
         "messages": [
@@ -401,6 +496,7 @@ def verifier_request_body(
                     "Judge children's stories with the fixed rubric. Do not infer or "
                     "guess whether a story is human-written or model-generated. Score "
                     "only the text and its adherence to the supplied story brief."
+                    f"{json_instruction}"
                 ),
                 "role": "system",
             },
@@ -416,18 +512,7 @@ def verifier_request_body(
         ],
         "model": VERIFIER_MODEL.request_model_id,
         "plugins": [],
-        "provider": {
-            "allow_fallbacks": False,
-            "data_collection": "deny",
-            "enforce_distillable_text": True,
-            "max_price": {
-                "completion": _per_million_price(completion_usd_per_token),
-                "prompt": _per_million_price(prompt_usd_per_token),
-            },
-            "only": [provider_slug],
-            "quantizations": [provider_quantization],
-            "require_parameters": True,
-        },
+        "provider": provider,
         "response_format": {
             "json_schema": {
                 "name": "tinyworlds_v2_style_verifier_v1",
@@ -440,6 +525,15 @@ def verifier_request_body(
         "stream": False,
         "transforms": [],
     }
+
+
+def _deterministic_seed(
+    material: str,
+    request_contract: GenerationRequestContract,
+) -> int:
+    """Map stable request material into the contract's provider-safe seed range."""
+    raw = int.from_bytes(sha256(material.encode("utf-8")).digest()[:4], "big")
+    return raw & ((1 << request_contract.seed_bits) - 1)
 
 
 def parse_generated_story_payload(content: str | bytes) -> GeneratedStoryPayload:
@@ -786,10 +880,14 @@ def request_body_sha256(body: JsonObject) -> str:
 
 __all__ = [
     "CANDIDATE_MODELS",
+    "GENERATION_REQUEST_V1",
+    "SYNTHETIC_STORY_REQUEST_V2",
+    "SYNTHETIC_STORY_REQUEST_V3",
     "VERIFIER_MODEL",
     "CandidateModelSpec",
     "EvidenceQuote",
     "GeneratedStoryPayload",
+    "GenerationRequestContract",
     "NeutralStoryBrief",
     "StoryValidation",
     "VerifierPayload",

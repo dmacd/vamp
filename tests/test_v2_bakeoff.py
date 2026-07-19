@@ -1,17 +1,23 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from hashlib import sha256
 import json
 
 import pytest
 
 from apm.data.text.tinyworlds_v2.bakeoff import (
     CANDIDATE_MODELS,
+    GENERATION_REQUEST_V1,
     NeutralStoryBrief,
+    SYNTHETIC_STORY_REQUEST_V2,
+    SYNTHETIC_STORY_REQUEST_V3,
     assistant_message_content,
     neutral_story_request_body,
     parse_verifier_payload,
     request_body_sha256,
     validate_generated_story,
+    verifier_request_body,
 )
 
 
@@ -81,6 +87,110 @@ def test_generation_request_disables_routing_fallbacks_and_plugins() -> None:
     }
     assert body["response_format"]["json_schema"]["strict"] is True
     assert request_body_sha256(body) == request_body_sha256(body)
+
+
+def test_v2_requests_are_distinct_portable_synthetic_authoring_contract() -> None:
+    brief = replace(
+        _brief(),
+        brief_id="preview-brief-a0cd61e7c4ebc9cd571ced1f",
+    )
+    story = "A kind child saw the moon and tried to jump."
+    legacy_generation = neutral_story_request_body(
+        brief,
+        CANDIDATE_MODELS[1],
+        provider_slug="google-vertex/global",
+        provider_quantization="unknown",
+        prompt_usd_per_token="0.00000015",
+        completion_usd_per_token="0.0000006",
+        request_contract=GENERATION_REQUEST_V1,
+    )
+    legacy_verifier = verifier_request_body(
+        brief,
+        story,
+        provider_slug="openai",
+        provider_quantization="bf16",
+        prompt_usd_per_token="0.00000075",
+        completion_usd_per_token="0.0000045",
+        request_contract=GENERATION_REQUEST_V1,
+    )
+    generation = neutral_story_request_body(
+        brief,
+        CANDIDATE_MODELS[1],
+        provider_slug="google-vertex/global",
+        provider_quantization="unknown",
+        prompt_usd_per_token="0.00000015",
+        completion_usd_per_token="0.0000006",
+        request_contract=SYNTHETIC_STORY_REQUEST_V2,
+    )
+    verifier = verifier_request_body(
+        brief,
+        story,
+        provider_slug="openai",
+        provider_quantization="bf16",
+        prompt_usd_per_token="0.00000075",
+        completion_usd_per_token="0.0000045",
+        request_contract=SYNTHETIC_STORY_REQUEST_V2,
+    )
+
+    assert legacy_generation["provider"]["enforce_distillable_text"] is True
+    assert legacy_verifier["provider"]["enforce_distillable_text"] is True
+    assert request_body_sha256(legacy_generation) == (
+        "f6ce4a774c1306e7796aa2a81a9fde61d30802212bdc80c1e1bdf1e259cdd545"
+    )
+    assert request_body_sha256(legacy_verifier) == (
+        "c93800654fc73f1a1dc2bee03910785e465e21cf298fb5189db6344bf9fc1ecc"
+    )
+    assert request_body_sha256(legacy_generation) != request_body_sha256(generation)
+
+    generation_seed_v1 = int(
+        sha256(brief.brief_id.encode("utf-8")).hexdigest()[:8], 16
+    )
+    assert generation_seed_v1 > 2**31 - 1
+    verifier_seed_material = (
+        "verifier\0"
+        f"{brief.brief_id}\0"
+        f"{sha256(story.encode('utf-8')).hexdigest()}"
+    )
+    verifier_seed_v1 = int(
+        sha256(verifier_seed_material.encode("utf-8")).hexdigest()[:8], 16
+    )
+    assert legacy_generation["seed"] == generation_seed_v1
+    assert legacy_verifier["seed"] == verifier_seed_v1
+    assert generation["seed"] == generation_seed_v1 & 0x7FFF_FFFF
+    assert verifier["seed"] == verifier_seed_v1 & 0x7FFF_FFFF
+
+    for body in (generation, verifier):
+        seed = body["seed"]
+        assert type(seed) is int
+        assert 0 <= seed <= 2**31 - 1
+        message_text = "\n".join(
+            message["content"] for message in body["messages"]
+        )
+        assert "json" in message_text.casefold()
+        assert "enforce_distillable_text" not in body["provider"]
+
+
+def test_v3_disables_default_reasoning_only_on_cost_risk_routes() -> None:
+    bodies = {
+        model.route_id: neutral_story_request_body(
+            _brief(),
+            model,
+            provider_slug=model.first_party_provider_slug or "fixture-provider",
+            provider_quantization="unknown",
+            prompt_usd_per_token="0.00000015",
+            completion_usd_per_token="0.0000006",
+            request_contract=SYNTHETIC_STORY_REQUEST_V3,
+        )
+        for model in CANDIDATE_MODELS
+    }
+
+    assert bodies["qwen3.5-35b-a3b"]["reasoning"] == {"effort": "none"}
+    assert bodies["gemini-3.1-flash-lite"]["reasoning"] == {"effort": "none"}
+    assert all(
+        "reasoning" not in body
+        for route_id, body in bodies.items()
+        if route_id not in {"qwen3.5-35b-a3b", "gemini-3.1-flash-lite"}
+    )
 
 
 def test_no_feature_brief_uses_a_valid_zero_length_evidence_schema() -> None:

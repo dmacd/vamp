@@ -10,6 +10,8 @@ from typing import Protocol, TypeVar
 
 from apm.data.text.tinyworlds_v2.bakeoff import (
     CandidateModelSpec,
+    GENERATION_REQUEST_V1,
+    GenerationRequestContract,
     GeneratedStoryPayload,
     NeutralStoryBrief,
     StoryValidation,
@@ -247,6 +249,8 @@ def build_generation_jobs(
     briefs: Sequence[NeutralStoryBrief],
     models: Sequence[CandidateModelSpec],
     routes: Sequence[RouteLock],
+    *,
+    request_contract: GenerationRequestContract = GENERATION_REQUEST_V1,
 ) -> tuple[GenerationJob, ...]:
     """Create route-major jobs so every route receives identical brief order."""
     if not briefs or not models or not routes:
@@ -258,7 +262,12 @@ def build_generation_jobs(
     if tuple(model_by_id) != tuple(route_by_id):
         raise ValueError("generation model and route orders must match exactly")
     return tuple(
-        _generation_job(brief, model, route_by_id[model.route_id])
+        _generation_job(
+            brief,
+            model,
+            route_by_id[model.route_id],
+            request_contract,
+        )
         for model in models
         for brief in briefs
     )
@@ -272,6 +281,7 @@ def build_verifier_job(
     story: str,
     model: CandidateModelSpec,
     route: RouteLock,
+    request_contract: GenerationRequestContract = GENERATION_REQUEST_V1,
 ) -> VerifierJob:
     """Build one canonical source-blind verifier request."""
     body = verifier_request_body(
@@ -281,6 +291,7 @@ def build_verifier_job(
         provider_quantization=route.quantization,
         prompt_usd_per_token=_per_token(route.input_usd_per_million),
         completion_usd_per_token=_per_token(route.output_usd_per_million),
+        request_contract=request_contract,
     )
     if model.route_id != route.route_id:
         raise ValueError("verifier model and route IDs differ")
@@ -432,6 +443,7 @@ def _generation_job(
     brief: NeutralStoryBrief,
     model: CandidateModelSpec,
     route: RouteLock,
+    request_contract: GenerationRequestContract,
 ) -> GenerationJob:
     body = neutral_story_request_body(
         brief,
@@ -440,6 +452,7 @@ def _generation_job(
         provider_quantization=route.quantization,
         prompt_usd_per_token=_per_token(route.input_usd_per_million),
         completion_usd_per_token=_per_token(route.output_usd_per_million),
+        request_contract=request_contract,
     )
     request = CanonicalRequest.from_body(
         route_lock_sha256=route.lock_sha256,

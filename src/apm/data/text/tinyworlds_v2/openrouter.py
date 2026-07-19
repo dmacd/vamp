@@ -1003,6 +1003,12 @@ def _completion_response(
             record,
             require_selected=200 <= transport_response.status_code < 300,
         )
+        selected_model = _strict_selected_model(
+            record,
+            require_selected=200 <= transport_response.status_code < 300,
+        )
+        if selected_model is not None:
+            returned_model = selected_model
     except OpenRouterContractError:
         metadata_is_invalid = True
     usage_value = record.get("usage")
@@ -1050,6 +1056,12 @@ def _derive_response(
             record,
             require_selected=200 <= response.status_code < 300,
         )
+        selected_model = _strict_selected_model(
+            record,
+            require_selected=200 <= response.status_code < 300,
+        )
+        if selected_model is not None:
+            returned_model = selected_model
     except OpenRouterCostPolicyError:
         raise
     except OpenRouterContractError:
@@ -1098,6 +1110,12 @@ def _response_needs_stats(response: RawHttpResponse) -> bool:
         record,
         require_selected=200 <= response.status_code < 300,
     )
+    selected_model = _strict_selected_model(
+        record,
+        require_selected=200 <= response.status_code < 300,
+    )
+    if selected_model is not None:
+        returned_model = selected_model
     usage_value = record.get("usage")
     usage = _usage_if_complete(usage_value) if type(usage_value) is dict else None
     direct_cost = (
@@ -1276,6 +1294,42 @@ def _strict_selected_provider(
             "selected OpenRouter endpoint lacks provider"
         )
     return provider
+
+
+def _strict_selected_model(
+    record: JsonObject,
+    *,
+    require_selected: bool,
+) -> str | None:
+    """Return an exact selected-endpoint model when router metadata supplies it."""
+    # Reuse the complete provider/BYOK/selected-cardinality validation before
+    # interpreting the additive endpoint model field.
+    provider = _strict_selected_provider(
+        record,
+        require_selected=require_selected,
+    )
+    if provider is None:
+        return None
+    metadata = record["openrouter_metadata"]
+    assert type(metadata) is dict
+    endpoints = metadata["endpoints"]
+    assert type(endpoints) is dict
+    available = endpoints["available"]
+    assert type(available) is list
+    endpoint = next(
+        item
+        for item in available
+        if type(item) is dict and item.get("selected") is True
+    )
+    model_value = endpoint.get("model")
+    if model_value is None:
+        return None
+    model = _nonempty_string(model_value)
+    if model is None:
+        raise OpenRouterContractError(
+            "selected OpenRouter endpoint model is malformed"
+        )
+    return model
 
 
 def _completion_cost_is_trusted(record: JsonObject) -> bool:
@@ -1491,6 +1545,10 @@ def _validate_observation(
         record,
         require_selected=200 <= response.status_code < 300,
     )
+    endpoint_model = _strict_selected_model(
+        record,
+        require_selected=200 <= response.status_code < 300,
+    )
     usage_value = record.get("usage")
     body_usage = _usage_if_complete(usage_value)
     body_cost = (
@@ -1553,7 +1611,18 @@ def _validate_observation(
                 "completion and generation-stats billed costs differ"
             )
 
-    returned_model = body_model or stats.returned_model
+    if endpoint_model is not None and endpoint_model != route_lock.canonical_model:
+        raise OpenRouterContractError(
+            "selected endpoint model differs from the locked canonical model"
+        )
+    if body_model is not None and body_model not in {
+        route_lock.requested_model,
+        route_lock.canonical_model,
+    }:
+        raise OpenRouterContractError(
+            "observed model differs from both locked model identities"
+        )
+    returned_model = endpoint_model or body_model or stats.returned_model
     returned_provider = body_provider or stats.returned_provider
     billed_cost = body_cost or stats.billed_cost_usd
     if returned_model is not None and returned_model != route_lock.canonical_model:

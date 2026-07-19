@@ -34,6 +34,16 @@ Accepted and rejected interpretations are derived artifacts, so validators may
 be rerun without another model call. A request is never silently regenerated
 to replace a schema or semantic failure.
 
+The external models are commissioned authors of constrained synthetic stories;
+the benchmark is not trying to reproduce their general behavior in a student
+model. OpenRouter's `enforce_distillable_text` routing switch is therefore not a
+scientific quality or route-eligibility gate. Because accepted stories may
+later become training data, output-use permission remains a separate policy
+boundary: before bulk generation, the exact model and provider route must have
+an explicit recorded review for that intended use. Preview quality, mechanical
+acceptance, and human approval do not substitute for that review, and preview
+records do not flow into a training corpus.
+
 Route identity distinguishes billable semantics from catalog provenance. The
 versioned semantic lock hashes the local route name, requested model alias,
 expected dated canonical model, provider selector and returned-provider name,
@@ -77,6 +87,14 @@ into router metadata and explicitly disables OpenRouter response caching with
 `X-OpenRouter-Metadata: enabled` and `X-OpenRouter-Cache: false`. A change to
 either behavior requires a protocol/version bump and a new request identity.
 Authorization bytes are deliberately excluded.
+
+Optional model reasoning is also an explicit request-contract field. Short
+story routes known to produce separately billed hidden reasoning are sent
+`reasoning.effort=none` when their pinned endpoint supports it; routes without
+that capability omit the field. Hidden reasoning usage is billable output even
+when it is absent from the visible story, so it must either be disabled or be
+included in the reservation bound. Changing this policy changes the canonical
+request body and requires a new request-contract version.
 
 The completion secret enters only from `OPENROUTER_API_KEY` or the local
 `openrouter-tinyworlds-key.txt` fallback, whose mode must be `0600`. It is an
@@ -150,6 +168,12 @@ retry allowance, and worst-case in-flight reservations. Phase 1 has a `$15`
 inclusive hard ceiling. Estimated and provider-billed costs are distinct
 provenance fields. Normal tests use fixtures and fake transports and perform no
 downloads or remote generation.
+
+Small route previews use separate, explicitly authorized cumulative caps and
+are labeled `diagnostic_only`. If a preview is interrupted after paid requests,
+its exact provider-reported spend is debited before calculating a successor
+run's residual cap. A preview may inform a human decision but cannot select a
+production route, authorize a full funnel, or advance a phase gate.
 
 The same ceiling is enforced during execution by one thread-safe ledger shared
 by all eight workers while one nonblocking filesystem lease excludes a second

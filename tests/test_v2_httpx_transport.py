@@ -27,13 +27,22 @@ class _FakeCatalogTransport:
 
 def test_local_key_requires_exact_private_mode(tmp_path: Path) -> None:
     key_path = tmp_path / "openrouter-tinyworlds-key.txt"
-    key_path.write_text("secret-test-key", encoding="utf-8")
+    key_path.write_text("secret-test-key\n", encoding="utf-8")
     key_path.chmod(0o644)
     with pytest.raises(PermissionError, match="0600"):
         load_openrouter_api_key(tmp_path, environment={})
 
     key_path.chmod(0o600)
     assert load_openrouter_api_key(tmp_path, environment={}) == "secret-test-key"
+
+
+def test_local_key_rejects_more_than_one_record_terminator(tmp_path: Path) -> None:
+    key_path = tmp_path / "openrouter-tinyworlds-key.txt"
+    key_path.write_text("secret-test-key\n\n", encoding="utf-8")
+    key_path.chmod(0o600)
+
+    with pytest.raises(ValueError, match="one nonempty trimmed line"):
+        load_openrouter_api_key(tmp_path, environment={})
 
 
 def test_environment_key_takes_precedence_without_touching_fallback(tmp_path: Path) -> None:
