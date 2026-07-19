@@ -1,8 +1,258 @@
 # VAMP Technical Design
 
-## TinyWorlds Benchmark Boundary
+## TinyWorlds-v2 Benchmark Boundary
 
-TinyWorlds is a deterministic, knowledge-graph-first continual-learning
+TinyWorlds-v2 is a new, parallel benchmark contract named
+`tinyworlds-v2-gpt`. The symbolic world ledger is authoritative for entity and
+task lineage, controlled assignments, truth, support provenance, candidate
+answers, and scoring. A pinned external language model expresses ledger
+constraints as ordinary, variable-length TinyStories-style narratives; the
+ledger never serves as a prose grammar.
+
+V2 retains the plain-JAX GPT-Neo base, immutable pathwise-LoRA VAMP graph,
+candidate scorer, hard and soft addressing, Hopfield and EBT evaluators,
+parent counterfactuals, forgetting/transfer decomposition, and report/artifact
+infrastructure. It does not use the v1 template registry, generic fact/rule
+statements, exact-token text fitting, padding fragments, artificial cue blocks,
+formal relation questions, or visible internal identifiers. Text padding
+exists only in token arrays under explicit masks.
+
+TinyWorlds-v1 and its promoted stopped calibration are immutable negative
+scientific evidence. V2 lives in a separate package and artifact namespace; no
+v2 result changes, resumes, repairs, or reinterprets a v1 artifact. Two-hop,
+cross-branch, and consolidation questions remain deferred until natural direct,
+convention, and contextual-revision probes demonstrate learnability.
+
+## TinyWorlds-v2 External Generation and Reproducibility
+
+External generation is an artifact-production boundary, never an implicit data
+loader. A generation request is content-addressed over the exact model and
+provider route, system and user prompts, JSON schema, settings, and body. The
+complete raw response is immutable and records its request ID, response bytes,
+returned model/provider identity, relevant headers, usage, and billed cost.
+Accepted and rejected interpretations are derived artifacts, so validators may
+be rerun without another model call. A request is never silently regenerated
+to replace a schema or semantic failure.
+
+Route identity distinguishes billable semantics from catalog provenance. The
+versioned semantic lock hashes the local route name, requested model alias,
+expected dated canonical model, provider selector and returned-provider name,
+quantization, and input/output prices. It deliberately excludes the digest of
+the complete public catalog responses. Those exact response bytes and their
+digest remain manifested provenance, but harmless catalog byte changes neither
+invalidate an immutable response nor manufacture a new request identity. Any
+change to a semantic lock field changes the lock/request hash or fails closed.
+
+The initial production backend is direct OpenRouter HTTP behind an optional
+generation dependency. Both the model and one concrete provider endpoint are
+locked before submission; automatic model/provider fallback, response healing,
+plugins, and unrecorded routing are forbidden. Catalog or returned-identity
+drift fails closed. This is intentionally a narrow backend boundary, not a
+general provider abstraction. Direct OpenAI Batch may be costed for comparison
+but is not a second Phase 1 execution path.
+
+OpenRouter serving provenance is taken from the opt-in router-metadata record,
+not from a nonstandard top-level response field. Exactly one endpoint must be
+marked selected and its provider must match the catalog lock. Token usage and
+billing are independent observations: a failed generation can have a reported
+cost without complete token counts. When completion metadata is incomplete,
+the client polls generation stats by generation ID under a separate bounded
+retry policy. Every stats response and transport failure is append-only and
+preserved byte-for-byte; resume continues the stats lookup without repeating
+the completion POST. The final record must agree on provider, model, identity,
+and cost before the attempt is accepted.
+
+The original catalog lock is revalidated from the public model and endpoint
+catalogs immediately before every paid generator-route batch and every
+50-request verifier batch. Revalidation compares semantic fields rather than
+raw catalog bytes. Drift halts the shared ledger before the batch's first POST
+and becomes an explicit `catalog_route_drift` result; a live alias is never
+trusted without rechecking its expected dated canonical model. Each raw
+attempt separately records the fresh catalog digest that authorized its
+submission, preserving exact provenance across harmless catalog-byte changes.
+
+Behavior-affecting HTTP conventions are part of a versioned transport protocol
+included in the canonical request hash. The current completion protocol opts
+into router metadata and explicitly disables OpenRouter response caching with
+`X-OpenRouter-Metadata: enabled` and `X-OpenRouter-Cache: false`. A change to
+either behavior requires a protocol/version bump and a new request identity.
+Authorization bytes are deliberately excluded.
+
+The completion secret enters only from `OPENROUTER_API_KEY` or the local
+`openrouter-tinyworlds-key.txt` fallback, whose mode must be `0600`. It is an
+inference credential and is never treated as proof of workspace BYOK state.
+An optional, distinct `OPENROUTER_MANAGEMENT_API_KEY` may perform only the
+authenticated `/api/v1/byok` preflight; it is never used for completions. The
+alternative repository-root
+`openrouter-tinyworlds-no-byok-attestation.json` is a canonical manual claim
+created only after explicit user confirmation, binds the exact statement “I
+attest that this OpenRouter workspace has zero configured BYOK keys.” and a UTC
+interval, and expires within 24 hours. Only sanitized preflight evidence (proof
+source, response/attestation digest, count when available, and times) is
+manifested; raw management responses and BYOK key metadata are not persisted.
+All secret values remain absent from logs, hashes, manifests, caches, reports,
+exceptions, and copied artifacts.
+
+BYOK is checked twice because it is an external-cost escape hatch. Paid work is
+disabled unless the management preflight proves zero configured keys or a valid
+manual attestation is present. Every successful completion must additionally
+carry explicit `is_byok=false` evidence; a generation-stats fallback must do the
+same before its cost or provider is trusted. A positive or ambiguous BYOK
+runtime observation is charged conservatively to the request bound and halts
+further POSTs.
+
+Authorization is attached to the durable paid boundary, not inferred from the
+latest run-level preflight. Every write-ahead reservation embeds one canonical,
+sanitized zero-BYOK authorization record and its digest. This lets replay prove
+that historical POSTs were authorized even if a later resume has no current
+proof or records a new failed preflight. The ledger first reconciles all prior
+requests, responses, and reservations, then evaluates whether new work is
+authorized. A run-level preflight record describes only the current invocation;
+it never invalidates or retroactively authorizes earlier paid work.
+
+Reproducibility does not mean calling a remote model twice and expecting the
+same text. It means pinned source/model/route/prompt/schema/settings identities,
+content-addressed requests, complete raw-response preservation, immutable
+accepted datasets, and byte-identical reconstruction of derived files from the
+cache. Loading and reconstruction never call a network. Changing any pinned
+input creates a new dataset version; resume submits only absent requests and
+never overwrites a raw response.
+
+Phase 1 replay is a stricter zero-network boundary than ordinary artifact
+loading. It starts from persisted briefs, semantic route locks, raw cache and
+cost-journal evidence, plus already persisted tokenizer/NLL measurements. A
+network-forbidden client reconstructs canonical jobs and discovers attempts
+from the raw cache rather than trusting committed generator or verifier result
+streams. It reparses immutable HTTP bytes for every attempted request,
+including interrupted terminal attempts that never reached those streams,
+reruns source joins, deterministic validation and quality selection, and
+rebuilds generator, verifier, execution-manifest, and audit files. Provider,
+BYOK, and response-contract terminal causes must agree with the underlying raw
+attempt status. Every rebuilt derived byte is compared to the source tree
+except the replay tree's own root manifest. Replay never reads the source
+corpora, accelerator, tokenizer/checkpoint, API credentials, or network. Every
+public completed-artifact validation and human-approval entry point invokes
+this full semantic and replay gate before accepting a tree or overlay; an
+internally consistent manifest or approval digest cannot bless corrupted base
+evidence.
+
+Remote bytes are screened for the active completion and management secrets
+before hashing, caching, error formatting, or artifact copying. A reflected
+secret becomes a canonical secret-free terminal marker so replay can prove why
+the run stopped without retaining the reflected material or retrying the
+request. Final publication validates the temporary tree, uses an atomic
+no-replace rename, and validates the promoted tree again. A destination created
+by another process during promotion is preserved rather than overwritten.
+
+Billable work is guarded by a serialized preflight computed from exact request
+bodies, current route prices, expected output lengths, verification traffic,
+retry allowance, and worst-case in-flight reservations. Phase 1 has a `$15`
+inclusive hard ceiling. Estimated and provider-billed costs are distinct
+provenance fields. Normal tests use fixtures and fake transports and perform no
+downloads or remote generation.
+
+The same ceiling is enforced during execution by one thread-safe ledger shared
+by all eight workers while one nonblocking filesystem lease excludes a second
+paid process from the complete raw-cache lifecycle. Before each completion POST
+the ledger derives an upper bound from exact UTF-8 request bytes, maximum output
+tokens, and locked maximum prices, then atomically persists and fsyncs an
+immutable write-ahead reservation. The corresponding cache entry stores the
+complete canonical route lock rather than reconstructing historical route
+semantics from a current catalog or request body. Immediately before transport,
+the ledger verifies that the reservation remains postable. If another worker
+has already halted the run, it appends an explicit `cancelled_before_post`
+journal state; cancellation is neither a submission nor a charge. The HTTP
+attempt is durably cached before an uncancelled reservation is settled.
+Provider-reported actual cost replaces the bound;
+an HTTP response with unknown cost or a transport failure that may have occurred
+after POST consumes the full bound as a separately labeled conservative unknown
+charge and halts further POSTs.
+
+OpenRouter's maximum-price fields are per-million-token JSON numbers. Exact
+decimal catalog prices are encoded conservatively upward, and reservation
+arithmetic uses the actual transmitted ceiling. Denying a new reservation does
+not revoke earlier reservations already counted under the cap; a later
+ambiguous-billing or provider-contract failure on an authorized POST supersedes
+that benign admission-denial reason.
+
+Restart reconciles the journal against canonical requests, their persisted
+route locks and BYOK authorizations, and immutable raw attempts from both
+current and historical catalog locks, using each frozen request's own prices.
+A response already present may safely settle an orphaned reservation. A
+reservation with no recoverable response is charged at its bound and stops as
+`orphaned_cost_reservation`; a provider-billed settlement missing its raw
+response stops as `billed_attempt_response_missing`. Neither condition is
+reposted. Cancelled reservations require no response and are excluded from
+submitted, interrupted, actual, and unknown-cost counts. Stopped artifacts
+attribute every actual and conservative charge exactly to its persisted
+generator or verifier route rather than assigning all historical cost to the
+current stage. Exactly `$15` is permitted; a reservation above it is rejected
+before transport.
+
+Phase 1 authenticates and streams the pinned release, then ranks unique story
+content by namespaced hashes. Content identity uses NFKC normalization,
+case-folding, whitespace collapse, and SHA-256, and is disjoint within and
+across the prompt, reference, paired, and validation cohorts; source-location
+and raw-content identities remain separately available for provenance. Surface
+measurements run in deterministic 16-process shards and merge by stable record
+identity, while TinyStories-8M NLL is computed once on the GPU and persisted for
+replay.
+
+Phase 1 compares three reference views for different scientific purposes. The
+global 20,000-story profile defines vocabulary coverage. The 200 genuine
+stories paired to the generation briefs define token, NLL, length, paragraph,
+dialogue, repetition, token-form, and realized-feature comparisons; a stable
+split of that paired profile calibrates token-unigram divergence. The separate
+10,000-record released prompt-metadata cohort defines requested-feature rates,
+so the unannotated validation half cannot dilute the released TinyStories
+recipe. Full-corpus cost projections mean 4,000 accepted stories: 500 accepted
+stories for each of the eight planned tasks. The economy envelope chooses the
+lowest projected cost among fully
+qualified routes, quality-ceiling chooses the lowest alignment distance, and
+balanced gives equal weight to min-max-normalized projected cost and alignment.
+If no route fully qualifies, all three are explicitly unavailable.
+
+The blinded audit packet and key belong to the immutable manifested Phase 1
+tree. Browser decisions, the explicit approval request, and the derived final
+approval are the only permitted post-manifest overlays. Each overlay is strict,
+canonical JSON bound to the exact audit and decision digests; passing automated
+or human thresholds never creates approval implicitly. Audit selection solves
+the complete deterministic balanced assignment over distinct pair IDs, keeping
+all screen finalists represented while making only automated-qualified routes
+selectable. If the requested 100 generated controls cannot be allocated at the
+fixed per-route quotas, the run publishes
+`audit_insufficient_accepted_samples` and exact feasibility evidence rather
+than reducing the audit, using duplicate pairs, or applying a greedy fallback.
+
+## TinyWorlds-v2 Validation and Human Gates
+
+The generation model is not its own sole judge. Semantic verification is a
+separate pinned request that classifies required-fact entailment,
+contradictions, new controlled claims, exact evidence, and answer leakage.
+TinyStories quality is assessed separately with a source-blinded rubric over
+preschool vocabulary, sentence simplicity, grammar, plot coherence,
+repetition, and meta-language. Deterministic validators enforce exact evidence
+substrings, ledger assignments, forbidden alternatives and identifiers,
+candidate balance, split/request isolation, token boundaries, EOS/masks, and
+copying limits.
+
+Distributional validation compares real GPT-4 TinyStories, neutral stories
+from the selected generator, and world-conditioned stories from that same
+generator. The neutral-to-world shift is the primary measure of whether ledger
+constraints damage language quality. Natural evaluation prefixes are nested
+64/128/192-token suffixes of one unfinished story and end at one shared answer
+boundary; candidate NLL is normalized only over active answer tokens, with
+unnormalized total NLL retained as a sensitivity measure.
+
+Phase 1 and the Phase 3 sample corpus end at artifact-bound human gates. An
+approval names the exact audit digest; code cannot infer approval from passing
+automated metrics or from an unbound acknowledgement. No world generation may
+start before the Phase 1 audit is approved, and no full training corpus may be
+generated before the Phase 3 sample audit is approved.
+
+## TinyWorlds-v1 Benchmark Boundary (Preserved)
+
+TinyWorlds-v1 is a deterministic, knowledge-graph-first continual-learning
 benchmark. Its symbolic graph, typed facts, positive safe Horn rules, proofs,
 task dependencies, and candidate answers are authoritative. Natural-language
 stories and queries are deterministic projections of those records. External
@@ -45,7 +295,7 @@ filtered by cue stratum, and `all` is a derived aggregate. A completed report
 is a deterministic projection of its completed evaluation object and must
 reproduce byte-for-byte without training or mutating the adaptation artifact.
 
-## TinyWorlds Symbolic Generation
+## TinyWorlds-v1 Symbolic Generation
 
 The master seed is SHA-256-derived from the canonical benchmark version,
 public seed, frozen-base manifest SHA-256, and frozen-base parameter checksum.
@@ -85,7 +335,7 @@ training contains all direct facts and task rules, validation contains the
 first eight direct facts, and test contains the next eight, with no evaluation
 rules stated directly.
 
-## TinyWorlds Persistence and Novelty
+## TinyWorlds-v1 Persistence and Novelty
 
 Symbolic bundles are canonical JSON/JSONL plus a dependency-free
 MeTTa/Atomese text projection. Manifests bind every artifact's path, count,
@@ -104,7 +354,7 @@ Only the marked novelty audit streams this file. It audits every generated
 name, class, role, and inflection by case-folded exact lexical words. Ordinary
 tests use offline fixtures.
 
-## TinyWorlds Deterministic Rendering
+## TinyWorlds-v1 Deterministic Rendering
 
 Natural-language data is a deterministic projection of the symbolic bundle
 through `tinyworlds-templates-v1`. Every predicate, rule, query kind, and plot
@@ -149,7 +399,7 @@ hashes are split-isolated. Canonical materialization publishes only after this
 validation and a reuse invocation must reproduce the completed content-only
 result byte-for-byte without changing the artifact tree.
 
-## TinyWorlds Candidate Scoring and Knowledge Evaluation
+## TinyWorlds-v1 Candidate Scoring and Knowledge Evaluation
 
 Knowledge competence is an exact four-candidate comparison. Each candidate
 stores its own prefix-plus-answer `CompetenceBatch`, while one separate
@@ -182,7 +432,7 @@ and applicable node, top-k, and support metrics. Aggregation is deterministic
 over stage, method, task, family, query kind, prefix length, cue regime,
 reasoning type and depth, novelty regime, and open/closed-book mode.
 
-## TinyWorlds Parent Selection and Resumable Transfer
+## TinyWorlds-v1 Parent Selection and Resumable Transfer
 
 TinyWorlds parent selection uses only the explicit validation suite. Every
 current hard node is scored by mean correct-candidate NLL; equal means resolve
@@ -200,7 +450,7 @@ suite, frozen parameters, packed memory, training batches, model/LoRA/optimizer
 configuration, and current update-zero state. This identity check is mandatory
 even when a final-budget chunk needs no additional optimizer update.
 
-## TinyWorlds Calibration Boundary
+## TinyWorlds-v1 Calibration Boundary
 
 Calibration uses its own four-task world and the fixed one-axis ladder. Trial
 selection, optimizer randomness, and cache identity are derived only from the
@@ -241,7 +491,7 @@ absent. Such a result cannot authorize Phase 5. Gates must not be relaxed and
 test data must not be consulted to rescue the run; changing the calibration
 hypothesis requires a new versioned contract and a fresh calibration.
 
-## TinyWorlds Interactive Inspection Boundary
+## TinyWorlds-v1 Interactive Inspection Boundary
 
 The TinyWorlds notebook is a read-only analysis surface over immutable
 artifacts. Its support layer strictly reloads the promoted calibration result,

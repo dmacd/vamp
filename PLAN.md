@@ -1,13 +1,53 @@
 # Development Plan
 
-## Active Milestone: TinyWorlds Knowledge-Graph Benchmark
+## Active Milestone: TinyWorlds-v2 External-Generation Benchmark
 
-The active roadmap is the six-phase TinyWorlds benchmark. Phases are promoted
-only after their production artifact gate and the complete default test suite
-pass. Implementations for later phases may be present in the worktree, but
-they are not considered complete until the preceding gates have passed.
+The active roadmap is `tinyworlds-v2-gpt`, tracked in detail in
+[`docs/TW-v2_PLAN.md`](docs/TW-v2_PLAN.md). The symbolic world ledger remains
+authoritative for truth and scoring, while pinned external language models
+produce variable-length natural TinyStories-style text through immutable,
+content-addressed request/response caches. V2 does not reuse the v1
+deterministic renderer or exact-token prose fitting.
 
-### Gate Status
+### TinyWorlds-v2 Status
+
+- **Phase 1 — reference profile and generator bakeoff: active (2026-07-19).**
+  This phase profiles the released GPT-4 TinyStories prompt/story distribution
+  and screens seven provider-locked OpenRouter routes under a `$15` hard cost
+  ceiling. It generates no world data. Advancement requires automated quality
+  gates plus explicit human approval of a blinded 100-reference/100-generated
+  audit digest. The offline implementation now covers exact normalized-content
+  source cohorts, deterministic 16-process surface profiles and persisted GPU
+  NLL measurements, semantic route identity separated from exact catalog
+  provenance, versioned behavior-changing transport headers, public catalog
+  revalidation before every paid batch (with a passing public-only live
+  resolver smoke on 2026-07-18), append-only completion/stats caching,
+  and independent billing observations. Its inclusive runtime cap uses both a
+  nonblocking cross-process lease and an fsynced write-ahead reservation/
+  settlement journal, persists the complete route lock and sanitized zero-BYOK
+  authorization with each reservation, records concurrent pre-POST
+  cancellations without charging them, reconciles historical locks after a
+  crash, and stops without reposting on ambiguous billing. BYOK also fails
+  closed: the inference key cannot prove account state, so production requires
+  either a distinct `OPENROUTER_MANAGEMENT_API_KEY` zero-key check or an
+  explicit canonical manual attestation valid for at most 24 hours; every
+  returned completion/stats record must still prove `is_byok=false`. The
+  artifact boundary includes exact generator/verifier cost attribution, route,
+  audit, and raw-cache evidence, strict cross-artifact semantic validation, and
+  a zero-network byte-for-byte derived replay. Targeted offline unit and
+  integration gates, the pinned-source integration, the real-GPU NLL smoke,
+  the public-catalog resolver smoke, and focused cost/recovery/replay checks
+  pass. The complete offline default suite passes 753 tests with one optional
+  skip and eight resource-marked deselections in 2,045.40 seconds; peak RSS was
+  4,085,656 KiB. The production bakeoff has not run: no paid completion call or
+  generated bakeoff sample exists, no manual BYOK attestation has been created,
+  and no production audit artifact or Phase 1 gate result exists.
+- **Phases 2–7: blocked by Phase 1.** Counterbalanced world bibles, natural
+  training stories, probes, calibration, the eight-task pilot, and scaling are
+  specified in the v2 tracker but are not authorized early. Phase 3 has a
+  second mandatory human stop before full-corpus generation.
+
+### TinyWorlds-v1 Gate History
 
 - **Phase 0 — TinyStories post-mortem: complete (2026-07-17).** One exact
   retrain published reusable adaptation artifact
@@ -120,21 +160,20 @@ they are not considered complete until the preceding gates have passed.
 ### Immediate Work
 
 1. Preserve the promoted stopped calibration bundle as the terminal
-   TinyWorlds-v1 result; do not launch or tune Phase 5 from it.
-2. Treat frozen direct accuracy at 100%, zero direct lift, and zero revision
-   recovery as confounded by the failed language-distribution audit; retain
-   them as visible v1 results without using them to choose a repair.
-3. Introduce any changed gate, query construction, candidate policy, or
-   calibration hypothesis as a new versioned benchmark contract and rerun
-   calibration from scratch before a pilot can be authorized.
-4. Use `notebooks/tinyworlds_playground.ipynb` for the TinyWorlds-v1
-   post-mortem and hypothesis exploration. Treat experiments that change the
-   benchmark contract as TinyWorlds-v2 work rather than modifying v1 evidence.
-5. Design TinyWorlds-v2 surfaces from frequent TinyStories BPE pieces while
-   preserving whole-name novelty, use type-aware natural templates and
-   coherent plots, remove all visible internal identifiers and candidate
-   filler, and calibrate lexical, token-distribution, repetition, and frozen
-   base-NLL gates from same-sized TinyStories resamples before retraining.
+   TinyWorlds-v1 result; do not modify it or launch its Phase 5 pilot.
+2. Preserve the passing 753-test offline checkpoint before any billable
+   request.
+3. Establish zero-BYOK authorization with a distinct management credential or
+   the user's explicit short-lived manual attestation, then run the exact live
+   cost preflight. Submit nothing if authorization is absent or the
+   conservative estimate exceeds `$15`.
+4. Run the provider-locked seven-model bakeoff, retaining exact cost, route,
+   rejection, interruption, and recovery evidence for every attempted request.
+5. Stop at the blinded Phase 1 human audit. Do not generate world bibles until
+   the exact audit digest is explicitly approved and recorded; Phase 2 remains
+   blocked even if the automated route gates pass.
+6. Record Phase 1 status and artifact hashes here and in
+   `docs/TW-v2_PLAN.md`; record only durable boundary changes in `DESIGN.md`.
 
 ### Deferred Alternative
 

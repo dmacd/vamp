@@ -37,6 +37,9 @@ notebook = [
     "ipywidgets>=8",
     "jupyterlab>=4",
 ]
+generation = [
+    "httpx>=0.28,<1",
+]
 hf-convert = [
     "torch",
     "transformers==4.28.1",
