@@ -27,7 +27,7 @@ generation end at mandatory human-approval stops.
 | Phase | State | Advancement gate |
 |---|---|---|
 | V1 stopped result | Preserved | No further v1 tuning or pilot is authorized |
-| 1. Reference profile and generator bakeoff | **Active — production gates pending** | Reference artifacts validate, one generator route passes automated review, and the exact blinded audit digest receives explicit human approval |
+| 1. Reference profile and generator bakeoff | **Stopped — live cost cap exceeded** | A new versioned cost contract is required before another bakeoff; then reference artifacts must validate, one route must pass automated review, and the exact blinded audit digest must receive explicit human approval |
 | 2. Counterbalanced world bibles | Blocked by Phase 1 | World audit and deterministic counterbalance checks pass |
 | 3. Natural training corpus | Blocked by Phase 2 | The 150-story sample audit receives explicit human approval, then the complete corpus validates |
 | 4. Natural evaluation data | Blocked by Phase 3 | Frozen-base sensitivity, balance, semantic, leakage, and 100-probe human gates pass before adapter training |
@@ -50,19 +50,29 @@ pass. The complete offline default suite passes 753 tests with one optional
 skip and eight resource-marked deselections in 2,045.40 seconds; peak RSS was
 4,085,656 KiB.
 
-The production bakeoff has not run. No live cost preflight has authorized a
-completion request, no paid OpenRouter completion has been submitted, no
-generated bakeoff sample exists, and no production audit artifact or Phase 1
-gate result exists. The remaining Phase 1 work is zero-BYOK authorization,
-live cost preflight, the paid seven-route bakeoff, automated selection, the
-blinded human audit, and explicit approval of its exact digest. Phase 2
-therefore remains blocked.
+The live production attempt reached a controlled `blocked_by_cost_cap` stop.
+After explicit zero-BYOK confirmation, it authenticated and profiled the pinned
+sources, ran the real-GPU measurements, resolved all live routes, and computed
+an expected spend of `$3.439507`. The mandatory two-attempt exposure was
+`$20.020653`, above the fixed `$15.000000` cap; the 800-request GPT-5.4
+verifier reserve contributed `$17.544000`. The inference key was therefore not
+read and no completion POST, charge, or paid sample exists.
 
-The supplied `openrouter-tinyworlds-key.txt` is the inference credential, not
-a Management API key. Paid execution is presently waiting for either a
-distinct `OPENROUTER_MANAGEMENT_API_KEY` or explicit user confirmation recorded
-in the short-lived manual attestation described below. No manual attestation
-has been created.
+The stopped artifact is `data/tinyworlds-v2/reference/`, with manifest
+`28a1280c256d8a6ecfc5e4048e65f71e5839c522e391eb03dd07b1669a66d5e9`.
+Strict semantic validation passes, and zero-network replay reproduces all 31
+derived files (101,081 bytes). No human audit or Phase 1 gate result exists. A
+redundant post-artifact default-suite rerun was intentionally interrupted at
+85% before repeating the known 20--25-minute production-cache fixture; it had
+no failures, no code changed after the complete pre-run pass, and the artifact
+validation and replay gates passed independently.
+
+Phase 2 remains blocked. Another paid attempt requires an explicitly authorized
+versioned cost contract and a new artifact identity; the existing stopped tree
+must not be overwritten. The narrowest continuation is to preserve every route,
+sample count, retry rule, and quality gate while changing only the inclusive
+cap to `$25`. Changing verifier identity, verifier coverage, or retry policy
+would alter more of the scientific comparison.
 
 ## Non-negotiable V2 Contract
 

@@ -11,7 +11,8 @@ deterministic renderer or exact-token prose fitting.
 
 ### TinyWorlds-v2 Status
 
-- **Phase 1 — reference profile and generator bakeoff: active (2026-07-19).**
+- **Phase 1 — reference profile and generator bakeoff: stopped by the live
+  cost cap (2026-07-19).**
   This phase profiles the released GPT-4 TinyStories prompt/story distribution
   and screens seven provider-locked OpenRouter routes under a `$15` hard cost
   ceiling. It generates no world data. Advancement requires automated quality
@@ -39,9 +40,21 @@ deterministic renderer or exact-token prose fitting.
   the public-catalog resolver smoke, and focused cost/recovery/replay checks
   pass. The complete offline default suite passes 753 tests with one optional
   skip and eight resource-marked deselections in 2,045.40 seconds; peak RSS was
-  4,085,656 KiB. The production bakeoff has not run: no paid completion call or
-  generated bakeoff sample exists, no manual BYOK attestation has been created,
-  and no production audit artifact or Phase 1 gate result exists.
+  4,085,656 KiB. After explicit zero-BYOK confirmation, the production runner
+  authenticated and profiled the pinned sources, measured them on the GPU,
+  resolved the live routes, and reached its exact preflight. Expected spend was
+  `$3.439507`, but the required two-attempt exposure was `$20.020653`, above
+  the fixed `$15.000000` cap; the 800-request GPT-5.4 verifier reserve alone was
+  `$17.544000`. Per contract, the inference key was not read and zero completion
+  POSTs, charges, or generated samples occurred. The promoted stopped artifact
+  is `data/tinyworlds-v2/reference/`, with manifest
+  `28a1280c256d8a6ecfc5e4048e65f71e5839c522e391eb03dd07b1669a66d5e9`.
+  Strict semantic validation passes and zero-network replay reproduces all 31
+  derived files (101,081 bytes). No human audit exists and the Phase 1 gate did
+  not pass. A redundant post-artifact default-suite rerun was intentionally
+  interrupted at 85% before repeating the known 20--25-minute cache fixture;
+  it had no failures, no code changed after the complete pre-run pass, and the
+  artifact validation/replay gates passed independently.
 - **Phases 2–7: blocked by Phase 1.** Counterbalanced world bibles, natural
   training stories, probes, calibration, the eight-task pilot, and scaling are
   specified in the v2 tracker but are not authorized early. Phase 3 has a
@@ -161,14 +174,16 @@ deterministic renderer or exact-token prose fitting.
 
 1. Preserve the promoted stopped calibration bundle as the terminal
    TinyWorlds-v1 result; do not modify it or launch its Phase 5 pilot.
-2. Preserve the passing 753-test offline checkpoint before any billable
-   request.
-3. Establish zero-BYOK authorization with a distinct management credential or
-   the user's explicit short-lived manual attestation, then run the exact live
-   cost preflight. Submit nothing if authorization is absent or the
-   conservative estimate exceeds `$15`.
-4. Run the provider-locked seven-model bakeoff, retaining exact cost, route,
-   rejection, interruption, and recovery evidence for every attempted request.
+2. Preserve the valid `blocked_by_cost_cap` Phase 1 artifact and its exact
+   `$3.439507` expected / `$20.020653` conservative evidence; do not overwrite
+   or reinterpret it.
+3. Decide whether to keep this as the terminal v2 result or introduce a new
+   versioned cost contract. The least scientifically invasive continuation is
+   to preserve all routes, sample counts, retries, and gates while raising only
+   the inclusive ceiling to `$25`; changing verifier identity, coverage, or
+   retry policy would alter more of the experiment.
+4. If a new contract is explicitly authorized, use a new artifact identity and
+   rerun its offline gates before the provider-locked seven-model bakeoff.
 5. Stop at the blinded Phase 1 human audit. Do not generate world bibles until
    the exact audit digest is explicitly approved and recorded; Phase 2 remains
    blocked even if the automated route gates pass.
