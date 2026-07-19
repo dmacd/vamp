@@ -241,6 +241,29 @@ absent. Such a result cannot authorize Phase 5. Gates must not be relaxed and
 test data must not be consulted to rescue the run; changing the calibration
 hypothesis requires a new versioned contract and a fresh calibration.
 
+## TinyWorlds Interactive Inspection Boundary
+
+The TinyWorlds notebook is a read-only analysis surface over immutable
+artifacts. Its support layer strictly reloads the promoted calibration result,
+validates trial-tree and execution identities, and uses the production
+symbolic generator, tokenizer, renderer, closure, and proof checker for small
+in-memory demonstrations. It does not duplicate benchmark semantics in
+notebook cells, trigger training, perform parameter selection, or open the
+held-out calibration test split.
+
+Saved candidate scores are meaningful only for the exact canonical seed-0
+world and rendered prefix/candidate strings that produced them. The notebook
+therefore refuses to attach those scores to a newly seeded or otherwise
+changed demonstration. New worlds remain useful for inspecting stories,
+proofs, cues, candidates, and exact-KG behavior without suggesting that a
+model evaluated them.
+
+The addressing view illustrates hard-path recall and continuous required-edge
+support algebra. Phase 4 did not persist EBT-soft candidate scores, so the
+notebook must not fabricate them. Widget and Jupyter dependencies remain in an
+optional package extra, and the core inspection module does not eagerly import
+the UI stack.
+
 ## Scope and Terminology
 
 Virtually Addressed Memory for Parameters (VAMP) is the name of the

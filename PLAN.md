@@ -89,17 +89,60 @@ they are not considered complete until the preceding gates have passed.
   held-out calibration test remained unopened. The TinyWorlds-v1 contract
   therefore forbids launching the pilot. This is the prescribed visible
   scientific outcome, not an implementation failure.
+- **Interactive calibration playground: implemented (2026-07-18).**
+  `notebooks/tinyworlds_playground.ipynb` provides a read-only view of the
+  symbolic world, rendered stories and alignments, proof depth, cue variants,
+  hard and continuous support, saved candidate NLLs, gate evidence, and parent
+  transfer. Its supporting module strictly reloads the promoted Phase 4 result
+  and can generate small worlds through the production symbolic generator,
+  tokenizer, and renderer. Fresh samples never inherit saved model scores;
+  only the exact canonical seed-0 demo may be joined to validation evidence.
+  The notebook does not train, tune, open the held-out test split, or imply
+  that Phase 5 is authorized. A clean-kernel execution passed end-to-end, and
+  the complete default suite passed 550 tests with one optional skip and five
+  resource-marked deselections.
+- **TinyWorlds-v1 language-distribution audit: failed (2026-07-18).** The
+  renderer is mechanically tokenizer-valid but far outside the frozen
+  TinyStories model's training distribution. Entity surfaces are `N` plus 12
+  hexadecimal characters and average 8.42 BPE pieces, versus 1.21 for names in
+  a matched corpus sample. Generated stories have token-distribution
+  Jensen-Shannon divergence 0.702 from TinyStories, while two independent
+  TinyStories samples differ by 0.014; an estimated 68.5% of story tokens are
+  exact-length padding. Frozen-model scoring on 128 matched 256-token examples
+  produced mean NLL 6.780 for TinyWorlds and 1.460 for original TinyStories,
+  about a 204-fold perplexity ratio. Raw task IDs, hash marks, symbolic
+  predicate labels, and rule-variable labels also enter visible prose, while
+  candidate-specific filler contaminates answer NLL. The exact whole-word
+  novelty audit did not measure these properties. Preserve v1 as historical
+  evidence, but do not interpret its learned-model results as a clean test of
+  knowledge-graph acquisition.
 
 ### Immediate Work
 
 1. Preserve the promoted stopped calibration bundle as the terminal
    TinyWorlds-v1 result; do not launch or tune Phase 5 from it.
-2. Analyze the visible calibration failure—especially frozen direct accuracy
-   at 100%, zero direct lift, and zero revision recovery—without altering the
-   completed evidence.
+2. Treat frozen direct accuracy at 100%, zero direct lift, and zero revision
+   recovery as confounded by the failed language-distribution audit; retain
+   them as visible v1 results without using them to choose a repair.
 3. Introduce any changed gate, query construction, candidate policy, or
    calibration hypothesis as a new versioned benchmark contract and rerun
    calibration from scratch before a pilot can be authorized.
+4. Use `notebooks/tinyworlds_playground.ipynb` for the TinyWorlds-v1
+   post-mortem and hypothesis exploration. Treat experiments that change the
+   benchmark contract as TinyWorlds-v2 work rather than modifying v1 evidence.
+5. Design TinyWorlds-v2 surfaces from frequent TinyStories BPE pieces while
+   preserving whole-name novelty, use type-aware natural templates and
+   coherent plots, remove all visible internal identifiers and candidate
+   filler, and calibrate lexical, token-distribution, repetition, and frozen
+   base-NLL gates from same-sized TinyStories resamples before retraining.
+
+### Deferred Alternative
+
+- A domain-pretrained, TinyStories-scale base model is recorded in
+  `docs/TINYWORLDS_DOMAIN_PRETRAINING_NOTE.md`. It would learn KG-oriented
+  language from many disposable worlds before continual evaluation on wholly
+  held-out worlds. This is a preserved research option, not active work or
+  authorization to modify the v1 artifacts.
 
 ## Completed Foundation: Language-Model VAMP Proof of Concept
 

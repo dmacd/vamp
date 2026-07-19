@@ -32,6 +32,11 @@ lm = [
     "tokenizers",
     "safetensors",
 ]
+notebook = [
+    "ipykernel>=6",
+    "ipywidgets>=8",
+    "jupyterlab>=4",
+]
 hf-convert = [
     "torch",
     "transformers==4.28.1",
