@@ -1,8 +1,74 @@
 # Development Plan
 
-## Active Milestone: TinyWorlds-v2 External-Generation Benchmark
+## Active Milestone: TinyWorlds-P Partitioned TinyStories Base
 
-The active roadmap is `tinyworlds-v2-gpt`, tracked in detail in
+The active roadmap is `tinyworlds-p-v1`, tracked in
+[`docs/TW-P_PLAN.md`](docs/TW-P_PLAN.md). It replaces generated TinyWorlds prose
+with unmodified stories hash-joined to the released TinyStories recipe
+metadata. Five noun-bucket by verb-bucket cells are withheld from a freshly
+initialized eight-layer GPT-Neo base; only story text reaches the model.
+TinyWorlds-v2 external generation is parked as non-qualifying historical
+evidence. LoRA/VAMP continual episodes are explicitly deferred until the
+partition and scratch base pass their publication gates.
+
+### TinyWorlds-P Status
+
+- **Partition and trainer implementation: complete; canonical execution stopped
+  (2026-07-20).** The new
+  `apm.data.text.tinyworlds_p` package now defines immutable source,
+  normalization, recipe, duplicate-group, bucket, topology, split, control,
+  shard, artifact, cursor, and training contracts. It implements bounded
+  external-sort source joining, exact normalized duplicate grouping,
+  largest-mass-first namespaced buckets, deterministic five-cell selection,
+  component-visibility gates, token-weighted multi-marginal allocation,
+  strict matched controls, original-byte and little-endian uint16 shards,
+  strict tree loading, memory-mapped block-shuffled batching, scratch AdamW
+  training, token-weighted gradient accumulation, complete immutable resume
+  states, calibration fallback decisions, epoch selection, and sealed-test
+  evaluation.
+- **CPU fixture: passing.** A genuine-text 3x3 fixture builds all partition
+  artifacts, exercises two training epochs and interrupted/resumed parity,
+  validates a reloaded checkpoint, evaluates a memory-mapped split, rejects
+  semantic leakage through strict loading, and rebuilds byte-identically with
+  different worker counts and sort-run sizes.
+- **Fixed runners: implemented.** `scripts/prepare_tinyworlds_p.py` prepares
+  the pinned 8x8 partition with 16 physical workers and phase/overall ETAs.
+  `scripts/train_tinyworlds_p_base.py` requires the host RTX GPU, performs the
+  one allowed 6x6/10x10 calibration fallback, resumes a passing run through
+  epoch five, selects only a gap-eligible checkpoint, opens test once, and
+  publishes the strict base bundle.
+- **Pre-partition default gate: passed.** The complete CPU/default suite passed
+  with 828 tests, one expected skip, and 11 deselected integration/benchmark
+  tests in 33m46s on the exact production revision. A first pass exposed
+  Python's JAX/fork warning in the worker-order property fixture; partition
+  worker pools were changed to isolated `spawn` processes and the complete
+  warning-free suite was then repeated successfully.
+- **Canonical source gate: stopped (2026-07-20).** The 16-worker real join
+  authenticated both pins and processed 2,119,489 corpus occurrences plus
+  4,967,871 metadata records. Hash-match coverage was 78.9663%, role coverage
+  among matched tokens was 99.9698%, and combined eligible coverage was
+  78.9425%. The immutable minima are 95%, 95%, and 90%. The mismatch is
+  distributed across the corpus; an exhaustive diagnostic confirmed that a
+  representative missing story has only a different-continuation prefix match
+  in the archive. The compact result and diagnosis are recorded in
+  [`docs/TW-P_SOURCE_AUDIT.md`](docs/TW-P_SOURCE_AUDIT.md) and
+  [`docs/TW-P_SOURCE_AUDIT.json`](docs/TW-P_SOURCE_AUDIT.json). No partition was
+  published and no GPU training was started.
+- **Next gate requires new authority or input.** Continue only if a pinned
+  metadata source covering the canonical corpus is supplied, or if the
+  benchmark contract is explicitly revised. Do not lower coverage, perform an
+  approximate/semantic join, infer recipes from prose, substitute the GPT-4 V2
+  text corpus, or train on the partial partition implicitly.
+- **Test scope direction.** If work resumes, run focused TinyWorlds-P and shared
+  LM/checkpoint tests after promotion, then the host RTX 4090 workflow.
+  Per the 2026-07-20 audit direction, do not rerun the parked legacy
+  TinyWorlds-v2 default tests: one production-shaped cache/reseal test alone
+  consumes about 24m54s while exercising no active-milestone code. No continual
+  LoRA or VAMP stream work begins in this milestone.
+
+## Parked Milestone: TinyWorlds-v2 External-Generation Benchmark
+
+The parked roadmap is `tinyworlds-v2-gpt`, tracked in detail in
 [`docs/TW-v2_PLAN.md`](docs/TW-v2_PLAN.md). The symbolic world ledger remains
 authoritative for truth and scoring, while pinned external language models
 produce variable-length natural TinyStories-style text through immutable,
@@ -392,7 +458,7 @@ deterministic renderer or exact-token prose fitting.
   evidence, but do not interpret its learned-model results as a clean test of
   knowledge-graph acquisition.
 
-### Immediate Work
+### Parked TinyWorlds-v2 Follow-up
 
 1. Preserve the promoted stopped calibration bundle as the terminal
    TinyWorlds-v1 result; do not modify it or launch its Phase 5 pilot.

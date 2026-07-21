@@ -1,5 +1,178 @@
 # VAMP Technical Design
 
+## TinyWorlds-P Benchmark Boundary
+
+TinyWorlds-P is the benchmark contract `tinyworlds-p-v1`. It uses only genuine
+story bytes from the pinned original `TinyStories-train.txt` corpus. Released
+prompt metadata determines partitions and audits but is never included in
+model input. External generation, story embeddings, learned routers, semantic
+clustering, semantic near-deduplication, replay, consolidation, LoRA, and VAMP
+episodes are outside the base-publication milestone.
+
+The canonical corpus is revision
+`f54c09fd23315a6f9c86f9dc80f725de7d8f9c64`, 1,924,281,556 bytes, SHA-256
+`c5cf5e22ff13614e830afbe61a99fbcbe8bcb7dd72252b989fa1117a368d401f`.
+The metadata source is the pinned 1,608,001,638-byte
+`TinyStories_all_data.tar.gz`, SHA-256
+`26cf7605aca15bc4ea6fa637256400d9d01317b28ed296172b2d1dd160cd7699`.
+The tokenizer is the existing hashed 50,257-token GPT-2 BPE artifact. These
+identities, normalization, all research choices, assignments, controls, and
+tree digests are artifact contracts rather than runner defaults.
+
+### Identity join and duplicate semantics
+
+Story identity is SHA-256 over UTF-8 text after NFKC, case folding, canonical
+straight single/double quotation marks, Unicode whitespace collapse, and edge
+trim. Normalization exists only for identity. Training and original-text
+shards retain the exact corpus bytes between `<|endoftext|>` separators; the
+tokenizer appends the corresponding EOS token after each occurrence.
+
+The corpus and archive are streamed into bounded sorted runs and externally
+merged by normalized SHA-256. Neither source is materialized in memory and no
+mutable database is part of the build. Normalization and tokenization use 16
+physical processes in the production preset. Published order is canonical, so
+worker completion order and temporary run size cannot change output bytes.
+
+Every normalized duplicate group is one indivisible assignment unit. All raw
+corpus occurrences and their multiplicity remain attached to that assignment.
+Prompt roles are accepted only when explicit released noun, verb, and
+adjective labels mechanically and uniquely identify the three released words.
+Every metadata duplicate must classify and all complete normalized recipes
+must agree; otherwise the group is excluded as unclassifiable or conflicting.
+Unmatched groups are also excluded. Excluded text never enters the base, since
+untracked base prose could contain a held-out conjunction.
+
+The join stops before partitioning unless corpus-token hash-match coverage is
+at least 95%, role-classified mass among matched tokens is at least 95%, and
+combined eligible corpus-token coverage is at least 90%. The audit retains
+each exclusion category, duplicate counts, token numerators and denominators,
+and every accepted metadata provenance record.
+
+### Buckets and five-cell topology
+
+Ingredient surfaces use NFKC, case folding, and trim. Noun, verb, and adjective
+vocabularies are balanced independently. Words are processed largest eligible
+token mass first and assigned to the currently lightest of eight buckets.
+Equal word masses and equal bucket loads use SHA-256 namespaces derived from
+the benchmark version, complete source/tokenizer identities, public seed zero,
+role namespace, word, and bucket. Changing a verb vocabulary therefore cannot
+perturb noun ties. Adjectives affect stratification only.
+
+Cell statistics retain active tokens, groups, and token-weighted source,
+feature-signature, adjective-bucket, and length-bin marginals. The selected
+topology is a 2x2 noun/verb corner plus a row- and column-unrelated cell. All
+valid physical bucket tuples are scored by exact rational token imbalance and
+nuisance-distribution imbalance; the minimum combined score wins, with a
+canonical namespaced tuple hash as final tie break. Physical buckets are then
+relabelled:
+
+- A = N0 x V0
+- B = N1 x V0
+- C = N1 x V1
+- D = N0 x V1
+- E = N2 x V2
+
+Every selected cell must lie within 10% of the five-cell median active-token
+count. Every actual noun and verb used in a selected-world group must occur in
+at least 64 eligible groups outside all five worlds. Counts refer to duplicate
+groups, not raw occurrences.
+
+### Split and control semantics
+
+Duplicate groups are allocated largest-token-first with deterministic hash
+ties. Each candidate split is scored against its active-token target and four
+token-weighted marginals: released source model, canonical feature signature,
+adjective bucket, and canonical-story token-length bin (`<=64`, `65-128`,
+`129-192`, `>192`). World cells use 80/10/10 train/validation/sealed-test
+weights. The held-in complement uses 96/2/2. Test assignments are made in the
+same immutable pass as every other split and are never consulted by grid,
+epoch, or checkpoint selection.
+
+Each world validation and test split owns a no-replacement control drawn from
+the corresponding held-in split. Half its groups come from the same noun row
+and other verb columns, and half from the same verb column and other noun rows.
+Joint nuisance strata are quota matched before deterministic token-mass swaps
+within a stratum. Controls fail rather than relax when active token mass differs
+by more than 0.25%, source or feature prevalence by more than two percentage
+points, adjective-bucket or length-bin prevalence by more than three points,
+or mean canonical length by more than 5%. A held-in group cannot serve two
+controls in the same evaluation split.
+
+### Partition persistence and loading
+
+Partition publications live at
+`data/tinyworlds-p/v1/<partition-sha256>/`. They contain source and
+normalization identities, bucket word lists, topology, one assignment per
+duplicate group, provenance, controls, audit, base/world/control manifests,
+original-byte shards, little-endian uint16 token shards, and document indexes.
+Both shard kinds roll only between stories near 32 MiB. Indexes bind raw
+occurrence IDs, source offsets and hashes, recipe and bucket evidence,
+partition/split, shard offsets, and token counts.
+
+`tree.json` lists every other file with exact size and SHA-256. Strict loading
+rejects unknown/missing paths, symlinks, noncanonical JSON, checksum changes,
+assignment/count mismatches, control reuse, an unknown control group, duplicate
+assignment identities, malformed topology, and any held-out physical cell in
+a base assignment. Rebuilding identical inputs produces the same partition
+identity and every published byte even when process completion, worker count,
+or external-sort run size changes.
+
+`iter_partition_batches` accepts canonical selectors such as `base/train`,
+`world/A/validation`, or `control/A/test`. It memory maps uint16 shards, never
+joins two stories into a causal window, pads only tensor rows, and groups a
+fixed number of documents into source blocks. Epoch-specific SHA-256 ranks
+shuffle those blocks while preserving document and window order within each
+block. The block coordinate is the resume boundary.
+
+### Scratch base training and selection
+
+The production base initializes every float32 parameter from seed zero. It is
+the existing tied-embedding GPT-Neo shape: vocabulary 50,257; positions 2,048;
+width 256; MLP 1,024; eight alternating global/local layers; 16 heads; local
+window 256; no dropout. Old TinyStories checkpoints provide engineering
+continuity only and are not initialization or baselines.
+
+Training uses 256-token windows, microbatches of 32, and eight-microbatch
+gradient accumulation. Each microbatch differentiates summed masked NLL.
+Gradient PyTrees are summed and divided once by the total active token count,
+so padded or short microbatches cannot receive equal weight. Global-norm clip
+1.0 precedes AdamW with maximum LR `5e-4`, betas `(0.9, 0.95)`, epsilon `1e-8`,
+and weight decay 0.1. The schedule linearly warms through the first ceiling of
+1% of planned updates, reaches the maximum at the warmup boundary, then
+cosine-decays to exactly `5e-5` on the final planned update.
+
+Resume state includes model, optimizer, RNG, update, next epoch, shuffled
+block, microbatch, and schedule position. States are immutable at every 1,000
+updates and epoch. Checkpoints occur only after a complete optimizer update;
+an interrupted run resumes from the prior complete state and is bit-identical
+to uninterrupted execution. Progress and loss JSONL is flushed continuously.
+
+An 8x8 partition trains for two calibration epochs. At both epoch boundaries,
+validation measures held-in NLL and
+`gap(world) = NLL(world) - NLL(matched control)`. Epoch two passes when mean
+gap is 0.08-0.30, every gap is at least 0.05, held-in NLL is at most 2.2,
+held-in NLL improved by at least 0.02 since epoch one, partition/leakage gates
+passed, and JAX reports an allocator peak no greater than 12 GiB. Too-small or
+per-world-low gaps trigger exactly one fresh 6x6 build; mean gap above 0.30
+triggers exactly one fresh 10x10 build. Held-in quality, improvement, or memory
+failure never triggers regridding. A failing second grid ends the milestone
+without final training.
+
+A passing two-epoch state resumes through epoch five. Among epochs two through
+five that still pass gap gates, lowest held-in validation NLL wins and an exact
+tie selects the earlier epoch. Publication additionally requires held-in
+validation NLL at most 2.0. Only after selection are held-in, five-world, and
+five-control test splits opened once. Test hypothesis failures are reported
+results and cannot change the selected partition or checkpoint.
+
+The base publication lives at
+`checkpoints/tinyworlds-p-v1/<training-sha256>/` and contains the strict selected
+base checkpoint, copied hashed tokenizer, every complete resume state, trace,
+validation records, sealed test, fixed-prompt samples, identities, strict tree,
+and report. The report includes coverage, calibration, learning curves,
+world/control gaps, selected epoch, runtime, active-token throughput, and the
+measured allocator peak.
+
 ## TinyWorlds-v2 Benchmark Boundary
 
 TinyWorlds-v2 is a new, parallel benchmark contract named
