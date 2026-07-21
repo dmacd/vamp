@@ -23,10 +23,12 @@ from apm.data.text.tinyworlds_v2.audit import (
 from apm.data.text.tinyworlds_v2.quality import (
     BLIND_VERIFIER_DIMENSIONS,
     SCREEN_ROUTE_ORDER,
+    TWO_ROUTE_AUTHOR_ORDER,
     GeneratedObservation,
     QualityOutcome,
     QualityPhase,
     evaluate_route_quality,
+    select_direct_quality_routes,
     select_full_quality_routes,
     select_screen_finalists,
     validate_route_quality_report,
@@ -480,6 +482,24 @@ def test_full_funnel_requires_paired_200_brief_reports() -> None:
             ),
             finalist_order=finalist_order,
         )
+
+
+def test_direct_two_route_quality_uses_all_200_without_a_verifier() -> None:
+    profile = build_reference_profile(_reference_observations())
+    reports = tuple(
+        evaluate_route_quality(
+            _generated_observations(route_id, 200),
+            profile,
+            phase=QualityPhase.DIRECT,
+        )
+        for route_id in TWO_ROUTE_AUTHOR_ORDER
+    )
+
+    selection = select_direct_quality_routes(reports)
+
+    assert selection.outcome is QualityOutcome.QUALITY_QUALIFIED_ROUTES
+    assert selection.route_ids == TWO_ROUTE_AUTHOR_ORDER
+    assert all(report.blind_verifier_clean_rate == 1.0 for report in reports)
 
 
 def _audit_sources() -> tuple[

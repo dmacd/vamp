@@ -27,7 +27,7 @@ generation end at mandatory human-approval stops.
 | Phase | State | Advancement gate |
 |---|---|---|
 | V1 stopped result | Preserved | No further v1 tuning or pilot is authorized |
-| 1. Reference profile and generator bakeoff | **Stopped — corrected diagnostic preview awaiting human review** | Human review of the v3 preview and a separate exact-route output-use review are required before any full funnel; then reference artifacts must validate, one route must pass automated review, and the exact blinded audit digest must receive explicit human approval |
+| 1. Reference profile and generator bakeoff | **Stopped — direct bakeoff complete; neither route qualified** | A new versioned run must produce a strictly valid Qwen/GPT-5.4-Mini 2×200 artifact with at least one automated passer, byte-identical derived replay, a complete default-suite pass, and explicit approval of its exact 50/50 blinded-audit digest |
 | 2. Counterbalanced world bibles | Blocked by Phase 1 | World audit and deterministic counterbalance checks pass |
 | 3. Natural training corpus | Blocked by Phase 2 | The 150-story sample audit receives explicit human approval, then the complete corpus validates |
 | 4. Natural evaluation data | Blocked by Phase 3 | Frozen-base sensitivity, balance, semantic, leakage, and 100-probe human gates pass before adapter training |
@@ -35,8 +35,217 @@ generation end at mandatory human-approval stops.
 | 6. Eight-task pilot | Blocked by Phase 5 | Complete pilot bundle passes integrity, coverage, drift, and report-reproduction gates |
 | 7. Scaling and consolidation studies | Deferred | Phase 6 passes with interpretable learning and routing behavior |
 
-Current checkpoint (2026-07-19): the offline Phase 1 implementation is in
-place through the artifact-integrity boundary. It covers the exact
+Current checkpoint (2026-07-19): Phase 1 has been simplified to a direct paired
+comparison of Qwen 3.5 35B-A3B and GPT-5.4 Mini. Both are full corpus-author
+candidates and each receives the same 200 neutral briefs. The active V4 request
+returns exactly one `story` field; required-word spans, visible feature
+realization, forbidden forms, length, and token-form evidence are derived
+locally. Semantic narrative-feature heuristics are report-only; only exact
+mechanical requirements can reject a story. There is no 50-story screen,
+finalist expansion, or third-model verifier. Consequently the complete paid
+plan is 400 author requests, followed
+by frozen TinyStories vocabulary/token/NLL measurements and a blinded audit of
+100 genuine and 100 generated stories, exactly 50 per author. The active output
+path is `data/tinyworlds-v2/reference-two-route-v2/` and it uses a separate
+content-addressed cache. The already authenticated reference artifact is reused
+directly, so the original source archive and 30-minute profiling path are not
+repeated. The live catalog pinned Qwen to Alibaba and GPT-5.4 Mini to Azure.
+The exact preflight estimated `$0.305313`, reserved `$1.683770` for the
+two-attempt policy, and passed the `$15` cap. All 400 author calls then completed
+for `$0.1906939625`; no provider-reported cost is missing. Rebuilding V2 from
+the same raw cache made no new completion POSTs.
+
+The terminal artifact is
+`data/tinyworlds-v2/reference-two-route-v2/`, manifest
+`6f0e14a7bf8cdcc933f5f6b459e33e6027e14fa714cdd938d384fcd8ebc042b9`,
+with status `no_quality_qualified_route`. Its exact balanced audit digest is
+`a5d9da91fe9636bda942e1f4532620e7761d4c722358f5cb0e1443fa042fff3a`.
+GPT-5.4 Mini accepted 192/200 briefs (96%) and Qwen accepted 123/200 (61.5%).
+Both passed the vocabulary-coverage and token-unigram-JSD gates and produced no
+alphanumeric identifier contamination. Both failed TinyStories-8M NLL,
+story-length, paragraph-format, and dialogue-distribution gates. GPT was the
+clearer candidate—alignment distance 1.665 versus Qwen's 2.777—but still did
+not qualify. The paragraph metric may partly measure a formatting mismatch:
+the paired released references have no counted double-newline breaks even
+though the released prompts request paragraphs. Inspect the blinded audit
+before revising that measurement or paying for another run.
+
+The 73-test core bakeoff suite passes and the completed V2 artifact passes its
+strict loader, including raw request/route and cost-journal evidence, cost
+arithmetic, direct-quality/status consistency, and audit packet/key/HTML
+balance. The broader legacy replay tests were stopped when they entered
+their known 20--30-minute cache fixture; because no route passed, the phase
+cannot advance regardless. Zero-network V2 derived replay and a post-change
+complete default-suite run remain mandatory before any future passing artifact
+can be promoted. Phase 2 remains blocked.
+
+The first post-stop prompt review is now complete at
+`data/tinyworlds-v2/prompt-tuning-v1/`, manifest
+`074cdacbc38e311a85de988801a8c5d2cef561fd88b19daa43640176162836f3`.
+It is intentionally a 20-brief development diagnostic, not a smaller Phase 1
+gate: the same 20 briefs bind 40 cached V4 controls and exactly 40 new V6 calls
+(20 per author), and `review.html` displays every tuned output beside its
+control and matched reference. The live expected/conservative costs were
+`$0.039824` / `$0.174217` under a separate `$1` cap; exact billed cost was
+`$0.0244546375`. V6 requested 130--170 words plus reference-shaped cadence and
+formatting. Qwen improved from 13/20 to 14/20 accepted, 75 to 110.5 median
+accepted words, and 2.498 to 2.133 median TinyStories-8M NLL. GPT stayed 20/20
+accepted, improved from 90.5 to 116.5 words, and moved from 2.296 to 2.262 NLL.
+Only one Qwen and four GPT outputs reached the requested word interval, and
+both routes continued to serialize blank lines between paragraphs. No route
+qualifies and Phase 2 remains blocked. These 20 examples, whose matched
+references are unusually long (median 172 words), are now development data;
+any future gate run requires a disjoint held-out cohort. The 78-test focused
+generation/artifact suite and hardened semantic/raw-evidence reload pass. The
+complete default suite was not repeated for this diagnostic and is still
+required before a future Phase 1 promotion.
+
+The next isolated prompt-shape diagnostic is complete. V7 removes the
+wrapper's duplicate compression cues and places concrete output requirements
+last: one newline-free story block, exact required-word forms, quoted dialogue
+when requested, 18--20 complete sentences, at least six connected events, and
+a soft 155--190-word target. It reused the 40 cached V6 controls and made
+exactly 40 new calls, 20 per author. The preflight was `$0.041028` expected /
+`$0.179473` conservative under the separate `$1` cap; the calls completed in
+about 15 seconds for `$0.0296057500`. The immutable paid-output artifact is
+`data/tinyworlds-v2/prompt-tuning-v2/`, manifest
+`838facd8975a04561987ebac3412c8e7897ee3ce4783259600f34aa26a347b4a`.
+It eliminated newlines and brought median accepted length to 154.5 words for
+Qwen and 153.5 for GPT. Qwen acceptance did not improve (14/20), GPT fell from
+20/20 to 18/20, and median TinyStories-8M NLL worsened from 2.133 to 2.568 and
+from 2.262 to 2.781 respectively. The experiment therefore supports a concrete
+failure mode: a detailed shape checklist can improve visible compliance while
+moving prose away from the base model's learned TinyStories distribution.
+
+The initial V7 comparison is not the authoritative quality interpretation.
+An exact normalized-content audit found that 3,393 of the selected 10,000
+GPT-4 validation records also occur in the pinned original training file.
+Nine of the 20 small paired archive references likewise overlap training.
+`prompt-tuning-v2` is preserved unchanged as paid-generation evidence, while
+the zero-call corrected interpretation is
+`data/tinyworlds-v2/prompt-tuning-v3/`, manifest
+`50576804cf1cd81efce293ec62732aad3ec9251ca1010511eedacb630c087b74`.
+V3 filters the overlap with NFKC, case-folding, whitespace collapse, SHA-256
+prefiltering, and full normalized-text confirmation; its reference profile is
+built from the remaining 6,607 validation stories. It reuses all 80 cached
+stories and 66 accepted NLL measurements and incurs zero new calls, cost, or
+GPU measurements. Seen-versus-unseen reference medians and generation gaps are
+nearly the same, so overlap invalidated the clean-holdout claim but does not
+explain the central NLL mismatch. The nominal composite score still ranks V7
+first because length and newline conformity offset other errors; that rank is
+descriptive only because every V7 route still fails hard gates. The corrected
+40-sample review is `prompt-tuning-v3/review.html`. The current focused suite
+passes 94 tests; the complete default suite was not repeated because this
+development diagnostic cannot promote Phase 1.
+
+That prompt-envelope hypothesis has now been tested directly in V8. Each
+request contains one user message formed as the exact archived prompt plus
+`Possible story:`. There is no system message, repeated instruction, JSON
+request, response schema, or added length/shape language. Pinned route, seed,
+512-token ceiling, disabled reasoning, data-denial, and no-fallback fields are
+transport controls rather than natural-language instructions. The complete
+plain assistant message is retained unchanged as the story, and required-word,
+feature, safety, length, and token-form evidence remains locally derived. V8
+uses V7 as its exact cached control and the train-decontaminated 6,607-story
+validation profile as its comparator.
+
+The exact preflight was `$0.034422` expected / `$0.152463` conservative under
+the separate `$1` cap. All 40 calls completed in 17 seconds for
+`$0.0155166000`. The result is
+`data/tinyworlds-v2/prompt-tuning-v4/`, manifest
+`362a0c85c7722fbaf36120eaa5479285edb798bc067d8f7c7fd41631571e2bb0`,
+and all samples are in `review.html`. Both routes moved to 20/20 mechanically
+accepted samples. GPT median NLL improved sharply from 2.781 to 2.185, and Qwen
+improved from 2.568 to 2.475, against a 1.347 validation median. At the same
+time, the bare released prompt restored short-story behavior: GPT produced a
+median 80 words and Qwen 113.5, versus 138 in validation, and all new stories
+contained paragraph breaks. Both still fail NLL and token-unigram gates; GPT
+also fails story length badly, while Qwen narrowly misses the 15% length band
+and has overlong pooled sentences. Composite distance therefore retains V7
+for both routes despite V8's acceptance/NLL gains. The result establishes that
+the wrapper caused part of GPT's mismatch but was not the only cause. No route
+qualifies and Phase 2 remains blocked. The strict persisted-evidence reload and
+complete focused generation/comparator suite pass; the long default suite was
+not repeated for a development-only non-passer.
+
+The isolated minimal-length experiment is also complete. V9 differs from V8
+by exactly one inserted sentence: `Aim for about 130 to 150 words.` Briefs,
+model/provider routes, deterministic provider seeds, token ceiling, response
+handling, local validator, decontaminated comparator, and every other technical
+field remain identical. V8's 40 generated controls and NLLs are loaded from
+the strict V4 artifact without rescoring. The V9 preflight was `$0.034641`
+expected / `$0.153339` conservative under the `$1` cap; generation completed
+in 15 seconds and the 40 calls cost `$0.0220921000`. The result is
+`data/tinyworlds-v2/prompt-tuning-v5/`, manifest
+`1605d21acff2647fe4be456a627653f606b7e4e90c7241d3d552ebe513430c73`,
+with the exact prompt and every output in `review.html`.
+
+V9 fixed median length for both models, but not identically. Qwen moved from
+113.5 to 147 words, improved median NLL from 2.475 to 2.339, token JSD from
+0.324 to 0.293, and composite distance from 2.644 to 2.550. It fell from 20/20
+to 18/20 accepted because two stories omitted required word forms; nevertheless
+V9 is the better Qwen cell. GPT moved from 80 to 128 words and improved token
+JSD from 0.352 to 0.314, but median NLL worsened from 2.185 to 2.381. Its V8
+and V9 composite distances are 2.2645 and 2.2653, so bare V8 retains a nominal
+0.0008 lead despite failing length. Both V9 routes pass the 15% median-length
+band, but neither passes NLL, token-unigram, sentence-length,
+paragraph-serialization, or dialogue-distribution gates. Qwen also fails the
+85% acceptance threshold. No route qualifies and Phase 2 remains blocked.
+The artifact strictly reloads and the 106-test focused suite passes; the long
+default suite was not repeated for a development-only non-passer.
+
+A separate learnability sidebar now tests whether the measured prose mismatch
+actually prevents this TinyStories-8M/LoRA stack from storing and using a tiny
+world. It is deliberately not a Phase 1 gate or prompt-selection cell. Each of
+three matched arms contains the same eight arbitrary child-to-badge facts and
+four badge-to-meeting-place rules, 24 documents, canonical leading evidence,
+rank-8 initialization, RNG state, batch, and 512-update schedule. Only the
+continuation author changes: decontaminated official TinyStories prose, Qwen
+3.5 35B-A3B, or GPT-5.4 Mini. The paid boundary was 72 calls (three candidates
+per evidence per external author, selecting the first two mechanically valid
+stories) under a `$0.50` cap; exact spend was `$0.0392434000`.
+
+The strict result is `data/tinyworlds-v2/reasoning-sidebar-v1/`, manifest
+`59200a624dcc8e2afe4cfcdb720d22724184eb97797d7da8208cf0b527d797fe`.
+Frozen corpus NLL was 1.621 for the TinyStories control, 2.436 for Qwen, and
+2.806 for GPT, confirming a surface-distribution gap. Every adapted corpus NLL
+fell below 0.028. Yet held-out test direct recall was 25.0%, 25.0%, and 31.2%
+respectively, and all three arms scored 25.0% on one-hop fact-plus-rule probes,
+where 25% is chance. A no-training follow-up reused the saved adapters and
+asked for the next word after each exact evidence prefix. Every arm scored
+100% on all eight fact clauses and all four rule clauses, with large positive
+margins. That diagnostic is
+`data/tinyworlds-v2/reasoning-sidebar-v1-clause-probe/`, manifest
+`1d1d8a7921e4ab74b4b23d57266da776d06bf01b3effe5fecc6a92ed5a318b6f`.
+
+The mechanism conclusion is narrower and more useful than an author ranking:
+the current next-token LoRA setup memorizes literal continuations but does not
+turn them into stable paraphrase-invariant bindings or one-hop compositional
+knowledge. Since the official-TinyStories control fails too, this experiment
+does not identify an incremental Qwen/GPT author penalty despite their higher
+frozen NLLs. Before using distribution gates as corpus-author vetoes, a future
+learnability comparison must first establish a passing in-distribution control,
+most likely by adding explicit query-style supervision or changing the
+adaptation objective. This sidebar leaves Phase 1 stopped and Phase 2 blocked.
+Both artifacts strictly reload, and the 17-test sidebar, shared LoRA workflow,
+and candidate-scoring suite passes. The complete default suite was not repeated
+because this diagnostic cannot promote Phase 1.
+
+Do not purchase another prompt cell before inspecting V5. Preserve the
+route-specific conclusion rather than averaging it away, and require any next
+change to isolate one named remaining failure. Reintroducing a system message,
+JSON, and narrative checklist together would lose the causal isolation gained
+here.
+
+The completed `reference-two-route-v1` artifact is retained as a validator
+diagnostic. All 400 requests completed for `$0.1906939625`, but V1 incorrectly
+treated lexical patterns for moral, conflict, foreshadowing, twist, and ending
+valence as hard semantic proof. The active V2 artifact reuses those exact raw
+responses without new completion POSTs and hard-gates only whole-word
+ingredients, safety/length, and structurally quoted dialogue. Other narrative
+features remain report/audit fields.
+
+The historical seven-route Phase 1 implementation remains in place through the artifact-integrity boundary. It covers the exact
 pinned-source cohorts and profiles, semantic route locks with separately
 preserved catalog provenance, fixed request construction, crash/process-safe
 cost accounting, historical route and per-reservation authorization evidence,
@@ -104,21 +313,16 @@ charge is `$0.0150615205`.
 
 Phase 2 remains blocked. The v3 artifact has `scientific_role=diagnostic_only`,
 is ineligible for route selection, and awaits human review of both accepted and
-rejected stories. No full funnel is authorized yet. After that quality review,
-the intended training-data use must be reviewed separately against the exact
-selected model/provider output terms; neither mechanical acceptance nor human
-preference grants that permission. A later paid funnel also requires a new
-artifact identity and explicit cost authorization and must not overwrite the
-stopped reference tree or any preview.
+rejected stories. It is now superseded operationally by the explicitly
+authorized two-author V4 comparison, which has a new artifact identity and cost
+preflight and cannot overwrite the stopped reference tree or any preview.
 
 Preliminary story inspection exposes a flaw in the current acceptance metric.
 All three coherent Qwen stories failed only because Qwen returned different
 evidence field names; two strong GPT stories failed because their self-reported
 feature quotes did not exactly match the prose; meanwhile weaker Gemini prose
-passed all three records. The next implementation step is therefore to derive
-word, feature, and part-of-speech evidence locally from the story and treat the
-model's output envelope as a transport concern, then rerun only a tiny finalist
-comparison. Do not spend on the full screen under the present gate.
+passed all three records. V4 fixes this by deriving observable evidence locally
+from the story and treating the one-field response envelope as transport.
 
 A post-run harness audit found and fixed four non-scientific safety edges:
 bounded missing-cost responses now require all four generation-stat lookups;
@@ -140,9 +344,9 @@ paid request was made and both artifact manifests remain unchanged.
 - Every training story and natural knowledge probe comes from a pinned external
   model and provider route through a content-addressed, resumable cache.
 - External models author synthetic data; this is not a claim that the benchmark
-  distills their general capabilities. Do not use a platform's broad
-  “distillable” label as a proxy for quality or scientific eligibility. Review
-  the exact model/provider output-use terms separately before bulk generation.
+  reproduces their general capabilities. Do not use a platform routing label as
+  a proxy for story quality. Qwen 3.5 35B-A3B and GPT-5.4 Mini are both active
+  corpus-author candidates for this open research benchmark.
 - Generated text is variable length. EOS, tensor padding, and loss masks handle
   batching; filler English never does.
 - Text may not expose task/family IDs, relation names, query terminology,
@@ -213,8 +417,8 @@ must not generate any world, task, training, or probe data.
 - Disable model/provider fallbacks, automatic routing, response healing, and
   plugins. Bind each request to its expected canonical model and provider, and
   fail on catalog or route drift.
-- Refresh the public catalog immediately before every paid route batch and
-  verifier batch, then compare its semantic lock with the original one. Halt
+- Refresh the public catalog immediately before every paid author-route batch,
+  then compare its semantic lock with the original one. Halt
   before that batch's first POST and publish `catalog_route_drift` if the
   model, provider, quantization, or price changed. Record the fresh catalog
   digest on every submitted raw attempt even when its semantic cache identity
@@ -232,65 +436,40 @@ must not generate any world, task, training, or probe data.
   record as a persisted fallback when completion usage omits billed cost or
   serving provenance.
 - Use signed 31-bit deterministic seeds and say `JSON` explicitly in every
-  structured-output prompt. Do not enable `enforce_distillable_text` for route
-  comparison. Pin optional reasoning in the canonical request: Qwen and Gemini
-  story requests use `reasoning.effort=none`, while routes without a matching
-  endpoint capability omit the field. Any change to those fields creates a new
-  request-contract identity.
+  structured-output prompt. Do not enable `enforce_distillable_text`. V4 asks
+  Qwen and GPT-5.4 Mini for exactly `{"story": ...}` and pins optional reasoning
+  to `none`; any change creates a new request-contract identity.
 - Retry only transport, rate-limit, and server failures. Schema-invalid or
   semantically invalid responses remain immutable failed observations and
   count against route reliability.
 
-### 1.3 Seven-model funnel
+### 1.3 Direct two-author comparison
 
-Screen the same first 50 neutral briefs through all seven routes. Expand three
-finalists over the remaining 150 briefs, yielding 200 paired observations per
-finalist. Canonical route names are resolved to pinned OpenRouter model and
-provider identities immediately before the cost preflight.
+Send all 200 paired neutral briefs to both pinned author routes, for exactly 400
+generation requests. There is no screen, finalist stage, or external verifier.
+Resolve and persist the exact OpenRouter model/provider route and live price
+immediately before preflight.
 
-| Candidate route | Input / output price per 1M tokens at plan time |
+| Author route | Plan-time input / output price per 1M tokens |
 |---|---:|
-| Ling 2.6 Flash | `$0.01 / $0.03` |
-| Gemma 4 26B | `$0.07 / $0.34` |
-| DeepSeek V4 Flash | `$0.098 / $0.196` |
-| Mistral Small 4 | `$0.15 / $0.60` |
-| Qwen3.5 35B-A3B | `$0.14 / $1.00` |
-| Gemini 3.1 Flash Lite | `$0.25 / $1.50` |
+| Qwen 3.5 35B-A3B | `$0.14 / $1.00` |
 | GPT-5.4 Mini | `$0.75 / $4.50` |
 
-Use pinned `gpt-5.4-2026-03-05` as the independent blind style verifier, not as
-another generator candidate. Bind the GPT-5.4 Mini route to
-`gpt-5.4-mini-2026-03-17` when that snapshot is available through the selected
-provider. Snapshot every observed catalog price and re-evaluate all costs
-before any billable submission.
-
-A screening route must achieve at least 98% schema-valid responses, at least
-90% deterministic acceptance, and zero forbidden forms in any response.
-Expand the cheapest passing route, the closest-to-reference route, and
-the best remaining normalized cost/alignment trade-off. Resolve ties in table
-order. If fewer than three routes pass, expand every passer; if none pass,
-publish a stopped result.
-
-The completed v3 3-by-7 preview is too small and is explicitly ineligible for
-this screening decision. Its five deterministic acceptances are examples for
-human request/quality review, not evidence that a route meets the funnel's
-percentage gates. No 50-brief screen may begin until that review and the
-separate output-use review are recorded.
+The historical seven-route table and 3-by-7 previews are immutable diagnostic
+evidence only. They do not select an author and none of their prose enters the
+corpus. Both active authors proceed through the complete 200-brief comparison;
+selection occurs only after automated metrics and the balanced human audit.
 
 ### 1.4 Cost preflight and ceilings
 
 - Before any billable request, write and print `cost_estimates.json` from the
   completed request bodies, current pinned-route prices, matched-reference
-  output lengths, verifier traffic, retry allowance, and worst-case in-flight
-  reservations.
-- Expected total Phase 1 OpenRouter spend is approximately `$3–$7`; the hard
-  inclusive ceiling is `$15`. If the conservative estimate crosses the cap,
-  submit nothing.
-- Include direct OpenAI Batch comparisons for
-  `gpt-5.4-mini-2026-03-17` and `gpt-5.4-2026-03-05`. Batch is an
-  estimate-only alternative in this phase; no second production backend is
-  introduced. Its token charges are approximately half normal API pricing
-  under the documented 24-hour Batch contract.
+  output lengths, one full retry allowance, and worst-case in-flight
+  reservations. The request counts must be exactly 200 Qwen and 200 GPT-5.4
+  Mini; there is no verifier reserve.
+- Keep the hard inclusive ceiling at `$15`. Print the current expected and
+  conservative totals before reading the inference key, and submit nothing if
+  the conservative total crosses the cap.
 - After observed usage and rejection rates are known, project full-corpus
   economy, balanced, and quality-ceiling envelopes. Economy minimizes projected
   cost among fully qualified routes; quality-ceiling minimizes alignment
@@ -317,8 +496,8 @@ separate output-use review are recorded.
   submission. A reservation with no recoverable response is charged at its
   full bound and stops as `orphaned_cost_reservation`; a known billed settlement
   whose raw response is missing stops as `billed_attempt_response_missing`.
-  Neither case may be reposted. Stopped artifacts retain exact generator,
-  verifier, and route attribution for both actual and conservative charges.
+  Neither case may be reposted. Stopped artifacts retain exact author-route
+  attribution for both actual and conservative charges.
 - Treat BYOK as a separate billing boundary. The inference credential is not a
   Management API credential and cannot prove the absence of workspace BYOK
   keys. Before any completion POST, require either a zero-key `/api/v1/byok`
@@ -341,13 +520,15 @@ separate output-use review are recorded.
 
 ### 1.5 Automated quality and alignment gates
 
-Score all 200 observations for each finalist against matched genuine
+Score all 200 observations for each author against matched genuine
 references. A route qualifies only if every gate passes:
 
 - Schema-valid responses at least 99%; deterministic acceptance at least 95%.
-- Requested noun, verb, adjective, and narrative-feature adherence at least
-  95%. Feature realization is measured from story text by the deterministic
-  checker, separately from requested prevalence and model-copied evidence.
+- Requested noun, verb, and adjective whole-word adherence at least 95%.
+  Structurally quoted dialogue is a hard check when dialogue is requested.
+  Moral, conflict, foreshadowing, twist, and ending valence are reported from
+  deterministic heuristics but are not hard semantic proof or rejection gates;
+  the blinded human audit judges them.
 - No response contains internal IDs, relation labels, answer markers,
   meta-language, or padding fragments.
 - At least 98% of word tokens are covered by the reference vocabulary profile.
@@ -365,22 +546,21 @@ references. A route qualifies only if every gate passes:
   references by at most 0.01. These tokens remain in every lexical denominator;
   mixed letter-digit IDs, snake-case IDs, and page/chapter numbers are blocked,
   while ordinary standalone numbers remain valid children's prose.
-- Blind verifier rubric means are no more than 0.5 points below genuine
-  references, and at least 90% of stories have no grammar, coherence,
-  repetition, or meta-language hard failure.
+- The independent human audit supplies simplicity/coherence and TS-like
+  judgment; no model judges its own prose or the other author's prose.
 
 If the gates cannot be met within the cost ceiling, publish either
 `no_quality_qualified_route` or `blocked_by_cost_cap`, including every failed
-metric and the remaining-cost estimate. Do not reduce sample counts, omit
-verification, or relax thresholds.
+metric and the remaining-cost estimate. Do not reduce sample counts or relax
+thresholds.
 
 ### 1.6 Mandatory human audit
 
 - Produce a static interactive audit with 100 matched genuine GPT-4 references
-  and 100 generated controls. Balance generated controls 34/33/33 across three
-  finalists (or as evenly as possible across fewer finalists) and randomize
-  them deterministically. Preserve all screened finalists in this comparison;
-  only the automated-qualified subset remains eligible for final selection.
+  and 100 generated controls. Balance generated controls exactly 50 Qwen and 50
+  GPT-5.4 Mini and randomize them deterministically. Both authors remain visible
+  to the hidden key; only automated-qualified routes are eligible for final
+  selection.
 - The first-pass `audit.html` contains only opaque IDs, blinded text, source
   prompts, token counts, base NLL, and automated style scores. Keep source and
   route identities in a separately revealed `audit_key.json`.
@@ -397,61 +577,66 @@ verification, or relax thresholds.
 
 ### 1.7 Phase 1 artifacts and verification
 
-Publish beneath `data/tinyworlds-v2/reference/`:
+Publish the active comparison beneath
+`data/tinyworlds-v2/reference-two-route-v2/`; preserve
+`data/tinyworlds-v2/reference/` as its immutable reference-profile parent:
 
-- `source_manifest.json`, `neutral_story_briefs.jsonl`,
-  `prompt_metadata_sample.jsonl`, `reference_story_sample.jsonl`,
-  `validation_source_sample.jsonl`, `reference_annotations.jsonl`,
-  `reference_observations.jsonl`, `paired_reference_observations.jsonl`, and
-  `reference_statistics.json`;
-- `configuration.json`, exact raw `catalog/` responses and normalized route
-  locks, all persisted measurement batches and runtimes,
-  `generator_bakeoff.jsonl`, `verifier_results.jsonl`,
-  `sequential_results.jsonl`, `cost_estimates.json`, `cost_actuals.json`,
-  `cost_observations.json`, `runtime_cost_ledger.json` when paid execution is
-  reached, `quality_comparisons.json`, `quality_details.json`,
-  `finalist_decision.json`, `status.json`, `audit.html`,
-  `audit_packet.json`, and `audit_key.json` as applicable to the terminal
-  status;
+- `neutral_story_briefs.jsonl` plus a digest-bound `reference_binding.json` to
+  the already validated parent, avoiding duplication or recomputation of its
+  source/profile files;
+- `reference_binding.json`, `configuration.json`, exact raw `catalog/`
+  responses and normalized route locks, one generation measurement batch and
+  runtime, `generator_bakeoff.jsonl`, `cost_estimates.json`,
+  `cost_actuals.json`, `quality_comparisons.json`, `quality_details.json`,
+  `status.json`, `audit.html`, `audit_packet.json`, and `audit_key.json` as
+  applicable to the terminal status; there is no verifier or finalist artifact;
 - the human-authored overlays `audit_decisions.json`,
   `audit_approval_request.json`, and `audit_approval.json`, which remain
   outside the immutable base manifest;
-- one directory per canonical route containing `requests.jsonl`,
-  `batch_submission.json`, `plan.json`, `raw_responses.jsonl`,
-  `accepted.jsonl`, `rejected.jsonl`, and `manifest.json`, plus the verifier
-  manifest and an authenticated copy of every submitted raw request, response,
-  stats observation, full historical route lock, per-reservation sanitized BYOK
-  authorization, and runtime-cost journal entry under `raw_cache/`.
+- one directory per author containing `requests.jsonl`, `plan.json`,
+  `accepted.jsonl`, and `rejected.jsonl`, plus an authenticated copy of every
+  submitted raw request, response, stats observation, full route lock,
+  per-reservation sanitized BYOK authorization, and runtime-cost journal entry
+  under `raw_cache/`.
 
 Every manifest binds source pins, request and response hashes, semantic route
 identity and full catalog provenance, prompt/schema and transport-protocol
 versions, validator/measurement versions, prices, costs, and all file digests.
-The strict semantic loader cross-checks source counts and identities, funnel
-selection, quality reports, planned/submitted/completed requests, accepted and
-rejected splits, raw attempts, cost-journal settlements, audit allocation, and
-all permitted terminal statuses rather than trusting the root digest alone.
-Those terminal statuses are exactly `blocked_by_cost_cap`,
-`blocked_by_runtime_cost_cap`, `provider_billing_unknown`,
-`catalog_route_drift`, `no_quality_qualified_route`,
-`audit_insufficient_accepted_samples`, and `awaiting_human_audit`.
+The active strict loader cross-checks the exact parent digest, 2×200 V4 request
+plan, route order, completed result identities, locally rederived story
+evidence, accepted/rejected partitions, and measurement coverage rather than
+trusting the root digest alone. Its terminal statuses are
+`blocked_by_cost_cap`, `no_quality_qualified_route`,
+`audit_insufficient_accepted_samples`, and `awaiting_human_audit`. Runtime
+billing/contract failures retain their dedicated raw cache and temporary tree
+for safe resume instead of being converted into a scientific result.
 
-Derived replay starts only from persisted briefs, route locks, raw HTTP/cache
+Before the Phase 1 gate can pass, derived replay must start only from persisted briefs, route locks, raw HTTP/cache
 evidence, and accelerator-derived measurements. With a transport that raises
 on any network access, it reconstructs canonical requests, reparses every
 attempted response discovered in the raw cache, including interrupted terminal
-attempts absent from committed route/verifier result streams, reruns source
-joins, deterministic validators and quality selection, rebuilds route/verifier
+attempts absent from committed result streams, reruns source
+joins, deterministic validators and quality selection, rebuilds route
 streams and the blinded audit, and byte-compares every replayed derived file
 (apart from the replay tree's own root manifest). Raw provider, BYOK, and
 response-contract evidence must agree with the published terminal cause and
 status. It never reopens the TinyStories sources, loads the
 tokenizer/checkpoint or GPU, reads an API key, or performs a network call.
-Public completed-artifact validation and human approval both perform this
-complete semantic and replay validation; passing an overlay-only digest check
-is insufficient.
+Before a future artifact can pass the phase gate, public completed-artifact
+validation and human approval must both invoke this complete semantic and
+replay validation; passing an overlay-only digest check is insufficient. The
+current V2 strict loader does not yet implement the derived replay requirement.
+
+The completed V2 artifact has manifest
+`6f0e14a7bf8cdcc933f5f6b459e33e6027e14fa714cdd938d384fcd8ebc042b9`,
+audit digest
+`a5d9da91fe9636bda942e1f4532620e7761d4c722358f5cb0e1443fa042fff3a`,
+and terminal status `no_quality_qualified_route`. It is valid evidence, not a
+passing Phase 1 artifact. Its audit remains useful for diagnosis, but no
+approval overlay can make an automated non-passer eligible for Phase 2.
 
 Audit construction uses an exact deterministic balanced assignment over
-distinct pair IDs, not a greedy sampler. All screen finalists remain in the
+distinct pair IDs, not a greedy sampler. Both authors remain in the
 blinded generated controls; only automated-qualified routes can be selected
 after human scoring. If accepted samples cannot satisfy the exact per-route
 quotas, publish `audit_insufficient_accepted_samples` with feasibility evidence
@@ -461,12 +646,12 @@ Tests cover source verification and streaming selection, deterministic shard
 merging, request hashes, route/catalog drift, immutable cache behavior,
 retry classification, schema rejection, cost arithmetic and cap enforcement,
 crash and cross-process recovery, BYOK fail-closed behavior, quality metrics,
-finalist selection, exact blinded-audit allocation, semantic tamper rejection,
+direct route selection, exact blinded-audit allocation, semantic tamper rejection,
 zero-network replay, and approval-digest enforcement. Default tests use fake
 transports and small fixtures. Marked integrations cover the real archive,
-tokenizer/checkpoint NLL, and minimal OpenRouter smoke requests. Run the
-complete default suite before billable generation and after validating the
-completed artifact.
+tokenizer/checkpoint NLL, and minimal OpenRouter smoke requests. Run the focused
+paid-boundary suite before generation and the complete default suite after the
+completed artifact, before Phase 1 can advance.
 
 **Phase 1 gate:** all reference and bakeoff artifacts strictly load; at least
 one route passes automated and human thresholds within the cap; raw-cache
@@ -502,8 +687,8 @@ approved; and the default suite passes.
   then ask the pinned generator to make the facts matter naturally in the
   plot. Supply only relevant cast/places, target facts, contradictions to
   avoid, and candidate alternatives that must not be established.
-- Require structured evidence metadata and verify it independently. The
-  generation model is never its own sole judge.
+- Request story-only responses and derive observable evidence locally. The
+  ledger checker and human gate remain independent of the author model.
 - Generate a maximal immutable corpus supporting deterministic exposure
   subsets: 32 accepted exposures per direct fact, 24 demonstrations per
   convention, and 16 stories per contextual revision. Record both exposures

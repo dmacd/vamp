@@ -5,6 +5,9 @@ import json
 from apm.data.text.tinyworlds_v2.bakeoff import (
     CANDIDATE_MODELS,
     NeutralStoryBrief,
+    SYNTHETIC_STORY_REQUEST_V4,
+    StoryOnlyPayload,
+    TWO_ROUTE_AUTHOR_MODELS,
     VERIFIER_MODEL,
     VerifierPayload,
 )
@@ -130,6 +133,48 @@ def test_generation_jobs_are_route_major_and_restore_concurrent_order() -> None:
     assert observation.required_verb_ok
     assert observation.required_noun_ok
     assert observation.required_adjective_ok
+
+
+def test_v4_job_carries_contract_and_decodes_story_only_response() -> None:
+    model = TWO_ROUTE_AUTHOR_MODELS[0]
+    route = _route(model.route_id, model.request_model_id, model.canonical_slug)
+    story = (
+        "Mia saw the moon over her small home. Mia was kind to a little wet bird. "
+        "She told the bird to jump onto her hand, but it was too tired. Mia gave "
+        "it water and sat with it by the tree. Soon the bird could jump and fly. "
+        "Mia went home with a happy smile under the moon."
+    )
+    jobs = build_generation_jobs(
+        (_brief(),),
+        (model,),
+        (route,),
+        request_contract=SYNTHETIC_STORY_REQUEST_V4,
+    )
+    sample = execute_generation_jobs(
+        jobs,
+        _Client(json.dumps({"story": story})),
+        max_workers=1,
+    )[0]
+
+    assert jobs[0].request_contract is SYNTHETIC_STORY_REQUEST_V4
+    assert sample.validation.accepted
+    assert type(sample.payload) is StoryOnlyPayload
+    assert tuple(
+        span.ingredient for span in sample.payload.required_word_spans
+    ) == ("jump", "moon", "kind")
+    assert sample.as_record()["payload"] == {
+        "realized_features": [],
+        "required_word_spans": [
+            {
+                "end": span.end,
+                "exact_text": span.exact_text,
+                "required_word": span.ingredient,
+                "start": span.start,
+            }
+            for span in sample.payload.required_word_spans
+        ],
+        "story": story,
+    }
 
 
 def test_verifier_failure_becomes_explicit_zero_score_full_observation() -> None:

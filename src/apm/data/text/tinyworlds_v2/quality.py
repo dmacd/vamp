@@ -29,6 +29,11 @@ SCREEN_ROUTE_ORDER = (
     "gpt-5.4-mini",
 )
 
+TWO_ROUTE_AUTHOR_ORDER = (
+    "qwen3.5-35b-a3b",
+    "gpt-5.4-mini",
+)
+
 BLIND_VERIFIER_DIMENSIONS = (
     "preschool_vocabulary",
     "sentence_simplicity",
@@ -39,10 +44,11 @@ BLIND_VERIFIER_DIMENSIONS = (
 
 
 class QualityPhase(str, Enum):
-    """The 50-brief screen or 200-brief finalist evaluation."""
+    """A historical screen/full pass or the direct two-author evaluation."""
 
     SCREEN = "screen"
     FULL = "full"
+    DIRECT = "direct"
 
 
 class QualityOutcome(str, Enum):
@@ -519,27 +525,33 @@ def evaluate_route_quality(
         form_rate_differences[0] / 0.01,
         form_rate_differences[1] / 0.01,
         generated_form_rates[2] / 1e-12,
-        max(
-            (
-                max(
-                    verifier_values[
-                        f"blind_verifier_{dimension}_mean_difference"
-                    ],
-                    0.0,
-                )
-                for dimension in BLIND_VERIFIER_DIMENSIONS
-            ),
-            default=0.0,
-        )
-        / 0.50,
-        max(0.0, 0.90 - verifier_clean_rate) / 0.10,
-        *(max(0.0, 0.95 - values[name]) / 0.05 for name in (
-            "noun_adherence_rate",
-            "verb_adherence_rate",
-            "adjective_adherence_rate",
-            "feature_adherence_rate",
-        )),
+        *(
+            max(0.0, 0.95 - values[name]) / 0.05
+            for name in (
+                "noun_adherence_rate",
+                "verb_adherence_rate",
+                "adjective_adherence_rate",
+                *(("feature_adherence_rate",) if phase is QualityPhase.FULL else ()),
+            )
+        ),
     )
+    if phase is QualityPhase.FULL:
+        alignment_components += (
+            max(
+                (
+                    max(
+                        verifier_values[
+                            f"blind_verifier_{dimension}_mean_difference"
+                        ],
+                        0.0,
+                    )
+                    for dimension in BLIND_VERIFIER_DIMENSIONS
+                ),
+                default=0.0,
+            )
+            / 0.50,
+            max(0.0, 0.90 - verifier_clean_rate) / 0.10,
+        )
     finite_alignment = tuple(
         component for component in alignment_components if math.isfinite(component)
     )
@@ -643,13 +655,40 @@ def select_full_quality_routes(
     )
 
 
+def select_direct_quality_routes(
+    reports: tuple[RouteQualityReport, ...],
+    *,
+    route_order: tuple[str, ...] = TWO_ROUTE_AUTHOR_ORDER,
+) -> QualitySelection:
+    """Return qualifying routes from a direct paired 200-story comparison.
+
+    Unlike the historical seven-route funnel, both named author routes are
+    evaluated on every brief. There is no screen, expansion, or finalist
+    selection stage.
+    """
+    _validate_report_set(reports, QualityPhase.DIRECT, route_order, expected_size=200)
+    by_route = {report.route_id: report for report in reports}
+    qualified = tuple(route_id for route_id in route_order if by_route[route_id].passed)
+    if not qualified:
+        return QualitySelection(
+            QualityOutcome.NO_QUALITY_QUALIFIED_ROUTE,
+            (),
+            "neither author passed every direct 200-brief quality gate",
+        )
+    return QualitySelection(
+        QualityOutcome.QUALITY_QUALIFIED_ROUTES,
+        qualified,
+        "one or both authors passed every direct 200-brief quality gate",
+    )
+
+
 def _quality_failures(values: dict[str, float | int], phase: QualityPhase) -> tuple[str, ...]:
     gates = [
         (values["schema_valid_rate"] >= (0.98 if phase is QualityPhase.SCREEN else 0.99), "schema_valid_rate"),
         (values["deterministic_acceptance_rate"] >= (0.90 if phase is QualityPhase.SCREEN else 0.95), "deterministic_acceptance_rate"),
         (values["forbidden_form_count"] == 0, "forbidden_forms"),
     ]
-    if phase is QualityPhase.FULL:
+    if phase in (QualityPhase.FULL, QualityPhase.DIRECT):
         gates.extend(
             (
                 (values[name] >= 0.95, name)
@@ -657,7 +696,7 @@ def _quality_failures(values: dict[str, float | int], phase: QualityPhase) -> tu
                     "noun_adherence_rate",
                     "verb_adherence_rate",
                     "adjective_adherence_rate",
-                    "feature_adherence_rate",
+                    *(("feature_adherence_rate",) if phase is QualityPhase.FULL else ()),
                 )
             )
         )
@@ -676,10 +715,6 @@ def _quality_failures(values: dict[str, float | int], phase: QualityPhase) -> tu
                     "max_requested_feature_rate_difference",
                 ),
                 (
-                    values["max_realized_feature_rate_difference"] <= 0.10,
-                    "max_realized_feature_rate_difference",
-                ),
-                (
                     values["repeated_ngram_fraction_median_difference"] <= 0.05,
                     "repeated_ngram_fraction_median_difference",
                 ),
@@ -695,7 +730,20 @@ def _quality_failures(values: dict[str, float | int], phase: QualityPhase) -> tu
                     values["alphanumeric_identifier_token_rate_generated"] == 0.0,
                     "alphanumeric_identifier_token_rate_generated",
                 ),
-                (values["blind_verifier_clean_rate"] >= 0.90, "blind_verifier_clean_rate"),
+            )
+        )
+        if phase is QualityPhase.FULL:
+            gates.append(
+                (
+                    values["max_realized_feature_rate_difference"] <= 0.10,
+                    "max_realized_feature_rate_difference",
+                )
+            )
+    if phase is QualityPhase.FULL:
+        gates.append(
+            (
+                values["blind_verifier_clean_rate"] >= 0.90,
+                "blind_verifier_clean_rate",
             )
         )
         gates.extend(

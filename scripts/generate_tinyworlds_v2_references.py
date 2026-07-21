@@ -1,4 +1,4 @@
-"""Generate the fixed TinyWorlds-v2 Phase 1 reference and bakeoff bundle."""
+"""Run the active Qwen/GPT-5.4-Mini TinyWorlds-v2 Phase 1 bakeoff."""
 
 import os
 
@@ -6,7 +6,7 @@ import os
 # configure it.  Set the allocator policy before importing any ``apm`` module.
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
-from apm.data.text.tinyworlds_v2.phase1_runner import main
+from apm.data.text.tinyworlds_v2.two_route_bakeoff import main
 
 
 if __name__ == "__main__":

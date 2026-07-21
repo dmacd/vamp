@@ -48,18 +48,38 @@ class CatalogContractError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class CatalogPayloads:
-    """Exact model catalog plus one endpoint response per planned model."""
+    """Exact model catalog plus ordered endpoints for one explicit plan.
+
+    The payload container deliberately does not know which scientific preset
+    requested the endpoints. Historical seven-route artifacts and newer
+    focused comparisons can therefore share the strict catalog parser without
+    changing one another's route tables or response digests.
+    """
 
     models: bytes
     endpoints: tuple[tuple[str, bytes], ...]
+    model_plan_ids: tuple[str, ...] = tuple(
+        model.request_model_id for model in (*CANDIDATE_MODELS, VERIFIER_MODEL)
+    )
 
     def __post_init__(self) -> None:
         if type(self.models) is not bytes or not self.models:
             raise ValueError("models catalog payload must be nonempty bytes")
-        expected_ids = tuple(
-            model.request_model_id for model in (*CANDIDATE_MODELS, VERIFIER_MODEL)
-        )
-        if tuple(model_id for model_id, _ in self.endpoints) != expected_ids:
+        model_ids = tuple(model_id for model_id, _ in self.endpoints)
+        if (
+            not model_ids
+            or any(type(model_id) is not str or not model_id for model_id in model_ids)
+            or len(model_ids) != len(set(model_ids))
+        ):
+            raise ValueError("endpoint model IDs must be nonempty and unique")
+        if (
+            type(self.model_plan_ids) is not tuple
+            or not self.model_plan_ids
+            or len(self.model_plan_ids) != len(set(self.model_plan_ids))
+            or any(type(model_id) is not str or not model_id for model_id in self.model_plan_ids)
+        ):
+            raise ValueError("catalog model plan IDs must be nonempty and unique")
+        if model_ids != self.model_plan_ids:
             raise ValueError("endpoint payloads must follow the fixed model-table order")
         if any(type(payload) is not bytes or not payload for _, payload in self.endpoints):
             raise ValueError("endpoint catalog payloads must be nonempty bytes")
@@ -88,12 +108,12 @@ class ResolvedRouteCatalog:
             or any(character not in "0123456789abcdef" for character in self.snapshot_sha256)
         ):
             raise ValueError("catalog snapshot identity must be SHA-256")
-        if tuple(route.route_id for route in self.generator_routes) != tuple(
-            model.route_id for model in CANDIDATE_MODELS
+        generator_ids = tuple(route.route_id for route in self.generator_routes)
+        if (
+            not generator_ids
+            or len(generator_ids) != len(set(generator_ids))
         ):
-            raise ValueError("resolved generator routes changed table order")
-        if self.verifier_route.route_id != VERIFIER_MODEL.route_id:
-            raise ValueError("resolved verifier route has the wrong identity")
+            raise ValueError("resolved generator route IDs must be nonempty and unique")
         if any(
             route.catalog_sha256 != self.snapshot_sha256
             for route in (*self.generator_routes, self.verifier_route)
@@ -101,26 +121,70 @@ class ResolvedRouteCatalog:
             raise ValueError("resolved routes do not share their catalog snapshot")
 
 
-def resolve_openrouter_catalog(payloads: CatalogPayloads) -> ResolvedRouteCatalog:
-    """Resolve every planned model to one healthy, exact, non-four-bit endpoint."""
+def resolve_openrouter_catalog(
+    payloads: CatalogPayloads,
+    *,
+    generator_models: tuple[CandidateModelSpec, ...] = CANDIDATE_MODELS,
+    verifier_model: CandidateModelSpec = VERIFIER_MODEL,
+) -> ResolvedRouteCatalog:
+    """Resolve one explicit model plan to exact non-four-bit endpoints.
+
+    Defaults preserve the original seven-author Phase 1 contract. New
+    experiments pass their model tuple explicitly rather than mutating the
+    historical table.
+    """
     if type(payloads) is not CatalogPayloads:
         raise TypeError("payloads must be CatalogPayloads")
+    if (
+        type(generator_models) is not tuple
+        or not generator_models
+        or any(type(model) is not CandidateModelSpec for model in generator_models)
+        or type(verifier_model) is not CandidateModelSpec
+    ):
+        raise TypeError("catalog model plan has the wrong type")
+    route_ids = tuple(model.route_id for model in (*generator_models, verifier_model))
+    if len(route_ids) != len(set(route_ids)):
+        raise ValueError("catalog model-plan route IDs must be unique")
+    specs = (*generator_models, verifier_model)
+    locks = resolve_openrouter_routes(payloads, specs)
+    return ResolvedRouteCatalog(
+        snapshot_sha256=payloads.snapshot_sha256,
+        generator_routes=locks[:-1],
+        verifier_route=locks[-1],
+    )
+
+
+def resolve_openrouter_routes(
+    payloads: CatalogPayloads,
+    model_specs: tuple[CandidateModelSpec, ...],
+) -> tuple[RouteLock, ...]:
+    """Resolve an explicit ordered route set without imposing Phase 1 roles."""
+    if type(payloads) is not CatalogPayloads:
+        raise TypeError("payloads must be CatalogPayloads")
+    if (
+        type(model_specs) is not tuple
+        or not model_specs
+        or any(type(model) is not CandidateModelSpec for model in model_specs)
+    ):
+        raise TypeError("catalog model_specs must be a nonempty model tuple")
+    route_ids = tuple(model.route_id for model in model_specs)
+    if len(route_ids) != len(set(route_ids)):
+        raise ValueError("catalog route IDs must be unique")
+    expected_endpoint_ids = tuple(
+        dict.fromkeys(model.request_model_id for model in model_specs)
+    )
+    if tuple(model_id for model_id, _ in payloads.endpoints) != expected_endpoint_ids:
+        raise ValueError("endpoint payloads do not match the explicit model plan")
     model_records = _model_records(payloads.models)
     endpoint_payloads = dict(payloads.endpoints)
-    specs = (*CANDIDATE_MODELS, VERIFIER_MODEL)
-    locks = tuple(
+    return tuple(
         _resolve_route(
             spec,
             model_records,
             endpoint_payloads[spec.request_model_id],
             payloads.snapshot_sha256,
         )
-        for spec in specs
-    )
-    return ResolvedRouteCatalog(
-        snapshot_sha256=payloads.snapshot_sha256,
-        generator_routes=locks[:-1],
-        verifier_route=locks[-1],
+        for spec in model_specs
     )
 
 
@@ -459,4 +523,5 @@ __all__ = [
     "PHASE1_PROMPT_TOKEN_UPPER_BOUND",
     "ResolvedRouteCatalog",
     "resolve_openrouter_catalog",
+    "resolve_openrouter_routes",
 ]

@@ -14,12 +14,15 @@ from apm.data.text.tinyworlds_v2.bakeoff import (
     GenerationRequestContract,
     GeneratedStoryPayload,
     NeutralStoryBrief,
+    StoryOnlyPayload,
     StoryValidation,
     VerifierPayload,
     assistant_message_content,
     neutral_story_request_body,
     parse_verifier_payload,
     validate_generated_story,
+    validate_plain_text_generated_story,
+    validate_story_only_generated_story,
     verifier_request_body,
 )
 from apm.data.text.tinyworlds_v2.generation_schema import (
@@ -68,6 +71,7 @@ class GenerationJob:
     model: CandidateModelSpec
     route: RouteLock
     request: CanonicalRequest
+    request_contract: GenerationRequestContract
 
     def __post_init__(self) -> None:
         if type(self.brief) is not NeutralStoryBrief:
@@ -78,6 +82,8 @@ class GenerationJob:
             raise TypeError("generation job route must be RouteLock")
         if type(self.request) is not CanonicalRequest:
             raise TypeError("generation job request must be CanonicalRequest")
+        if type(self.request_contract) is not GenerationRequestContract:
+            raise TypeError("generation job request contract has the wrong type")
         if self.model.route_id != self.route.route_id:
             raise ValueError("generation model and route IDs differ")
 
@@ -92,7 +98,7 @@ class GeneratedSample:
     """One immutable response interpretation backed by the raw response cache."""
 
     job: GenerationJob
-    payload: GeneratedStoryPayload | None
+    payload: GeneratedStoryPayload | StoryOnlyPayload | None
     validation: StoryValidation
     generation_id: str | None
     input_tokens: int
@@ -103,7 +109,10 @@ class GeneratedSample:
     def __post_init__(self) -> None:
         if type(self.job) is not GenerationJob:
             raise TypeError("generated sample job must be GenerationJob")
-        if self.payload is not None and type(self.payload) is not GeneratedStoryPayload:
+        if self.payload is not None and type(self.payload) not in (
+            GeneratedStoryPayload,
+            StoryOnlyPayload,
+        ):
             raise TypeError("generated sample payload has the wrong type")
         if type(self.validation) is not StoryValidation:
             raise TypeError("generated sample validation has the wrong type")
@@ -135,7 +144,7 @@ class GeneratedSample:
     def as_record(self) -> JsonObject:
         """Return the derived observation without duplicating raw response bytes."""
         payload: JsonObject | None = None
-        if self.payload is not None:
+        if type(self.payload) is GeneratedStoryPayload:
             payload = {
                 "feature_evidence": [
                     {
@@ -152,6 +161,20 @@ class GeneratedSample:
                     }
                     for item in self.payload.word_evidence
                 ],
+            }
+        elif type(self.payload) is StoryOnlyPayload:
+            payload = {
+                "realized_features": list(self.payload.realized_features),
+                "required_word_spans": [
+                    {
+                        "end": item.end,
+                        "exact_text": item.exact_text,
+                        "required_word": item.ingredient,
+                        "start": item.start,
+                    }
+                    for item in self.payload.required_word_spans
+                ],
+                "story": self.payload.story,
             }
         return {
             "billed_cost_usd": self.billed_cost_usd,
@@ -372,10 +395,9 @@ def generated_observation(
             sample.payload.story,
             sample.job.brief.requested_features,
         )
-        # This gate is deliberately text-mechanical.  Copied evidence is part
-        # of deterministic acceptance, and the blind verifier's adherence
-        # judgment is reported separately; neither may manufacture or erase a
-        # feature realization found in the story itself.
+        # This gate is deliberately text-mechanical.  The blind verifier's
+        # adherence judgment is reported separately and cannot manufacture or
+        # erase a feature realization found in the story itself.
         feature_ok = set(sample.job.brief.requested_features).issubset(
             realized_features
         )
@@ -459,7 +481,7 @@ def _generation_job(
         endpoint=CHAT_COMPLETIONS_ENDPOINT,
         body=body,
     )
-    return GenerationJob(brief, model, route, request)
+    return GenerationJob(brief, model, route, request, request_contract)
 
 
 def _execute_generation_job(
@@ -471,16 +493,16 @@ def _execute_generation_job(
     except OpenRouterContractError:
         raise
     except OpenRouterError as error:
-        _, validation = validate_generated_story(job.brief, b"")
+        _, validation = _validate_generation_content(job, b"")
         return GeneratedSample(job, None, validation, None, 0, 0, "0", type(error).__name__)
     assert response.provenance is not None
     assert response.usage is not None
     try:
         content = assistant_message_content(response.body)
-        payload, validation = validate_generated_story(job.brief, content)
+        payload, validation = _validate_generation_content(job, content)
         error_kind = None if validation.accepted else "deterministic_rejection"
     except (TypeError, ValueError):
-        payload, validation = validate_generated_story(job.brief, b"")
+        payload, validation = _validate_generation_content(job, b"")
         error_kind = "completion_contract_invalid"
     return GeneratedSample(
         job=job,
@@ -492,6 +514,17 @@ def _execute_generation_job(
         billed_cost_usd=response.billed_cost_usd or "0",
         error_kind=error_kind,
     )
+
+
+def _validate_generation_content(
+    job: GenerationJob,
+    content: str | bytes,
+) -> tuple[GeneratedStoryPayload | StoryOnlyPayload | None, StoryValidation]:
+    if job.request_contract.plain_text_story_response:
+        return validate_plain_text_generated_story(job.brief, content)
+    if job.request_contract.story_only_response:
+        return validate_story_only_generated_story(job.brief, content)
+    return validate_generated_story(job.brief, content)
 
 
 def _execute_verifier_job(

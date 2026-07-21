@@ -11,7 +11,11 @@ from pathlib import Path
 import stat
 from typing import Protocol
 
-from apm.data.text.tinyworlds_v2.bakeoff import CANDIDATE_MODELS, VERIFIER_MODEL
+from apm.data.text.tinyworlds_v2.bakeoff import (
+    CANDIDATE_MODELS,
+    VERIFIER_MODEL,
+    CandidateModelSpec,
+)
 from apm.data.text.tinyworlds_v2.catalog import CatalogPayloads
 from apm.data.text.tinyworlds_v2.openrouter import (
     HttpTransport,
@@ -176,12 +180,25 @@ def load_openrouter_management_api_key(
 def fetch_catalog_payloads(
     transport: CatalogTransport,
     *,
+    model_specs: tuple[CandidateModelSpec, ...] = (*CANDIDATE_MODELS, VERIFIER_MODEL),
     timeout_seconds: float = 60.0,
 ) -> CatalogPayloads:
-    """Fetch the public model and endpoint catalogs in bounded parallel calls."""
+    """Fetch public catalog evidence for one explicit ordered model plan."""
     if type(timeout_seconds) not in (int, float) or timeout_seconds <= 0:
         raise ValueError("catalog timeout_seconds must be positive")
-    specs = (*CANDIDATE_MODELS, VERIFIER_MODEL)
+    if (
+        type(model_specs) is not tuple
+        or not model_specs
+        or any(type(spec) is not CandidateModelSpec for spec in model_specs)
+    ):
+        raise TypeError("catalog model_specs must be a nonempty model tuple")
+    # Author and verifier route identities may share an underlying model. Its
+    # endpoint response is fetched once and reused when the route locks are
+    # resolved.
+    specs_by_model_id: dict[str, CandidateModelSpec] = {}
+    for spec in model_specs:
+        specs_by_model_id.setdefault(spec.request_model_id, spec)
+    specs = tuple(specs_by_model_id.values())
     model_url = f"{OPENROUTER_ORIGIN}/api/v1/models"
 
     def endpoint_payload(model_id: str) -> tuple[str, bytes]:
@@ -199,7 +216,11 @@ def fetch_catalog_payloads(
         )
         models_payload = models_future.result()
         endpoints = tuple(future.result() for future in endpoint_futures)
-    return CatalogPayloads(models=models_payload, endpoints=endpoints)
+    return CatalogPayloads(
+        models=models_payload,
+        endpoints=endpoints,
+        model_plan_ids=tuple(spec.request_model_id for spec in specs),
+    )
 
 
 def _validate_key_text(value: str) -> str:

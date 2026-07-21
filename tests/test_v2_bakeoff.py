@@ -12,11 +12,20 @@ from apm.data.text.tinyworlds_v2.bakeoff import (
     NeutralStoryBrief,
     SYNTHETIC_STORY_REQUEST_V2,
     SYNTHETIC_STORY_REQUEST_V3,
+    SYNTHETIC_STORY_REQUEST_V4,
+    SYNTHETIC_STORY_REQUEST_V5,
+    SYNTHETIC_STORY_REQUEST_V6,
+    SYNTHETIC_STORY_REQUEST_V7,
+    SYNTHETIC_STORY_REQUEST_V8,
+    SYNTHETIC_STORY_REQUEST_V9,
+    TWO_ROUTE_AUTHOR_MODELS,
     assistant_message_content,
     neutral_story_request_body,
     parse_verifier_payload,
     request_body_sha256,
     validate_generated_story,
+    validate_plain_text_generated_story,
+    validate_story_only_generated_story,
     verifier_request_body,
 )
 
@@ -61,6 +70,14 @@ def test_candidate_table_is_fixed_and_model_snapshots_are_canonical() -> None:
         "gpt-5.4-mini",
     ]
     assert all(model.canonical_slug.startswith(model.request_model_id) for model in CANDIDATE_MODELS)
+
+
+def test_two_route_author_table_is_qwen_and_gpt_without_mutating_preview_table() -> None:
+    assert tuple(model.route_id for model in TWO_ROUTE_AUTHOR_MODELS) == (
+        "qwen3.5-35b-a3b",
+        "gpt-5.4-mini",
+    )
+    assert len(CANDIDATE_MODELS) == 7
 
 
 def test_generation_request_disables_routing_fallbacks_and_plugins() -> None:
@@ -193,6 +210,296 @@ def test_v3_disables_default_reasoning_only_on_cost_risk_routes() -> None:
     )
 
 
+def test_v4_is_story_only_signed_31_bit_and_disables_both_authors_reasoning() -> None:
+    for model in TWO_ROUTE_AUTHOR_MODELS:
+        body = neutral_story_request_body(
+            _brief(),
+            model,
+            provider_slug=model.first_party_provider_slug or "fixture-provider",
+            provider_quantization="unknown",
+            prompt_usd_per_token="0.00000015",
+            completion_usd_per_token="0.0000006",
+            request_contract=SYNTHETIC_STORY_REQUEST_V4,
+        )
+
+        assert 0 <= body["seed"] <= 2**31 - 1
+        assert "enforce_distillable_text" not in body["provider"]
+        assert body["reasoning"] == {"effort": "none"}
+        assert body["response_format"]["json_schema"] == {
+            "name": "tinyworlds_v2_neutral_story_v2",
+            "schema": {
+                "additionalProperties": False,
+                "properties": {"story": {"minLength": 1, "type": "string"}},
+                "required": ["story"],
+                "type": "object",
+            },
+            "strict": True,
+        }
+        user_prompt = body["messages"][1]["content"]
+        assert "only the story field" in user_prompt
+        assert "exact quotes" not in user_prompt
+
+
+def test_v4_through_v6_prompt_bytes_stay_frozen() -> None:
+    bodies = {
+        contract.version: neutral_story_request_body(
+            _brief(),
+            TWO_ROUTE_AUTHOR_MODELS[0],
+            provider_slug="alibaba",
+            provider_quantization="unknown",
+            prompt_usd_per_token="0.00000015",
+            completion_usd_per_token="0.0000006",
+            request_contract=contract,
+        )
+        for contract in (
+            SYNTHETIC_STORY_REQUEST_V4,
+            SYNTHETIC_STORY_REQUEST_V5,
+            SYNTHETIC_STORY_REQUEST_V6,
+        )
+    }
+    control, length_only, reference_shape = (
+        bodies[contract.version]["messages"][0]["content"]
+        for contract in (
+            SYNTHETIC_STORY_REQUEST_V4,
+            SYNTHETIC_STORY_REQUEST_V5,
+            SYNTHETIC_STORY_REQUEST_V6,
+        )
+    )
+
+    assert tuple(request_body_sha256(body) for body in bodies.values()) == (
+        "7fc6b570405bdd089c2b7a0b412eb9f17042000e5bf78bac7aa067896bf6e57a",
+        "2955b315c404391320f2092f16204d975bf9dfbb1ca466f6403b9c1ccae9db3e",
+        "cc9f14f6ee1ed20909282a5ff4746ae7922d32756a1d2bb66f1389eea0643c49",
+    )
+    assert tuple(body["messages"][1]["content"] for body in bodies.values()) == (
+        "RELEASED TINYSTORIES INSTRUCTION:\n"
+        "Write a simple story using moon, jump, and kind, with dialogue.\n\n"
+        "REQUIRED WORDS: moon, jump, kind\n"
+        "REQUESTED NARRATIVE FEATURES: Dialogue\n\n"
+        "Return exactly one JSON object containing only the story field. "
+        "Do not return evidence, analysis, commentary, or any other field.",
+    ) * 3
+    assert "130 to 170 words" not in control
+    assert "130 to 170 words" in length_only
+    assert "single line breaks" not in length_only
+    assert "130 to 170 words" in reference_shape
+    assert "single line breaks" in reference_shape
+    assert "Once upon a time" in reference_shape
+    assert len(set(map(request_body_sha256, bodies.values()))) == 3
+    assert all(
+        body["reasoning"] == {"effort": "none"}
+        and body["response_format"]["json_schema"]["name"]
+        == "tinyworlds_v2_neutral_story_v2"
+        for body in bodies.values()
+    )
+
+
+def test_v7_moves_structural_requirements_to_the_end_of_the_user_prompt() -> None:
+    body = neutral_story_request_body(
+        _brief(),
+        TWO_ROUTE_AUTHOR_MODELS[0],
+        provider_slug="alibaba",
+        provider_quantization="unknown",
+        prompt_usd_per_token="0.00000015",
+        completion_usd_per_token="0.0000006",
+        request_contract=SYNTHETIC_STORY_REQUEST_V7,
+    )
+    system_prompt = body["messages"][0]["content"]
+    user_prompt = body["messages"][1]["content"]
+
+    assert "one short" not in system_prompt
+    assert "3- to 4-year-old" not in system_prompt
+    assert "gentle and suitable for young children" in system_prompt
+    assert "supplied released TinyStories instruction" in system_prompt
+    assert "ordinary story prose only" in system_prompt
+    assert "Do not mention prompts" in system_prompt
+    assert system_prompt.endswith(
+        "Return exactly one JSON object matching the supplied response format."
+    )
+    assert user_prompt.index("only the story field") < user_prompt.index(
+        "FINAL STORY REQUIREMENTS"
+    )
+    assert "exactly as written" in user_prompt
+    assert "moon, jump, kind" in user_prompt
+    assert "standard ASCII double quotation marks" in user_prompt
+    assert 'like "Hello."' in user_prompt
+    assert "one continuous story-field text block with no newline" in user_prompt
+    assert "18 to 20 complete sentences" in user_prompt
+    assert "mostly 7 to 11 words" in user_prompt
+    assert "at least 6 connected events" in user_prompt
+    assert "155 to 190 words" in user_prompt
+    assert "soft target" in user_prompt
+    assert "natural, simple repetition" in user_prompt
+    assert body["reasoning"] == {"effort": "none"}
+
+
+def test_v7_dialogue_requirement_is_conditional() -> None:
+    body = neutral_story_request_body(
+        replace(
+            _brief(),
+            brief_id="brief-without-dialogue",
+            prompt_text="Write a simple story using moon, jump, and kind.",
+            requested_features=(),
+        ),
+        TWO_ROUTE_AUTHOR_MODELS[1],
+        provider_slug="openai",
+        provider_quantization="unknown",
+        prompt_usd_per_token="0.00000075",
+        completion_usd_per_token="0.0000045",
+        request_contract=SYNTHETIC_STORY_REQUEST_V7,
+    )
+
+    assert "Because Dialogue is requested" not in body["messages"][1]["content"]
+
+
+def test_v8_is_exactly_the_released_prompt_plus_continuation_cue() -> None:
+    body = neutral_story_request_body(
+        _brief(),
+        TWO_ROUTE_AUTHOR_MODELS[0],
+        provider_slug="alibaba",
+        provider_quantization="unknown",
+        prompt_usd_per_token="0.00000015",
+        completion_usd_per_token="0.0000006",
+        request_contract=SYNTHETIC_STORY_REQUEST_V8,
+    )
+
+    assert body["messages"] == [
+        {
+            "role": "user",
+            "content": (
+                "Write a simple story using moon, jump, and kind, with dialogue."
+                "\n\nPossible story:"
+            ),
+        }
+    ]
+    assert "response_format" not in body
+    assert body["reasoning"] == {"effort": "none"}
+    assert body["plugins"] == []
+    assert body["transforms"] == []
+    assert body["provider"]["allow_fallbacks"] is False
+    assert body["provider"]["data_collection"] == "deny"
+
+
+def test_v9_differs_from_v8_only_by_the_single_length_cue() -> None:
+    bodies = tuple(
+        neutral_story_request_body(
+            _brief(),
+            TWO_ROUTE_AUTHOR_MODELS[0],
+            provider_slug="alibaba",
+            provider_quantization="unknown",
+            prompt_usd_per_token="0.00000015",
+            completion_usd_per_token="0.0000006",
+            request_contract=contract,
+        )
+        for contract in (SYNTHETIC_STORY_REQUEST_V8, SYNTHETIC_STORY_REQUEST_V9)
+    )
+    bare_body, length_body = bodies
+
+    assert length_body["messages"] == [
+        {
+            "role": "user",
+            "content": (
+                "Write a simple story using moon, jump, and kind, with dialogue."
+                "\n\nAim for about 130 to 150 words.\n\nPossible story:"
+            ),
+        }
+    ]
+    assert {
+        key: value for key, value in bare_body.items() if key != "messages"
+    } == {
+        key: value for key, value in length_body.items() if key != "messages"
+    }
+
+
+def test_plain_text_story_preserves_the_complete_reply_and_derives_evidence() -> None:
+    story = (
+        'Mia saw the Moon above her little house. "Come with me," she said.\n'
+        "Her kind friend Ben came outside. They wanted to jump over a puddle, "
+        "but first they helped a wet frog. The frog was safe, and the two "
+        "friends went home smiling together under the moon."
+    )
+
+    payload, validation = validate_plain_text_generated_story(_brief(), story)
+
+    assert payload is not None
+    assert payload.story == story
+    assert validation.accepted
+    assert tuple(span.ingredient for span in payload.required_word_spans) == (
+        "moon",
+        "jump",
+        "kind",
+    )
+    assert payload.realized_features == ("Dialogue",)
+
+
+@pytest.mark.parametrize(
+    ("brief_id", "expected_opening_requirement"),
+    (
+        (
+            "opening-000",
+            'Use another simple opening; do not start with "Once upon a time" '
+            'or "One day".',
+        ),
+        ("opening-001", 'Start the story with exactly "Once upon a time".'),
+        ("opening-002", 'Start the story with exactly "One day".'),
+    ),
+)
+def test_v7_opening_is_deterministic_and_hash_balanced(
+    brief_id: str,
+    expected_opening_requirement: str,
+) -> None:
+    brief = replace(_brief(), brief_id=brief_id)
+    request_bodies = tuple(
+        neutral_story_request_body(
+            brief,
+            TWO_ROUTE_AUTHOR_MODELS[0],
+            provider_slug="alibaba",
+            provider_quantization="unknown",
+            prompt_usd_per_token="0.00000015",
+            completion_usd_per_token="0.0000006",
+            request_contract=SYNTHETIC_STORY_REQUEST_V7,
+        )
+        for _ in range(2)
+    )
+
+    assert request_bodies[0] == request_bodies[1]
+    assert request_bodies[0]["messages"][1]["content"].endswith(
+        expected_opening_requirement
+    )
+
+
+def test_v1_through_v3_generation_hashes_remain_frozen() -> None:
+    brief = replace(
+        _brief(),
+        brief_id="preview-brief-a0cd61e7c4ebc9cd571ced1f",
+    )
+    model = CANDIDATE_MODELS[4]
+    hashes = tuple(
+        request_body_sha256(
+            neutral_story_request_body(
+                brief,
+                model,
+                provider_slug="alibaba",
+                provider_quantization="unknown",
+                prompt_usd_per_token="0.00000015",
+                completion_usd_per_token="0.0000006",
+                request_contract=contract,
+            )
+        )
+        for contract in (
+            GENERATION_REQUEST_V1,
+            SYNTHETIC_STORY_REQUEST_V2,
+            SYNTHETIC_STORY_REQUEST_V3,
+        )
+    )
+
+    assert hashes == (
+        "aa8e468f40144d4bbf16497eb94b6e47f9a306c971c959372286a248e8c2429c",
+        "712371b2bfc63d8283fa7f6bd0866852771ff14d39d171a1c0e4621b3c3ace33",
+        "d9865941fe1b52eb56b3146d6ce9d466e56b51e9b9188281ae23a4d00dbb5fe0",
+    )
+
+
 def test_no_feature_brief_uses_a_valid_zero_length_evidence_schema() -> None:
     brief = NeutralStoryBrief(
         brief_id="brief-no-feature",
@@ -245,6 +552,83 @@ def test_story_payload_accepts_only_exact_evidence_and_natural_text() -> None:
     assert validation.schema_valid
     assert validation.required_words_present
     assert validation.evidence_valid
+
+
+def test_story_only_payload_derives_spans_and_features_from_text() -> None:
+    story = (
+        'Mia saw the Moon above her little house. "Come with me," she said. '
+        "Her kind friend Ben came outside. They wanted to jump over a puddle, "
+        "but first they helped a wet frog. The frog was safe, and the two "
+        "friends went home smiling together under the moon."
+    )
+    payload, validation = validate_story_only_generated_story(
+        _brief(),
+        json.dumps({"story": story}),
+    )
+
+    assert validation.accepted
+    assert payload is not None
+    assert tuple(span.ingredient for span in payload.required_word_spans) == (
+        "moon",
+        "jump",
+        "kind",
+    )
+    assert payload.required_word_spans[0].exact_text == "Moon"
+    assert story[
+        payload.required_word_spans[0].start : payload.required_word_spans[0].end
+    ] == "Moon"
+    assert payload.realized_features == ("Dialogue",)
+
+
+def test_story_only_payload_rejects_extra_fields_and_missing_local_feature() -> None:
+    story = (
+        "Mia saw the moon above her little house. Her kind friend Ben came "
+        "outside. They wanted to jump over a puddle, but first they helped a "
+        "wet frog. The frog was safe, and the two friends went home smiling "
+        "together under the bright moon."
+    )
+    payload, extra = validate_story_only_generated_story(
+        _brief(),
+        json.dumps({"story": story, "word_evidence": []}),
+    )
+    assert payload is None
+    assert extra.rejection_reasons == ("schema_invalid",)
+
+    payload, missing_feature = validate_story_only_generated_story(
+        _brief(),
+        json.dumps({"story": story}),
+    )
+    assert payload is not None
+    assert not missing_feature.accepted
+    assert missing_feature.required_words_present
+    assert "evidence_invalid" in missing_feature.rejection_reasons
+
+
+def test_story_only_payload_reports_but_does_not_hard_gate_semantic_features() -> None:
+    brief = NeutralStoryBrief(
+        brief_id="brief-semantic-feature",
+        source_record_id="source-semantic-feature",
+        prompt_text="Write a story with a moral using moon, jump, and kind.",
+        required_words=("moon", "jump", "kind"),
+        requested_features=("MoralValue", "Foreshadowing"),
+        matched_reference_text="A reference story.",
+    )
+    story = (
+        "Mia saw the moon above her little house. Her kind friend Ben came "
+        "outside. They wanted to jump over a puddle, so they helped a wet "
+        "frog first. The frog was safe. The friends smiled and walked home "
+        "together under the bright moon after their happy day."
+    )
+
+    payload, validation = validate_story_only_generated_story(
+        brief,
+        json.dumps({"story": story}),
+    )
+
+    assert payload is not None
+    assert payload.realized_features == ()
+    assert validation.evidence_valid
+    assert validation.accepted
 
 
 def test_story_evidence_order_is_irrelevant_but_duplicates_are_rejected() -> None:

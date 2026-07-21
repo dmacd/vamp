@@ -4,12 +4,17 @@ import json
 
 import pytest
 
-from apm.data.text.tinyworlds_v2.bakeoff import CANDIDATE_MODELS, VERIFIER_MODEL
+from apm.data.text.tinyworlds_v2.bakeoff import (
+    CANDIDATE_MODELS,
+    TWO_ROUTE_AUTHOR_MODELS,
+    VERIFIER_MODEL,
+)
 from apm.data.text.tinyworlds_v2.catalog import (
     CatalogContractError,
     CatalogPayloads,
     PHASE1_PROMPT_TOKEN_UPPER_BOUND,
     resolve_openrouter_catalog,
+    resolve_openrouter_routes,
 )
 
 
@@ -110,6 +115,23 @@ def test_catalog_resolver_pins_canonical_models_and_provider_policy() -> None:
 def test_catalog_resolver_fails_closed_on_canonical_model_drift() -> None:
     with pytest.raises(CatalogContractError, match="canonical model drift"):
         resolve_openrouter_catalog(_payloads(drift=True))
+
+
+def test_catalog_resolver_accepts_an_explicit_two_author_plan() -> None:
+    historical = _payloads()
+    endpoint_by_model = dict(historical.endpoints)
+    model_ids = tuple(model.request_model_id for model in TWO_ROUTE_AUTHOR_MODELS)
+    payloads = CatalogPayloads(
+        historical.models,
+        tuple((model_id, endpoint_by_model[model_id]) for model_id in model_ids),
+        model_plan_ids=model_ids,
+    )
+
+    routes = resolve_openrouter_routes(payloads, TWO_ROUTE_AUTHOR_MODELS)
+
+    assert tuple(route.route_id for route in routes) == tuple(
+        model.route_id for model in TWO_ROUTE_AUTHOR_MODELS
+    )
 
 
 def test_catalog_payload_order_is_fixed() -> None:

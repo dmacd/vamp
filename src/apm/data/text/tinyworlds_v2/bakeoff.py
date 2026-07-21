@@ -23,11 +23,22 @@ from apm.data.text.tinyworlds_v2.json_contracts import (
     require_json_object,
     strict_json_loads,
 )
-from apm.data.text.tinyworlds_v2.surface import lexical_tokens, token_form_counts
+from apm.data.text.tinyworlds_v2.surface import (
+    canonical_feature_labels,
+    lexical_tokens,
+    realized_feature_labels,
+    token_form_counts,
+)
 
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 _WORD_RE = re.compile(r"[^\W_]+(?:['’-][^\W_]+)*", re.UNICODE)
+_PLAIN_TEXT_STORY_PROFILES = frozenset(
+    (
+        "released-prompt-only-v1",
+        "released-prompt-length-cue-v1",
+    )
+)
 _FORBIDDEN_PATTERNS = (
     re.compile(r"\b(?:task|family|fact|relation|predicate|query)_id\b", re.I),
     re.compile(r"\b(?:task|family|fact|relation|predicate|query)\s*:\s*", re.I),
@@ -94,6 +105,9 @@ class GenerationRequestContract:
     seed_bits: int
     explicit_json_instruction: bool
     reasoning_disabled_routes: tuple[str, ...] = ()
+    story_only_response: bool = False
+    story_prompt_profile: str = "released-instruction-v1"
+    plain_text_story_response: bool = False
 
     def __post_init__(self) -> None:
         if type(self.version) is not str or not self.version:
@@ -104,6 +118,30 @@ class GenerationRequestContract:
             raise ValueError("generation request seed width must be 31 or 32 bits")
         if type(self.explicit_json_instruction) is not bool:
             raise TypeError("JSON instruction policy must be boolean")
+        if type(self.story_only_response) is not bool:
+            raise TypeError("story-only response policy must be boolean")
+        if type(self.plain_text_story_response) is not bool:
+            raise TypeError("plain-text story response policy must be boolean")
+        if self.plain_text_story_response and (
+            self.explicit_json_instruction or self.story_only_response
+        ):
+            raise ValueError(
+                "plain-text story responses cannot request JSON response semantics"
+            )
+        if self.story_prompt_profile not in {
+            "released-instruction-v1",
+            "reference-length-v1",
+            "reference-shape-v1",
+            "reference-structure-v2",
+            *_PLAIN_TEXT_STORY_PROFILES,
+        }:
+            raise ValueError("generation story prompt profile is unsupported")
+        if (self.story_prompt_profile in _PLAIN_TEXT_STORY_PROFILES) != (
+            self.plain_text_story_response
+        ):
+            raise ValueError(
+                "released plain-prompt profiles require a plain-text response"
+            )
         if (
             type(self.reasoning_disabled_routes) is not tuple
             or any(
@@ -205,6 +243,91 @@ CANDIDATE_MODELS = (
     ),
 )
 
+# The original seven-route table above is part of the immutable preview
+# contract.  Keep it intact while making the smaller author set an explicit,
+# independently versioned choice for new Phase 1 work.
+TWO_ROUTE_AUTHOR_MODELS = (
+    CANDIDATE_MODELS[4],
+    CANDIDATE_MODELS[6],
+)
+
+SYNTHETIC_STORY_REQUEST_V4 = GenerationRequestContract(
+    version="tinyworlds-v2-synthetic-story-request-v4",
+    enforce_distillable_text=False,
+    seed_bits=31,
+    explicit_json_instruction=True,
+    reasoning_disabled_routes=(
+        "gpt-5.4-mini",
+        "qwen3.5-35b-a3b",
+    ),
+    story_only_response=True,
+)
+
+SYNTHETIC_STORY_REQUEST_V5 = GenerationRequestContract(
+    version="tinyworlds-v2-synthetic-story-request-v5",
+    enforce_distillable_text=False,
+    seed_bits=31,
+    explicit_json_instruction=True,
+    reasoning_disabled_routes=(
+        "gpt-5.4-mini",
+        "qwen3.5-35b-a3b",
+    ),
+    story_only_response=True,
+    story_prompt_profile="reference-length-v1",
+)
+
+SYNTHETIC_STORY_REQUEST_V6 = GenerationRequestContract(
+    version="tinyworlds-v2-synthetic-story-request-v6",
+    enforce_distillable_text=False,
+    seed_bits=31,
+    explicit_json_instruction=True,
+    reasoning_disabled_routes=(
+        "gpt-5.4-mini",
+        "qwen3.5-35b-a3b",
+    ),
+    story_only_response=True,
+    story_prompt_profile="reference-shape-v1",
+)
+
+SYNTHETIC_STORY_REQUEST_V7 = GenerationRequestContract(
+    version="tinyworlds-v2-synthetic-story-request-v7",
+    enforce_distillable_text=False,
+    seed_bits=31,
+    explicit_json_instruction=True,
+    reasoning_disabled_routes=(
+        "gpt-5.4-mini",
+        "qwen3.5-35b-a3b",
+    ),
+    story_only_response=True,
+    story_prompt_profile="reference-structure-v2",
+)
+
+SYNTHETIC_STORY_REQUEST_V8 = GenerationRequestContract(
+    version="tinyworlds-v2-synthetic-story-request-v8",
+    enforce_distillable_text=False,
+    seed_bits=31,
+    explicit_json_instruction=False,
+    reasoning_disabled_routes=(
+        "gpt-5.4-mini",
+        "qwen3.5-35b-a3b",
+    ),
+    story_prompt_profile="released-prompt-only-v1",
+    plain_text_story_response=True,
+)
+
+SYNTHETIC_STORY_REQUEST_V9 = GenerationRequestContract(
+    version="tinyworlds-v2-synthetic-story-request-v9",
+    enforce_distillable_text=False,
+    seed_bits=31,
+    explicit_json_instruction=False,
+    reasoning_disabled_routes=(
+        "gpt-5.4-mini",
+        "qwen3.5-35b-a3b",
+    ),
+    story_prompt_profile="released-prompt-length-cue-v1",
+    plain_text_story_response=True,
+)
+
 VERIFIER_MODEL = CandidateModelSpec(
     "gpt-5.4-verifier",
     "openai/gpt-5.4",
@@ -286,6 +409,65 @@ class GeneratedStoryPayload:
             type(item) is not EvidenceQuote for item in self.feature_evidence
         ):
             raise TypeError("feature evidence must contain EvidenceQuote values")
+
+
+@dataclass(frozen=True, slots=True)
+class TextEvidenceSpan:
+    """One canonical, locally located ingredient occurrence in story text."""
+
+    ingredient: str
+    exact_text: str
+    start: int
+    end: int
+
+    def __post_init__(self) -> None:
+        if type(self.ingredient) is not str or not self.ingredient:
+            raise ValueError("text evidence ingredient must be nonempty")
+        if type(self.exact_text) is not str or not self.exact_text:
+            raise ValueError("text evidence exact text must be nonempty")
+        if (
+            type(self.start) is not int
+            or type(self.end) is not int
+            or self.start < 0
+            or self.end <= self.start
+            or self.end - self.start != len(self.exact_text)
+        ):
+            raise ValueError("text evidence offsets must bound the exact text")
+
+
+@dataclass(frozen=True, slots=True)
+class StoryOnlyPayload:
+    """Story-only response augmented solely with evidence derived locally."""
+
+    story: str
+    required_word_spans: tuple[TextEvidenceSpan, ...]
+    realized_features: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.story) is not str or not self.story.strip():
+            raise ValueError("generated story must be nonempty")
+        if type(self.required_word_spans) is not tuple or any(
+            type(item) is not TextEvidenceSpan for item in self.required_word_spans
+        ):
+            raise TypeError("required-word spans must contain TextEvidenceSpan values")
+        if type(self.realized_features) is not tuple or any(
+            type(feature) is not str or not feature
+            for feature in self.realized_features
+        ):
+            raise ValueError("realized features must be nonempty strings")
+        if tuple(sorted(set(self.realized_features))) != self.realized_features:
+            raise ValueError("realized features must be sorted and unique")
+        if any(
+            item.end > len(self.story)
+            or self.story[item.start : item.end] != item.exact_text
+            for item in self.required_word_spans
+        ):
+            raise ValueError("required-word spans must locate exact story text")
+        span_keys = tuple(
+            item.ingredient.casefold() for item in self.required_word_spans
+        )
+        if len(span_keys) != len(set(span_keys)):
+            raise ValueError("required-word spans must have unique ingredients")
 
 
 @dataclass(frozen=True, slots=True)
@@ -371,6 +553,22 @@ class VerifierPayload:
         ) / 5.0
 
 
+def plain_story_user_prompt(
+    brief: NeutralStoryBrief,
+    profile: str,
+) -> str:
+    """Build the exact one-message released-prompt text for a plain story cell."""
+    if type(brief) is not NeutralStoryBrief:
+        raise TypeError("plain story prompt brief must be NeutralStoryBrief")
+    if profile == "released-prompt-only-v1":
+        additions: tuple[str, ...] = ()
+    elif profile == "released-prompt-length-cue-v1":
+        additions = ("Aim for about 130 to 150 words.",)
+    else:
+        raise ValueError("plain story prompt profile is unsupported")
+    return "\n\n".join((brief.prompt_text, *additions, "Possible story:"))
+
+
 def neutral_story_request_body(
     brief: NeutralStoryBrief,
     model: CandidateModelSpec,
@@ -391,11 +589,13 @@ def neutral_story_request_body(
     if type(request_contract) is not GenerationRequestContract:
         raise TypeError("generation request contract has the wrong type")
     seed = _deterministic_seed(brief.brief_id, request_contract)
-    json_instruction = (
-        " Return one JSON object matching the supplied response format."
-        if request_contract.explicit_json_instruction
-        else ""
-    )
+    json_instruction = ""
+    if request_contract.explicit_json_instruction:
+        json_instruction = (
+            " Return exactly one JSON object matching the supplied response format."
+            if request_contract.story_only_response
+            else " Return one JSON object matching the supplied response format."
+        )
     provider: JsonObject = {
         "allow_fallbacks": False,
         "data_collection": "deny",
@@ -409,39 +609,62 @@ def neutral_story_request_body(
     }
     if request_contract.enforce_distillable_text:
         provider["enforce_distillable_text"] = True
-    body: JsonObject = {
-        model.max_token_parameter: 512,
-        "messages": [
+    messages: list[JsonObject]
+    if request_contract.plain_text_story_response:
+        messages = [
             {
-                "content": (
-                    "Write one short, complete children's story that a typical "
-                    "3- to 4-year-old can understand. Follow the supplied released "
-                    "TinyStories instruction closely. Use ordinary story prose only. "
-                    "Do not mention prompts, schemas, required words, or this request."
-                    f"{json_instruction}"
+                "content": plain_story_user_prompt(
+                    brief,
+                    request_contract.story_prompt_profile,
+                ),
+                "role": "user",
+            }
+        ]
+    else:
+        messages = [
+            {
+                "content": _neutral_system_prompt(
+                    request_contract.story_prompt_profile,
+                    json_instruction=json_instruction,
                 ),
                 "role": "system",
             },
             {
-                "content": _neutral_user_prompt(brief),
+                "content": _neutral_user_prompt(
+                    brief,
+                    story_only=request_contract.story_only_response,
+                    story_prompt_profile=request_contract.story_prompt_profile,
+                ),
                 "role": "user",
             },
-        ],
+        ]
+    body: JsonObject = {
+        model.max_token_parameter: 512,
+        "messages": messages,
         "model": model.request_model_id,
         "plugins": [],
         "provider": provider,
-        "response_format": {
-            "json_schema": {
-                "name": "tinyworlds_v2_neutral_story_v1",
-                "schema": _story_response_schema(brief),
-                "strict": True,
-            },
-            "type": "json_schema",
-        },
         "seed": seed,
         "stream": False,
         "transforms": [],
     }
+    if not request_contract.plain_text_story_response:
+        body["response_format"] = {
+            "json_schema": {
+                "name": (
+                    "tinyworlds_v2_neutral_story_v2"
+                    if request_contract.story_only_response
+                    else "tinyworlds_v2_neutral_story_v1"
+                ),
+                "schema": (
+                    _story_only_response_schema()
+                    if request_contract.story_only_response
+                    else _story_response_schema(brief)
+                ),
+                "strict": True,
+            },
+            "type": "json_schema",
+        }
     if model.route_id in request_contract.reasoning_disabled_routes:
         body["reasoning"] = {"effort": "none"}
     return body
@@ -558,6 +781,55 @@ def parse_generated_story_payload(content: str | bytes) -> GeneratedStoryPayload
     )
 
 
+def parse_story_only_payload(
+    brief: NeutralStoryBrief,
+    content: str | bytes,
+) -> StoryOnlyPayload:
+    """Parse exactly ``{"story": ...}`` and derive all evidence locally."""
+    if type(brief) is not NeutralStoryBrief:
+        raise TypeError("story-only payload brief must be NeutralStoryBrief")
+    raw = content.encode("utf-8") if type(content) is str else content
+    if type(raw) is not bytes:
+        raise TypeError("generated story content must be text or bytes")
+    record = require_json_object(
+        strict_json_loads(raw, label="story-only generated content"),
+        label="story-only generated content",
+    )
+    require_exact_fields(
+        record,
+        ("story",),
+        label="story-only generated content",
+    )
+    story = _required_string(record["story"], "generated story")
+    return StoryOnlyPayload(
+        story=story,
+        required_word_spans=_required_word_spans(story, brief.required_words),
+        realized_features=realized_feature_labels(story, brief.requested_features),
+    )
+
+
+def parse_plain_text_story_payload(
+    brief: NeutralStoryBrief,
+    content: str | bytes,
+) -> StoryOnlyPayload:
+    """Treat the complete assistant message as story text without repairing it."""
+    if type(brief) is not NeutralStoryBrief:
+        raise TypeError("plain-text story brief must be NeutralStoryBrief")
+    if type(content) is bytes:
+        story = content.decode("utf-8")
+    elif type(content) is str:
+        story = content
+    else:
+        raise TypeError("plain-text generated content must be text or bytes")
+    if not story.strip():
+        raise ValueError("plain-text generated story must be nonempty")
+    return StoryOnlyPayload(
+        story=story,
+        required_word_spans=_required_word_spans(story, brief.required_words),
+        realized_features=realized_feature_labels(story, brief.requested_features),
+    )
+
+
 def assistant_message_content(response_body: bytes) -> str:
     """Extract one completed assistant message from an exact OpenRouter body."""
     if type(response_body) is not bytes:
@@ -600,39 +872,58 @@ def validate_generated_story(
             story_sha256=None,
         )
 
-    story_words = tuple(match.group(0).casefold() for match in _WORD_RE.finditer(payload.story))
-    required_words_present = all(
-        required.casefold() in story_words for required in brief.required_words
+    return payload, _validate_story_text(
+        brief,
+        payload.story,
+        evidence_valid=_evidence_is_valid(brief, payload),
     )
-    evidence_valid = _evidence_is_valid(brief, payload)
-    # Ordinary hyphenated prose such as ``3-year-old`` remains valid.  A
-    # hyphen/apostrophe segment containing both a letter and a digit (``fox7``,
-    # ``R2-D2``) is the machine-like form that the profile and quality gate also
-    # measure.  Keeping this test on the shared tokenizer prevents acceptance
-    # and the reported identifier-token rate from drifting.
-    mixed_alphanumeric = token_form_counts(lexical_tokens(payload.story))[2] > 0
-    forbidden = mixed_alphanumeric or any(
-        pattern.search(payload.story) for pattern in _FORBIDDEN_PATTERNS
+
+
+def validate_story_only_generated_story(
+    brief: NeutralStoryBrief,
+    content: str | bytes,
+) -> tuple[StoryOnlyPayload | None, StoryValidation]:
+    """Validate a V4 story without accepting model-authored evidence claims."""
+    try:
+        payload = parse_story_only_payload(brief, content)
+    except (CanonicalJsonError, TypeError, ValueError):
+        return None, _schema_invalid_story_validation()
+
+    return payload, _validate_locally_derived_story(brief, payload)
+
+
+def validate_plain_text_generated_story(
+    brief: NeutralStoryBrief,
+    content: str | bytes,
+) -> tuple[StoryOnlyPayload | None, StoryValidation]:
+    """Validate an unwrapped assistant story with locally derived evidence."""
+    try:
+        payload = parse_plain_text_story_payload(brief, content)
+    except (UnicodeDecodeError, TypeError, ValueError):
+        return None, _schema_invalid_story_validation()
+    return payload, _validate_locally_derived_story(brief, payload)
+
+
+def _validate_locally_derived_story(
+    brief: NeutralStoryBrief,
+    payload: StoryOnlyPayload,
+) -> StoryValidation:
+    # Only surface-observable features belong in a deterministic hard gate.
+    # Conflict, foreshadowing, moral value, twists, and ending valence require
+    # semantic judgment and remain audit/report metadata. Quoted dialogue is
+    # the one released narrative feature with an exact local text contract.
+    observable_features = frozenset(
+        feature
+        for feature in canonical_feature_labels(brief.requested_features)
+        if feature == "Dialogue"
     )
-    length_valid = 40 <= len(story_words) <= 600
-    reasons: list[str] = []
-    if not required_words_present:
-        reasons.append("required_words_missing")
-    if not evidence_valid:
-        reasons.append("evidence_invalid")
-    if forbidden:
-        reasons.append("forbidden_identifier_or_meta_language")
-    if not length_valid:
-        reasons.append("story_length_outside_safety_bounds")
-    return payload, StoryValidation(
-        schema_valid=True,
-        required_words_present=required_words_present,
-        evidence_valid=evidence_valid,
-        forbidden_identifier_present=forbidden,
-        length_valid=length_valid,
-        accepted=not reasons,
-        rejection_reasons=tuple(reasons),
-        story_sha256=sha256(payload.story.encode("utf-8")).hexdigest(),
+    return _validate_story_text(
+        brief,
+        payload.story,
+        evidence_valid=(
+            len(payload.required_word_spans) == len(brief.required_words)
+            and observable_features.issubset(payload.realized_features)
+        ),
     )
 
 
@@ -676,15 +967,121 @@ def parse_verifier_payload(content: str | bytes) -> VerifierPayload:
     )
 
 
-def _neutral_user_prompt(brief: NeutralStoryBrief) -> str:
+def _neutral_user_prompt(
+    brief: NeutralStoryBrief,
+    *,
+    story_only: bool = False,
+    story_prompt_profile: str = "released-instruction-v1",
+) -> str:
     features = ", ".join(brief.requested_features) or "none"
-    return (
+    prompt = (
         f"RELEASED TINYSTORIES INSTRUCTION:\n{brief.prompt_text}\n\n"
         f"REQUIRED WORDS: {', '.join(brief.required_words)}\n"
         f"REQUESTED NARRATIVE FEATURES: {features}\n\n"
+    )
+    if story_only:
+        story_only_prompt = (
+            prompt
+            + "Return exactly one JSON object containing only the story field. "
+            "Do not return evidence, analysis, commentary, or any other field."
+        )
+        if story_prompt_profile == "reference-structure-v2":
+            return story_only_prompt + _v7_final_story_requirements(brief)
+        return story_only_prompt
+    return prompt + (
         "Return the story plus exact quotes showing each required word and each "
         "requested feature. Quotes must occur verbatim in the story."
     )
+
+
+def _neutral_system_prompt(
+    profile: str,
+    *,
+    json_instruction: str,
+) -> str:
+    if profile == "reference-structure-v2":
+        return (
+            "Write one complete children's story. Keep it gentle and suitable "
+            "for young children. Follow the supplied released TinyStories "
+            "instruction closely. Use ordinary story prose only. Do not mention "
+            "prompts, schemas, required words, or this request."
+            f"{json_instruction}"
+        )
+    return (
+        "Write one short, complete children's story that a typical "
+        "3- to 4-year-old can understand. Follow the supplied released "
+        "TinyStories instruction closely. Use ordinary story prose only. "
+        "Do not mention prompts, schemas, required words, or this request."
+        f"{_story_prompt_guidance(profile)}"
+        f"{json_instruction}"
+    )
+
+
+def _v7_final_story_requirements(brief: NeutralStoryBrief) -> str:
+    dialogue_requirement = (
+        (
+            "Because Dialogue is requested, include an actual complete spoken "
+            'sentence in standard ASCII double quotation marks, like "Hello.".'
+        ),
+    ) if "Dialogue" in canonical_feature_labels(brief.requested_features) else ()
+    requirements = (
+        "Use every required word exactly as written at least once, without "
+        "changing that occurrence's spelling or word form: "
+        f"{', '.join(brief.required_words)}.",
+        *dialogue_requirement,
+        "Put the story in one continuous story-field text block with no "
+        "newline characters.",
+        "Write 18 to 20 complete sentences, mostly 7 to 11 words each.",
+        "Include at least 6 connected events, each leading naturally onward.",
+        "Aim for 155 to 190 words; this is a soft target, not a reason to cut "
+        "off the ending.",
+        "Use a little natural, simple repetition, without padding.",
+        _v7_opening_requirement(brief.brief_id),
+    )
+    return "\n\nFINAL STORY REQUIREMENTS:\n- " + "\n- ".join(requirements)
+
+
+def _v7_opening_requirement(brief_id: str) -> str:
+    material = f"tinyworlds-v2-v7-opening-v1\0{brief_id}".encode("utf-8")
+    bucket = int.from_bytes(sha256(material).digest()[:8], "big") % 5
+    if bucket < 3:
+        return 'Start the story with exactly "Once upon a time".'
+    if bucket == 3:
+        return 'Start the story with exactly "One day".'
+    return (
+        'Use another simple opening; do not start with "Once upon a time" or '
+        '"One day".'
+    )
+
+
+def _story_prompt_guidance(profile: str) -> str:
+    if profile == "released-instruction-v1":
+        return ""
+    length_guidance = " Write 130 to 170 words."
+    if profile == "reference-length-v1":
+        return length_guidance
+    if profile == "reference-shape-v1":
+        return length_guidance + (
+            " Use three to five short paragraphs separated by single line breaks; "
+            "do not put blank lines between them. Use mostly short sentences and "
+            "simple chronological actions, with each event leading naturally to "
+            "the next. Begin naturally with 'Once upon a time' or 'One day'. Use "
+            "ordinary English words only. End with a simple consequence or feeling "
+            "inside the story. Avoid headings, lists, summaries, ornate description, "
+            "and explanations of the writing task."
+        )
+    raise ValueError("generation story prompt profile is unsupported")
+
+
+def _story_only_response_schema() -> JsonObject:
+    return {
+        "additionalProperties": False,
+        "properties": {
+            "story": {"minLength": 1, "type": "string"},
+        },
+        "required": ["story"],
+        "type": "object",
+    }
 
 
 def _story_response_schema(brief: NeutralStoryBrief) -> JsonObject:
@@ -792,6 +1189,86 @@ def _decode_evidence(value: JsonValue, ingredient_field: str) -> tuple[EvidenceQ
     return tuple(evidence)
 
 
+def _required_word_spans(
+    story: str,
+    required_words: tuple[str, ...],
+) -> tuple[TextEvidenceSpan, ...]:
+    first_by_word: dict[str, re.Match[str]] = {}
+    required_keys = frozenset(word.casefold() for word in required_words)
+    for match in _WORD_RE.finditer(story):
+        key = match.group(0).casefold()
+        if key in required_keys and key not in first_by_word:
+            first_by_word[key] = match
+    spans: list[TextEvidenceSpan] = []
+    for required_word in required_words:
+        match = first_by_word.get(required_word.casefold())
+        if match is not None:
+            spans.append(
+                TextEvidenceSpan(
+                    ingredient=required_word,
+                    exact_text=match.group(0),
+                    start=match.start(),
+                    end=match.end(),
+                )
+            )
+    return tuple(spans)
+
+
+def _schema_invalid_story_validation() -> StoryValidation:
+    return StoryValidation(
+        schema_valid=False,
+        required_words_present=False,
+        evidence_valid=False,
+        forbidden_identifier_present=False,
+        length_valid=False,
+        accepted=False,
+        rejection_reasons=("schema_invalid",),
+        story_sha256=None,
+    )
+
+
+def _validate_story_text(
+    brief: NeutralStoryBrief,
+    story: str,
+    *,
+    evidence_valid: bool,
+) -> StoryValidation:
+    story_words = lexical_tokens(story)
+    required_words_present = all(
+        required.casefold() in story_words for required in brief.required_words
+    )
+    # Ordinary hyphenated prose such as ``3-year-old`` remains valid.  A
+    # hyphen/apostrophe segment containing both a letter and a digit (``fox7``,
+    # ``R2-D2``) is the machine-like form that the profile and quality gate also
+    # measure.  Keeping this test on the shared tokenizer prevents acceptance
+    # and the reported identifier-token rate from drifting.
+    mixed_alphanumeric = token_form_counts(story_words)[2] > 0
+    forbidden = mixed_alphanumeric or any(
+        pattern.search(story) for pattern in _FORBIDDEN_PATTERNS
+    )
+    length_valid = 40 <= len(story_words) <= 600
+    reasons = tuple(
+        reason
+        for invalid, reason in (
+            (not required_words_present, "required_words_missing"),
+            (not evidence_valid, "evidence_invalid"),
+            (forbidden, "forbidden_identifier_or_meta_language"),
+            (not length_valid, "story_length_outside_safety_bounds"),
+        )
+        if invalid
+    )
+    return StoryValidation(
+        schema_valid=True,
+        required_words_present=required_words_present,
+        evidence_valid=evidence_valid,
+        forbidden_identifier_present=forbidden,
+        length_valid=length_valid,
+        accepted=not reasons,
+        rejection_reasons=reasons,
+        story_sha256=sha256(story.encode("utf-8")).hexdigest(),
+    )
+
+
 def _evidence_is_valid(brief: NeutralStoryBrief, payload: GeneratedStoryPayload) -> bool:
     word_evidence = {item.ingredient.casefold(): item for item in payload.word_evidence}
     required_words = {word.casefold(): word for word in brief.required_words}
@@ -883,6 +1360,13 @@ __all__ = [
     "GENERATION_REQUEST_V1",
     "SYNTHETIC_STORY_REQUEST_V2",
     "SYNTHETIC_STORY_REQUEST_V3",
+    "SYNTHETIC_STORY_REQUEST_V4",
+    "SYNTHETIC_STORY_REQUEST_V5",
+    "SYNTHETIC_STORY_REQUEST_V6",
+    "SYNTHETIC_STORY_REQUEST_V7",
+    "SYNTHETIC_STORY_REQUEST_V8",
+    "SYNTHETIC_STORY_REQUEST_V9",
+    "TWO_ROUTE_AUTHOR_MODELS",
     "VERIFIER_MODEL",
     "CandidateModelSpec",
     "EvidenceQuote",
@@ -890,12 +1374,19 @@ __all__ = [
     "GenerationRequestContract",
     "NeutralStoryBrief",
     "StoryValidation",
+    "StoryOnlyPayload",
+    "TextEvidenceSpan",
     "VerifierPayload",
     "assistant_message_content",
     "neutral_story_request_body",
+    "plain_story_user_prompt",
     "parse_generated_story_payload",
+    "parse_plain_text_story_payload",
+    "parse_story_only_payload",
     "parse_verifier_payload",
     "request_body_sha256",
     "validate_generated_story",
+    "validate_plain_text_generated_story",
+    "validate_story_only_generated_story",
     "verifier_request_body",
 ]

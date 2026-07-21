@@ -7,7 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from apm.data.text.tinyworlds_v2.bakeoff import CANDIDATE_MODELS, VERIFIER_MODEL
+from apm.data.text.tinyworlds_v2.bakeoff import (
+    CANDIDATE_MODELS,
+    TWO_ROUTE_AUTHOR_MODELS,
+    VERIFIER_MODEL,
+)
 from apm.data.text.tinyworlds_v2.httpx_transport import (
     HttpxTransport,
     fetch_catalog_payloads,
@@ -65,6 +69,21 @@ def test_catalog_fetch_is_complete_and_returns_fixed_order() -> None:
     assert tuple(model_id for model_id, _ in payloads.endpoints) == expected_ids
     assert len(transport.urls) == len(expected_ids) + 1
     assert any(url.endswith("/api/v1/models") for url in transport.urls)
+
+
+def test_catalog_fetch_accepts_the_explicit_two_author_plan() -> None:
+    transport = _FakeCatalogTransport()
+
+    payloads = fetch_catalog_payloads(
+        transport,
+        model_specs=TWO_ROUTE_AUTHOR_MODELS,
+        timeout_seconds=7.0,
+    )
+
+    assert tuple(model_id for model_id, _ in payloads.endpoints) == tuple(
+        model.request_model_id for model in TWO_ROUTE_AUTHOR_MODELS
+    )
+    assert len(transport.urls) == 3
 
 
 def test_authenticated_stats_get_retains_exact_http_observation(

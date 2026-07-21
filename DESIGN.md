@@ -38,11 +38,112 @@ The external models are commissioned authors of constrained synthetic stories;
 the benchmark is not trying to reproduce their general behavior in a student
 model. OpenRouter's `enforce_distillable_text` routing switch is therefore not a
 scientific quality or route-eligibility gate. Because accepted stories may
-later become training data, output-use permission remains a separate policy
-boundary: before bulk generation, the exact model and provider route must have
-an explicit recorded review for that intended use. Preview quality, mechanical
-acceptance, and human approval do not substitute for that review, and preview
-records do not flow into a training corpus.
+later become training data, corpus eligibility is an explicit experiment
+decision rather than an inference from a router metadata label. For the active
+two-author run, Qwen 3.5 35B-A3B and GPT-5.4 Mini are both eligible authors;
+diagnostic preview records still do not flow into a training corpus.
+
+The active Phase 1 comparison is direct and paired: both authors receive all
+200 neutral briefs. There is no cheap-route screen, finalist expansion, or
+external verifier pass. This makes the paid boundary exactly 400 author
+requests and avoids confounding author quality with a third model's ratings.
+Automated evidence instead comes from the frozen TinyStories vocabulary/token
+profile, TinyStories-8M NLL, surface statistics, and deterministic brief checks;
+the 100-reference/100-generated blinded audit supplies the independent semantic
+and stylistic judgment, with generated controls split 50/50 by author.
+
+The V4 generator response contains only `story`. Required-word occurrences are
+whole-word spans with exact character offsets derived locally, and requested
+features, forbidden forms, length, dialogue, and token-form evidence are also
+computed from the story text. Model-authored evidence or quotes are neither
+requested nor trusted. V1--V3 and the seven-route table remain frozen solely to
+replay their historical artifacts; the active V4 run has a separate artifact
+version, destination, and raw cache.
+
+Prompt changes are separately versioned request semantics. V5 is the frozen
+length-only contract (`Write 130 to 170 words.`); V6 adds a declared
+reference-shape profile while retaining the one-field response and locally
+derived evidence boundary. The first V6 run is a 20-brief development review,
+not a reduced Phase 1 gate. Because the user requested only 20 new outputs per
+model, this first run compares bundled V6 against V4 and does not claim to
+attribute changes to length versus cadence; V5 was defined but not purchased.
+It binds each new story to the same brief's cached
+V4 control and matched reference, uses a dedicated `$1` runtime ledger and raw
+cache, and publishes all pairs in one authenticated review page. Once used for
+prompt choice, those briefs are tuning data and cannot be called a clean
+holdout. Prompt compliance is measured, never assumed: V6's prose instruction
+to use single newlines did not prevent either route from emitting blank-line
+paragraphs, so a future serialization constraint must receive its own request
+contract rather than being silently normalized after generation.
+
+V7 is a separate development-only prompt-shape contract; it preserves the
+exact V4--V6 request bytes and does not alter or satisfy a Phase 1 gate. It
+removes the redundant `short` and `3- to 4-year-old` compression cues from the
+system message while retaining young-child safety, the released-instruction
+boundary, ordinary-prose output, and the strict story-only JSON response. Its
+final user-message block requires unchanged required-word forms, actual
+double-quoted speech when dialogue is requested, one story-field text block
+without newlines, 18--20 complete sentences, at least six connected events, a
+soft 155--190-word target, and a little natural simple repetition. A dedicated
+brief-ID hash namespace assigns openings independently at 60% `Once upon a
+time`, 20% `One day`, and 20% another simple opening. Versioning this bundle as
+V7 isolates the hypothesis that instruction placement and concrete narrative
+shape—not merely a word-count request—drive length and TinyStories alignment.
+V8 tests the complementary bare-envelope condition without changing or
+reinterpreting V7.
+
+V8 is the bare released-prompt ablation. Its chat envelope contains exactly one
+user message: the archived TinyStories instruction, two newline characters,
+and `Possible story:`. It contains no system role, repeated ingredient list,
+JSON instruction, response schema, or added prose constraint. Model/provider
+pinning, deterministic seed, reasoning disablement, output ceiling,
+data-collection denial, and fallback denial remain request transport controls;
+they do not add natural-language tokens. The complete assistant content is
+preserved as the story without JSON parsing, fence removal, prefix stripping,
+or whitespace normalization. A nonempty UTF-8 reply is structurally valid, and
+the existing local story validator derives all spans, visible features, safety
+flags, and acceptance evidence from that exact text.
+
+Plain-prompt experiments use the V3 train-decontaminated validation profile
+directly, never the historical 10,000-record comparator or the small matched
+archive set. Each prior control remains immutable and is loaded with its saved
+NLL rather than rescored. V9 is the one-factor length intervention: it inserts
+exactly `Aim for about 130 to 150 words.` between the archived prompt and
+`Possible story:`. V8 and V9 otherwise share the same one-message envelope,
+provider seed, route controls, and plain-response interpretation. Any later
+change is another request contract and must name the single factor it adds; it
+must not silently restore a system prompt, JSON, or the V7 narrative checklist.
+
+Local derivation does not make every derived field a hard validator. Exact
+schema, whole-word ingredients, safety/forbidden forms, length, and structurally
+quoted dialogue are mechanically decidable and may reject a sample. Moral,
+conflict, foreshadowing, twist, and ending valence are semantic narrative
+labels: deterministic heuristics may report them, but they cannot prove
+realization or reject prose. Their authoritative assessment belongs to the
+blinded human audit. Changing this boundary requires a validator and artifact
+version change; cached raw responses may be reinterpreted only into a new
+artifact, never silently in place.
+
+## TinyWorlds-v2 Author Learnability Diagnostics
+
+Distribution resemblance and downstream learnability are different claims.
+An author cannot be rejected as LoRA-incompatible merely because frozen-base
+NLL or surface-distribution gates fail. A learnability comparison must hold the
+symbolic facts, exact leading evidence, document count, adapter initialization,
+RNG state, optimizer schedule, and probes fixed, and must include a
+decontaminated in-distribution TinyStories control. If that control does not
+learn the semantic task, external-author differences are inconclusive rather
+than evidence of an author penalty.
+
+Probe difficulty is interpreted as a ladder. Exact-clause completion tests
+whether a seen literal continuation was stored. Held-out paraphrases test
+whether the corresponding entity binding is queryable independently of its
+training wording. One-hop probes test whether one stored entity-to-value fact
+can be composed with one stored value-to-conclusion rule when the named
+entity-to-conclusion sentence was never shown. Near-zero training NLL or
+perfect exact-clause completion is not called reasoning when paraphrase or
+one-hop transfer stays at chance. Author suitability is assessed only at the
+highest rung passed by a matched in-distribution control.
 
 Route identity distinguishes billable semantics from catalog provenance. The
 versioned semantic lock hashes the local route name, requested model alias,
@@ -242,24 +343,48 @@ qualified routes, quality-ceiling chooses the lowest alignment distance, and
 balanced gives equal weight to min-max-normalized projected cost and alignment.
 If no route fully qualifies, all three are explicitly unavailable.
 
+An official split label is provenance, not proof of train/evaluation
+disjointness. Every TinyStories cohort used as a distributional comparator must
+be checked against the authenticated original training file before it is called
+a clean holdout. Comparator identity is Unicode NFKC normalization followed by
+case-folding and whitespace collapse; SHA-256 is a prefilter, and equality of
+the full normalized texts confirms a collision-safe match. Records overlapping
+training are excluded from distribution profiles. Small paired archive stories
+may remain visible as human review examples, but they are not authoritative
+distribution evidence unless they pass the same audit.
+
+Paid outputs and their original interpretations are immutable. If a comparator
+audit later changes which references are eligible, publish a new derived
+reevaluation that authenticates the source artifact, reuses its exact generated
+stories and measurements, embeds the filtered comparator and audit, and makes
+zero model calls. Never overwrite the paid artifact or silently relabel a
+contaminated report. A composite alignment distance is descriptive ranking
+evidence, not a gate override: improvements in length or serialization cannot
+compensate for failed acceptance, language-distribution, or NLL gates when
+selecting a production author prompt.
+
 The blinded audit packet and key belong to the immutable manifested Phase 1
 tree. Browser decisions, the explicit approval request, and the derived final
 approval are the only permitted post-manifest overlays. Each overlay is strict,
 canonical JSON bound to the exact audit and decision digests; passing automated
-or human thresholds never creates approval implicitly. Audit selection solves
-the complete deterministic balanced assignment over distinct pair IDs, keeping
-all screen finalists represented while making only automated-qualified routes
-selectable. If the requested 100 generated controls cannot be allocated at the
+or human thresholds never creates approval implicitly. Audit construction
+solves the complete deterministic balanced assignment over distinct pair IDs,
+keeping both fixed authors represented while making only automated-qualified
+routes selectable after human scoring. If the requested 100 generated controls
+cannot be allocated at the
 fixed per-route quotas, the run publishes
 `audit_insufficient_accepted_samples` and exact feasibility evidence rather
 than reducing the audit, using duplicate pairs, or applying a greedy fallback.
 
 ## TinyWorlds-v2 Validation and Human Gates
 
-The generation model is not its own sole judge. Semantic verification is a
-separate pinned request that classifies required-fact entailment,
-contradictions, new controlled claims, exact evidence, and answer leakage.
-TinyStories quality is assessed separately with a source-blinded rubric over
+The generation model is not its own sole judge. The Phase 1 neutral-author
+bakeoff deliberately has no model verifier: deterministic distribution checks
+and the blinded human audit are independent of both authors. For later
+world-conditioned generation, semantic verification is a separate pinned
+request that classifies required-fact entailment, contradictions, new
+controlled claims, exact evidence, and answer leakage. TinyStories quality is
+assessed separately with a source-blinded rubric over
 preschool vocabulary, sentence simplicity, grammar, plot coherence,
 repetition, and meta-language. Deterministic validators enforce exact evidence
 substrings, ledger assignments, forbidden alternatives and identifiers,
