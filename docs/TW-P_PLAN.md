@@ -102,7 +102,7 @@ and an observed allocator peak below 12 GiB.
 - [x] Remove `TinyStories-train.txt` and corpus identity from TinyWorlds-P input
   and artifact contracts. Do not retain the corpus join as a compatibility
   alias or optional mode.
-- [ ] Replace source joining with one bounded archive pass that verifies the
+- [x] Replace source joining with one bounded archive pass that verifies the
   pinned tarball, binds every record to member/index/content identity,
   tokenizes exact released story text, groups normalized duplicates, recovers
   recipes, and audits exclusions and archive token mass.

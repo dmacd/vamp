@@ -30,19 +30,24 @@ until the archive-only partition and scratch base pass their publication gates.
   but they are not TinyWorlds-P publication candidates and must not be resumed,
   selected, or used to set the new partition. Exact identifiers remain only in
   the historical audit documents linked below.
-- **Corpus-intersection implementation purged.** The join, artifact loader,
+- **Corpus-intersection implementation purged.** The join, old artifact loader,
   builder, batching/training stack, publication code, fixed runners, and
   corpus-backed integration have been removed. The package currently exposes
   only source-independent normalization, recipe recovery, bucket/topology,
   split/control algorithms, calibration decisions, generic identities, and
   base-training policy constants. Partition construction is intentionally
-  unavailable at this checkpoint.
-- **Next implementation sequence.** Add the strict archive-native streaming
-  parser and contracts, then restore partition persistence and scratch
-  training against archive record identities only. Rewrite the CPU and real
-  replay tests before building and byte-rebuilding the complete archive-only
-  partition. Only after those gates pass may scratch calibration restart from
-  seed zero.
+  unavailable at the purge checkpoint.
+- **Archive-native ingestion implemented.** The TinyWorlds-P-owned parser
+  authenticates and streams the tarball once, writes exact story bytes to an
+  archive-order spool, classifies bounded batches in physical workers,
+  externally sorts by normalized story identity and record ID, groups every
+  occurrence with its provenance and multiplicity, audits all exclusions, and
+  enforces only the 95% token-weighted role-classification gate.
+- **Next implementation sequence.** Restore strict partition persistence,
+  memory-mapped batching, and scratch training against archive record
+  identities only. Rewrite the CPU and real replay tests before building and
+  byte-rebuilding the complete archive-only partition. Only after those gates
+  pass may scratch calibration restart from seed zero.
 - **Historical audits retained for provenance only.** The original train/archive
   mismatch analysis is preserved in
   [`docs/TW-P_SOURCE_AUDIT.md`](docs/TW-P_SOURCE_AUDIT.md), and the obsolete

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 import json
 from math import isfinite
@@ -20,6 +20,12 @@ WORLD_LABELS = ("A", "B", "C", "D", "E")
 
 SplitLabel = Literal["train", "validation", "test"]
 BucketNamespace = Literal["noun", "verb", "adjective"]
+ArchiveGroupStatus = Literal[
+    "eligible",
+    "empty_story",
+    "unclassifiable_metadata",
+    "conflicting_metadata",
+]
 
 _SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 _REVISION_PATTERN = re.compile(r"[0-9a-f]{40}")
@@ -200,6 +206,143 @@ class Recipe:
 
 
 @dataclass(frozen=True, slots=True)
+class ArchiveOccurrence:
+    """One exact released archive entity and its temporary story location."""
+
+    record_id: str
+    source_member: str
+    source_index: int
+    content_sha256: str
+    story_sha256: str
+    source: Literal["GPT-3.5", "GPT-4"]
+    spool_offset: int
+    byte_length: int
+    token_count: int
+
+    def __post_init__(self) -> None:
+        if type(self.record_id) is not str or not self.record_id:
+            raise ValueError("archive occurrence record_id must be nonempty")
+        if type(self.source_member) is not str or not self.source_member:
+            raise ValueError("archive occurrence member must be nonempty")
+        if type(self.source_index) is not int or self.source_index < 0:
+            raise ValueError("archive occurrence index must be nonnegative")
+        if self.source not in ("GPT-3.5", "GPT-4"):
+            raise ValueError("archive occurrence source label is unsupported")
+        for value, label in (
+            (self.content_sha256, "archive record content hash"),
+            (self.story_sha256, "exact archive story hash"),
+        ):
+            require_sha256(value, label)
+        if any(
+            type(value) is not int or value < 0
+            for value in (self.spool_offset, self.byte_length, self.token_count)
+        ):
+            raise ValueError("archive occurrence offsets and counts must be nonnegative")
+        expected_id = (
+            f"archive:{self.source_member}:{self.source_index}:{self.content_sha256}"
+        )
+        if self.record_id != expected_id:
+            raise ValueError("archive occurrence ID does not bind location and content")
+
+    def as_record(self) -> dict[str, object]:
+        """Return the canonical sortable occurrence representation."""
+        return {
+            "byte_length": self.byte_length,
+            "content_sha256": self.content_sha256,
+            "record_id": self.record_id,
+            "source": self.source,
+            "source_index": self.source_index,
+            "source_member": self.source_member,
+            "spool_offset": self.spool_offset,
+            "story_sha256": self.story_sha256,
+            "token_count": self.token_count,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveDuplicateGroup:
+    """One indivisible normalized archive-story group with full multiplicity."""
+
+    normalized_story_sha256: str
+    occurrences: tuple[ArchiveOccurrence, ...]
+    status: ArchiveGroupStatus
+    recipe: Recipe | None
+
+    def __post_init__(self) -> None:
+        require_sha256(self.normalized_story_sha256, "normalized archive story hash")
+        if type(self.occurrences) is not tuple or not self.occurrences:
+            raise ValueError("archive duplicate group requires occurrences")
+        if any(type(item) is not ArchiveOccurrence for item in self.occurrences):
+            raise TypeError("archive duplicate group occurrences have the wrong type")
+        if tuple(item.record_id for item in self.occurrences) != tuple(
+            sorted(item.record_id for item in self.occurrences)
+        ):
+            raise ValueError("archive duplicate occurrences must be canonically ordered")
+        if self.status == "eligible" and self.recipe is None:
+            raise ValueError("eligible archive groups require one recipe")
+        if self.status != "eligible" and self.recipe is not None:
+            raise ValueError("excluded archive groups cannot retain a recipe")
+
+    @property
+    def active_token_count(self) -> int:
+        """Return token mass across every released occurrence."""
+        return sum(item.token_count for item in self.occurrences)
+
+
+@dataclass(frozen=True, slots=True)
+class ArchiveIngestAudit:
+    """Complete archive-native record, duplicate, exclusion, and token counts."""
+
+    archive_member_count: int
+    archive_record_count: int
+    archive_group_count: int
+    nonempty_record_count: int
+    nonempty_token_count: int
+    classified_record_count: int
+    classified_token_count: int
+    empty_group_count: int
+    empty_record_count: int
+    unclassifiable_group_count: int
+    unclassifiable_record_count: int
+    unclassifiable_token_count: int
+    conflicting_group_count: int
+    conflicting_record_count: int
+    conflicting_token_count: int
+    eligible_group_count: int
+    eligible_record_count: int
+    eligible_token_count: int
+    duplicate_group_count: int
+    maximum_group_multiplicity: int
+
+    def __post_init__(self) -> None:
+        values = tuple(getattr(self, name) for name in self.__dataclass_fields__)
+        if any(type(value) is not int or value < 0 for value in values):
+            raise ValueError("archive ingest counts must be nonnegative integers")
+        if self.archive_member_count == 0 or self.archive_record_count == 0:
+            raise ValueError("archive ingest must contain members and records")
+        if self.archive_group_count == 0 or self.nonempty_token_count == 0:
+            raise ValueError("archive ingest must contain nonempty token mass")
+        if self.classified_token_count > self.nonempty_token_count:
+            raise ValueError("classified token mass exceeds nonempty archive mass")
+
+    @property
+    def role_classification_coverage(self) -> float:
+        """Return classified record-token mass over all nonempty record-token mass."""
+        return self.classified_token_count / self.nonempty_token_count
+
+    def as_record(self) -> dict[str, int | float]:
+        """Return canonical persisted archive-ingest evidence."""
+        record = {
+            name: getattr(self, name)
+            for name in self.__dataclass_fields__
+        }
+        return {
+            **record,
+            "role_classification_coverage": self.role_classification_coverage,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class WordBucket:
     """One frequency-balanced ingredient bucket."""
 
@@ -298,11 +441,42 @@ ProgressCallback = Callable[[ProgressEvent], None]
 
 
 @dataclass(frozen=True, slots=True)
+class PartitionInputs:
+    """Authenticated archive/tokenizer inputs and bounded build locations."""
+
+    archive_path: Path
+    tokenizer_directory: Path
+    output_root: Path
+    temporary_directory: Path
+    archive_identity: SourceIdentity
+    tokenizer_identity: TokenizerIdentity
+    progress: ProgressCallback | None = field(default=None, compare=False, repr=False)
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "archive_path",
+            "tokenizer_directory",
+            "output_root",
+            "temporary_directory",
+        ):
+            object.__setattr__(self, field_name, Path(getattr(self, field_name)))
+        if type(self.archive_identity) is not SourceIdentity:
+            raise TypeError("archive_identity must be SourceIdentity")
+        if type(self.tokenizer_identity) is not TokenizerIdentity:
+            raise TypeError("tokenizer_identity must be TokenizerIdentity")
+        if self.progress is not None and not callable(self.progress):
+            raise TypeError("progress must be callable")
+
+
+@dataclass(frozen=True, slots=True)
 class PartitionPreset:
-    """Source-independent choices used by deterministic partition algorithms."""
+    """Immutable archive ingestion and deterministic partition choices."""
 
     bucket_count: int = 8
     public_seed: int = PUBLIC_SEED
+    worker_count: int = 16
+    run_record_count: int = 50_000
+    minimum_role_coverage: float = 0.95
     selected_cell_median_tolerance: float = 0.10
     minimum_component_outside_groups: int = 64
     world_split_weights: tuple[int, int, int] = (80, 10, 10)
@@ -315,6 +489,11 @@ class PartitionPreset:
     def __post_init__(self) -> None:
         if type(self.bucket_count) is not int or self.bucket_count < 3:
             raise ValueError("five-cell topology requires at least three buckets")
+        if any(
+            type(value) is not int or value <= 0
+            for value in (self.worker_count, self.run_record_count)
+        ):
+            raise ValueError("archive worker and sort-run sizes must be positive")
         if type(self.public_seed) is not int or self.public_seed < 0:
             raise ValueError("public seed must be nonnegative")
         if (
@@ -329,6 +508,11 @@ class PartitionPreset:
                 or any(type(value) is not int or value <= 0 for value in weights)
             ):
                 raise ValueError("split weights must be three positive integers")
+        if (
+            not isfinite(self.minimum_role_coverage)
+            or not 0.0 <= self.minimum_role_coverage <= 1.0
+        ):
+            raise ValueError("role coverage minimum must lie in [0, 1]")
         tolerances = (
             self.selected_cell_median_tolerance,
             self.control_token_tolerance,
@@ -349,10 +533,22 @@ class PartitionPreset:
             "control_source_feature_tolerance": self.control_source_feature_tolerance,
             "control_token_tolerance": self.control_token_tolerance,
             "minimum_component_outside_groups": self.minimum_component_outside_groups,
+            "minimum_role_coverage": self.minimum_role_coverage,
             "public_seed": self.public_seed,
+            "run_record_count": self.run_record_count,
             "selected_cell_median_tolerance": self.selected_cell_median_tolerance,
             "world_split_weights": list(self.world_split_weights),
+            "worker_count": self.worker_count,
         }
+
+
+CANONICAL_ARCHIVE_IDENTITY = SourceIdentity(
+    dataset_id="roneneldan/TinyStories",
+    revision="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64",
+    filename="TinyStories_all_data.tar.gz",
+    size_bytes=1_608_001_638,
+    sha256="26cf7605aca15bc4ea6fa637256400d9d01317b28ed296172b2d1dd160cd7699",
+)
 
 
 CANONICAL_TOKENIZER_IDENTITY = TokenizerIdentity(
@@ -523,15 +719,21 @@ def record_sha256(record: object) -> str:
 
 
 __all__ = [
+    "ArchiveDuplicateGroup",
+    "ArchiveGroupStatus",
+    "ArchiveIngestAudit",
+    "ArchiveOccurrence",
     "BASE_TRAINING_PRESET",
     "BENCHMARK_ID",
     "BaseTrainingPreset",
+    "CANONICAL_ARCHIVE_IDENTITY",
     "CANONICAL_TOKENIZER_IDENTITY",
     "ControlSelection",
     "HashedFile",
     "NORMALIZATION_IDENTITY",
     "NormalizationIdentity",
     "PARTITION_PRESET",
+    "PartitionInputs",
     "PartitionPreset",
     "ProgressEvent",
     "Recipe",
