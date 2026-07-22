@@ -68,9 +68,10 @@ until the archive-only partition and scratch base pass their publication gates.
   runner now consume only strict archive-v1 artifacts. Low-gap fallback uses a
   fresh 6x6 partition with 94/3/3 held-in splits; excessive-gap fallback uses
   10x10 with 96/2/2. Training and every validation/sealed-test batch report
-  throttled, measured phase and pass-path ETAs. CPU tests prove
-  interrupted/resumed state and trace parity, schedule and selection boundaries,
-  old-resume rejection, finite evaluation, and exact evaluation progress.
+  detached-safe, sparsely refreshed measured phase and pass-path ETAs. CPU
+  tests prove interrupted/resumed state and trace parity, schedule and selection
+  boundaries, old-resume rejection, finite evaluation, and exact evaluation
+  progress.
 - **Focused CPU/shared checks pass.** The 81-test TinyWorlds-P, GPT-Neo,
   checkpoint, and training-state suite passes in four concurrent groups
   (10.3s wall time); parked TinyWorlds-v2 tests are still collection-skipped.

@@ -99,8 +99,8 @@ class _TrainingReporter:
                 total=self._phase_end_update - self._initial_update,
                 desc=self._description,
                 unit="update",
-                mininterval=10.0,
-                maxinterval=30.0,
+                mininterval=120.0,
+                maxinterval=300.0,
             )
             self._started = time.monotonic()
             self._timed_initial_update = cursor.optimizer_update
@@ -172,8 +172,8 @@ class _EvaluationReporter:
                 total=sum(self._planned.values()),
                 desc=self._description,
                 unit="batch",
-                mininterval=10.0,
-                maxinterval=30.0,
+                mininterval=120.0,
+                maxinterval=300.0,
             )
             self._started = time.monotonic()
             self._timed_initial_batches = self._progress.n
