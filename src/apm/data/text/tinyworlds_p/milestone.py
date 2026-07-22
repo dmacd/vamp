@@ -52,6 +52,7 @@ from apm.lm.training import LmTrainState
 
 
 TrainingProgress = Callable[[TrainingCursor, float, int], None]
+EvaluationProgress = Callable[[int, str, int, int], None]
 
 
 class TrainingGateError(ValueError):
@@ -100,6 +101,7 @@ def run_calibration_attempt(
     config: StreamingTrainingConfig,
     *,
     progress: TrainingProgress | None = None,
+    evaluation_progress: EvaluationProgress | None = None,
 ) -> CalibrationAttempt:
     """Train exactly two epochs from scratch, validate both, and decide the grid."""
     started = time.monotonic()
@@ -123,6 +125,7 @@ def run_calibration_attempt(
             artifact,
             epoch,
             config.model_config,
+            progress=_split_evaluation_progress(evaluation_progress, epoch),
         )
         for epoch in (1, 2)
     )
@@ -163,6 +166,7 @@ def finish_and_publish_base(
     tokenizer_directory: str | Path,
     *,
     progress: TrainingProgress | None = None,
+    evaluation_progress: EvaluationProgress | None = None,
 ) -> PublishedBase:
     """Resume a passing grid through epoch five, select, test once, and publish."""
     if calibration.decision != "pass":
@@ -194,6 +198,7 @@ def finish_and_publish_base(
             calibration.artifact,
             epoch,
             calibration.config.model_config,
+            progress=_split_evaluation_progress(evaluation_progress, epoch),
         )
         for epoch in (3, 4, 5)
     )
@@ -223,6 +228,7 @@ def finish_and_publish_base(
         calibration.artifact,
         selected.epoch,
         calibration.config.model_config,
+        progress=_split_evaluation_progress(evaluation_progress, selected.epoch),
     )
     _write_json(sealed_path, _sealed_test_record(sealed_test))
     publication_directory = Path(publication_root) / final_training.training_sha256
@@ -311,6 +317,18 @@ def finish_and_publish_base(
         selected_epoch=selected.epoch,
         validations=validations,
         sealed_test=sealed_test,
+    )
+
+
+def _split_evaluation_progress(
+    progress: EvaluationProgress | None,
+    epoch: int,
+) -> Callable[[str, int, int], None] | None:
+    """Bind an epoch to split-level evaluator progress."""
+    return (
+        None
+        if progress is None
+        else lambda split, completed, total: progress(epoch, split, completed, total)
     )
 
 

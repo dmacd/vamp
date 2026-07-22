@@ -74,8 +74,9 @@ class _TrainingReporter:
         self._phase_end_update = phase_end_update
         self._overall_end_update = overall_end_update
         self._progress: Tqdm | None = None
-        self._started = time.monotonic()
+        self._started: float | None = None
         self._initial_update = 0
+        self._timed_initial_update = 0
 
     def __call__(
         self,
@@ -98,29 +99,133 @@ class _TrainingReporter:
                 total=self._phase_end_update - self._initial_update,
                 desc=self._description,
                 unit="update",
+                mininterval=10.0,
+                maxinterval=30.0,
             )
+            self._started = time.monotonic()
+            self._timed_initial_update = cursor.optimizer_update
         phase_updates = cursor.optimizer_update - self._initial_update
         self._progress.update(phase_updates - self._progress.n)
-        completed_here = max(1, cursor.optimizer_update - self._initial_update)
-        seconds_per_update = (time.monotonic() - self._started) / completed_here
-        phase_seconds = seconds_per_update * max(
-            0,
-            self._phase_end_update - cursor.optimizer_update,
-        )
-        overall_seconds = seconds_per_update * max(
-            0,
-            self._overall_end_update - cursor.optimizer_update,
-        )
+        assert self._started is not None
+        timed_updates = cursor.optimizer_update - self._timed_initial_update
+        if timed_updates:
+            seconds_per_update = (time.monotonic() - self._started) / timed_updates
+            phase_eta = _duration(
+                seconds_per_update
+                * max(0, self._phase_end_update - cursor.optimizer_update)
+            )
+            overall_eta = _duration(
+                seconds_per_update
+                * max(0, self._overall_end_update - cursor.optimizer_update)
+            )
+        else:
+            phase_eta = overall_eta = "pending"
         self._progress.set_postfix_str(
             f"epoch {cursor.epoch + 1}, NLL {nll:.4f}, "
-            f"phase ETA {_duration(phase_seconds)}, "
-            f"overall ETA {_duration(overall_seconds)}"
+            f"phase ETA {phase_eta}, overall ETA {overall_eta}",
+            refresh=False,
         )
 
     def close(self) -> None:
         """Close a constructed progress bar."""
         if self._progress is not None:
             self._progress.close()
+
+
+class _EvaluationReporter:
+    """Render ordered GPU evaluation with measured phase and pass-path ETAs."""
+
+    def __init__(
+        self,
+        artifact: PartitionArtifact,
+        description: str,
+        phases: tuple[tuple[int | None, str], ...],
+        overall_after_seconds: float,
+    ) -> None:
+        from apm.data.text.tinyworlds_p import count_partition_microbatches
+
+        split_totals = {
+            split: count_partition_microbatches(artifact, split)
+            for split in dict.fromkeys(split for _, split in phases)
+        }
+        self._description = description
+        self._planned = {
+            (epoch, split): split_totals[split] for epoch, split in phases
+        }
+        self._overall_after_seconds = overall_after_seconds
+        self._completed: dict[tuple[int | None, str], int] = {}
+        self._progress: Tqdm | None = None
+        self._started: float | None = None
+        self._timed_initial_batches = 0
+
+    def __call__(self, epoch: int, split: str, completed: int, total: int) -> None:
+        """Advance the evaluation bar after one synchronized GPU batch."""
+        from tqdm import tqdm
+
+        key = (None if split.endswith("/test") else epoch, split)
+        expected = self._planned.get(key)
+        previous = self._completed.get(key, 0)
+        if expected is None or total != expected or not previous <= completed <= total:
+            raise ValueError("evaluation reporter progress is inconsistent")
+        if self._progress is None:
+            self._progress = tqdm(
+                total=sum(self._planned.values()),
+                desc=self._description,
+                unit="batch",
+                mininterval=10.0,
+                maxinterval=30.0,
+            )
+            self._started = time.monotonic()
+            self._timed_initial_batches = self._progress.n
+        self._completed[key] = completed
+        self._progress.update(completed - previous)
+        assert self._started is not None
+        measured_batches = self._progress.n - self._timed_initial_batches
+        if measured_batches:
+            seconds_per_batch = (time.monotonic() - self._started) / measured_batches
+            phase_seconds = seconds_per_batch * (
+                self._progress.total - self._progress.n
+            )
+            phase_eta = _duration(phase_seconds)
+            overall_eta = _duration(phase_seconds + self._overall_after_seconds)
+        else:
+            phase_eta = overall_eta = "pending"
+        self._progress.set_postfix_str(
+            f"epoch {epoch}, {split}, phase ETA {phase_eta}, "
+            f"pass-path ETA {overall_eta}",
+            refresh=False,
+        )
+
+    def close(self) -> None:
+        """Close a constructed evaluation progress bar."""
+        if self._progress is not None:
+            self._progress.close()
+
+
+def _evaluation_splits(split: str) -> tuple[str, ...]:
+    """Return held-in, world, and matched-control splits in evaluation order."""
+    from apm.data.text.tinyworlds_p.contracts import WORLD_LABELS
+
+    return (
+        f"base/{split}",
+        *(
+            f"{role}/{world}/{split}"
+            for world in WORLD_LABELS
+            for role in ("world", "control")
+        ),
+    )
+
+
+def _evaluation_phases(
+    epochs: tuple[int, ...],
+    split: str,
+) -> tuple[tuple[int, str], ...]:
+    """Expand ordered epochs over one complete evaluation split family."""
+    return tuple(
+        (epoch, split_name)
+        for epoch in epochs
+        for split_name in _evaluation_splits(split)
+    )
 
 
 def _fixed_partition_inputs(
@@ -281,15 +386,23 @@ def main() -> int:
         plan.calibration_updates,
         plan.total_updates,
     )
+    evaluation_reporter = _EvaluationReporter(
+        artifact,
+        "TinyWorlds-P 8x8 calibration validation",
+        _evaluation_phases(tuple(range(1, plan.calibration_epochs + 1)), "validation"),
+        plan.seconds_for_epochs(plan.remaining_epochs),
+    )
     try:
         calibration = run_calibration_attempt(
             artifact,
             temporary_directory / "grid-8-training",
             config,
             progress=reporter,
+            evaluation_progress=evaluation_reporter,
         )
     finally:
         reporter.close()
+        evaluation_reporter.close()
     fallback_count = {
         "fallback_6x6": 6,
         "fallback_10x10": 10,
@@ -329,15 +442,26 @@ def main() -> int:
             plan.calibration_updates,
             plan.total_updates,
         )
+        evaluation_reporter = _EvaluationReporter(
+            fallback_partition,
+            f"TinyWorlds-P {fallback_count}x{fallback_count} calibration validation",
+            _evaluation_phases(
+                tuple(range(1, plan.calibration_epochs + 1)),
+                "validation",
+            ),
+            plan.seconds_for_epochs(plan.remaining_epochs),
+        )
         try:
             calibration = run_calibration_attempt(
                 fallback_partition,
                 temporary_directory / f"grid-{fallback_count}-training",
                 config,
                 progress=reporter,
+                evaluation_progress=evaluation_reporter,
             )
         finally:
             reporter.close()
+            evaluation_reporter.close()
     if calibration.decision != "pass":
         print(
             f"[stop] calibration did not pass: {calibration.decision}; no final base trained",
@@ -357,15 +481,25 @@ def main() -> int:
         plan.total_updates,
         plan.total_updates,
     )
+    validation_epochs = tuple(range(plan.calibration_epochs + 1, plan.epochs + 1))
+    evaluation_reporter = _EvaluationReporter(
+        calibration.artifact,
+        "TinyWorlds-P final validation and sealed test",
+        _evaluation_phases(validation_epochs, "validation")
+        + tuple((None, split) for split in _evaluation_splits("test")),
+        0.0,
+    )
     try:
         published = finish_and_publish_base(
             calibration,
             REPOSITORY_ROOT / "checkpoints" / "tinyworlds-p-archive-v1",
             REPOSITORY_ROOT / "checkpoints" / "tinystories-8m" / "tokenizer",
             progress=reporter,
+            evaluation_progress=evaluation_reporter,
         )
     finally:
         reporter.close()
+        evaluation_reporter.close()
     print(f"training publication: {published.directory}")
     print(f"selected epoch: {published.selected_epoch}")
     print(f"training SHA-256: {published.training_sha256}")

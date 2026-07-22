@@ -97,14 +97,26 @@ def test_streaming_training_is_token_weighted_and_resume_identical(
         active_tokens_per_epoch * config.epochs
     )
     assert all(record["active_tokens"] > 0 for record in trace)
+    evaluation_progress: list[tuple[str, int, int]] = []
     validation = evaluate_partition_split(
         resumed.state.trainable,
         artifact,
         "base/validation",
         config.model_config,
+        progress=lambda split, completed, total: evaluation_progress.append(
+            (split, completed, total)
+        ),
     )
     assert validation.active_tokens > 0
     assert np.isfinite(validation.nll)
+    assert evaluation_progress[-1] == (
+        "base/validation",
+        evaluation_progress[-1][2],
+        evaluation_progress[-1][2],
+    )
+    assert tuple(completed for _, completed, _ in evaluation_progress) == tuple(
+        range(1, len(evaluation_progress) + 1)
+    )
 
 
 def test_training_checkpoint_rejects_old_resume_format(tmp_path: Path) -> None:

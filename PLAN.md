@@ -67,9 +67,10 @@ until the archive-only partition and scratch base pass their publication gates.
   validation, one-shot sealed test, milestone publication, and the fixed GPU
   runner now consume only strict archive-v1 artifacts. Low-gap fallback uses a
   fresh 6x6 partition with 94/3/3 held-in splits; excessive-gap fallback uses
-  10x10 with 96/2/2. CPU tests prove interrupted/resumed state and trace parity,
-  schedule and selection boundaries, old-resume rejection, and finite
-  evaluation.
+  10x10 with 96/2/2. Training and every validation/sealed-test batch report
+  throttled, measured phase and pass-path ETAs. CPU tests prove
+  interrupted/resumed state and trace parity, schedule and selection boundaries,
+  old-resume rejection, finite evaluation, and exact evaluation progress.
 - **Focused CPU/shared checks pass.** The 81-test TinyWorlds-P, GPT-Neo,
   checkpoint, and training-state suite passes in four concurrent groups
   (10.3s wall time); parked TinyWorlds-v2 tests are still collection-skipped.
@@ -78,9 +79,17 @@ until the archive-only partition and scratch base pass their publication gates.
   through update two, and measured an 8.695 GiB JAX allocator peak against the
   12 GiB gate. Splitting strict semantics into assignment, provenance, and
   shard/index proof passes reduced the full smoke from 5m20s to 4m20s.
-- **Next execution sequence.** Start the fresh seed-zero RTX 4090 calibration.
-  The fixed runner derives exact update counts and phase/overall estimates from
+- **Current execution sequence.** Complete the fresh seed-zero RTX 4090
+  calibration, apply its predeclared one-fallback policy, then train and publish
+  the selected archive-only base if the gap and quality gates pass. The fixed
+  runner derives exact update counts and phase/overall estimates from
   archive-only active-token mass and reports adaptive ETAs.
+- **Archive-v1 calibration active (2026-07-21).** A fresh seed-zero 8x8 run is
+  training in
+  `checkpoints/tinyworlds-p-archive-v1/work/base-archive-v1-mu03o__f` after a
+  3m08s strict load. The bound schedule is 150,653 microbatches and 18,832
+  optimizer updates per epoch; no historical checkpoint was inspected or
+  resumed.
 - **Historical audits retained for provenance only.** The original train/archive
   mismatch analysis is preserved in
   [`docs/TW-P_SOURCE_AUDIT.md`](docs/TW-P_SOURCE_AUDIT.md), and the obsolete

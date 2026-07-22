@@ -41,7 +41,7 @@ def normalized_story_sha256(text: str) -> str:
 
 
 def normalized_story_bytes_sha256(raw_story: bytes) -> str:
-    """Strictly decode raw corpus bytes and return their normalized identity hash."""
+    """Strictly decode raw story bytes and return their normalized identity hash."""
     if type(raw_story) is not bytes:
         raise TypeError("raw story must be bytes")
     return normalized_story_sha256(raw_story.decode("utf-8", errors="strict"))

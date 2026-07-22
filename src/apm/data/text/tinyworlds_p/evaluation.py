@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 import math
 
 import jax
 import jax.numpy as jnp
 
-from apm.data.text.tinyworlds_p.batching import iter_partition_batches
+from apm.data.text.tinyworlds_p.batching import (
+    count_partition_microbatches,
+    iter_partition_batches,
+)
 from apm.data.text.tinyworlds_p.contracts import PartitionArtifact, WORLD_LABELS
 from apm.data.text.tinyworlds_p.training import (
     EpochValidation,
@@ -20,6 +24,9 @@ from apm.lm.config import GptNeoConfig
 from apm.lm.losses import per_token_nll
 from apm.lm.parameters import GptNeoParams
 from apm.lm.text_data import TokenBatch
+
+
+SplitEvaluationProgress = Callable[[str, int, int], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +71,8 @@ def evaluate_partition_split(
     artifact: PartitionArtifact,
     split: str,
     model_config: GptNeoConfig | None = None,
+    *,
+    progress: SplitEvaluationProgress | None = None,
 ) -> SplitNll:
     """Stream total float32 NLL and normalize once across all active tokens."""
     effective_model_config = model_config or _model_config_for_artifact(artifact)
@@ -87,10 +96,18 @@ def evaluate_partition_split(
     compiled = jax.jit(evaluate_batch)
     total_loss = 0.0
     active_tokens = 0
-    for batch in iter_partition_batches(artifact, split, epoch=0):
+    planned_batches = (
+        count_partition_microbatches(artifact, split) if progress is not None else 0
+    )
+    for completed_batches, batch in enumerate(
+        iter_partition_batches(artifact, split, epoch=0),
+        start=1,
+    ):
         loss_sum, token_count = compiled(batch)
         total_loss += float(loss_sum)
         active_tokens += int(token_count)
+        if progress is not None:
+            progress(split, completed_batches, planned_batches)
     if active_tokens == 0:
         raise ValueError(f"evaluation split contains no active tokens: {split}")
     return SplitNll(split, active_tokens, total_loss / active_tokens)
@@ -101,6 +118,8 @@ def evaluate_epoch_validation(
     artifact: PartitionArtifact,
     epoch: int,
     model_config: GptNeoConfig | None = None,
+    *,
+    progress: SplitEvaluationProgress | None = None,
 ) -> EpochValidation:
     """Evaluate held-in validation and all five world/control matched gaps."""
     held_in = evaluate_partition_split(
@@ -108,14 +127,23 @@ def evaluate_epoch_validation(
         artifact,
         "base/validation",
         model_config,
+        progress=progress,
     )
     world_results = tuple(
         (
             evaluate_partition_split(
-                params, artifact, f"world/{world}/validation", model_config
+                params,
+                artifact,
+                f"world/{world}/validation",
+                model_config,
+                progress=progress,
             ),
             evaluate_partition_split(
-                params, artifact, f"control/{world}/validation", model_config
+                params,
+                artifact,
+                f"control/{world}/validation",
+                model_config,
+                progress=progress,
             ),
         )
         for world in WORLD_LABELS
@@ -140,20 +168,36 @@ def evaluate_sealed_test_once(
     artifact: PartitionArtifact,
     selected_epoch: int,
     model_config: GptNeoConfig | None = None,
+    *,
+    progress: SplitEvaluationProgress | None = None,
 ) -> SealedTestResults:
     """Open every sealed test split once for the already selected checkpoint."""
     return SealedTestResults(
         selected_epoch=selected_epoch,
-        held_in=evaluate_partition_split(params, artifact, "base/test", model_config),
+        held_in=evaluate_partition_split(
+            params,
+            artifact,
+            "base/test",
+            model_config,
+            progress=progress,
+        ),
         worlds=tuple(
             evaluate_partition_split(
-                params, artifact, f"world/{world}/test", model_config
+                params,
+                artifact,
+                f"world/{world}/test",
+                model_config,
+                progress=progress,
             )
             for world in WORLD_LABELS
         ),
         controls=tuple(
             evaluate_partition_split(
-                params, artifact, f"control/{world}/test", model_config
+                params,
+                artifact,
+                f"control/{world}/test",
+                model_config,
+                progress=progress,
             )
             for world in WORLD_LABELS
         ),
