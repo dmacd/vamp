@@ -30,13 +30,10 @@ until the archive-only partition and scratch base pass their publication gates.
   but they are not TinyWorlds-P publication candidates and must not be resumed,
   selected, or used to set the new partition. Exact identifiers remain only in
   the historical audit documents linked below.
-- **Corpus-intersection implementation purged.** The join, old artifact loader,
-  builder, batching/training stack, publication code, fixed runners, and
-  corpus-backed integration have been removed. The package currently exposes
-  only source-independent normalization, recipe recovery, bucket/topology,
-  split/control algorithms, calibration decisions, generic identities, and
-  base-training policy constants. Partition construction is intentionally
-  unavailable at the purge checkpoint.
+- **Corpus-intersection implementation purged.** The obsolete join and all
+  corpus-backed paths, identities, offsets, gates, loaders, runners, and tests
+  are gone. The purge-only checkpoint remains in history; every subsequently
+  restored surface is archive-native and rejects old artifact identities.
 - **Archive-native ingestion implemented.** The TinyWorlds-P-owned parser
   authenticates and streams the tarball once, writes exact story bytes to an
   archive-order spool, classifies bounded batches in physical workers,
@@ -52,10 +49,20 @@ until the archive-only partition and scratch base pass their publication gates.
   globally unique controls, rejects tampering, and rebuilds byte-identically
   across worker/run settings. The fixed preparation runner and opt-in real
   archive replay have been restored.
-- **Next implementation sequence.** Restore memory-mapped scratch training,
-  evaluation, calibration, and publication against these artifacts. Then run
-  focused shared checks and build and byte-rebuild the complete archive-only
-  partition before any fresh seed-zero GPU calibration.
+- **Archive-only scratch training restored.** Memory-mapped batching,
+  token-weighted accumulation, immutable complete resume states, streaming
+  validation, one-shot sealed test, milestone publication, and the fixed GPU
+  runner now consume only strict archive-v1 artifacts. Low-gap fallback uses a
+  fresh 6x6 partition with 94/3/3 held-in splits; excessive-gap fallback uses
+  10x10 with 96/2/2. CPU tests prove interrupted/resumed state and trace parity,
+  schedule and selection boundaries, old-resume rejection, and finite
+  evaluation.
+- **Focused CPU/shared checks pass.** The 81-test TinyWorlds-P, GPT-Neo,
+  checkpoint, and training-state suite passes; parked TinyWorlds-v2 tests are
+  still collection-skipped. Re-run this scope immediately before GPU training.
+- **Next execution sequence.** Build and byte-rebuild the complete archive-only
+  8x8 partition, strictly reload and audit it, re-run focused checks, and only
+  then start a fresh seed-zero GPU calibration.
 - **Historical audits retained for provenance only.** The original train/archive
   mismatch analysis is preserved in
   [`docs/TW-P_SOURCE_AUDIT.md`](docs/TW-P_SOURCE_AUDIT.md), and the obsolete

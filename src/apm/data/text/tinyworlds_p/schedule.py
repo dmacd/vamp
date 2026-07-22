@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Literal, Protocol, Sequence
 
-from apm.data.text.tinyworlds_p.contracts import WORLD_LABELS
+from apm.data.text.tinyworlds_p.contracts import PartitionPreset, WORLD_LABELS
 
 
 GridDecision = Literal[
@@ -122,6 +122,26 @@ def epoch_satisfies_gap_gates(validation: EpochValidation) -> bool:
     )
 
 
+def fallback_partition_preset(
+    decision: GridDecision,
+    preset: PartitionPreset,
+) -> PartitionPreset:
+    """Return the single allowed fresh grid and its held-in control capacity."""
+    if decision == "fallback_6x6":
+        return replace(
+            preset,
+            bucket_count=6,
+            base_split_weights=(94, 3, 3),
+        )
+    if decision == "fallback_10x10":
+        return replace(
+            preset,
+            bucket_count=10,
+            base_split_weights=(96, 2, 2),
+        )
+    raise ValueError("a fallback partition requires a low-gap or excessive-gap decision")
+
+
 def select_best_eligible_epoch(
     validations: Sequence[EpochValidation],
 ) -> EpochValidation:
@@ -143,5 +163,6 @@ __all__ = [
     "calibration_grid_decision",
     "cosine_learning_rate",
     "epoch_satisfies_gap_gates",
+    "fallback_partition_preset",
     "select_best_eligible_epoch",
 ]

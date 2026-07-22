@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from hashlib import sha256
+from itertools import islice
 import json
 import os
 from pathlib import Path
@@ -16,11 +18,13 @@ from apm.data.text.tinyworlds_p import (
     NORMALIZATION_IDENTITY,
     PARTITION_PRESET,
     PartitionInputs,
+    StreamingTrainingConfig,
     build_archive_ingest,
     build_partition,
     iter_archive_groups,
     load_partition,
     read_spooled_story,
+    run_streaming_base_training,
 )
 from apm.lm.text import TokenizersTextTokenizer
 
@@ -80,10 +84,9 @@ def test_canonical_partition_replays_archive_and_real_tokenizer(tmp_path: Path) 
     tokenizer = TokenizersTextTokenizer.from_file(
         _TOKENIZER_DIRECTORY / "tokenizer.json"
     )
-    documents = tuple(
-        json.loads(line)
-        for line in (artifact.root / "documents.jsonl").read_text().splitlines()[:256]
-    )
+    with (artifact.root / "documents.jsonl").open("rb") as document_stream:
+        documents = tuple(json.loads(line) for line in islice(document_stream, 256))
+    assert len(documents) == 256
     expected = {document["record_id"]: document for document in documents}
     replayed: dict[str, bytes] = {}
     for group in iter_archive_groups(replay.groups_path):
@@ -134,14 +137,56 @@ def test_canonical_partition_full_rebuild_is_byte_identical(tmp_path: Path) -> N
         replace(PARTITION_PRESET, worker_count=7, run_record_count=37_001),
     )
     assert rebuilt.partition_sha256 == published.partition_sha256
-    published_files = {
-        path.relative_to(published.root): path.read_bytes()
+    published_files = tuple(
+        path.relative_to(published.root)
         for path in published.root.rglob("*")
         if path.is_file()
-    }
-    rebuilt_files = {
-        path.relative_to(rebuilt.root): path.read_bytes()
+    )
+    rebuilt_files = tuple(
+        path.relative_to(rebuilt.root)
         for path in rebuilt.root.rglob("*")
         if path.is_file()
-    }
-    assert rebuilt_files == published_files
+    )
+    assert sorted(published_files) == sorted(rebuilt_files)
+    for relative_path in sorted(published_files):
+        published_path = published.root / relative_path
+        rebuilt_path = rebuilt.root / relative_path
+        assert rebuilt_path.stat().st_size == published_path.stat().st_size
+        assert _file_sha256(rebuilt_path) == _file_sha256(published_path)
+
+
+@pytest.mark.benchmark
+def test_rtx_training_and_resume_smoke(tmp_path: Path) -> None:
+    """Compile production training and prove one-update GPU resume continuity."""
+    if os.environ.get("TINYWORLDS_P_GPU_SMOKE") != "1":
+        pytest.skip("set TINYWORLDS_P_GPU_SMOKE=1 for the GPU resume smoke")
+    jax = pytest.importorskip("jax")
+    devices = tuple(device for device in jax.devices() if device.platform == "gpu")
+    if len(devices) != 1:
+        pytest.skip("the GPU smoke requires exactly one visible GPU")
+    artifact = _published_partition()
+    config = StreamingTrainingConfig.from_preset()
+    interrupted = run_streaming_base_training(
+        artifact,
+        tmp_path / "training",
+        config,
+        stop_after_update=1,
+    )
+    resumed = run_streaming_base_training(
+        artifact,
+        tmp_path / "training",
+        config,
+        resume_from=interrupted.checkpoints[-1].directory,
+        stop_after_update=2,
+    )
+    assert interrupted.cursor.optimizer_update == 1
+    assert resumed.cursor.optimizer_update == 2
+    assert tuple(device.platform for device in jax.devices()) == ("gpu",)
+
+
+def _file_sha256(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(4 * 1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()

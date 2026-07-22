@@ -81,12 +81,14 @@ updates and at each epoch. Interrupted/resumed execution must be bit-identical
 to uninterrupted execution.
 
 An 8×8 partition is calibrated for two epochs. A low gap triggers one 6×6
-fallback; an excessive gap triggers one 10×10 fallback. Training-quality
-failures do not trigger regridding. A passing run continues through epoch five,
-and selection uses the lowest held-in validation NLL among gap-eligible epoch
-2–5 checkpoints, with earlier epochs winning ties. Test is opened exactly once
-after selection. Publication also requires held-in validation NLL at most 2.0
-and an observed allocator peak below 12 GiB.
+fallback with held-in 94/3/3 splits, preserving approximately 12% shared-row /
+shared-column validation-and-test control capacity for 10% world demand. An
+excessive gap triggers one 10×10 fallback with held-in 96/2/2 splits.
+Training-quality failures do not trigger regridding. A passing run continues
+through epoch five, and selection uses the lowest held-in validation NLL among
+gap-eligible epoch 2–5 checkpoints, with earlier epochs winning ties. Test is
+opened exactly once after selection. Publication also requires held-in
+validation NLL at most 2.0 and an observed allocator peak below 12 GiB.
 
 ## Execution tracker
 
@@ -112,10 +114,16 @@ and an observed allocator peak below 12 GiB.
 - [x] Rewrite normalization/source/duplicate/property tests and the CPU 3x3
   end-to-end partition fixture around archive-only entities. It preserves
   worker-count/order independence, exact reconstruction, leakage rejection,
-  control non-reuse, tamper rejection, and old-artifact rejection. Training
-  resume parity and best-epoch coverage remain in the next layer.
-- [ ] Run the focused TinyWorlds-P and shared GPT-Neo/checkpoint suite. Keep all
-  parked TinyWorlds-v2 tests collection-skipped; do not run their bodies.
+  control non-reuse, tamper rejection, and old-artifact rejection.
+- [x] Restore memory-mapped batching, token-weighted scratch training,
+  immutable resume, validation, calibration, sealed-test evaluation,
+  publication, and the fixed archive-only GPU runner. CPU tests cover schedule
+  and calibration boundaries, the 6x6 94/3/3 and 10x10 96/2/2 fallbacks,
+  interrupted/resumed parity, checkpoint identity, and best eligible epoch.
+- [x] Run the focused TinyWorlds-P and shared GPT-Neo/checkpoint suite. The
+  81-test archive/core/partition/training/GPT-Neo/checkpoint/training-state
+  scope passes; parked TinyWorlds-v2 tests remain collection-skipped. Repeat
+  this scope immediately before the GPU run.
 - [ ] Build the real archive-only 8x8 partition, rebuild it byte-identically,
   strictly reload it, and audit cell balance, component visibility, split
   marginals, controls, and sealed-test isolation.

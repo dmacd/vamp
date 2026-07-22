@@ -162,8 +162,11 @@ validation measures held-in NLL and
 gap is 0.08-0.30, every gap is at least 0.05, held-in NLL is at most 2.2,
 held-in NLL improved by at least 0.02 since epoch one, partition/leakage gates
 passed, and JAX reports an allocator peak no greater than 12 GiB. Too-small or
-per-world-low gaps trigger exactly one fresh 6x6 build; mean gap above 0.30
-triggers exactly one fresh 10x10 build. Held-in quality, improvement, or memory
+per-world-low gaps trigger exactly one fresh 6x6 build with held-in 94/3/3
+train/validation/test weights. That leaves approximately 12% shared-row or
+shared-column held-in control capacity for 10% world demand while preserving
+global no-replacement. Mean gap above 0.30 triggers exactly one fresh 10x10
+build with held-in 96/2/2 weights. Held-in quality, improvement, or memory
 failure never triggers regridding. A failing second grid ends the milestone
 without final training.
 

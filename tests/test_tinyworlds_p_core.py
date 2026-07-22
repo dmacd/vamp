@@ -16,6 +16,7 @@ from apm.data.text.tinyworlds_p import (
     bucket_word_lookup,
     calibration_grid_decision,
     cosine_learning_rate,
+    fallback_partition_preset,
     normalize_story_identity,
     normalized_story_sha256,
     recover_released_recipe,
@@ -263,6 +264,19 @@ def test_schedule_grid_fallback_and_best_epoch_boundaries() -> None:
         _validation(2, 2.09, (0.10,) * 5),
         12 * 1024**3,
     ) == "training_quality_failure"
+
+    low_gap_preset = fallback_partition_preset(
+        "fallback_6x6",
+        PartitionPreset(),
+    )
+    assert low_gap_preset.bucket_count == 6
+    assert low_gap_preset.base_split_weights == (94, 3, 3)
+    excessive_gap_preset = fallback_partition_preset(
+        "fallback_10x10",
+        PartitionPreset(),
+    )
+    assert excessive_gap_preset.bucket_count == 10
+    assert excessive_gap_preset.base_split_weights == (96, 2, 2)
 
     earlier = _validation(3, 1.9, (0.10,) * 5)
     tied_later = _validation(4, 1.9, (0.11,) * 5)

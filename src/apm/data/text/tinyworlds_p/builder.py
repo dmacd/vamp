@@ -1290,7 +1290,7 @@ def _integer(record: Mapping[str, object], field: str) -> int:
 
 def _namespaced_sha256(identity: str, namespace: str, value: str) -> str:
     return sha256(
-        f"tinyworlds-p-v1\0{identity}\0{namespace}\0{value}".encode("utf-8")
+        f"{BENCHMARK_ID}\0{identity}\0{namespace}\0{value}".encode("utf-8")
     ).hexdigest()
 
 
