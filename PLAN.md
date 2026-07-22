@@ -1,8 +1,8 @@
 # Development Plan
 
-## Active Milestone: TinyWorlds-P Partitioned TinyStories Base
+## Completed Milestone: TinyWorlds-P Archive-Only Calibration Stop
 
-The active roadmap is `tinyworlds-p-archive-v1`, tracked in
+The completed roadmap is `tinyworlds-p-archive-v1`, tracked in
 [`docs/TW-P_PLAN.md`](docs/TW-P_PLAN.md). It replaces generated TinyWorlds prose
 with unmodified stories taken directly from released records in the pinned
 `TinyStories_all_data.tar.gz` archive. Five noun-bucket by verb-bucket cells are
@@ -11,8 +11,9 @@ reaches the model. All base, world, control, validation, and sealed-test sets
 are derived from eligible archive entities. The original TinyStories train,
 validation, and GPT-4-only text aggregates are irrelevant to this benchmark
 and are not inputs. TinyWorlds-v2 external generation is parked as
-non-qualifying historical evidence. LoRA/VAMP continual episodes are deferred
-until the archive-only partition and scratch base pass their publication gates.
+non-qualifying historical evidence. LoRA/VAMP continual episodes remain
+unstarted because the archive-only scratch base did not pass its publication
+gates.
 
 ### TinyWorlds-P Status
 
@@ -72,36 +73,45 @@ until the archive-only partition and scratch base pass their publication gates.
   tests prove interrupted/resumed state and trace parity, schedule and selection
   boundaries, old-resume rejection, finite evaluation, and exact evaluation
   progress.
-- **Focused CPU/shared checks pass.** The 81-test TinyWorlds-P, GPT-Neo,
+- **Focused CPU/shared checks pass.** The 82-test TinyWorlds-P, GPT-Neo,
   checkpoint, and training-state suite passes in four concurrent groups
-  (10.3s wall time); parked TinyWorlds-v2 tests are still collection-skipped.
+  (9.8s wall time); parked TinyWorlds-v2 tests are still collection-skipped.
 - **GPU smoke passes.** The opt-in RTX 4090 smoke strictly loaded the real tree,
   compiled production training, wrote an interrupted update-one state, resumed
   through update two, and measured an 8.695 GiB JAX allocator peak against the
   12 GiB gate. Splitting strict semantics into assignment, provenance, and
   shard/index proof passes reduced the full smoke from 5m20s to 4m20s.
-- **Current execution sequence.** Complete the fresh seed-zero RTX 4090
-  calibration, apply its predeclared one-fallback policy, then train and publish
-  the selected archive-only base if the gap and quality gates pass. The fixed
-  runner derives exact update counts and phase/overall estimates from
-  archive-only active-token mass and reports adaptive ETAs.
-- **Archive-v1 calibration active (2026-07-21).** A fresh seed-zero 8x8 run is
-  training in
-  `checkpoints/tinyworlds-p-archive-v1/work/base-archive-v1-mu03o__f` after a
-  3m08s strict load. The bound schedule is 150,653 microbatches and 18,832
-  optimizer updates per epoch; no historical checkpoint was inspected or
-  resumed.
+- **Archive-v1 calibration ended with the declared scientific stop
+  (2026-07-22).** The fresh seed-zero 8x8 run completed epochs one and two at
+  updates 18,832 and 37,664. Held-in NLL improved from 1.261707 to 1.201706,
+  but mean gap was only 0.008017, so the fixed policy built the one allowed
+  fresh 6x6 partition with 94/3/3 held-in splits. That fallback completed at
+  updates 17,200 and 34,400; held-in NLL improved from 1.267558 to 1.206720
+  and peak allocation was 8.772 GiB, but mean gap remained only 0.002802 and
+  every world gap was below 0.05. The runner therefore exited with its
+  controlled status 2. It did not train epochs three through five, select a
+  checkpoint, open sealed test, or publish a base. The exact identities,
+  metrics, output hashes, and gate audit are recorded in
+  [`docs/TW-P_ARCHIVE_CALIBRATION_REPORT.md`](docs/TW-P_ARCHIVE_CALIBRATION_REPORT.md).
+- **Terminal policy consequence.** The archive-only implementation, 8x8
+  partition, independent byte-identical rebuild, fresh 6x6 fallback partition,
+  and both scratch calibration attempts are complete. The frozen archive-v1
+  conjunction hypothesis did not produce the required representation gap.
+  No additional regrid, gate change, historical comparison, or test-set
+  inspection is authorized under this benchmark version; a different
+  hypothesis requires a new versioned benchmark.
 - **Historical audits retained for provenance only.** The original train/archive
   mismatch analysis is preserved in
   [`docs/TW-P_SOURCE_AUDIT.md`](docs/TW-P_SOURCE_AUDIT.md), and the obsolete
   intersection-based calibration is preserved in
   [`docs/TW-P_CALIBRATION_AUDIT.md`](docs/TW-P_CALIBRATION_AUDIT.md). Neither
   audit defines a current source, coverage gate, split, or stopping decision.
-- **Test scope direction remains focused.** Every parked TinyWorlds-v2 test is
-  collection-skipped; do not run those legacy bodies. After the archive-only
-  refactor, run focused TinyWorlds-P and shared GPT-Neo/checkpoint tests before
-  and after partition promotion, followed by the host RTX 4090 workflow. No
-  continual LoRA or VAMP stream work begins in this milestone.
+- **Test scope remains focused.** Every parked TinyWorlds-v2 test is
+  collection-skipped; do not run those legacy bodies. Final verification uses
+  the focused TinyWorlds-P and shared GPT-Neo/checkpoint scope in concurrent
+  CPU groups. The completed opt-in archive rebuild and RTX 4090 evidence are
+  retained rather than rerun as default tests. No continual LoRA or VAMP
+  stream work begins from this stopped milestone.
 
 ## Parked Milestone: TinyWorlds-v2 External-Generation Benchmark
 

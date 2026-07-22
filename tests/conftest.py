@@ -7,7 +7,7 @@ from apm.data.mnist import MnistArrays
 
 
 _PARKED_TINYWORLDS_V2_REASON = (
-    "TinyWorlds-v2 is parked while tinyworlds-p-archive-v1 is active"
+    "TinyWorlds-v2 remains parked after the tinyworlds-p-archive-v1 milestone"
 )
 
 

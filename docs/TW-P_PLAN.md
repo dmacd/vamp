@@ -12,6 +12,10 @@ The supplied planning document is archived alongside this tracker as
 is the durable implementation contract and `PLAN.md` is the live repository
 roadmap.
 
+The archive-v1 execution is complete with a controlled low-gap stop. The
+current result and evidence hashes are in the
+[archive-only calibration report](TW-P_ARCHIVE_CALIBRATION_REPORT.md).
+
 ## Immutable identities
 
 - Benchmark: `tinyworlds-p-archive-v1`.
@@ -121,9 +125,10 @@ validation NLL at most 2.0 and an observed allocator peak below 12 GiB.
   and calibration boundaries, the 6x6 94/3/3 and 10x10 96/2/2 fallbacks,
   interrupted/resumed parity, checkpoint identity, and best eligible epoch.
 - [x] Run the focused TinyWorlds-P and shared GPT-Neo/checkpoint suite. The
-  81-test archive/core/partition/training/GPT-Neo/checkpoint/training-state
-  scope passes; parked TinyWorlds-v2 tests remain collection-skipped. Repeat
-  this scope immediately before the GPU run.
+  final 82-test archive/core/partition/training/GPT-Neo/checkpoint/training-state
+  scope passes as four concurrent jobs in 9.8 seconds; parked TinyWorlds-v2
+  tests remain collection-skipped. The same focused scope also passed before
+  the GPU run.
 - [x] Build the real archive-only 8x8 partition, rebuild it byte-identically,
   strictly reload it, and audit cell balance, component visibility, split
   marginals, controls, and sealed-test isolation. The canonical partition is
@@ -137,11 +142,20 @@ validation NLL at most 2.0 and an observed allocator peak below 12 GiB.
   allocator peak was 8.695 GiB against the fixed 12 GiB gate. Three independent
   semantic validators now authenticate assignment topology, archive provenance,
   and shard/index reconstruction concurrently.
-- [ ] Start a fresh seed-zero RTX 4090 calibration from the archive-only
-  partition. Do not resume or select the superseded intersection-based run.
-- [ ] If calibration passes the declared grid policy, finish five epochs,
-  select the best eligible checkpoint, open sealed test exactly once, and
-  publish the checkpoint, results, samples, strict tree, and final report.
+- [x] Start a fresh seed-zero RTX 4090 calibration from the archive-only
+  partition. The 8x8 attempt completed at 18,832 updates per epoch without
+  inspecting or resuming the superseded intersection run. Its epoch-two
+  held-in NLL was 1.201706 and mean gap was 0.008017, which required the one
+  declared fresh 6x6 fallback.
+- [x] Apply the complete one-fallback policy. The fresh 6x6 partition is
+  `7bf90c70ca7207d8b0fdd7896eed7a2ae019bbcbd74126cfcc2115ae0759b4fb`
+  with 94/3/3 held-in splits. Its scratch attempt completed at 17,200 updates
+  per epoch; epoch-two held-in NLL was 1.206720, allocator peak was 8.772 GiB,
+  and mean gap was 0.002802. The second low-gap result ended the milestone as
+  specified. Epochs three through five, checkpoint selection, sealed test, and
+  base publication were correctly not run. See the current
+  [archive-only calibration report](TW-P_ARCHIVE_CALIBRATION_REPORT.md) for
+  exact identities, per-world metrics, and evidence hashes.
 
 Continual LoRA/VAMP streams, replay, consolidation, regeneration, semantic
 clustering, and near-deduplication are deliberately outside this milestone.
