@@ -20,7 +20,9 @@ from apm.data.text.tinyworlds_p import (
     build_archive_ingest,
     iter_archive_groups,
     read_spooled_story,
+    read_spooled_tokens,
 )
+from apm.lm.text import TokenizersTextTokenizer
 
 
 def _sha256(path: Path) -> str:
@@ -210,6 +212,13 @@ def test_archive_ingest_retains_multiplicity_exclusions_and_exact_bytes(
     assert tuple(item["record_id"] for item in quote_group["provenance"]) == tuple(
         item["record_id"] for item in quote_group["occurrences"]
     )
+    tokenizer = TokenizersTextTokenizer.from_file(
+        tokenizer_directory / "tokenizer.json"
+    )
+    assert tuple(
+        read_spooled_tokens(result.token_spool_path, occurrence)
+        for occurrence in quote_group["occurrences"]
+    ) == tuple(tokenizer.encode(story, add_eos=True) for story in reconstructed)
 
 
 @pytest.mark.parametrize(
@@ -359,3 +368,4 @@ def test_archive_ingest_bytes_ignore_worker_completion_and_run_size(
     assert second.groups_path.read_bytes() == first.groups_path.read_bytes()
     assert second.audit_path.read_bytes() == first.audit_path.read_bytes()
     assert second.story_spool_path.read_bytes() == first.story_spool_path.read_bytes()
+    assert second.token_spool_path.read_bytes() == first.token_spool_path.read_bytes()

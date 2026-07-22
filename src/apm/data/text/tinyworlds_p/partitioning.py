@@ -760,15 +760,25 @@ def _improve_control_marginal_match(
     if len(selected) != target_count:
         raise ValueError("control and target group counts must agree")
 
+    category_cache: dict[
+        str,
+        tuple[tuple[str, str], tuple[str, str], tuple[str, str], tuple[str, str]],
+    ] = {}
+
     def categories(
         group: AllocationGroup,
     ) -> tuple[tuple[str, str], tuple[str, str], tuple[str, str], tuple[str, str]]:
-        return (
+        cached = category_cache.get(group.normalized_sha256)
+        if cached is not None:
+            return cached
+        value = (
             ("source", group.source),
             ("feature", group.feature_signature),
             ("adjective", str(group.adjective_bucket)),
             ("length", group.length_bin),
         )
+        category_cache[group.normalized_sha256] = value
+        return value
 
     target_counts = Counter(
         category for group in target_groups for category in categories(group)
@@ -868,6 +878,20 @@ def _improve_control_marginal_match(
         tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]],
         tuple[tuple[tuple[str, str], int], ...],
     ] = {}
+    selected_order_hashes: dict[tuple[int, str], str] = {}
+
+    def selected_order_hash(arm_index: int, group: AllocationGroup) -> str:
+        key = arm_index, group.normalized_sha256
+        cached = selected_order_hashes.get(key)
+        if cached is None:
+            cached = _namespace_hash(
+                identity_sha256,
+                0,
+                f"{namespace}:selected:{arm_index}",
+                group.normalized_sha256,
+            )
+            selected_order_hashes[key] = cached
+        return cached
 
     for iteration in range(min(512, max(1, len(selected)))):
         if violation_score == 0:
@@ -895,21 +919,11 @@ def _improve_control_marginal_match(
                 signature = categories(group)
                 current = outgoing_by_signature.get(signature)
                 candidate_key = (
-                    _namespace_hash(
-                        identity_sha256,
-                        0,
-                        f"{namespace}:selected:{arm_index}",
-                        group.normalized_sha256,
-                    ),
+                    selected_order_hash(arm_index, group),
                     group.normalized_sha256,
                 )
                 if current is None or candidate_key < (
-                    _namespace_hash(
-                        identity_sha256,
-                        0,
-                        f"{namespace}:selected:{arm_index}",
-                        current[1].normalized_sha256,
-                    ),
+                    selected_order_hash(arm_index, current[1]),
                     current[1].normalized_sha256,
                 ):
                     outgoing_by_signature[signature] = (index, group)
@@ -966,6 +980,11 @@ def _improve_control_marginal_match(
                         )
                         next_violation += following[0] - previous[0]
                         next_balance += following[1] - previous[1]
+                    if best_swap is not None and (
+                        next_violation,
+                        next_balance,
+                    ) > best_swap[:2]:
+                        continue
                     candidate = (
                         next_violation,
                         next_balance,
@@ -1055,6 +1074,8 @@ def _improve_control_token_match(
                         + incoming.active_token_count
                         - target_tokens
                     )
+                    if best_swap is not None and error > best_swap[0]:
+                        continue
                     swap = (
                         error,
                         _namespace_hash(
@@ -1153,8 +1174,11 @@ def _improve_control_numeric_match(
                         - outgoing.canonical_token_count
                         + incoming.canonical_token_count
                     )
+                    next_score = score(next_tokens, next_canonical_tokens)
+                    if best_swap is not None and next_score > best_swap[0]:
+                        continue
                     candidate = (
-                        score(next_tokens, next_canonical_tokens),
+                        next_score,
                         _namespace_hash(
                             identity_sha256,
                             0,

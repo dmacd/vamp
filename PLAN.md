@@ -49,6 +49,19 @@ until the archive-only partition and scratch base pass their publication gates.
   globally unique controls, rejects tampering, and rebuilds byte-identically
   across worker/run settings. The fixed preparation runner and opt-in real
   archive replay have been restored.
+- **Canonical archive partition built and reproduced.** The strict 8x8 artifact
+  is
+  `beb9e1e38efdf0447b9421b072c4053fdb7b6156c4814edefa170ec40072f084`.
+  It contains all 4,966,067 eligible archive records (945,499,161 active
+  tokens), passes the 99.968% token-weighted role gate, retains every agreeing
+  duplicate occurrence, excludes six conflicting duplicate groups, and passes
+  topology, component-visibility, split-marginal, globally unique-control,
+  exact-byte reconstruction, and sealed-test isolation checks. A second build
+  with 24 workers and a different external-sort run size authenticated to the
+  same identity and exact `tree.json`, proving byte equality for every strict
+  tree entry. The opt-in acceptance test took 39m08s end to end; the build took
+  35m11s and its final parallel strict reload took 3m56s. Long real-source
+  gates remain excluded from the default test suite.
 - **Archive-only scratch training restored.** Memory-mapped batching,
   token-weighted accumulation, immutable complete resume states, streaming
   validation, one-shot sealed test, milestone publication, and the fixed GPU
@@ -58,11 +71,16 @@ until the archive-only partition and scratch base pass their publication gates.
   schedule and selection boundaries, old-resume rejection, and finite
   evaluation.
 - **Focused CPU/shared checks pass.** The 81-test TinyWorlds-P, GPT-Neo,
-  checkpoint, and training-state suite passes; parked TinyWorlds-v2 tests are
-  still collection-skipped. Re-run this scope immediately before GPU training.
-- **Next execution sequence.** Build and byte-rebuild the complete archive-only
-  8x8 partition, strictly reload and audit it, re-run focused checks, and only
-  then start a fresh seed-zero GPU calibration.
+  checkpoint, and training-state suite passes in four concurrent groups
+  (10.3s wall time); parked TinyWorlds-v2 tests are still collection-skipped.
+- **GPU smoke passes.** The opt-in RTX 4090 smoke strictly loaded the real tree,
+  compiled production training, wrote an interrupted update-one state, resumed
+  through update two, and measured an 8.695 GiB JAX allocator peak against the
+  12 GiB gate. Splitting strict semantics into assignment, provenance, and
+  shard/index proof passes reduced the full smoke from 5m20s to 4m20s.
+- **Next execution sequence.** Start the fresh seed-zero RTX 4090 calibration.
+  The fixed runner derives exact update counts and phase/overall estimates from
+  archive-only active-token mass and reports adaptive ETAs.
 - **Historical audits retained for provenance only.** The original train/archive
   mismatch analysis is preserved in
   [`docs/TW-P_SOURCE_AUDIT.md`](docs/TW-P_SOURCE_AUDIT.md), and the obsolete

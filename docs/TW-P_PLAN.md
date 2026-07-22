@@ -124,9 +124,19 @@ validation NLL at most 2.0 and an observed allocator peak below 12 GiB.
   81-test archive/core/partition/training/GPT-Neo/checkpoint/training-state
   scope passes; parked TinyWorlds-v2 tests remain collection-skipped. Repeat
   this scope immediately before the GPU run.
-- [ ] Build the real archive-only 8x8 partition, rebuild it byte-identically,
+- [x] Build the real archive-only 8x8 partition, rebuild it byte-identically,
   strictly reload it, and audit cell balance, component visibility, split
-  marginals, controls, and sealed-test isolation.
+  marginals, controls, and sealed-test isolation. The canonical partition is
+  `beb9e1e38efdf0447b9421b072c4053fdb7b6156c4814edefa170ec40072f084`:
+  4,966,067 eligible records and 945,499,161 active tokens. Its independent
+  24-worker rebuild used a different run size and produced the identical strict
+  tree in 39m08s including both loads. This acceptance gate is opt-in and the
+  normal 81-test scope runs as four concurrent jobs in about 10 seconds.
+- [x] Run the opt-in RTX 4090 compile/resume smoke against the strict real
+  partition. Interrupted update one resumed through update two, and JAX's
+  allocator peak was 8.695 GiB against the fixed 12 GiB gate. Three independent
+  semantic validators now authenticate assignment topology, archive provenance,
+  and shard/index reconstruction concurrently.
 - [ ] Start a fresh seed-zero RTX 4090 calibration from the archive-only
   partition. Do not resume or select the superseded intersection-based run.
 - [ ] If calibration passes the declared grid policy, finish five epochs,

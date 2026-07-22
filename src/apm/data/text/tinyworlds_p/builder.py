@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import dataclass
 from hashlib import sha256
@@ -13,9 +13,7 @@ import multiprocessing
 import os
 from pathlib import Path
 import shutil
-from typing import BinaryIO
-
-import numpy as np
+from typing import BinaryIO, TypeVar
 
 from apm.data.text.tinyworlds_p.contracts import (
     BENCHMARK_ID,
@@ -49,11 +47,40 @@ from apm.data.text.tinyworlds_p.archive_ingest import (
     build_archive_ingest,
     iter_archive_groups,
 )
-from apm.lm.text import TokenizersTextTokenizer
 
 
-_TOKENIZER_WORKER: TokenizersTextTokenizer | None = None
-_TOKENIZATION_BATCH_SIZE = 128
+_PUBLICATION_BATCH_SIZE = 256
+_MAX_PARALLEL_WORKERS = max(1, (os.cpu_count() or 1) * 3 // 4)
+_InputT = TypeVar("_InputT")
+_OutputT = TypeVar("_OutputT")
+
+
+@dataclass(frozen=True, slots=True)
+class _PublicationRecord:
+    document: dict[str, object]
+    compact_index: dict[str, object]
+    primary_index_name: str
+    control_index_name: str | None
+    count_key: tuple[str, str | None, str]
+    control_count_key: tuple[str, str, str] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _AllocationRunTask:
+    domain: str
+    path: Path
+    records: tuple[dict[str, object], ...]
+
+
+_EncodedPublicationRecord = tuple[
+    bytes,
+    bytes,
+    str,
+    str | None,
+    tuple[str, str | None, str],
+    tuple[str, str, str] | None,
+]
+_EncodedPublicationBatch = tuple[_EncodedPublicationRecord, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,7 +170,7 @@ def build_partition(
         raise TypeError("build_partition requires PartitionInputs and PartitionPreset")
     ingest = build_archive_ingest(inputs, preset, NORMALIZATION_IDENTITY)
     seed_identity = _seed_identity(inputs, preset)
-    _progress(inputs, "buckets", 0, None, "balancing ingredient token mass")
+    _progress(inputs, "buckets", 0, 3, "balancing ingredient token mass")
     buckets = _build_buckets(ingest, preset, seed_identity)
     bucket_lookups = {
         namespace: bucket_word_lookup(
@@ -157,6 +184,7 @@ def build_partition(
         bucket_lookups["verb"],
         bucket_lookups["adjective"],
     )
+    _progress(inputs, "buckets", 1, 3, "selecting the five-cell topology")
     cells = select_world_cells(
         summarize_cells(allocation_factory()),
         preset.bucket_count,
@@ -164,12 +192,14 @@ def build_partition(
         public_seed=preset.public_seed,
         median_tolerance=preset.selected_cell_median_tolerance,
     )
+    _progress(inputs, "buckets", 2, 3, "auditing component visibility")
     visibility = require_component_visibility(
         allocation_factory(),
         cells,
         preset.minimum_component_outside_groups,
     )
-    _progress(inputs, "splits", 0, None, "allocating groups and strict matched controls")
+    _progress(inputs, "buckets", 3, 3, "bucket, topology, and visibility gates passed")
+    _progress(inputs, "splits", 0, 4, "preparing deterministic domain allocation runs")
     allocation = _prepare_allocations(
         inputs,
         preset,
@@ -198,7 +228,13 @@ def build_partition(
     (publication / "indexes").mkdir()
     (publication / "manifests").mkdir()
     shutil.copyfile(allocation.assignments_path, publication / "assignments.jsonl")
-    _progress(inputs, "shards", 0, None, "writing original bytes and uint16 token shards")
+    _progress(
+        inputs,
+        "shards",
+        0,
+        ingest.audit.eligible_record_count,
+        "writing original bytes, uint16 tokens, and indexes",
+    )
     shard_records, occurrence_counts = _write_shards_and_indexes(
         inputs,
         preset,
@@ -206,6 +242,13 @@ def build_partition(
         allocation.assignments_path,
         allocation.control_group_owners,
         publication,
+    )
+    _progress(
+        inputs,
+        "shards",
+        ingest.audit.eligible_record_count,
+        ingest.audit.eligible_record_count,
+        "shards and document indexes completed",
     )
     _write_partition_metadata(
         publication,
@@ -228,12 +271,19 @@ def build_partition(
     inputs.output_root.mkdir(parents=True, exist_ok=True)
     os.rename(publication, target)
     _fsync_directory(inputs.output_root)
-    _progress(inputs, "publish", 1, 1, f"published {partition_sha256}")
+    _progress(
+        inputs,
+        "publish",
+        1,
+        2,
+        f"published {partition_sha256}; authenticating the complete tree",
+    )
     from apm.data.text.tinyworlds_p.artifact import load_partition
 
     artifact = load_partition(target)
     if artifact.manifest_sha256 != manifest_sha256:
         raise RuntimeError("published partition manifest identity changed on strict reload")
+    _progress(inputs, "publish", 2, 2, "strict parallel reload passed")
     return artifact
 
 
@@ -318,52 +368,75 @@ def _prepare_allocations(
     assignment_runs_directory = inputs.temporary_directory / "assignment-runs"
     allocation_runs_directory.mkdir()
     assignment_runs_directory.mkdir()
+    expected_domains = ("base", *WORLD_LABELS)
     totals_tokens: Counter[str] = Counter()
     totals_marginals: Counter[tuple[str, str, str]] = Counter()
-    pending: list[dict[str, object]] = []
-    allocation_run_paths: list[Path] = []
-    for group in allocation_factory():
-        domain = cell_labels.get((group.noun_bucket, group.verb_bucket), "base")
-        totals_tokens[domain] += group.active_token_count
-        for dimension, category in group.marginals:
-            totals_marginals[(domain, dimension, category)] += group.active_token_count
-        pending.append(
-            {
-                **_allocation_group_record(group),
-                "domain": domain,
-                "order_sha256": _namespaced_sha256(
-                    seed_identity,
-                    f"allocator-order:{domain}",
-                    group.normalized_sha256,
-                ),
-            }
-        )
-        if len(pending) == preset.run_record_count:
-            allocation_run_paths.append(
-                _flush_records(
-                    pending,
-                    allocation_runs_directory,
-                    "allocation",
-                    len(allocation_run_paths),
-                    _allocation_sort_key,
+    pending_by_domain: dict[str, list[dict[str, object]]] = {
+        domain: [] for domain in expected_domains
+    }
+    allocation_run_paths: dict[str, list[Path]] = {
+        domain: [] for domain in expected_domains
+    }
+    run_counts: Counter[str] = Counter()
+
+    def allocation_run_tasks() -> Iterator[_AllocationRunTask]:
+        for group in allocation_factory():
+            domain = cell_labels.get((group.noun_bucket, group.verb_bucket), "base")
+            totals_tokens[domain] += group.active_token_count
+            for dimension, category in group.marginals:
+                totals_marginals[(domain, dimension, category)] += group.active_token_count
+            pending = pending_by_domain[domain]
+            pending.append(
+                {
+                    **_allocation_group_record(group),
+                    "domain": domain,
+                    "order_sha256": _namespaced_sha256(
+                        seed_identity,
+                        f"allocator-order:{domain}",
+                        group.normalized_sha256,
+                    ),
+                }
+            )
+            if len(pending) == preset.run_record_count:
+                index = run_counts[domain]
+                run_counts[domain] += 1
+                yield _AllocationRunTask(
+                    domain=domain,
+                    path=(
+                        allocation_runs_directory
+                        / f"allocation-{domain}-{index:06d}.jsonl"
+                    ),
+                    records=tuple(pending),
                 )
-            )
-            pending = []
-    if pending:
-        allocation_run_paths.append(
-            _flush_records(
-                pending,
-                allocation_runs_directory,
-                "allocation",
-                len(allocation_run_paths),
-                _allocation_sort_key,
-            )
-        )
-    expected_domains = {"base", *WORLD_LABELS}
-    if set(totals_tokens) != expected_domains:
+                pending_by_domain[domain] = []
+        for domain in expected_domains:
+            pending = pending_by_domain[domain]
+            if pending:
+                index = run_counts[domain]
+                run_counts[domain] += 1
+                yield _AllocationRunTask(
+                    domain=domain,
+                    path=(
+                        allocation_runs_directory
+                        / f"allocation-{domain}-{index:06d}.jsonl"
+                    ),
+                    records=tuple(pending),
+                )
+                pending_by_domain[domain] = []
+
+    allocation_worker_count = min(_MAX_PARALLEL_WORKERS, preset.worker_count)
+    for domain, path in _ordered_process_map(
+        allocation_run_tasks(),
+        _write_allocation_run,
+        allocation_worker_count,
+        max_pending=allocation_worker_count,
+    ):
+        allocation_run_paths[domain].append(path)
+    if set(totals_tokens) != set(expected_domains):
         raise PartitionGateError(
             f"partition allocation domains are incomplete: {tuple(sorted(totals_tokens))}"
         )
+    _progress(inputs, "splits", 1, 4, "domain allocation runs prepared")
     domain_totals = {
         domain: _DomainTotals(
             token_count=totals_tokens[domain],
@@ -378,12 +451,13 @@ def _prepare_allocations(
         for domain in expected_domains
     }
     assignment_run_paths = _allocate_sorted_runs(
-        allocation_run_paths,
+        {domain: tuple(paths) for domain, paths in allocation_run_paths.items()},
         assignment_runs_directory,
         domain_totals,
         preset,
         seed_identity,
     )
+    _progress(inputs, "splits", 2, 4, "six independent domain allocators completed")
     eligible_assignments_path = inputs.temporary_directory / "eligible-assignments.jsonl"
     _merge_records_to_path(
         assignment_run_paths,
@@ -460,12 +534,14 @@ def _prepare_allocations(
             output.write(canonical_record_bytes(assignment_record))
         if eligible_current is not None:
             raise ValueError("eligible assignment stream contains an unknown group")
+    _progress(inputs, "splits", 3, 4, "canonical assignment ledger completed")
     controls, owners = _build_controls(
         evaluation_groups,
         cells,
         preset,
         seed_identity,
     )
+    _progress(inputs, "splits", 4, 4, "validation and test controls completed in parallel")
     split_counts = tuple(
         SplitCount(
             role=role,
@@ -490,27 +566,70 @@ def _prepare_allocations(
 
 
 def _allocate_sorted_runs(
-    allocation_run_paths: Sequence[Path],
+    allocation_run_paths: Mapping[str, tuple[Path, ...]],
     assignment_directory: Path,
     domain_totals: Mapping[str, _DomainTotals],
     preset: PartitionPreset,
     seed_identity: str,
 ) -> tuple[Path, ...]:
+    domains = ("base", *WORLD_LABELS)
+    domain_directories = {
+        domain: assignment_directory / domain for domain in domains
+    }
+    for directory in domain_directories.values():
+        directory.mkdir()
+    if preset.worker_count == 1:
+        results = tuple(
+            _allocate_domain_runs(
+                domain,
+                allocation_run_paths[domain],
+                domain_directories[domain],
+                domain_totals[domain],
+                preset,
+                seed_identity,
+            )
+            for domain in domains
+        )
+    else:
+        with ProcessPoolExecutor(
+            max_workers=min(preset.worker_count, len(domains)),
+            mp_context=multiprocessing.get_context("spawn"),
+        ) as executor:
+            futures = {
+                domain: executor.submit(
+                    _allocate_domain_runs,
+                    domain,
+                    allocation_run_paths[domain],
+                    domain_directories[domain],
+                    domain_totals[domain],
+                    preset,
+                    seed_identity,
+                )
+                for domain in domains
+            }
+            results = tuple(futures[domain].result() for domain in domains)
+    return tuple(path for result in results for path in result)
+
+
+def _allocate_domain_runs(
+    domain: str,
+    allocation_run_paths: Sequence[Path],
+    assignment_directory: Path,
+    totals: _DomainTotals,
+    preset: PartitionPreset,
+    seed_identity: str,
+) -> tuple[Path, ...]:
+    """Allocate one independent domain inside one worker process."""
     split_labels = ("train", "validation", "test")
-    active_domain: str | None = None
     split_tokens: Counter[str] = Counter()
     split_marginals: Counter[tuple[str, str, str]] = Counter()
     pending: list[dict[str, object]] = []
     paths: list[Path] = []
     for record in _merge_records(allocation_run_paths, _allocation_sort_key):
-        domain = _string(record, "domain")
-        if domain != active_domain:
-            active_domain = domain
-            split_tokens = Counter()
-            split_marginals = Counter()
+        if _string(record, "domain") != domain:
+            raise ValueError("allocation run crossed domain boundaries")
         group = _allocation_group_from_record(record)
         weights = preset.base_split_weights if domain == "base" else preset.world_split_weights
-        totals = domain_totals[domain]
         total_marginals = {
             (dimension, category): count
             for dimension, category, count in totals.marginal_token_counts
@@ -597,45 +716,45 @@ def _build_controls(
     preset: PartitionPreset,
     seed_identity: str,
 ) -> tuple[tuple[ControlSelection, ...], tuple[tuple[str, str, str], ...]]:
-    controls: list[ControlSelection] = []
-    owners: list[tuple[str, str, str]] = []
-    cells_by_label = {cell.label: cell for cell in cells}
-    used_by_split: dict[str, set[str]] = {"validation": set(), "test": set()}
-    for split in ("validation", "test"):
-        base_candidates = tuple(evaluation_groups[("base", split)])
-        # E draws from all four complement arms, so reserve its balanced sample
-        # first; opposite corner pairs then consume symmetric remaining pools.
-        for world in ("E", "A", "C", "B", "D"):
-            cell = cells_by_label[world]
-            unused = tuple(
-                group
-                for group in base_candidates
-                if group.normalized_sha256 not in used_by_split[split]
-            )
-            row_candidates = tuple(
-                group
-                for group in unused
-                if group.noun_bucket == cell.noun_bucket
-                and group.verb_bucket != cell.verb_bucket
-            )
-            column_candidates = tuple(
-                group
-                for group in unused
-                if group.verb_bucket == cell.verb_bucket
-                and group.noun_bucket != cell.noun_bucket
-            )
-            control, _ = select_matched_control(
-                evaluation_groups[(world, split)],
-                row_candidates,
-                column_candidates,
-                world,
+    split_payloads = {
+        split: {
+            domain: tuple(evaluation_groups[(domain, split)])
+            for domain in ("base", *WORLD_LABELS)
+        }
+        for split in ("validation", "test")
+    }
+    if preset.worker_count == 1:
+        results = tuple(
+            _build_controls_for_split(
                 split,
-                seed_identity,
+                split_payloads[split],
+                tuple(cells),
                 preset,
+                seed_identity,
             )
-            controls.append(control)
-            used_by_split[split].update(control.group_sha256)
-            owners.extend((group_sha256, world, split) for group_sha256 in control.group_sha256)
+            for split in ("validation", "test")
+        )
+    else:
+        with ProcessPoolExecutor(
+            max_workers=2,
+            mp_context=multiprocessing.get_context("spawn"),
+        ) as executor:
+            futures = {
+                split: executor.submit(
+                    _build_controls_for_split,
+                    split,
+                    split_payloads[split],
+                    tuple(cells),
+                    preset,
+                    seed_identity,
+                )
+                for split in ("validation", "test")
+            }
+            results = tuple(
+                futures[split].result() for split in ("validation", "test")
+            )
+    controls = [control for result in results for control in result[0]]
+    owners = [owner for result in results for owner in result[1]]
     canonical_controls = tuple(
         sorted(
             controls,
@@ -646,6 +765,58 @@ def _build_controls(
         )
     )
     return canonical_controls, tuple(sorted(owners))
+
+
+def _build_controls_for_split(
+    split: str,
+    evaluation_groups: Mapping[str, tuple[AllocationGroup, ...]],
+    cells: tuple[WorldCell, ...],
+    preset: PartitionPreset,
+    seed_identity: str,
+) -> tuple[tuple[ControlSelection, ...], tuple[tuple[str, str, str], ...]]:
+    """Select one split's controls sequentially inside an independent process."""
+    controls: list[ControlSelection] = []
+    owners: list[tuple[str, str, str]] = []
+    cells_by_label = {cell.label: cell for cell in cells}
+    used: set[str] = set()
+    base_candidates = evaluation_groups["base"]
+    # E draws from all four complement arms, so reserve its balanced sample
+    # first; opposite corner pairs then consume symmetric remaining pools.
+    for world in ("E", "A", "C", "B", "D"):
+        cell = cells_by_label[world]
+        unused = tuple(
+            group
+            for group in base_candidates
+            if group.normalized_sha256 not in used
+        )
+        row_candidates = tuple(
+            group
+            for group in unused
+            if group.noun_bucket == cell.noun_bucket
+            and group.verb_bucket != cell.verb_bucket
+        )
+        column_candidates = tuple(
+            group
+            for group in unused
+            if group.verb_bucket == cell.verb_bucket
+            and group.noun_bucket != cell.noun_bucket
+        )
+        control, _ = select_matched_control(
+            evaluation_groups[world],
+            row_candidates,
+            column_candidates,
+            world,
+            split,
+            seed_identity,
+            preset,
+        )
+        controls.append(control)
+        used.update(control.group_sha256)
+        owners.extend(
+            (group_sha256, world, split)
+            for group_sha256 in control.group_sha256
+        )
+    return tuple(controls), tuple(owners)
 
 
 def _write_shards_and_indexes(
@@ -698,86 +869,39 @@ def _write_shards_and_indexes(
         with documents_path.open("wb") as documents:
             occurrences = _iter_assigned_raw_occurrences(
                 ingest.story_spool_path,
+                ingest.token_spool_path,
                 ingest.groups_path,
                 assignments_path,
             )
-            tokenized = _ordered_tokenize(
+            records = _iter_publication_records(
                 occurrences,
-                inputs.tokenizer_directory / "tokenizer.json",
-                preset.worker_count,
+                text_writer,
+                token_writer,
+                control_by_group,
+                inputs,
+                ingest.audit.eligible_record_count,
             )
-            for occurrence, raw_story, token_ids in tokenized:
-                if len(token_ids) != _integer(occurrence, "token_count"):
-                    raise ValueError("replayed tokenizer count differs from archive ingest")
-                if any(not 0 <= token_id <= np.iinfo(np.uint16).max for token_id in token_ids):
-                    raise ValueError("token shard ID does not fit uint16")
-                text_shard, text_offset = text_writer.write(raw_story)
-                token_payload = np.asarray(token_ids, dtype="<u2").tobytes(order="C")
-                token_shard, token_byte_offset = token_writer.write(token_payload)
-                assignment = _object_record(occurrence, "assignment")
-                group_sha256 = _string(assignment, "normalized_story_sha256")
-                role = _string(assignment, "role")
-                split = _string(assignment, "split")
-                world_value = assignment.get("world")
-                if world_value is not None and type(world_value) is not str:
-                    raise ValueError("assignment world must be text or null")
-                recipe = _object_record(assignment, "recipe")
-                document = {
-                    "active_group_token_count": _integer(assignment, "active_token_count"),
-                    "adjective_bucket": _integer(occurrence, "adjective_bucket"),
-                    "byte_length": len(raw_story),
-                    "normalized_story_sha256": group_sha256,
-                    "noun_bucket": _integer(occurrence, "noun_bucket"),
-                    "record_id": _string(occurrence, "record_id"),
-                    "source": _string(occurrence, "source"),
-                    "source_member": _string(occurrence, "source_member"),
-                    "source_index": _integer(occurrence, "source_index"),
-                    "content_sha256": _string(occurrence, "content_sha256"),
-                    "provenance": assignment["provenance"],
-                    "recipe": recipe,
-                    "role": role,
-                    "story_sha256": _string(occurrence, "story_sha256"),
-                    "split": split,
-                    "text_bytes": len(raw_story),
-                    "text_offset": text_offset,
-                    "text_shard": text_shard,
-                    "token_count": len(token_ids),
-                    "token_offset": token_byte_offset // 2,
-                    "token_shard": token_shard,
-                    "verb_bucket": _integer(occurrence, "verb_bucket"),
-                    "world": world_value,
-                }
-                documents.write(canonical_record_bytes(document))
-                compact = {
-                    "normalized_story_sha256": group_sha256,
-                    "record_id": document["record_id"],
-                    "source": document["source"],
-                    "source_member": document["source_member"],
-                    "source_index": document["source_index"],
-                    "content_sha256": document["content_sha256"],
-                    "story_sha256": document["story_sha256"],
-                    "text_bytes": document["text_bytes"],
-                    "text_offset": text_offset,
-                    "text_shard": text_shard,
-                    "token_count": len(token_ids),
-                    "token_offset": document["token_offset"],
-                    "token_shard": token_shard,
-                }
-                primary_name = (
-                    f"base-{split}.jsonl"
-                    if role == "base"
-                    else f"world-{world_value}-{split}.jsonl"
-                )
-                index_streams[primary_name].write(canonical_record_bytes(compact))
-                occurrence_counts[(role, world_value, split)] += 1
-                if group_sha256 in control_by_group:
-                    control_world, control_split = control_by_group[group_sha256]
-                    if split != control_split or role != "base":
-                        raise ValueError("control owner is not in the corresponding held-in split")
-                    index_streams[f"control-{control_world}-{control_split}.jsonl"].write(
-                        canonical_record_bytes(compact)
-                    )
-                    occurrence_counts[("control", control_world, control_split)] += 1
+            batches = _chunked(records, _PUBLICATION_BATCH_SIZE)
+            for encoded_batch in _ordered_process_map(
+                batches,
+                _encode_publication_batch,
+                min(_MAX_PARALLEL_WORKERS, preset.worker_count),
+            ):
+                for (
+                    document_payload,
+                    compact_payload,
+                    primary_name,
+                    control_name,
+                    count_key,
+                    control_count_key,
+                ) in encoded_batch:
+                    documents.write(document_payload)
+                    index_streams[primary_name].write(compact_payload)
+                    occurrence_counts[count_key] += 1
+                    if control_name is not None:
+                        index_streams[control_name].write(compact_payload)
+                        assert control_count_key is not None
+                        occurrence_counts[control_count_key] += 1
     finally:
         for stream in index_streams.values():
             stream.flush()
@@ -786,14 +910,129 @@ def _write_shards_and_indexes(
     return text_writer.finish() + token_writer.finish(), occurrence_counts
 
 
+def _iter_publication_records(
+    occurrences: Iterable[tuple[dict[str, object], bytes, bytes]],
+    text_writer: _ShardWriter,
+    token_writer: _ShardWriter,
+    control_by_group: Mapping[str, tuple[str, str]],
+    inputs: PartitionInputs,
+    total_occurrences: int,
+) -> Iterator[_PublicationRecord]:
+    """Write shard payloads and yield metadata for parallel canonical encoding."""
+    for completed, (occurrence, raw_story, token_payload) in enumerate(
+        occurrences,
+        start=1,
+    ):
+        token_count = _integer(occurrence, "token_count")
+        if len(token_payload) != token_count * 2:
+            raise ValueError("replayed tokenizer count differs from archive ingest")
+        text_shard, text_offset = text_writer.write(raw_story)
+        token_shard, token_byte_offset = token_writer.write(token_payload)
+        assignment = _object_record(occurrence, "assignment")
+        group_sha256 = _string(assignment, "normalized_story_sha256")
+        role = _string(assignment, "role")
+        split = _string(assignment, "split")
+        world_value = assignment.get("world")
+        if world_value is not None and type(world_value) is not str:
+            raise ValueError("assignment world must be text or null")
+        recipe = _object_record(assignment, "recipe")
+        document = {
+            "active_group_token_count": _integer(assignment, "active_token_count"),
+            "adjective_bucket": _integer(occurrence, "adjective_bucket"),
+            "byte_length": len(raw_story),
+            "normalized_story_sha256": group_sha256,
+            "noun_bucket": _integer(occurrence, "noun_bucket"),
+            "record_id": _string(occurrence, "record_id"),
+            "source": _string(occurrence, "source"),
+            "source_member": _string(occurrence, "source_member"),
+            "source_index": _integer(occurrence, "source_index"),
+            "content_sha256": _string(occurrence, "content_sha256"),
+            "provenance": assignment["provenance"],
+            "recipe": recipe,
+            "role": role,
+            "story_sha256": _string(occurrence, "story_sha256"),
+            "split": split,
+            "text_bytes": len(raw_story),
+            "text_offset": text_offset,
+            "text_shard": text_shard,
+            "token_count": token_count,
+            "token_offset": token_byte_offset // 2,
+            "token_shard": token_shard,
+            "verb_bucket": _integer(occurrence, "verb_bucket"),
+            "world": world_value,
+        }
+        compact = {
+            "normalized_story_sha256": group_sha256,
+            "record_id": document["record_id"],
+            "source": document["source"],
+            "source_member": document["source_member"],
+            "source_index": document["source_index"],
+            "content_sha256": document["content_sha256"],
+            "story_sha256": document["story_sha256"],
+            "text_bytes": document["text_bytes"],
+            "text_offset": text_offset,
+            "text_shard": text_shard,
+            "token_count": token_count,
+            "token_offset": document["token_offset"],
+            "token_shard": token_shard,
+        }
+        primary_name = (
+            f"base-{split}.jsonl"
+            if role == "base"
+            else f"world-{world_value}-{split}.jsonl"
+        )
+        control_name: str | None = None
+        control_count_key: tuple[str, str, str] | None = None
+        if group_sha256 in control_by_group:
+            control_world, control_split = control_by_group[group_sha256]
+            if split != control_split or role != "base":
+                raise ValueError("control owner is not in the corresponding held-in split")
+            control_name = f"control-{control_world}-{control_split}.jsonl"
+            control_count_key = ("control", control_world, control_split)
+        yield _PublicationRecord(
+            document=document,
+            compact_index=compact,
+            primary_index_name=primary_name,
+            control_index_name=control_name,
+            count_key=(role, world_value, split),
+            control_count_key=control_count_key,
+        )
+        if completed % 100_000 == 0:
+            _progress(
+                inputs,
+                "shards",
+                completed,
+                total_occurrences,
+                "publishing archive occurrences with bounded encoding workers",
+            )
+
+
+def _encode_publication_batch(
+    batch: tuple[_PublicationRecord, ...],
+) -> _EncodedPublicationBatch:
+    """Encode document/index ledgers in workers without changing stream order."""
+    return tuple(
+        (
+            canonical_record_bytes(record.document),
+            canonical_record_bytes(record.compact_index),
+            record.primary_index_name,
+            record.control_index_name,
+            record.count_key,
+            record.control_count_key,
+        )
+        for record in batch
+    )
+
+
 def _iter_assigned_raw_occurrences(
     story_spool_path: Path,
+    token_spool_path: Path,
     ingest_path: Path,
     assignments_path: Path,
-) -> Iterator[tuple[dict[str, object], bytes]]:
+) -> Iterator[tuple[dict[str, object], bytes, bytes]]:
     assignments = _iter_jsonl(assignments_path)
     assignment = next(assignments, None)
-    with story_spool_path.open("rb") as spool:
+    with story_spool_path.open("rb") as spool, token_spool_path.open("rb") as token_spool:
         for group in iter_archive_groups(ingest_path):
             if assignment is None or _string(
                 assignment, "normalized_story_sha256"
@@ -817,6 +1056,11 @@ def _iter_assigned_raw_occurrences(
                     occurrence, "story_sha256"
                 ):
                     raise ValueError("spooled archive story changed after ingestion")
+                token_count = _integer(occurrence, "token_count")
+                token_spool.seek(_integer(occurrence, "token_spool_offset") * 2)
+                token_payload = token_spool.read(token_count * 2)
+                if len(token_payload) != token_count * 2:
+                    raise ValueError("spooled archive tokens changed after ingestion")
                 yield (
                     {
                         **occurrence,
@@ -826,71 +1070,10 @@ def _iter_assigned_raw_occurrences(
                         "verb_bucket": verb_bucket,
                     },
                     raw_story,
+                    token_payload,
                 )
         if assignment is not None:
             raise ValueError("assignment stream contains unknown trailing groups")
-
-
-def _ordered_tokenize(
-    occurrences: Iterable[tuple[dict[str, object], bytes]],
-    tokenizer_path: Path,
-    worker_count: int,
-) -> Iterator[tuple[dict[str, object], bytes, tuple[int, ...]]]:
-    batches = _chunked_occurrences(occurrences, _TOKENIZATION_BATCH_SIZE)
-    if worker_count == 1:
-        _init_tokenizer_worker(str(tokenizer_path))
-        for batch in batches:
-            yield from _tokenize_occurrence_batch(batch)
-        return
-    with ProcessPoolExecutor(
-        max_workers=worker_count,
-        mp_context=multiprocessing.get_context("spawn"),
-        initializer=_init_tokenizer_worker,
-        initargs=(str(tokenizer_path),),
-    ) as executor:
-        pending: dict[Future[tuple[tuple[dict[str, object], bytes, tuple[int, ...]], ...]], int] = {}
-        completed: dict[int, tuple[tuple[dict[str, object], bytes, tuple[int, ...]], ...]] = {}
-        batch_iterator = enumerate(batches)
-        next_output = 0
-        for _ in range(worker_count * 2):
-            item = next(batch_iterator, None)
-            if item is None:
-                break
-            index, batch = item
-            pending[executor.submit(_tokenize_occurrence_batch, batch)] = index
-        while pending:
-            finished, _ = wait(set(pending), return_when=FIRST_COMPLETED)
-            for future in finished:
-                index = pending.pop(future)
-                completed[index] = future.result()
-                item = next(batch_iterator, None)
-                if item is not None:
-                    following_index, batch = item
-                    pending[executor.submit(_tokenize_occurrence_batch, batch)] = following_index
-            while next_output in completed:
-                yield from completed.pop(next_output)
-                next_output += 1
-
-
-def _init_tokenizer_worker(tokenizer_path: str) -> None:
-    global _TOKENIZER_WORKER
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    _TOKENIZER_WORKER = TokenizersTextTokenizer.from_file(tokenizer_path)
-
-
-def _tokenize_occurrence_batch(
-    batch: tuple[tuple[dict[str, object], bytes], ...],
-) -> tuple[tuple[dict[str, object], bytes, tuple[int, ...]], ...]:
-    if _TOKENIZER_WORKER is None:
-        raise RuntimeError("tokenizer worker was not initialized")
-    return tuple(
-        (
-            occurrence,
-            raw_story,
-            _TOKENIZER_WORKER.encode(raw_story.decode("utf-8", errors="strict"), add_eos=True),
-        )
-        for occurrence, raw_story in batch
-    )
 
 
 def _write_partition_metadata(
@@ -1130,6 +1313,14 @@ def _allocation_sort_key(record: dict[str, object]) -> tuple[object, ...]:
     )
 
 
+def _write_allocation_run(task: _AllocationRunTask) -> tuple[str, Path]:
+    """Sort and encode one bounded allocation run in a worker process."""
+    with task.path.open("wb") as output:
+        for record in sorted(task.records, key=_allocation_sort_key):
+            output.write(canonical_record_bytes(record))
+    return task.domain, task.path
+
+
 def _flush_records(
     records: list[dict[str, object]],
     directory: Path,
@@ -1193,11 +1384,11 @@ def _iter_json_stream(stream: BinaryIO, path: Path) -> Iterator[dict[str, object
         yield value
 
 
-def _chunked_occurrences(
-    values: Iterable[tuple[dict[str, object], bytes]],
+def _chunked(
+    values: Iterable[_PublicationRecord],
     size: int,
-) -> Iterator[tuple[tuple[dict[str, object], bytes], ...]]:
-    pending: list[tuple[dict[str, object], bytes]] = []
+) -> Iterator[tuple[_PublicationRecord, ...]]:
+    pending: list[_PublicationRecord] = []
     for value in values:
         pending.append(value)
         if len(pending) == size:
@@ -1205,6 +1396,49 @@ def _chunked_occurrences(
             pending = []
     if pending:
         yield tuple(pending)
+
+
+def _ordered_process_map(
+    values: Iterable[_InputT],
+    function: Callable[[_InputT], _OutputT],
+    worker_count: int,
+    *,
+    max_pending: int | None = None,
+) -> Iterator[_OutputT]:
+    """Run bounded process work while yielding results in exact input order."""
+    if worker_count <= 1:
+        for value in values:
+            yield function(value)
+        return
+    value_iterator = enumerate(values)
+    pending_limit = max_pending if max_pending is not None else worker_count * 2
+    if pending_limit < worker_count:
+        raise ValueError("pending process work cannot be smaller than the worker count")
+    with ProcessPoolExecutor(
+        max_workers=worker_count,
+        mp_context=multiprocessing.get_context("spawn"),
+    ) as executor:
+        pending: dict[Future[_OutputT], int] = {}
+        completed: dict[int, _OutputT] = {}
+        next_output = 0
+        for _ in range(pending_limit):
+            item = next(value_iterator, None)
+            if item is None:
+                break
+            index, value = item
+            pending[executor.submit(function, value)] = index
+        while pending:
+            finished, _ = wait(set(pending), return_when=FIRST_COMPLETED)
+            for future in finished:
+                index = pending.pop(future)
+                completed[index] = future.result()
+            while next_output in completed:
+                yield completed.pop(next_output)
+                next_output += 1
+                item = next(value_iterator, None)
+                if item is not None:
+                    following_index, value = item
+                    pending[executor.submit(function, value)] = following_index
 
 
 def _bucket_record(bucket: WordBucket) -> dict[str, object]:

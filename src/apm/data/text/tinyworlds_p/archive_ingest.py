@@ -16,6 +16,8 @@ from pathlib import Path
 import tarfile
 from typing import BinaryIO, TypeVar
 
+import numpy as np
+
 from apm.data.text.tinyworlds_p.contracts import (
     ArchiveIngestAudit,
     ArchiveOccurrence,
@@ -49,13 +51,19 @@ class ArchiveIngestResult:
 
     groups_path: Path
     story_spool_path: Path
+    token_spool_path: Path
     audit_path: Path
     audit: ArchiveIngestAudit
     pad_token_id: int
     eos_token_id: int
 
     def __post_init__(self) -> None:
-        for name in ("groups_path", "story_spool_path", "audit_path"):
+        for name in (
+            "groups_path",
+            "story_spool_path",
+            "token_spool_path",
+            "audit_path",
+        ):
             path = Path(getattr(self, name))
             object.__setattr__(self, name, path)
             if not path.is_file():
@@ -312,8 +320,15 @@ def build_archive_ingest(
     runs_directory = working / "archive-runs"
     runs_directory.mkdir()
     spool_path = working / "archive-stories.bin"
+    token_spool_path = working / "archive-tokens.uint16"
     counts = _ArchiveStreamCounts()
-    _progress(inputs, "archive", 0, None, "streaming, spooling, and classifying records")
+    _progress(
+        inputs,
+        "archive",
+        0,
+        inputs.archive_identity.size_bytes,
+        "streaming, spooling, and classifying records",
+    )
     batches = _archive_work_batches(inputs, spool_path, counts)
     tokenizer_path = inputs.tokenizer_directory / "tokenizer.json"
     if preset.worker_count == 1:
@@ -334,7 +349,7 @@ def build_archive_ingest(
             for record in result
         )
     runs = _write_sorted_runs(
-        processed_records,
+        _spool_processed_tokens(processed_records, token_spool_path),
         runs_directory,
         "archive",
         preset.run_record_count,
@@ -348,13 +363,14 @@ def build_archive_ingest(
     _progress(
         inputs,
         "archive",
-        audit.archive_record_count,
-        audit.archive_record_count,
-        "archive identity and role-classification gate passed",
+        inputs.archive_identity.size_bytes,
+        inputs.archive_identity.size_bytes,
+        f"archive identity and role gate passed for {audit.archive_record_count:,} records",
     )
     return ArchiveIngestResult(
         groups_path=groups_path,
         story_spool_path=spool_path,
+        token_spool_path=token_spool_path,
         audit_path=audit_path,
         audit=audit,
         pad_token_id=tokenizer.pad_token_id,
@@ -397,6 +413,22 @@ def read_spooled_story(spool_path: str | Path, occurrence: dict[str, object]) ->
     if sha256(payload).hexdigest() != expected:
         raise ArchiveIngestError("archive story spool content hash changed")
     return payload
+
+
+def read_spooled_tokens(
+    spool_path: str | Path,
+    occurrence: dict[str, object],
+) -> tuple[int, ...]:
+    """Read one exact token sequence from the temporary archive token spool."""
+    offset = _integer(occurrence, "token_spool_offset")
+    token_count = _integer(occurrence, "token_count")
+    with Path(spool_path).open("rb") as spool:
+        spool.seek(offset * 2)
+        payload = spool.read(token_count * 2)
+    tokens = np.frombuffer(payload, dtype="<u2")
+    if len(tokens) != token_count:
+        raise ArchiveIngestError("archive token spool coordinates exceed the file")
+    return tuple(int(token) for token in tokens)
 
 
 def _archive_work_batches(
@@ -474,6 +506,13 @@ def _iter_authenticated_archive(
                     for value in _records_from_member(extracted, member.name):
                         counts.record_count += 1
                         yield value
+                    _progress(
+                        inputs,
+                        "archive",
+                        min(hashing.size_bytes, identity.size_bytes),
+                        identity.size_bytes,
+                        f"streamed {counts.record_count:,} archive records",
+                    )
             while hashing.read(_READ_BYTES):
                 pass
     except ArchiveIngestError:
@@ -576,15 +615,17 @@ def _process_archive_batch(
     for record in batch:
         story_bytes = record.story.encode("utf-8")
         empty = not record.story.strip()
-        token_count = (
-            0
+        token_ids = (
+            ()
             if empty
-            else len(_WORKER_TOKENIZER.encode(record.story, add_eos=True))
+            else _WORKER_TOKENIZER.encode(record.story, add_eos=True)
         )
+        token_count = len(token_ids)
         if not empty and token_count == 0:
             raise ArchiveIngestError(
                 f"archive record {record.record_id} tokenized empty"
             )
+        token_payload = np.asarray(token_ids, dtype="<u2").tobytes(order="C")
         try:
             recipe = (
                 None
@@ -605,6 +646,7 @@ def _process_archive_batch(
             story_sha256=sha256(story_bytes).hexdigest(),
             source=record.source,
             spool_offset=record.spool_offset,
+            token_spool_offset=0,
             byte_length=record.byte_length,
             token_count=token_count,
         )
@@ -615,9 +657,39 @@ def _process_archive_batch(
                 "occurrence": occurrence.as_record(),
                 "recipe": None if recipe is None else recipe.as_record(),
                 "record_id": record.record_id,
+                "token_payload": token_payload,
             }
         )
     return tuple(processed)
+
+
+def _spool_processed_tokens(
+    records: Iterable[dict[str, object]],
+    destination: Path,
+) -> Iterator[dict[str, object]]:
+    """Persist worker-produced token IDs once and replace them with coordinates."""
+    with destination.open("wb") as output:
+        for record in records:
+            token_payload = record.get("token_payload")
+            if type(token_payload) is not bytes:
+                raise ArchiveIngestError("archive worker returned invalid token bytes")
+            occurrence = _object(record, "occurrence")
+            if len(token_payload) != _integer(occurrence, "token_count") * 2:
+                raise ArchiveIngestError("archive worker token count changed")
+            token_offset = output.tell() // 2
+            output.write(token_payload)
+            yield {
+                key: value
+                for key, value in record.items()
+                if key != "token_payload"
+            } | {
+                "occurrence": {
+                    **occurrence,
+                    "token_spool_offset": token_offset,
+                }
+            }
+        output.flush()
+        os.fsync(output.fileno())
 
 
 def _write_groups_and_audit(
@@ -894,19 +966,28 @@ def _bounded_process_map(
         initializer=initializer,
         initargs=initargs,
     ) as executor:
-        pending: set[Future[tuple[dict[str, object], ...]]] = set()
+        pending: dict[Future[tuple[dict[str, object], ...]], int] = {}
+        completed: dict[int, tuple[dict[str, object], ...]] = {}
+        indexed_batches = enumerate(batch_iterator)
+        next_output = 0
         for _ in range(worker_count * 2):
-            batch = next(batch_iterator, None)
-            if batch is None:
+            item = next(indexed_batches, None)
+            if item is None:
                 break
-            pending.add(executor.submit(function, batch))
+            index, batch = item
+            pending[executor.submit(function, batch)] = index
         while pending:
-            completed, pending = wait(pending, return_when=FIRST_COMPLETED)
-            for future in completed:
-                yield future.result()
-                batch = next(batch_iterator, None)
-                if batch is not None:
-                    pending.add(executor.submit(function, batch))
+            finished, _ = wait(set(pending), return_when=FIRST_COMPLETED)
+            for future in finished:
+                index = pending.pop(future)
+                completed[index] = future.result()
+            while next_output in completed:
+                yield completed.pop(next_output)
+                next_output += 1
+                item = next(indexed_batches, None)
+                if item is not None:
+                    following_index, batch = item
+                    pending[executor.submit(function, batch)] = following_index
 
 
 def _file_identity(path: Path) -> tuple[int, str]:
@@ -1017,5 +1098,6 @@ __all__ = [
     "build_archive_ingest",
     "iter_archive_groups",
     "read_spooled_story",
+    "read_spooled_tokens",
     "verify_partition_inputs",
 ]

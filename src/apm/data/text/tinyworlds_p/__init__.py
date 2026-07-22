@@ -10,6 +10,7 @@ from apm.data.text.tinyworlds_p.archive_ingest import (
     build_archive_ingest,
     iter_archive_groups,
     read_spooled_story,
+    read_spooled_tokens,
     verify_partition_inputs,
 )
 from apm.data.text.tinyworlds_p.batching import (
@@ -184,6 +185,7 @@ __all__ = [
     "normalized_story_sha256",
     "recover_released_recipe",
     "read_spooled_story",
+    "read_spooled_tokens",
     "require_component_visibility",
     "run_calibration_attempt",
     "run_streaming_base_training",

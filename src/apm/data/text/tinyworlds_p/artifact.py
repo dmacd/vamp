@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterator, Mapping
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from hashlib import sha256
 import json
+import multiprocessing
+import os
 from pathlib import Path
 from typing import BinaryIO
 
@@ -59,6 +62,33 @@ _CORE_FILES = {
         for split in ("validation", "test")
     ),
 }
+_DOCUMENT_FIELDS = (
+    "active_group_token_count",
+    "adjective_bucket",
+    "byte_length",
+    "content_sha256",
+    "normalized_story_sha256",
+    "noun_bucket",
+    "provenance",
+    "recipe",
+    "record_id",
+    "role",
+    "source",
+    "source_index",
+    "source_member",
+    "split",
+    "story_sha256",
+    "text_bytes",
+    "text_offset",
+    "text_shard",
+    "token_count",
+    "token_offset",
+    "token_shard",
+    "verb_bucket",
+    "world",
+)
+_PARALLEL_VALIDATION_MIN_BYTES = 256 * 1024 * 1024
+_MAX_PARALLEL_WORKERS = max(1, (os.cpu_count() or 1) * 3 // 4)
 
 
 class PartitionArtifactError(ValueError):
@@ -106,16 +136,7 @@ def load_partition(path: str | Path) -> PartitionArtifact:
         )
     if any(candidate.is_symlink() for candidate in root.rglob("*")):
         raise PartitionArtifactError("partition trees cannot contain symbolic links")
-    for descriptor in files:
-        candidate = root / descriptor.relative_path
-        if candidate.stat().st_size != descriptor.size_bytes:
-            raise PartitionArtifactError(
-                f"partition file size changed: {descriptor.relative_path}"
-            )
-        if _file_sha256(candidate) != descriptor.sha256:
-            raise PartitionArtifactError(
-                f"partition file checksum changed: {descriptor.relative_path}"
-            )
+    measured_hashes = _validate_tree_files(root, files)
     partition = _load_json(root / "partition.json", "partition identity")
     _require_fields(
         partition,
@@ -142,7 +163,7 @@ def load_partition(path: str | Path) -> PartitionArtifact:
     ):
         raise PartitionArtifactError("partition identity contract changed")
     assignments_sha256 = _sha256_string(partition, "assignments_sha256")
-    if _file_sha256(root / "assignments.jsonl") != assignments_sha256:
+    if measured_hashes["assignments.jsonl"] != assignments_sha256:
         raise PartitionArtifactError("assignment checksum differs from partition identity")
     sources = _object(partition, "sources")
     _require_fields(sources, ("archive", "tokenizer"), "partition sources")
@@ -197,12 +218,13 @@ def load_partition(path: str | Path) -> PartitionArtifact:
     if type(raw_split_counts) is not list:
         raise PartitionArtifactError("partition audit split_counts must be a list")
     split_counts = tuple(_split_count(value) for value in raw_split_counts)
-    _validate_assignments(root / "assignments.jsonl", cells, controls, split_counts)
     pad_token_id = _integer(partition, "pad_token_id")
     eos_token_id = _integer(partition, "eos_token_id")
-    _validate_documents_and_indexes(
+    _validate_partition_semantics(
         root,
+        cells,
         controls,
+        split_counts,
         eos_token_id,
         tokenizer_identity.vocab_size,
     )
@@ -234,6 +256,93 @@ def load_partition(path: str | Path) -> PartitionArtifact:
         pad_token_id=pad_token_id,
         eos_token_id=eos_token_id,
     )
+
+
+def _validate_tree_files(
+    root: Path,
+    files: tuple[ArtifactFile, ...],
+) -> dict[str, str]:
+    """Validate sizes and hashes, using bounded parallel reads for large trees."""
+    for descriptor in files:
+        candidate = root / descriptor.relative_path
+        if candidate.stat().st_size != descriptor.size_bytes:
+            raise PartitionArtifactError(
+                f"partition file size changed: {descriptor.relative_path}"
+            )
+    total_bytes = sum(descriptor.size_bytes for descriptor in files)
+    if total_bytes < _PARALLEL_VALIDATION_MIN_BYTES:
+        measured = tuple(
+            (descriptor.relative_path, _file_sha256(root / descriptor.relative_path))
+            for descriptor in files
+        )
+    else:
+        with ThreadPoolExecutor(
+            max_workers=min(_MAX_PARALLEL_WORKERS, len(files))
+        ) as executor:
+            digests = executor.map(
+                _file_sha256,
+                (root / descriptor.relative_path for descriptor in files),
+            )
+            measured = tuple(
+                (descriptor.relative_path, digest)
+                for descriptor, digest in zip(files, digests, strict=True)
+            )
+    result = dict(measured)
+    for descriptor in files:
+        if result[descriptor.relative_path] != descriptor.sha256:
+            raise PartitionArtifactError(
+                f"partition file checksum changed: {descriptor.relative_path}"
+            )
+    return result
+
+
+def _validate_partition_semantics(
+    root: Path,
+    cells: tuple[WorldCell, ...],
+    controls: tuple[ControlSelection, ...],
+    split_counts: tuple[SplitCount, ...],
+    eos_token_id: int,
+    vocab_size: int,
+) -> None:
+    """Run independent assignment, provenance, and storage checks concurrently."""
+    ledger_bytes = (root / "assignments.jsonl").stat().st_size + (
+        root / "documents.jsonl"
+    ).stat().st_size
+    if ledger_bytes < _PARALLEL_VALIDATION_MIN_BYTES:
+        _validate_assignments(root / "assignments.jsonl", cells, controls, split_counts)
+        _validate_documents_against_assignments(root)
+        _validate_document_storage_and_indexes(
+            root,
+            controls,
+            eos_token_id,
+            vocab_size,
+        )
+        return
+    with ProcessPoolExecutor(
+        max_workers=3,
+        mp_context=multiprocessing.get_context("spawn"),
+    ) as executor:
+        assignment_future = executor.submit(
+            _validate_assignments,
+            root / "assignments.jsonl",
+            cells,
+            controls,
+            split_counts,
+        )
+        provenance_future = executor.submit(
+            _validate_documents_against_assignments,
+            root,
+        )
+        storage_future = executor.submit(
+            _validate_document_storage_and_indexes,
+            root,
+            controls,
+            eos_token_id,
+            vocab_size,
+        )
+        assignment_future.result()
+        provenance_future.result()
+        storage_future.result()
 
 
 def _validate_assignments(
@@ -353,13 +462,98 @@ def _validate_assignments(
             raise PartitionArtifactError(f"persisted split counts disagree for {key}")
 
 
-def _validate_documents_and_indexes(
+def _validate_documents_against_assignments(root: Path) -> None:
+    """Bind every eligible assignment occurrence to one archive document."""
+    documents = _iter_jsonl(root / "documents.jsonl")
+    document_current = next(documents, None)
+    seen_record_ids: set[str] = set()
+    try:
+        for _, assignment in _iter_jsonl(root / "assignments.jsonl"):
+            if assignment.get("status") != "eligible":
+                continue
+            group_sha256 = _sha256_string(
+                assignment,
+                "normalized_story_sha256",
+            )
+            record_ids = assignment.get("record_ids")
+            provenance = assignment.get("provenance")
+            if type(record_ids) is not list or type(provenance) is not list:
+                raise PartitionArtifactError(
+                    "eligible assignment record IDs and provenance must be lists"
+                )
+            provenance_by_id = {
+                _text(item, "record_id"): item
+                for item in provenance
+                if type(item) is dict
+            }
+            for expected_record_id in record_ids:
+                if document_current is None:
+                    raise PartitionArtifactError(
+                        "eligible assignments exceed persisted documents"
+                    )
+                _, document = document_current
+                document_current = next(documents, None)
+                index, source = _document_index_and_source(document)
+                record_id = index.record_id
+                if record_id != expected_record_id or record_id in seen_record_ids:
+                    raise PartitionArtifactError(
+                        "document record identities are duplicated or out of order"
+                    )
+                seen_record_ids.add(record_id)
+                source_record = provenance_by_id.get(record_id)
+                if source_record is None or source_record != {
+                    "content_sha256": index.content_sha256,
+                    "record_id": record_id,
+                    "source": source,
+                    "source_index": index.source_index,
+                    "source_member": index.source_member,
+                    "story_sha256": index.story_sha256,
+                }:
+                    raise PartitionArtifactError(
+                        "document archive identity disagrees with group provenance"
+                    )
+                if document["provenance"] != provenance:
+                    raise PartitionArtifactError(
+                        "document group provenance differs from its assignment"
+                    )
+                for field in (
+                    "active_group_token_count",
+                    "adjective_bucket",
+                    "noun_bucket",
+                    "recipe",
+                    "role",
+                    "split",
+                    "verb_bucket",
+                    "world",
+                ):
+                    assignment_field = (
+                        "active_token_count"
+                        if field == "active_group_token_count"
+                        else field
+                    )
+                    if document[field] != assignment[assignment_field]:
+                        raise PartitionArtifactError(
+                            f"document {field} differs from its assignment"
+                        )
+                if index.normalized_story_sha256 != group_sha256:
+                    raise PartitionArtifactError(
+                        "document duplicate identity differs from its assignment"
+                    )
+        if document_current is not None:
+            raise PartitionArtifactError(
+                "persisted documents contain an unknown archive record"
+            )
+    finally:
+        documents.close()
+
+
+def _validate_document_storage_and_indexes(
     root: Path,
     controls: tuple[ControlSelection, ...],
     eos_token_id: int,
     vocab_size: int,
 ) -> None:
-    """Replay every archive/document/shard/index binding with bounded memory."""
+    """Replay every document-to-shard and document-to-index binding."""
     index_names = tuple(
         [f"base-{split}.jsonl" for split in ("train", "validation", "test")]
         + [
@@ -387,224 +581,65 @@ def _validate_documents_and_indexes(
         for control in controls
         for group_sha256 in control.group_sha256
     }
-    documents = _iter_jsonl(root / "documents.jsonl")
-    document_current = next(documents, None)
     seen_record_ids: set[str] = set()
     try:
-        for _, assignment in _iter_jsonl(root / "assignments.jsonl"):
-            if assignment.get("status") != "eligible":
-                continue
-            group_sha256 = _sha256_string(
-                assignment,
-                "normalized_story_sha256",
+        for _, document in _iter_jsonl(root / "documents.jsonl"):
+            index, source = _document_index_and_source(document)
+            if index.record_id in seen_record_ids:
+                raise PartitionArtifactError("document record identities are duplicated")
+            seen_record_ids.add(index.record_id)
+            if index.text_offset != next_text_offset[index.text_shard]:
+                raise PartitionArtifactError("text shard offsets are not contiguous")
+            if index.token_offset != next_token_offset[index.token_shard]:
+                raise PartitionArtifactError("token shard offsets are not contiguous")
+            if index.text_shard not in text_streams:
+                text_streams[index.text_shard] = (
+                    root / "shards" / f"text-{index.text_shard:06d}.bin"
+                ).open("rb")
+            raw_story = text_streams[index.text_shard].read(index.text_bytes)
+            if (
+                len(raw_story) != index.text_bytes
+                or sha256(raw_story).hexdigest() != index.story_sha256
+            ):
+                raise PartitionArtifactError(
+                    "text shard does not reconstruct the exact archive story"
+                )
+            if index.token_shard not in token_streams:
+                token_streams[index.token_shard] = (
+                    root / "shards" / f"tokens-{index.token_shard:06d}.uint16"
+                ).open("rb")
+            token_payload = token_streams[index.token_shard].read(index.token_count * 2)
+            tokens = np.frombuffer(token_payload, dtype="<u2")
+            if (
+                len(tokens) != index.token_count
+                or int(tokens[-1]) != eos_token_id
+                or bool(np.any(tokens >= vocab_size))
+            ):
+                raise PartitionArtifactError("token shard IDs are invalid")
+            next_text_offset[index.text_shard] += index.text_bytes
+            next_token_offset[index.token_shard] += index.token_count
+            text_story_counts[index.text_shard] += 1
+            token_story_counts[index.token_shard] += 1
+            compact = _compact_index_record(index, source)
+            primary_name = (
+                f"base-{index.split}.jsonl"
+                if index.role == "base"
+                else f"world-{index.world}-{index.split}.jsonl"
             )
-            record_ids = assignment["record_ids"]
-            provenance = assignment["provenance"]
-            assert type(record_ids) is list and type(provenance) is list
-            provenance_by_id = {
-                _text(item, "record_id"): item
-                for item in provenance
-                if type(item) is dict
-            }
-            for expected_record_id in record_ids:
-                if document_current is None:
+            _require_index_record(index_streams[primary_name], compact, primary_name)
+            owner = control_owner.get(index.normalized_story_sha256)
+            if owner is not None:
+                control_world, control_split = owner
+                if index.role != "base" or index.split != control_split:
                     raise PartitionArtifactError(
-                        "eligible assignments exceed persisted documents"
+                        "control document is not in the matching held-in split"
                     )
-                _, document = document_current
-                document_current = next(documents, None)
-                _require_fields(
-                    document,
-                    (
-                        "active_group_token_count",
-                        "adjective_bucket",
-                        "byte_length",
-                        "content_sha256",
-                        "normalized_story_sha256",
-                        "noun_bucket",
-                        "provenance",
-                        "recipe",
-                        "record_id",
-                        "role",
-                        "source",
-                        "source_index",
-                        "source_member",
-                        "split",
-                        "story_sha256",
-                        "text_bytes",
-                        "text_offset",
-                        "text_shard",
-                        "token_count",
-                        "token_offset",
-                        "token_shard",
-                        "verb_bucket",
-                        "world",
-                    ),
-                    "document index",
+                control_name = f"control-{control_world}-{control_split}.jsonl"
+                _require_index_record(
+                    index_streams[control_name],
+                    compact,
+                    control_name,
                 )
-                record_id = _text(document, "record_id")
-                if record_id != expected_record_id or record_id in seen_record_ids:
-                    raise PartitionArtifactError(
-                        "document record identities are duplicated or out of order"
-                    )
-                seen_record_ids.add(record_id)
-                source_member = _text(document, "source_member")
-                source_index = _integer(document, "source_index")
-                content_sha256 = _sha256_string(document, "content_sha256")
-                story_sha256 = _sha256_string(document, "story_sha256")
-                if record_id != (
-                    f"archive:{source_member}:{source_index}:{content_sha256}"
-                ):
-                    raise PartitionArtifactError(
-                        "document record ID does not bind archive location and content"
-                    )
-                source = _text(document, "source")
-                if source not in ("GPT-3.5", "GPT-4"):
-                    raise PartitionArtifactError("document archive source is invalid")
-                source_record = provenance_by_id.get(record_id)
-                if source_record is None or source_record != {
-                    "content_sha256": content_sha256,
-                    "record_id": record_id,
-                    "source": source,
-                    "source_index": source_index,
-                    "source_member": source_member,
-                    "story_sha256": story_sha256,
-                }:
-                    raise PartitionArtifactError(
-                        "document archive identity disagrees with group provenance"
-                    )
-                if document["provenance"] != provenance:
-                    raise PartitionArtifactError(
-                        "document group provenance differs from its assignment"
-                    )
-                role = _text(document, "role")
-                split = _text(document, "split")
-                world = document.get("world")
-                if world is not None and type(world) is not str:
-                    raise PartitionArtifactError("document world must be text or null")
-                for field in (
-                    "active_group_token_count",
-                    "adjective_bucket",
-                    "noun_bucket",
-                    "recipe",
-                    "role",
-                    "split",
-                    "verb_bucket",
-                    "world",
-                ):
-                    assignment_field = (
-                        "active_token_count"
-                        if field == "active_group_token_count"
-                        else field
-                    )
-                    if document[field] != assignment[assignment_field]:
-                        raise PartitionArtifactError(
-                            f"document {field} differs from its assignment"
-                        )
-                if _sha256_string(
-                    document,
-                    "normalized_story_sha256",
-                ) != group_sha256:
-                    raise PartitionArtifactError(
-                        "document duplicate identity differs from its assignment"
-                    )
-                index = DocumentIndex(
-                    record_id=record_id,
-                    source_member=source_member,
-                    source_index=source_index,
-                    content_sha256=content_sha256,
-                    story_sha256=story_sha256,
-                    normalized_story_sha256=group_sha256,
-                    text_shard=_integer(document, "text_shard"),
-                    text_offset=_integer(document, "text_offset"),
-                    text_bytes=_integer(document, "text_bytes"),
-                    token_shard=_integer(document, "token_shard"),
-                    token_offset=_integer(document, "token_offset"),
-                    token_count=_integer(document, "token_count"),
-                    role=role,
-                    world=world,
-                    split=split,
-                )
-                if _integer(document, "byte_length") != index.text_bytes:
-                    raise PartitionArtifactError(
-                        "document source and text-shard byte lengths differ"
-                    )
-                if index.text_offset != next_text_offset[index.text_shard]:
-                    raise PartitionArtifactError("text shard offsets are not contiguous")
-                if index.token_offset != next_token_offset[index.token_shard]:
-                    raise PartitionArtifactError("token shard offsets are not contiguous")
-                if index.text_shard not in text_streams:
-                    text_streams[index.text_shard] = (
-                        root
-                        / "shards"
-                        / f"text-{index.text_shard:06d}.bin"
-                    ).open("rb")
-                text_stream = text_streams[index.text_shard]
-                raw_story = text_stream.read(index.text_bytes)
-                if (
-                    len(raw_story) != index.text_bytes
-                    or sha256(raw_story).hexdigest() != story_sha256
-                ):
-                    raise PartitionArtifactError(
-                        "text shard does not reconstruct the exact archive story"
-                    )
-                if index.token_shard not in token_streams:
-                    token_streams[index.token_shard] = (
-                        root
-                        / "shards"
-                        / f"tokens-{index.token_shard:06d}.uint16"
-                    ).open("rb")
-                token_stream = token_streams[index.token_shard]
-                token_payload = token_stream.read(index.token_count * 2)
-                tokens = np.frombuffer(token_payload, dtype="<u2")
-                if (
-                    len(tokens) != index.token_count
-                    or int(tokens[-1]) != eos_token_id
-                    or bool(np.any(tokens >= vocab_size))
-                ):
-                    raise PartitionArtifactError("token shard IDs are invalid")
-                next_text_offset[index.text_shard] += index.text_bytes
-                next_token_offset[index.token_shard] += index.token_count
-                text_story_counts[index.text_shard] += 1
-                token_story_counts[index.token_shard] += 1
-                compact = {
-                    "content_sha256": content_sha256,
-                    "normalized_story_sha256": group_sha256,
-                    "record_id": record_id,
-                    "source": source,
-                    "source_index": source_index,
-                    "source_member": source_member,
-                    "story_sha256": story_sha256,
-                    "text_bytes": index.text_bytes,
-                    "text_offset": index.text_offset,
-                    "text_shard": index.text_shard,
-                    "token_count": index.token_count,
-                    "token_offset": index.token_offset,
-                    "token_shard": index.token_shard,
-                }
-                primary_name = (
-                    f"base-{split}.jsonl"
-                    if role == "base"
-                    else f"world-{world}-{split}.jsonl"
-                )
-                _require_index_record(index_streams[primary_name], compact, primary_name)
-                owner = control_owner.get(group_sha256)
-                if owner is not None:
-                    control_world, control_split = owner
-                    if role != "base" or split != control_split:
-                        raise PartitionArtifactError(
-                            "control document is not in the matching held-in split"
-                        )
-                    control_name = f"control-{control_world}-{control_split}.jsonl"
-                    _require_index_record(
-                        index_streams[control_name],
-                        compact,
-                        control_name,
-                    )
-        if document_current is not None:
-            raise PartitionArtifactError(
-                "persisted documents contain an unknown archive record"
-            )
         for name, stream in index_streams.items():
             if stream.read(1):
                 raise PartitionArtifactError(
@@ -624,6 +659,72 @@ def _validate_documents_and_indexes(
             *token_streams.values(),
         ):
             stream.close()
+
+
+def _document_index_and_source(
+    document: dict[str, object],
+) -> tuple[DocumentIndex, str]:
+    _require_fields(document, _DOCUMENT_FIELDS, "document index")
+    record_id = _text(document, "record_id")
+    source_member = _text(document, "source_member")
+    source_index = _integer(document, "source_index")
+    content_sha256 = _sha256_string(document, "content_sha256")
+    if record_id != f"archive:{source_member}:{source_index}:{content_sha256}":
+        raise PartitionArtifactError(
+            "document record ID does not bind archive location and content"
+        )
+    source = _text(document, "source")
+    if source not in ("GPT-3.5", "GPT-4"):
+        raise PartitionArtifactError("document archive source is invalid")
+    world = document.get("world")
+    if world is not None and type(world) is not str:
+        raise PartitionArtifactError("document world must be text or null")
+    index = DocumentIndex(
+        record_id=record_id,
+        source_member=source_member,
+        source_index=source_index,
+        content_sha256=content_sha256,
+        story_sha256=_sha256_string(document, "story_sha256"),
+        normalized_story_sha256=_sha256_string(
+            document,
+            "normalized_story_sha256",
+        ),
+        text_shard=_integer(document, "text_shard"),
+        text_offset=_integer(document, "text_offset"),
+        text_bytes=_integer(document, "text_bytes"),
+        token_shard=_integer(document, "token_shard"),
+        token_offset=_integer(document, "token_offset"),
+        token_count=_integer(document, "token_count"),
+        role=_text(document, "role"),
+        world=world,
+        split=_text(document, "split"),
+    )
+    if _integer(document, "byte_length") != index.text_bytes:
+        raise PartitionArtifactError(
+            "document source and text-shard byte lengths differ"
+        )
+    return index, source
+
+
+def _compact_index_record(
+    index: DocumentIndex,
+    source: str,
+) -> dict[str, object]:
+    return {
+        "content_sha256": index.content_sha256,
+        "normalized_story_sha256": index.normalized_story_sha256,
+        "record_id": index.record_id,
+        "source": source,
+        "source_index": index.source_index,
+        "source_member": index.source_member,
+        "story_sha256": index.story_sha256,
+        "text_bytes": index.text_bytes,
+        "text_offset": index.text_offset,
+        "text_shard": index.text_shard,
+        "token_count": index.token_count,
+        "token_offset": index.token_offset,
+        "token_shard": index.token_shard,
+    }
 
 
 def _require_index_record(

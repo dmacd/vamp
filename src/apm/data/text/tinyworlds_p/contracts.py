@@ -219,6 +219,7 @@ class ArchiveOccurrence:
     story_sha256: str
     source: Literal["GPT-3.5", "GPT-4"]
     spool_offset: int
+    token_spool_offset: int
     byte_length: int
     token_count: int
 
@@ -238,7 +239,12 @@ class ArchiveOccurrence:
             require_sha256(value, label)
         if any(
             type(value) is not int or value < 0
-            for value in (self.spool_offset, self.byte_length, self.token_count)
+            for value in (
+                self.spool_offset,
+                self.token_spool_offset,
+                self.byte_length,
+                self.token_count,
+            )
         ):
             raise ValueError("archive occurrence offsets and counts must be nonnegative")
         expected_id = (
@@ -259,6 +265,7 @@ class ArchiveOccurrence:
             "spool_offset": self.spool_offset,
             "story_sha256": self.story_sha256,
             "token_count": self.token_count,
+            "token_spool_offset": self.token_spool_offset,
         }
 
 

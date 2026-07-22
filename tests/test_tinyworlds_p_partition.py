@@ -159,6 +159,7 @@ def _tree_bytes(root: Path) -> dict[Path, bytes]:
 
 def test_archive_partition_builds_reconstructs_and_rebuilds_identically(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     first_inputs, expected_stories = _fixture_inputs(
         tmp_path,
@@ -166,7 +167,11 @@ def test_archive_partition_builds_reconstructs_and_rebuilds_identically(
         "first-work",
     )
     first = build_partition(first_inputs, _fixture_preset())
-    restored = load_partition(first.root)
+    from apm.data.text.tinyworlds_p import artifact as artifact_module
+
+    with monkeypatch.context() as loader_patch:
+        loader_patch.setattr(artifact_module, "_PARALLEL_VALIDATION_MIN_BYTES", 0)
+        restored = load_partition(first.root)
 
     assert restored.partition_sha256 == first.partition_sha256
     assert restored.archive_identity == first_inputs.archive_identity

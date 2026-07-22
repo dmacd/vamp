@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from hashlib import sha256
 from itertools import islice
 import json
 import os
@@ -19,6 +18,7 @@ from apm.data.text.tinyworlds_p import (
     PARTITION_PRESET,
     PartitionInputs,
     StreamingTrainingConfig,
+    allocator_peak_bytes,
     build_archive_ingest,
     build_partition,
     iter_archive_groups,
@@ -130,12 +130,25 @@ def test_canonical_partition_replays_archive_and_real_tokenizer(tmp_path: Path) 
 def test_canonical_partition_full_rebuild_is_byte_identical(tmp_path: Path) -> None:
     """Rebuild all real sources with different execution-only parallelism."""
     if os.environ.get("TINYWORLDS_P_FULL_REBUILD") != "1":
-        pytest.skip("set TINYWORLDS_P_FULL_REBUILD=1 for the multi-hour rebuild gate")
+        pytest.skip("set TINYWORLDS_P_FULL_REBUILD=1 for the full archive rebuild gate")
+    from apm.data.text.tinyworlds_p.progress import PreparationReporter
+
     published = _published_partition()
-    rebuilt = build_partition(
-        _canonical_inputs(tmp_path / "output", tmp_path / "work"),
-        replace(PARTITION_PRESET, worker_count=7, run_record_count=37_001),
-    )
+    reporter = PreparationReporter()
+    try:
+        rebuilt = build_partition(
+            replace(
+                _canonical_inputs(tmp_path / "output", tmp_path / "work"),
+                progress=reporter,
+            ),
+            replace(
+                PARTITION_PRESET,
+                worker_count=max(2, (os.cpu_count() or 2) * 3 // 4),
+                run_record_count=37_001,
+            ),
+        )
+    finally:
+        reporter.close()
     assert rebuilt.partition_sha256 == published.partition_sha256
     published_files = tuple(
         path.relative_to(published.root)
@@ -148,11 +161,12 @@ def test_canonical_partition_full_rebuild_is_byte_identical(tmp_path: Path) -> N
         if path.is_file()
     )
     assert sorted(published_files) == sorted(rebuilt_files)
-    for relative_path in sorted(published_files):
-        published_path = published.root / relative_path
-        rebuilt_path = rebuilt.root / relative_path
-        assert rebuilt_path.stat().st_size == published_path.stat().st_size
-        assert _file_sha256(rebuilt_path) == _file_sha256(published_path)
+    # Both trees have already passed complete strict checksum and semantic
+    # validation. Equal tree manifests therefore prove every listed byte is
+    # equal without redundantly reading and hashing another 36 GB here.
+    assert (rebuilt.root / "tree.json").read_bytes() == (
+        published.root / "tree.json"
+    ).read_bytes()
 
 
 @pytest.mark.benchmark
@@ -164,29 +178,39 @@ def test_rtx_training_and_resume_smoke(tmp_path: Path) -> None:
     devices = tuple(device for device in jax.devices() if device.platform == "gpu")
     if len(devices) != 1:
         pytest.skip("the GPU smoke requires exactly one visible GPU")
+    print(
+        "[gpu-smoke/load] authenticating the 18 GB partition with 24 checksum "
+        "workers and three semantic workers | phase ETA 0:04:00 | overall ETA 0:05:30",
+        flush=True,
+    )
     artifact = _published_partition()
     config = StreamingTrainingConfig.from_preset()
-    interrupted = run_streaming_base_training(
-        artifact,
-        tmp_path / "training",
-        config,
-        stop_after_update=1,
+    print(
+        "[gpu-smoke/train] compiling, checkpointing update 1, and resuming update 2 "
+        "| phase ETA 0:01:30 | overall ETA 0:01:30",
+        flush=True,
     )
-    resumed = run_streaming_base_training(
-        artifact,
-        tmp_path / "training",
-        config,
-        resume_from=interrupted.checkpoints[-1].directory,
-        stop_after_update=2,
-    )
+    from tqdm import tqdm
+
+    with tqdm(total=2, desc="TinyWorlds-P GPU resume smoke", unit="update") as progress:
+        interrupted = run_streaming_base_training(
+            artifact,
+            tmp_path / "training",
+            config,
+            stop_after_update=1,
+            progress=lambda *_: progress.update(1),
+        )
+        resumed = run_streaming_base_training(
+            artifact,
+            tmp_path / "training",
+            config,
+            resume_from=interrupted.checkpoints[-1].directory,
+            stop_after_update=2,
+            progress=lambda *_: progress.update(1),
+        )
+    peak_bytes = allocator_peak_bytes()
+    print(f"[gpu-smoke/memory] JAX allocator peak {peak_bytes / 1024**3:.3f} GiB")
     assert interrupted.cursor.optimizer_update == 1
     assert resumed.cursor.optimizer_update == 2
+    assert peak_bytes <= config.allocator_peak_limit_bytes
     assert tuple(device.platform for device in jax.devices()) == ("gpu",)
-
-
-def _file_sha256(path: Path) -> str:
-    digest = sha256()
-    with path.open("rb") as source:
-        while chunk := source.read(4 * 1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
