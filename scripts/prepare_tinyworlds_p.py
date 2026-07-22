@@ -56,12 +56,13 @@ def main() -> int:
             PARTITION_PRESET,
         )
     except ArchiveIngestError as error:
-        reporter.close()
         audit_path = temporary_directory / "archive-ingest.json"
         print(f"[stopped] {error}", flush=True)
         if audit_path.is_file():
             print(f"source audit: {audit_path}", flush=True)
         return 2
+    finally:
+        reporter.close()
     print(f"partition: {artifact.root}")
     print(f"partition SHA-256: {artifact.partition_sha256}")
     return 0
