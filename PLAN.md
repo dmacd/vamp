@@ -91,8 +91,15 @@ gates.
   every world gap was below 0.05. The runner therefore exited with its
   controlled status 2. It did not train epochs three through five, select a
   checkpoint, open sealed test, or publish a base. The exact identities,
-  metrics, output hashes, and gate audit are recorded in
+  metrics, output hashes, gate audit, practical gap analysis, and provenance of
+  the engineering thresholds are recorded in
   [`docs/TW-P_ARCHIVE_CALIBRATION_REPORT.md`](docs/TW-P_ARCHIVE_CALIBRATION_REPORT.md).
+  A deterministic
+  [`validation sample appendix`](docs/TW-P_ARCHIVE_VALIDATION_SAMPLES.md)
+  covers held-in base, all five worlds, and both arms of all five controls on
+  both grids: 32 exact hash-verified stories selected without semantic review.
+  Its two-grid generator runs concurrently in about 1.2 seconds and does not
+  read sealed-test indexes.
 - **Terminal policy consequence.** The archive-only implementation, 8x8
   partition, independent byte-identical rebuild, fresh 6x6 fallback partition,
   and both scratch calibration attempts are complete. The frozen archive-v1

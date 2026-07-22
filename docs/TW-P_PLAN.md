@@ -155,7 +155,14 @@ validation NLL at most 2.0 and an observed allocator peak below 12 GiB.
   specified. Epochs three through five, checkpoint selection, sealed test, and
   base publication were correctly not run. See the current
   [archive-only calibration report](TW-P_ARCHIVE_CALIBRATION_REPORT.md) for
-  exact identities, per-world metrics, and evidence hashes.
+  exact identities, per-world metrics, evidence hashes, a practical explanation
+  of the small gap, and the documented limits of the pre-run engineering
+  thresholds. Its deterministic
+  [validation sample appendix](TW-P_ARCHIVE_VALIDATION_SAMPLES.md) covers all
+  11 calibration conditions on both grids with one held-in/world sample and
+  both matched-control arms, for 32 exact hash-verified stories total. The two
+  grids are extracted concurrently in about 1.2 seconds; no sealed-test index
+  is read.
 
 Continual LoRA/VAMP streams, replay, consolidation, regeneration, semantic
 clustering, and near-deduplication are deliberately outside this milestone.
