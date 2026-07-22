@@ -43,11 +43,19 @@ until the archive-only partition and scratch base pass their publication gates.
   externally sorts by normalized story identity and record ID, groups every
   occurrence with its provenance and multiplicity, audits all exclusions, and
   enforces only the 95% token-weighted role-classification gate.
-- **Next implementation sequence.** Restore strict partition persistence,
-  memory-mapped batching, and scratch training against archive record
-  identities only. Rewrite the CPU and real replay tests before building and
-  byte-rebuilding the complete archive-only partition. Only after those gates
-  pass may scratch calibration restart from seed zero.
+- **Archive-only partition artifacts restored.** Partition construction now
+  derives every bucket, cell, split, and control from eligible archive groups;
+  publishes exact story and uint16 token shards under
+  `data/tinyworlds-p-archive/v1/`; binds documents to member, member-local
+  index, record hash, and story hash; and strictly rejects old source keys.
+  The CPU 3x3 fixture reconstructs source/token bytes, checks leakage and
+  globally unique controls, rejects tampering, and rebuilds byte-identically
+  across worker/run settings. The fixed preparation runner and opt-in real
+  archive replay have been restored.
+- **Next implementation sequence.** Restore memory-mapped scratch training,
+  evaluation, calibration, and publication against these artifacts. Then run
+  focused shared checks and build and byte-rebuild the complete archive-only
+  partition before any fresh seed-zero GPU calibration.
 - **Historical audits retained for provenance only.** The original train/archive
   mismatch analysis is preserved in
   [`docs/TW-P_SOURCE_AUDIT.md`](docs/TW-P_SOURCE_AUDIT.md), and the obsolete

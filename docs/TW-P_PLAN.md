@@ -106,13 +106,14 @@ and an observed allocator peak below 12 GiB.
   pinned tarball, binds every record to member/index/content identity,
   tokenizes exact released story text, groups normalized duplicates, recovers
   recipes, and audits exclusions and archive token mass.
-- [ ] Update partition shards, document indexes, manifests, strict loading, and
+- [x] Update partition shards, document indexes, manifests, strict loading, and
   rebuild identity so every source reference points to an archive entity and no
   field presupposes a flat text-corpus offset.
-- [ ] Rewrite normalization/source/duplicate/property tests and the CPU 3x3
-  end-to-end fixture around archive-only entities. Preserve worker-count/order
-  independence, exact reconstruction, leakage rejection, tamper rejection,
-  resume parity, and best-epoch selection coverage.
+- [x] Rewrite normalization/source/duplicate/property tests and the CPU 3x3
+  end-to-end partition fixture around archive-only entities. It preserves
+  worker-count/order independence, exact reconstruction, leakage rejection,
+  control non-reuse, tamper rejection, and old-artifact rejection. Training
+  resume parity and best-epoch coverage remain in the next layer.
 - [ ] Run the focused TinyWorlds-P and shared GPT-Neo/checkpoint suite. Keep all
   parked TinyWorlds-v2 tests collection-skipped; do not run their bodies.
 - [ ] Build the real archive-only 8x8 partition, rebuild it byte-identically,

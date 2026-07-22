@@ -15,11 +15,14 @@ from apm.lm.config import GptNeoConfig
 
 
 BENCHMARK_ID = "tinyworlds-p-archive-v1"
+PARTITION_FORMAT = "tinyworlds-p-archive-partition"
+PARTITION_SCHEMA_VERSION = 1
 PUBLIC_SEED = 0
 WORLD_LABELS = ("A", "B", "C", "D", "E")
 
 SplitLabel = Literal["train", "validation", "test"]
 BucketNamespace = Literal["noun", "verb", "adjective"]
+PartitionRole = Literal["base", "world"]
 ArchiveGroupStatus = Literal[
     "eligible",
     "empty_story",
@@ -390,6 +393,114 @@ class WorldCell:
 
 
 @dataclass(frozen=True, slots=True)
+class SplitAssignment:
+    """The canonical partition and split assignment for a duplicate group."""
+
+    normalized_story_sha256: str
+    status: ArchiveGroupStatus
+    role: PartitionRole | None
+    world: str | None
+    split: SplitLabel | None
+
+    def __post_init__(self) -> None:
+        require_sha256(self.normalized_story_sha256, "assignment group hash")
+        assigned = self.status == "eligible"
+        if assigned != (self.role is not None and self.split is not None):
+            raise ValueError("only eligible groups may have partition assignments")
+        if self.role == "world" and self.world not in WORLD_LABELS:
+            raise ValueError("world assignments require a canonical world label")
+        if self.role != "world" and self.world is not None:
+            raise ValueError("only world assignments may name a world")
+
+
+@dataclass(frozen=True, slots=True)
+class TokenShard:
+    """One immutable exact-text or little-endian uint16 shard."""
+
+    shard_id: int
+    kind: Literal["text", "tokens"]
+    relative_path: str
+    size_bytes: int
+    story_count: int
+
+    def __post_init__(self) -> None:
+        if type(self.shard_id) is not int or self.shard_id < 0:
+            raise ValueError("shard_id must be nonnegative")
+        if self.kind not in ("text", "tokens"):
+            raise ValueError("unknown shard kind")
+        path = Path(self.relative_path)
+        if (
+            type(self.relative_path) is not str
+            or not self.relative_path
+            or path.is_absolute()
+            or ".." in path.parts
+        ):
+            raise ValueError("shard path must be safe and relative")
+        if any(
+            type(value) is not int or value < 0
+            for value in (self.size_bytes, self.story_count)
+        ):
+            raise ValueError("shard size and story count must be nonnegative")
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentIndex:
+    """One archive entity bound to exact source and text/token shard coordinates."""
+
+    record_id: str
+    source_member: str
+    source_index: int
+    content_sha256: str
+    story_sha256: str
+    normalized_story_sha256: str
+    text_shard: int
+    text_offset: int
+    text_bytes: int
+    token_shard: int
+    token_offset: int
+    token_count: int
+    role: PartitionRole
+    world: str | None
+    split: SplitLabel
+
+    def __post_init__(self) -> None:
+        if any(
+            type(value) is not str or not value
+            for value in (self.record_id, self.source_member)
+        ):
+            raise ValueError("document archive identity strings must be nonempty")
+        for value, label in (
+            (self.content_sha256, "document content hash"),
+            (self.story_sha256, "document story hash"),
+            (self.normalized_story_sha256, "document group hash"),
+        ):
+            require_sha256(value, label)
+        if any(
+            type(value) is not int or value < 0
+            for value in (
+                self.source_index,
+                self.text_shard,
+                self.text_offset,
+                self.text_bytes,
+                self.token_shard,
+                self.token_offset,
+                self.token_count,
+            )
+        ):
+            raise ValueError("document coordinates and counts must be nonnegative")
+        if self.text_bytes == 0 or self.token_count == 0:
+            raise ValueError("indexed documents must be nonempty")
+        if self.role not in ("base", "world"):
+            raise ValueError("document role must be base or world")
+        if self.split not in ("train", "validation", "test"):
+            raise ValueError("document split is invalid")
+        if self.role == "world" and self.world not in WORLD_LABELS:
+            raise ValueError("world document index requires a valid world")
+        if self.role == "base" and self.world is not None:
+            raise ValueError("base document index cannot name a world")
+
+
+@dataclass(frozen=True, slots=True)
 class ControlSelection:
     """One no-replacement held-in control matched to a world evaluation split."""
 
@@ -413,6 +524,33 @@ class ControlSelection:
             raise ValueError("control arm counts must cover selected groups")
         if self.active_token_count <= 0:
             raise ValueError("control token count must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class SplitCount:
+    """Persisted group, archive-record, and active-token totals for one split."""
+
+    role: PartitionRole
+    world: str | None
+    split: SplitLabel
+    group_count: int
+    occurrence_count: int
+    active_token_count: int
+
+    def __post_init__(self) -> None:
+        if self.role == "world" and self.world not in WORLD_LABELS:
+            raise ValueError("world split count requires a valid world")
+        if self.role == "base" and self.world is not None:
+            raise ValueError("base split count cannot name a world")
+        if any(
+            type(value) is not int or value < 0
+            for value in (
+                self.group_count,
+                self.occurrence_count,
+                self.active_token_count,
+            )
+        ):
+            raise ValueError("split counts must be nonnegative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -476,6 +614,10 @@ class PartitionPreset:
     public_seed: int = PUBLIC_SEED
     worker_count: int = 16
     run_record_count: int = 50_000
+    shard_target_bytes: int = 32 * 1024 * 1024
+    batch_block_documents: int = 1_024
+    context_length: int = 256
+    batch_size: int = 32
     minimum_role_coverage: float = 0.95
     selected_cell_median_tolerance: float = 0.10
     minimum_component_outside_groups: int = 64
@@ -491,7 +633,14 @@ class PartitionPreset:
             raise ValueError("five-cell topology requires at least three buckets")
         if any(
             type(value) is not int or value <= 0
-            for value in (self.worker_count, self.run_record_count)
+            for value in (
+                self.worker_count,
+                self.run_record_count,
+                self.shard_target_bytes,
+                self.batch_block_documents,
+                self.context_length,
+                self.batch_size,
+            )
         ):
             raise ValueError("archive worker and sort-run sizes must be positive")
         if type(self.public_seed) is not int or self.public_seed < 0:
@@ -527,7 +676,10 @@ class PartitionPreset:
         """Return every behavior-changing algorithm choice canonically."""
         return {
             "base_split_weights": list(self.base_split_weights),
+            "batch_block_documents": self.batch_block_documents,
+            "batch_size": self.batch_size,
             "bucket_count": self.bucket_count,
+            "context_length": self.context_length,
             "control_adjective_length_tolerance": self.control_adjective_length_tolerance,
             "control_mean_length_tolerance": self.control_mean_length_tolerance,
             "control_source_feature_tolerance": self.control_source_feature_tolerance,
@@ -535,10 +687,9 @@ class PartitionPreset:
             "minimum_component_outside_groups": self.minimum_component_outside_groups,
             "minimum_role_coverage": self.minimum_role_coverage,
             "public_seed": self.public_seed,
-            "run_record_count": self.run_record_count,
             "selected_cell_median_tolerance": self.selected_cell_median_tolerance,
+            "shard_target_bytes": self.shard_target_bytes,
             "world_split_weights": list(self.world_split_weights),
-            "worker_count": self.worker_count,
         }
 
 
@@ -587,6 +738,72 @@ CANONICAL_TOKENIZER_IDENTITY = TokenizerIdentity(
 
 NORMALIZATION_IDENTITY = NormalizationIdentity()
 PARTITION_PRESET = PartitionPreset()
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactFile:
+    """One strict relative path, size, and digest in a published tree."""
+
+    relative_path: str
+    size_bytes: int
+    sha256: str
+
+    def __post_init__(self) -> None:
+        path = Path(self.relative_path)
+        if (
+            type(self.relative_path) is not str
+            or not self.relative_path
+            or path.is_absolute()
+            or ".." in path.parts
+        ):
+            raise ValueError("artifact path must be safe and relative")
+        if type(self.size_bytes) is not int or self.size_bytes < 0:
+            raise ValueError("artifact file size must be nonnegative")
+        require_sha256(self.sha256, f"artifact hash for {self.relative_path}")
+
+
+@dataclass(frozen=True, slots=True)
+class PartitionArtifact:
+    """A strictly loaded content-addressed archive-only partition."""
+
+    root: Path
+    partition_sha256: str
+    manifest_sha256: str
+    archive_identity: SourceIdentity
+    tokenizer_identity: TokenizerIdentity
+    normalization: NormalizationIdentity
+    preset: PartitionPreset
+    buckets: tuple[WordBucket, ...]
+    cells: tuple[WorldCell, ...]
+    controls: tuple[ControlSelection, ...]
+    split_counts: tuple[SplitCount, ...]
+    files: tuple[ArtifactFile, ...]
+    pad_token_id: int
+    eos_token_id: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "root", Path(self.root))
+        require_sha256(self.partition_sha256, "partition identity")
+        require_sha256(self.manifest_sha256, "tree manifest hash")
+        if type(self.archive_identity) is not SourceIdentity:
+            raise TypeError("partition archive identity has the wrong type")
+        if type(self.tokenizer_identity) is not TokenizerIdentity:
+            raise TypeError("partition tokenizer identity has the wrong type")
+        if type(self.buckets) is not tuple or any(
+            type(item) is not WordBucket for item in self.buckets
+        ):
+            raise TypeError("artifact buckets must be WordBucket values")
+        if tuple(cell.label for cell in self.cells) != WORLD_LABELS:
+            raise ValueError("artifact cells must be canonically ordered A through E")
+        if any(type(item) is not ControlSelection for item in self.controls):
+            raise TypeError("artifact controls must be ControlSelection values")
+        if any(type(item) is not SplitCount for item in self.split_counts):
+            raise TypeError("artifact split counts must be SplitCount values")
+        if any(type(item) is not ArtifactFile for item in self.files):
+            raise TypeError("artifact files must be ArtifactFile values")
+        for label, value in (("PAD", self.pad_token_id), ("EOS", self.eos_token_id)):
+            if type(value) is not int or not 0 <= value < self.tokenizer_identity.vocab_size:
+                raise ValueError(f"artifact {label} token ID is outside the vocabulary")
 
 
 @dataclass(frozen=True, slots=True)
@@ -723,21 +940,29 @@ __all__ = [
     "ArchiveGroupStatus",
     "ArchiveIngestAudit",
     "ArchiveOccurrence",
+    "ArtifactFile",
     "BASE_TRAINING_PRESET",
     "BENCHMARK_ID",
     "BaseTrainingPreset",
     "CANONICAL_ARCHIVE_IDENTITY",
     "CANONICAL_TOKENIZER_IDENTITY",
     "ControlSelection",
+    "DocumentIndex",
     "HashedFile",
     "NORMALIZATION_IDENTITY",
     "NormalizationIdentity",
     "PARTITION_PRESET",
+    "PARTITION_FORMAT",
+    "PARTITION_SCHEMA_VERSION",
+    "PartitionArtifact",
     "PartitionInputs",
     "PartitionPreset",
     "ProgressEvent",
     "Recipe",
     "SourceIdentity",
+    "SplitAssignment",
+    "SplitCount",
+    "TokenShard",
     "TokenizerIdentity",
     "WORLD_LABELS",
     "WordBucket",
