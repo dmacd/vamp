@@ -1,10 +1,11 @@
-# TinyWorlds-P v1 Execution Tracker
+# TinyWorlds-P Archive v1 Execution Tracker
 
-TinyWorlds-P replaces generated benchmark prose with genuine stories from the
-pinned TinyStories training corpus. It withholds five noun-bucket × verb-bucket
-conjunctions while keeping their individual noun and verb components visible in
-the reduced base corpus. The model receives story tokens only; recipes, bucket
-labels, cells, and split metadata are partition-construction records.
+TinyWorlds-P replaces generated benchmark prose with genuine stories taken
+directly from released entities in the pinned TinyStories metadata archive. It
+withholds five noun-bucket × verb-bucket conjunctions while keeping their
+individual noun and verb components visible in the held-in base partition. The
+model receives story tokens only; prompts, recipes, bucket labels, cells, and
+split metadata are partition-construction records.
 
 The supplied planning document is archived alongside this tracker as
 [TinyStories - partitioned.pdf](TinyStories%20-%20partitioned.pdf). `DESIGN.md`
@@ -13,11 +14,13 @@ roadmap.
 
 ## Immutable identities
 
-- Benchmark: `tinyworlds-p-v1`.
-- Corpus: `TinyStories-train.txt`, revision
-  `f54c09fd23315a6f9c86f9dc80f725de7d8f9c64`, 1,924,281,556 bytes,
-  SHA-256 `c5cf5e22ff13614e830afbe61a99fbcbe8bcb7dd72252b989fa1117a368d401f`.
-- Metadata: the pinned local `TinyStories_all_data.tar.gz` archive.
+- Benchmark: `tinyworlds-p-archive-v1`.
+- Sole story source: `TinyStories_all_data.tar.gz`, revision
+  `f54c09fd23315a6f9c86f9dc80f725de7d8f9c64`, 1,608,001,638 bytes,
+  SHA-256 `26cf7605aca15bc4ea6fa637256400d9d01317b28ed296172b2d1dd160cd7699`.
+- Explicit non-inputs: `TinyStories-train.txt`, `TinyStories-valid.txt`, and
+  both GPT-4-only text aggregates. They define no source coverage, eligibility,
+  split, or baseline for TinyWorlds-P.
 - Tokenizer: the existing hashed 50,257-token GPT-2 BPE files.
 - Public deterministic seed: `0`.
 - Base model: a fresh eight-layer, width-256 GPT-Neo; no old checkpoint is a
@@ -26,17 +29,21 @@ roadmap.
 ## Partition contract
 
 Identity normalization is NFKC, case folding, whitespace collapse, and
-canonical straight quotes. Training shards preserve the original corpus bytes.
-Corpus and metadata records are externally sorted and merged by normalized
-SHA-256, so neither source is held in memory and worker completion order cannot
-affect the result. Exact normalized duplicates form indivisible assignment
-groups, with every raw occurrence retained.
+canonical straight quotes. It is used only to group duplicate archive stories.
+Training shards preserve the exact UTF-8 bytes of each accepted archive
+`story`. Archive entities are externally sorted by normalized story SHA-256,
+so the source is never held in memory and worker completion order cannot affect
+the result. Exact normalized duplicates form indivisible assignment groups,
+with every released archive record, provenance location, and multiplicity
+retained.
 
 Only stories with a uniquely recoverable noun, verb, and adjective recipe are
-eligible. Conflicting metadata, unclassifiable metadata, and unmatched corpus
-stories are excluded from both base and worlds. Construction stops below 95%
-hash-match coverage, 95% role coverage among matched token mass, or 90% combined
-eligible coverage.
+eligible. Duplicate records with conflicting recipes and records with
+unclassifiable released metadata are excluded from both base and worlds. There
+is no corpus/archive matching step, unmatched-corpus category, hash-match gate,
+or combined corpus-coverage gate. All base and world split assignments, and
+every matched-control selection from the held-in splits, come exclusively from
+the eligible archive groups.
 
 Nouns, verbs, and adjectives are independently assigned by token mass to
 deterministic greedy buckets. Adjectives stratify splits but do not define held
@@ -83,35 +90,39 @@ and an observed allocator peak below 12 GiB.
 
 ## Execution tracker
 
-- [x] Implement immutable partition, source, shard, control, and manifest
-  contracts.
-- [x] Implement bounded external source join, duplicate grouping, mechanical
-  role recovery, coverage gates, deterministic buckets, cell selection,
-  stratified allocation, and strict controls.
-- [x] Implement strict artifact persistence/loading, original-text and token
-  shards, memory-mapped deterministic batching, and tamper checks.
-- [x] Implement token-weighted streaming training, complete resume states,
-  validation, calibration fallback, selection, sealed test, and publication.
-- [x] Add fixed preparation and training runners with temporary-directory,
-  phase, progress, and ETA reporting.
-- [x] Add a deterministic CPU end-to-end fixture, including interrupted/resumed
-  parity.
-- [x] Pass the complete default test suite before canonical preparation (828
-  passed, one skipped, 11 deselected; warning-free 33m46s exact-revision run on
-  2026-07-20).
-- [x] Attempt and audit the canonical build. It stopped before promotion at
-  78.9663% hash-match and 78.9425% eligible coverage, below 95% and 90%; see
-  `TW-P_SOURCE_AUDIT.md`. No partial partition was published.
-- [ ] Pass focused TinyWorlds-P plus shared LM/checkpoint tests after partition
-  promotion and immediately before accelerator training. Do not rerun the
-  parked legacy TinyWorlds-v2 suite; its dominant cache/reseal case measured
-  24m54s and was explicitly excluded from subsequent milestone verification on
-  2026-07-20.
-- [ ] Run the RTX 4090 calibration, any single permitted grid fallback, and the
-  five-epoch final training path. Blocked by the mandatory source gate; the GPU
-  was verified but training was correctly not started.
-- [ ] Publish the selected checkpoint, sealed-test results, samples, strict
-  tree, and final measured report. Blocked by the mandatory source gate.
+- [x] Record the archive-only source decision. The pinned archive is the sole
+  story universe, and all published TinyStories text aggregates are irrelevant
+  to TinyWorlds-P construction and training.
+- [x] Preserve the prior train/archive source and calibration audits as
+  historical diagnostics only. The intersection partition and its scratch run
+  are explicitly ineligible for publication or resume under this contract.
+- [x] Retain the source-independent implementation for deterministic
+  buckets/topology, stratified splits, matched controls, calibration decisions,
+  generic contracts, and fixed scratch-training policy.
+- [x] Remove `TinyStories-train.txt` and corpus identity from TinyWorlds-P input
+  and artifact contracts. Do not retain the corpus join as a compatibility
+  alias or optional mode.
+- [ ] Replace source joining with one bounded archive pass that verifies the
+  pinned tarball, binds every record to member/index/content identity,
+  tokenizes exact released story text, groups normalized duplicates, recovers
+  recipes, and audits exclusions and archive token mass.
+- [ ] Update partition shards, document indexes, manifests, strict loading, and
+  rebuild identity so every source reference points to an archive entity and no
+  field presupposes a flat text-corpus offset.
+- [ ] Rewrite normalization/source/duplicate/property tests and the CPU 3x3
+  end-to-end fixture around archive-only entities. Preserve worker-count/order
+  independence, exact reconstruction, leakage rejection, tamper rejection,
+  resume parity, and best-epoch selection coverage.
+- [ ] Run the focused TinyWorlds-P and shared GPT-Neo/checkpoint suite. Keep all
+  parked TinyWorlds-v2 tests collection-skipped; do not run their bodies.
+- [ ] Build the real archive-only 8x8 partition, rebuild it byte-identically,
+  strictly reload it, and audit cell balance, component visibility, split
+  marginals, controls, and sealed-test isolation.
+- [ ] Start a fresh seed-zero RTX 4090 calibration from the archive-only
+  partition. Do not resume or select the superseded intersection-based run.
+- [ ] If calibration passes the declared grid policy, finish five epochs,
+  select the best eligible checkpoint, open sealed test exactly once, and
+  publish the checkpoint, results, samples, strict tree, and final report.
 
 Continual LoRA/VAMP streams, replay, consolidation, regeneration, semantic
 clustering, and near-deduplication are deliberately outside this milestone.

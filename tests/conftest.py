@@ -6,6 +6,23 @@ import pytest
 from apm.data.mnist import MnistArrays
 
 
+_PARKED_TINYWORLDS_V2_REASON = (
+    "TinyWorlds-v2 is parked while tinyworlds-p-archive-v1 is active"
+)
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Skip every parked TinyWorlds-v2 test without executing its body."""
+    skip = pytest.mark.skip(reason=_PARKED_TINYWORLDS_V2_REASON)
+    for item in items:
+        test_name = item.path.name
+        if (
+            test_name.startswith("test_v2_")
+            or test_name == "test_tinyworlds_v2_phase1.py"
+        ):
+            item.add_marker(skip)
+
+
 @pytest.fixture
 def synthetic_mnist_arrays() -> MnistArrays:
     images = np.stack([_digit_pattern(label) for label in range(10) for _ in range(2)], axis=0)

@@ -13,6 +13,7 @@ import math
 from typing import Literal
 
 from apm.data.text.tinyworlds_p.contracts import (
+    BENCHMARK_ID,
     ControlSelection,
     PartitionPreset,
     SplitLabel,
@@ -503,32 +504,42 @@ def select_matched_control(
         identity_sha256,
         f"control:{world}:{split}:row",
     )
-    row_strata = Counter(group.full_stratum for group in selected_row)
-    column_target_strata = Counter(
-        {
-            stratum: count - row_strata[stratum]
-            for stratum, count in target_strata.items()
-            if count - row_strata[stratum] > 0
-        }
-    )
-    if sum(column_target_strata.values()) != column_count:
-        raise PartitionGateError("row control arm overfilled a target nuisance stratum")
     selected_column = _select_control_arm(
         column_candidates,
-        column_target_strata,
+        target_strata,
         column_count,
-        column_count,
+        target_count,
         identity_sha256,
         f"control:{world}:{split}:column",
     )
-    selected = _improve_control_token_match(
+    selected = _improve_control_marginal_match(
         tuple(selected_row + selected_column),
+        tuple(row_candidates),
+        tuple(column_candidates),
+        row_count,
+        target_groups,
+        identity_sha256,
+        f"control:{world}:{split}:marginal-swap",
+        preset,
+    )
+    selected = _improve_control_token_match(
+        selected,
         tuple(row_candidates),
         tuple(column_candidates),
         row_count,
         sum(group.active_token_count for group in target_groups),
         identity_sha256,
-        f"control:{world}:{split}:swap",
+        f"control:{world}:{split}:token-swap",
+    )
+    selected = _improve_control_numeric_match(
+        selected,
+        tuple(row_candidates),
+        tuple(column_candidates),
+        row_count,
+        target_groups,
+        identity_sha256,
+        f"control:{world}:{split}:numeric-swap",
+        preset,
     )
     selected_row_hashes = {
         group.normalized_sha256 for group in selected[:row_count]
@@ -569,7 +580,10 @@ def matched_control_diagnostics(
         _prevalence_errors(
             target_groups,
             control_groups,
-            lambda group: (group.source, group.feature_signature),
+            lambda group: (
+                ("source", group.source),
+                ("feature", group.feature_signature),
+            ),
         ),
         default=0.0,
     )
@@ -577,7 +591,10 @@ def matched_control_diagnostics(
         _prevalence_errors(
             target_groups,
             control_groups,
-            lambda group: (str(group.adjective_bucket), group.length_bin),
+            lambda group: (
+                ("adjective", str(group.adjective_bucket)),
+                ("length", group.length_bin),
+            ),
         ),
         default=0.0,
     )
@@ -727,6 +744,262 @@ def _select_control_arm(
     return selected
 
 
+def _improve_control_marginal_match(
+    initial: tuple[AllocationGroup, ...],
+    row_candidates: tuple[AllocationGroup, ...],
+    column_candidates: tuple[AllocationGroup, ...],
+    row_count: int,
+    target_groups: Sequence[AllocationGroup],
+    identity_sha256: str,
+    namespace: str,
+    preset: PartitionPreset,
+) -> tuple[AllocationGroup, ...]:
+    """Satisfy the declared marginal bounds without requiring joint matches."""
+    selected = list(initial)
+    target_count = len(target_groups)
+    if len(selected) != target_count:
+        raise ValueError("control and target group counts must agree")
+
+    def categories(
+        group: AllocationGroup,
+    ) -> tuple[tuple[str, str], tuple[str, str], tuple[str, str], tuple[str, str]]:
+        return (
+            ("source", group.source),
+            ("feature", group.feature_signature),
+            ("adjective", str(group.adjective_bucket)),
+            ("length", group.length_bin),
+        )
+
+    target_counts = Counter(
+        category for group in target_groups for category in categories(group)
+    )
+    selected_counts = Counter(
+        category for group in selected for category in categories(group)
+    )
+    all_categories = set(target_counts) | set(selected_counts)
+    differences = Counter(
+        {
+            category: selected_counts[category] - target_counts[category]
+            for category in all_categories
+        }
+    )
+    source_feature_tolerance = Fraction(
+        str(preset.control_source_feature_tolerance)
+    )
+    adjective_length_tolerance = Fraction(
+        str(preset.control_adjective_length_tolerance)
+    )
+
+    source_feature_threshold = (
+        target_count * source_feature_tolerance.numerator
+    )
+    adjective_length_threshold = (
+        target_count * adjective_length_tolerance.numerator
+    )
+    common_denominator = math.lcm(
+        source_feature_threshold**2,
+        adjective_length_threshold**2,
+    )
+    score_parameters = {
+        "source": (
+            source_feature_tolerance.denominator,
+            source_feature_threshold,
+            common_denominator // source_feature_threshold**2,
+        ),
+        "feature": (
+            source_feature_tolerance.denominator,
+            source_feature_threshold,
+            common_denominator // source_feature_threshold**2,
+        ),
+        "adjective": (
+            adjective_length_tolerance.denominator,
+            adjective_length_threshold,
+            common_denominator // adjective_length_threshold**2,
+        ),
+        "length": (
+            adjective_length_tolerance.denominator,
+            adjective_length_threshold,
+            common_denominator // adjective_length_threshold**2,
+        ),
+    }
+
+    def category_scores(
+        category: tuple[str, str],
+        difference: int,
+    ) -> tuple[int, int]:
+        scale, threshold, weight = score_parameters[category[0]]
+        scaled_difference = abs(difference) * scale
+        excess = max(scaled_difference - threshold, 0)
+        return excess**2 * weight, scaled_difference**2 * weight
+
+    violation_score = sum(
+        category_scores(category, difference)[0]
+        for category, difference in differences.items()
+    )
+    balance_score = sum(
+        category_scores(category, difference)[1]
+        for category, difference in differences.items()
+    )
+    pools = (row_candidates, column_candidates)
+    spans = ((0, row_count), (row_count, len(selected)))
+    pools_by_signature: list[
+        dict[tuple[tuple[str, str], ...], list[AllocationGroup]]
+    ] = []
+    for arm_index, pool in enumerate(pools):
+        by_signature: dict[
+            tuple[tuple[str, str], ...], list[AllocationGroup]
+        ] = defaultdict(list)
+        for group in pool:
+            by_signature[categories(group)].append(group)
+        for values in by_signature.values():
+            values.sort(
+                key=lambda group: (
+                    _namespace_hash(
+                        identity_sha256,
+                        0,
+                        f"{namespace}:pool:{arm_index}",
+                        group.normalized_sha256,
+                    ),
+                    group.normalized_sha256,
+                )
+            )
+        pools_by_signature.append(by_signature)
+    signature_changes: dict[
+        tuple[tuple[tuple[str, str], ...], tuple[tuple[str, str], ...]],
+        tuple[tuple[tuple[str, str], int], ...],
+    ] = {}
+
+    for iteration in range(min(512, max(1, len(selected)))):
+        if violation_score == 0:
+            break
+        selected_hashes = {group.normalized_sha256 for group in selected}
+        violating_directions = {
+            category: 1 if difference > 0 else -1
+            for category, difference in differences.items()
+            if category_scores(category, difference)[0] > 0
+        }
+        best_swap: tuple[
+            int,
+            int,
+            str,
+            int,
+            AllocationGroup,
+            tuple[tuple[tuple[str, str], int], ...],
+        ] | None = None
+        for arm_index, (start, stop) in enumerate(spans):
+            outgoing_by_signature: dict[
+                tuple[tuple[str, str], ...], tuple[int, AllocationGroup]
+            ] = {}
+            for index in range(start, stop):
+                group = selected[index]
+                signature = categories(group)
+                current = outgoing_by_signature.get(signature)
+                candidate_key = (
+                    _namespace_hash(
+                        identity_sha256,
+                        0,
+                        f"{namespace}:selected:{arm_index}",
+                        group.normalized_sha256,
+                    ),
+                    group.normalized_sha256,
+                )
+                if current is None or candidate_key < (
+                    _namespace_hash(
+                        identity_sha256,
+                        0,
+                        f"{namespace}:selected:{arm_index}",
+                        current[1].normalized_sha256,
+                    ),
+                    current[1].normalized_sha256,
+                ):
+                    outgoing_by_signature[signature] = (index, group)
+            incoming_by_signature = {
+                signature: incoming
+                for signature, values in pools_by_signature[arm_index].items()
+                for incoming in (
+                    next(
+                        (
+                            group
+                            for group in values
+                            if group.normalized_sha256 not in selected_hashes
+                        ),
+                        None,
+                    ),
+                )
+                if incoming is not None
+            }
+            for outgoing_signature, (
+                outgoing_index,
+                outgoing,
+            ) in outgoing_by_signature.items():
+                for incoming_signature, incoming in incoming_by_signature.items():
+                    if outgoing_signature == incoming_signature:
+                        continue
+                    signature_pair = (outgoing_signature, incoming_signature)
+                    delta = signature_changes.get(signature_pair)
+                    if delta is None:
+                        changes: Counter[tuple[str, str]] = Counter(incoming_signature)
+                        changes.subtract(outgoing_signature)
+                        delta = tuple(
+                            sorted(
+                                (category, change)
+                                for category, change in changes.items()
+                                if change
+                            )
+                        )
+                        signature_changes[signature_pair] = delta
+                    if not any(
+                        (direction > 0 and change < 0)
+                        or (direction < 0 and change > 0)
+                        for category, change in delta
+                        for direction in (violating_directions.get(category),)
+                        if direction is not None
+                    ):
+                        continue
+                    next_violation = violation_score
+                    next_balance = balance_score
+                    for category, change in delta:
+                        previous = category_scores(category, differences[category])
+                        following = category_scores(
+                            category,
+                            differences[category] + change,
+                        )
+                        next_violation += following[0] - previous[0]
+                        next_balance += following[1] - previous[1]
+                    candidate = (
+                        next_violation,
+                        next_balance,
+                        _namespace_hash(
+                            identity_sha256,
+                            0,
+                            f"{namespace}:choice:{iteration}",
+                            f"{outgoing.normalized_sha256}\0{incoming.normalized_sha256}",
+                        ),
+                        outgoing_index,
+                        incoming,
+                        delta,
+                    )
+                    if best_swap is None or candidate < best_swap:
+                        best_swap = candidate
+        if best_swap is None or best_swap[:2] >= (
+            violation_score,
+            balance_score,
+        ):
+            break
+        (
+            violation_score,
+            balance_score,
+            _,
+            outgoing_index,
+            incoming,
+            delta,
+        ) = best_swap
+        selected[outgoing_index] = incoming
+        for category, change in delta:
+            differences[category] += change
+    return tuple(selected)
+
+
 def _improve_control_token_match(
     initial: tuple[AllocationGroup, ...],
     row_candidates: tuple[AllocationGroup, ...],
@@ -805,6 +1078,107 @@ def _improve_control_token_match(
                 for group in (*alternatives, outgoing)
                 if group.normalized_sha256 != incoming.normalized_sha256
             ]
+    return tuple(selected)
+
+
+def _improve_control_numeric_match(
+    initial: tuple[AllocationGroup, ...],
+    row_candidates: tuple[AllocationGroup, ...],
+    column_candidates: tuple[AllocationGroup, ...],
+    row_count: int,
+    target_groups: Sequence[AllocationGroup],
+    identity_sha256: str,
+    namespace: str,
+    preset: PartitionPreset,
+) -> tuple[AllocationGroup, ...]:
+    """Use same-stratum swaps to jointly satisfy token and mean-length bounds."""
+    selected = list(initial)
+    target_tokens = sum(group.active_token_count for group in target_groups)
+    target_canonical_tokens = sum(
+        group.canonical_token_count for group in target_groups
+    )
+    selected_tokens = sum(group.active_token_count for group in selected)
+    selected_canonical_tokens = sum(
+        group.canonical_token_count for group in selected
+    )
+    pools = (row_candidates, column_candidates)
+    spans = ((0, row_count), (row_count, len(selected)))
+    token_tolerance = Fraction(str(preset.control_token_tolerance))
+    mean_tolerance = Fraction(str(preset.control_mean_length_tolerance))
+
+    def score(active_tokens: int, canonical_tokens: int) -> tuple[Fraction, Fraction]:
+        token_ratio = Fraction(
+            abs(active_tokens - target_tokens),
+            target_tokens,
+        ) / token_tolerance
+        mean_ratio = Fraction(
+            abs(canonical_tokens - target_canonical_tokens),
+            target_canonical_tokens,
+        ) / mean_tolerance
+        return max(token_ratio, mean_ratio), token_ratio + mean_ratio
+
+    for _ in range(min(256, max(1, len(selected)))):
+        current_score = score(selected_tokens, selected_canonical_tokens)
+        if current_score[0] <= 1:
+            break
+        selected_hashes = {group.normalized_sha256 for group in selected}
+        best_swap: tuple[
+            tuple[Fraction, Fraction],
+            str,
+            int,
+            AllocationGroup,
+            int,
+            int,
+        ] | None = None
+        for arm_index, (start, stop) in enumerate(spans):
+            alternatives_by_stratum: dict[
+                tuple[str, str, str, str], list[AllocationGroup]
+            ] = defaultdict(list)
+            for group in pools[arm_index]:
+                if group.normalized_sha256 not in selected_hashes:
+                    alternatives_by_stratum[group.full_stratum].append(group)
+            for index in range(start, stop):
+                outgoing = selected[index]
+                for incoming in alternatives_by_stratum.get(
+                    outgoing.full_stratum,
+                    (),
+                ):
+                    next_tokens = (
+                        selected_tokens
+                        - outgoing.active_token_count
+                        + incoming.active_token_count
+                    )
+                    next_canonical_tokens = (
+                        selected_canonical_tokens
+                        - outgoing.canonical_token_count
+                        + incoming.canonical_token_count
+                    )
+                    candidate = (
+                        score(next_tokens, next_canonical_tokens),
+                        _namespace_hash(
+                            identity_sha256,
+                            0,
+                            namespace,
+                            f"{outgoing.normalized_sha256}\0{incoming.normalized_sha256}",
+                        ),
+                        index,
+                        incoming,
+                        next_tokens,
+                        next_canonical_tokens,
+                    )
+                    if best_swap is None or candidate < best_swap:
+                        best_swap = candidate
+        if best_swap is None or best_swap[0] >= current_score:
+            break
+        (
+            _,
+            _,
+            index,
+            incoming,
+            selected_tokens,
+            selected_canonical_tokens,
+        ) = best_swap
+        selected[index] = incoming
     return tuple(selected)
 
 
@@ -887,7 +1261,8 @@ def _namespace_hash(
 ) -> str:
     return sha256(
         (
-            "tinyworlds-p-v1\0"
+            BENCHMARK_ID
+            + "\0"
             + identity_sha256
             + "\0"
             + str(public_seed)

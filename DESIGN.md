@@ -2,51 +2,57 @@
 
 ## TinyWorlds-P Benchmark Boundary
 
-TinyWorlds-P is the benchmark contract `tinyworlds-p-v1`. It uses only genuine
-story bytes from the pinned original `TinyStories-train.txt` corpus. Released
+TinyWorlds-P is the benchmark contract `tinyworlds-p-archive-v1`. Its sole story
+universe is the set of released entities in the pinned
+`TinyStories_all_data.tar.gz` archive. Base training, held-out worlds, matched
+controls, validation, and sealed test are derived only from eligible archive
+entities. The original `TinyStories-train.txt`,
+`TinyStories-valid.txt`, and GPT-4-only text aggregates are not inputs,
+reference corpora, coverage targets, or split authorities for TinyWorlds-P.
+They must not be read by partition construction or base training.
+
+The canonical source is the pinned 1,608,001,638-byte
+`TinyStories_all_data.tar.gz` from dataset revision
+`f54c09fd23315a6f9c86f9dc80f725de7d8f9c64`, SHA-256
+`26cf7605aca15bc4ea6fa637256400d9d01317b28ed296172b2d1dd160cd7699`.
+The tokenizer is the existing hashed 50,257-token GPT-2 BPE artifact. These
+identities, normalization, all research choices, assignments, controls, and
+tree digests are artifact contracts rather than runner defaults. Released
 prompt metadata determines partitions and audits but is never included in
 model input. External generation, story embeddings, learned routers, semantic
 clustering, semantic near-deduplication, replay, consolidation, LoRA, and VAMP
 episodes are outside the base-publication milestone.
 
-The canonical corpus is revision
-`f54c09fd23315a6f9c86f9dc80f725de7d8f9c64`, 1,924,281,556 bytes, SHA-256
-`c5cf5e22ff13614e830afbe61a99fbcbe8bcb7dd72252b989fa1117a368d401f`.
-The metadata source is the pinned 1,608,001,638-byte
-`TinyStories_all_data.tar.gz`, SHA-256
-`26cf7605aca15bc4ea6fa637256400d9d01317b28ed296172b2d1dd160cd7699`.
-The tokenizer is the existing hashed 50,257-token GPT-2 BPE artifact. These
-identities, normalization, all research choices, assignments, controls, and
-tree digests are artifact contracts rather than runner defaults.
+### Archive identity and duplicate semantics
 
-### Identity join and duplicate semantics
-
-Story identity is SHA-256 over UTF-8 text after NFKC, case folding, canonical
-straight single/double quotation marks, Unicode whitespace collapse, and edge
-trim. Normalization exists only for identity. Training and original-text
-shards retain the exact corpus bytes between `<|endoftext|>` separators; the
+Each archive entity is bound to its tar member, member-local index, and a hash
+of its complete released JSON record. Duplicate-story identity is SHA-256 over
+the entity's UTF-8 `story` after NFKC, case folding, canonical straight
+single/double quotation marks, Unicode whitespace collapse, and edge trim.
+Normalization exists only for duplicate identity. Training and original-text
+shards retain the exact UTF-8 bytes of each accepted archive `story`; the
 tokenizer appends the corresponding EOS token after each occurrence.
 
-The corpus and archive are streamed into bounded sorted runs and externally
-merged by normalized SHA-256. Neither source is materialized in memory and no
-mutable database is part of the build. Normalization and tokenization use 16
-physical processes in the production preset. Published order is canonical, so
-worker completion order and temporary run size cannot change output bytes.
+The archive is streamed into bounded sorted runs. It is never materialized in
+memory and no mutable database is part of the build. Normalization and
+tokenization use 16 physical processes in the production preset. Published
+order is canonical, so worker completion order and temporary run size cannot
+change output bytes.
 
 Every normalized duplicate group is one indivisible assignment unit. All raw
-corpus occurrences and their multiplicity remain attached to that assignment.
-Prompt roles are accepted only when explicit released noun, verb, and
-adjective labels mechanically and uniquely identify the three released words.
-Every metadata duplicate must classify and all complete normalized recipes
-must agree; otherwise the group is excluded as unclassifiable or conflicting.
-Unmatched groups are also excluded. Excluded text never enters the base, since
-untracked base prose could contain a held-out conjunction.
+archive record occurrences and their multiplicity remain attached to that
+assignment. Prompt roles are accepted only when explicit released noun, verb,
+and adjective labels mechanically and uniquely identify the three released
+words. Every duplicate record must classify and all complete normalized
+recipes must agree; otherwise the group is excluded as unclassifiable or
+conflicting.
 
-The join stops before partitioning unless corpus-token hash-match coverage is
-at least 95%, role-classified mass among matched tokens is at least 95%, and
-combined eligible corpus-token coverage is at least 90%. The audit retains
-each exclusion category, duplicate counts, token numerators and denominators,
-and every accepted metadata provenance record.
+There is no corpus-to-archive join, unmatched-corpus category, hash-match
+coverage gate, or combined corpus-coverage gate. Eligibility is determined
+solely from the pinned archive record and its released metadata. Every base,
+world, control, validation, and test assignment is a subset of eligible archive
+groups. The audit retains archive record/group counts, duplicate multiplicity,
+token mass, classification exclusions, and every accepted provenance record.
 
 ### Buckets and five-cell topology
 
@@ -91,23 +97,26 @@ epoch, or checkpoint selection.
 Each world validation and test split owns a no-replacement control drawn from
 the corresponding held-in split. Half its groups come from the same noun row
 and other verb columns, and half from the same verb column and other noun rows.
-Joint nuisance strata are quota matched before deterministic token-mass swaps
-within a stratum. Controls fail rather than relax when active token mass differs
-by more than 0.25%, source or feature prevalence by more than two percentage
-points, adjective-bucket or length-bin prevalence by more than three points,
-or mean canonical length by more than 5%. A held-in group cannot serve two
-controls in the same evaluation split.
+Joint nuisance strata seed a deterministic proportional preference; exact
+joint-stratum reproduction is not required because the contract constrains
+marginals. Cross-stratum swaps first satisfy the source, feature, adjective,
+and length-bin marginal bounds, then within-stratum swaps match active token
+mass and mean length without changing those marginals. Controls fail rather
+than relax when active token mass differs by more than 0.25%, source or feature
+prevalence by more than two percentage points, adjective-bucket or length-bin
+prevalence by more than three points, or mean canonical length by more than 5%.
+A held-in group cannot serve two controls in the same evaluation split.
 
 ### Partition persistence and loading
 
 Partition publications live at
-`data/tinyworlds-p/v1/<partition-sha256>/`. They contain source and
+`data/tinyworlds-p-archive/v1/<partition-sha256>/`. They contain source and
 normalization identities, bucket word lists, topology, one assignment per
 duplicate group, provenance, controls, audit, base/world/control manifests,
 original-byte shards, little-endian uint16 token shards, and document indexes.
 Both shard kinds roll only between stories near 32 MiB. Indexes bind raw
-occurrence IDs, source offsets and hashes, recipe and bucket evidence,
-partition/split, shard offsets, and token counts.
+archive record IDs, tar members and member-local indexes, content hashes,
+recipe and bucket evidence, partition/split, shard offsets, and token counts.
 
 `tree.json` lists every other file with exact size and SHA-256. Strict loading
 rejects unknown/missing paths, symlinks, noncanonical JSON, checksum changes,
@@ -166,7 +175,7 @@ five-control test splits opened once. Test hypothesis failures are reported
 results and cannot change the selected partition or checkpoint.
 
 The base publication lives at
-`checkpoints/tinyworlds-p-v1/<training-sha256>/` and contains the strict selected
+`checkpoints/tinyworlds-p-archive-v1/<training-sha256>/` and contains the strict selected
 base checkpoint, copied hashed tokenizer, every complete resume state, trace,
 validation records, sealed test, fixed-prompt samples, identities, strict tree,
 and report. The report includes coverage, calibration, learning curves,
