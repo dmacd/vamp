@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from apm.data.text.tinyworlds_p import (
+    BASE_TRAINING_PRESET,
     StreamingTrainingConfig,
     build_partition,
     evaluate_partition_split,
@@ -32,6 +33,7 @@ def _tiny_training_config(vocab_size: int) -> StreamingTrainingConfig:
             local_window_size=4,
         ),
         epochs=2,
+        calibration_epochs=1,
         context_length=8,
         microbatch_size=4,
         accumulation_microbatches=4,
@@ -47,6 +49,13 @@ def _tiny_training_config(vocab_size: int) -> StreamingTrainingConfig:
         state_interval_updates=100,
         allocator_peak_limit_bytes=1024**3,
     )
+
+
+def test_fixed_runner_uses_the_base_policy_calibration_prefix() -> None:
+    config = StreamingTrainingConfig.from_preset()
+
+    assert config.epochs == BASE_TRAINING_PRESET.epochs == 5
+    assert config.calibration_epochs == BASE_TRAINING_PRESET.calibration_epochs == 2
 
 
 def test_streaming_training_is_token_weighted_and_resume_identical(

@@ -39,10 +39,23 @@ class _ArchiveTrainingPlan:
     updates_per_epoch: int
     epoch_seconds: float
     epochs: int
+    calibration_epochs: int
+
+    def __post_init__(self) -> None:
+        if not 0 < self.calibration_epochs < self.epochs:
+            raise ValueError("calibration epochs must be a strict prefix of training")
 
     @property
     def total_updates(self) -> int:
         return self.updates_per_epoch * self.epochs
+
+    @property
+    def calibration_updates(self) -> int:
+        return self.updates_per_epoch * self.calibration_epochs
+
+    @property
+    def remaining_epochs(self) -> int:
+        return self.epochs - self.calibration_epochs
 
     def seconds_for_epochs(self, epochs: int) -> float:
         return self.epoch_seconds * epochs
@@ -181,6 +194,7 @@ def _print_archive_training_plan(
         updates_per_epoch=updates,
         epoch_seconds=active_tokens / _PLANNING_THROUGHPUT,
         epochs=config.epochs,
+        calibration_epochs=config.calibration_epochs,
     )
     planned_tokens = active_tokens * plan.epochs
     print(
@@ -258,13 +272,13 @@ def main() -> int:
     plan = _print_archive_training_plan(artifact, config)
     _print_training_phase(
         "calibration",
-        f"grid 8x8, epochs 1-{config.calibration_epochs}",
+        f"grid 8x8, epochs 1-{plan.calibration_epochs}",
         plan,
-        config.calibration_epochs,
+        plan.calibration_epochs,
     )
     reporter = _TrainingReporter(
         "TinyWorlds-P 8x8 calibration",
-        plan.updates_per_epoch * config.calibration_epochs,
+        plan.calibration_updates,
         plan.total_updates,
     )
     try:
@@ -306,13 +320,13 @@ def main() -> int:
         plan = _print_archive_training_plan(fallback_partition, config)
         _print_training_phase(
             "calibration",
-            f"grid {fallback_count}x{fallback_count}, epochs 1-{config.calibration_epochs}",
+            f"grid {fallback_count}x{fallback_count}, epochs 1-{plan.calibration_epochs}",
             plan,
-            config.calibration_epochs,
+            plan.calibration_epochs,
         )
         reporter = _TrainingReporter(
             f"TinyWorlds-P {fallback_count}x{fallback_count} calibration",
-            plan.updates_per_epoch * config.calibration_epochs,
+            plan.calibration_updates,
             plan.total_updates,
         )
         try:
@@ -330,7 +344,7 @@ def main() -> int:
             flush=True,
         )
         return 2
-    remaining_epochs = config.epochs - config.calibration_epochs
+    remaining_epochs = plan.remaining_epochs
     _print_training_phase(
         "final",
         f"resuming the passing run through epoch {config.epochs}",

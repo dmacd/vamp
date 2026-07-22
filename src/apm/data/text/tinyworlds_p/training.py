@@ -52,6 +52,7 @@ class StreamingTrainingConfig:
 
     model_config: GptNeoConfig
     epochs: int
+    calibration_epochs: int
     context_length: int
     microbatch_size: int
     accumulation_microbatches: int
@@ -72,6 +73,7 @@ class StreamingTrainingConfig:
             raise TypeError("model_config must be GptNeoConfig")
         integers = (
             self.epochs,
+            self.calibration_epochs,
             self.context_length,
             self.microbatch_size,
             self.accumulation_microbatches,
@@ -82,6 +84,8 @@ class StreamingTrainingConfig:
             raise ValueError("trainer dimensions and budgets must be positive")
         if type(self.parameter_seed) is not int or self.parameter_seed < 0:
             raise ValueError("parameter seed must be nonnegative")
+        if self.calibration_epochs >= self.epochs:
+            raise ValueError("calibration must be a strict prefix of training")
         if self.context_length > self.model_config.max_position_embeddings:
             raise ValueError("training context exceeds model positions")
         optimizer_values = (
@@ -112,6 +116,7 @@ class StreamingTrainingConfig:
         return cls(
             model_config=preset.model_config,
             epochs=preset.epochs,
+            calibration_epochs=preset.calibration_epochs,
             context_length=preset.context_length,
             microbatch_size=preset.microbatch_size,
             accumulation_microbatches=preset.accumulation_microbatches,
@@ -137,6 +142,7 @@ class StreamingTrainingConfig:
             "adam_beta2": self.adam_beta2,
             "adam_epsilon": self.adam_epsilon,
             "allocator_peak_limit_bytes": self.allocator_peak_limit_bytes,
+            "calibration_epochs": self.calibration_epochs,
             "context_length": self.context_length,
             "epochs": self.epochs,
             "gradient_clip_norm": self.gradient_clip_norm,
