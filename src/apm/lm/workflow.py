@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, Sequence
+from typing import Callable, Protocol, Sequence
 
 import jax
 import jax.numpy as jnp
@@ -184,6 +184,8 @@ def run_candidate_edge_updates(
     parent_edge_coefficients: jax.Array,
     candidate_index: int,
     train_config: LmTrainConfig,
+    *,
+    progress: Callable[[int, float, int], None] | None = None,
 ) -> tuple[LmTrainState[LoraEdge], LmLossTrace]:
     """Run exactly the configured candidate-edge updates while cycling batches."""
     _require_training_batches(batches)
@@ -207,7 +209,10 @@ def run_candidate_edge_updates(
             current_state,
             batches[step_index % len(batches)],
         )
-        losses.append(float(loss))
+        scalar_loss = float(loss)
+        losses.append(scalar_loss)
+        if progress is not None:
+            progress(step_index + 1, scalar_loss, train_config.steps)
     return current_state, LmLossTrace(step_losses=tuple(losses))
 
 

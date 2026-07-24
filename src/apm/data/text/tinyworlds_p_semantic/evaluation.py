@@ -9,6 +9,7 @@ import json
 import math
 import os
 from pathlib import Path
+import tempfile
 
 import jax
 import jax.numpy as jnp
@@ -22,6 +23,9 @@ from apm.data.text.tinyworlds_p_semantic.contracts import (
     canonical_json_bytes,
     record_sha256,
 )
+from apm.data.text.tinyworlds_p_semantic.partition_runtime import (
+    SemanticRuntimeArtifact,
+)
 from apm.data.text.tinyworlds_p_semantic.statistics import (
     CANONICAL_REPLICATES,
     GroupLoss,
@@ -31,6 +35,8 @@ from apm.data.text.tinyworlds_p_semantic.statistics import (
 )
 from apm.lm.config import GptNeoConfig
 from apm.lm.gpt_neo import apply_gpt_neo
+from apm.lm.lora import LoraConfig
+from apm.lm.lora_memory import PackedLoraMemory
 from apm.lm.losses import per_token_nll
 from apm.lm.parameters import GptNeoParams
 from apm.lm.text_data import TokenBatch
@@ -94,7 +100,39 @@ def evaluate_partition_split(
     progress: EvaluationProgress | None = None,
 ) -> SplitGroupEvaluation:
     """Stream model losses and persist sorted loss sums/counts per duplicate group."""
-    config = model_config or SEMANTIC_TRAINING_PRESET.model_config
+    if type(artifact) is not SemanticPartitionArtifact:
+        raise TypeError("semantic-v1 evaluation requires its strict partition")
+    return _evaluate_partition_split_core(
+        params,
+        artifact,
+        split,
+        ledger_path,
+        model_config or SEMANTIC_TRAINING_PRESET.model_config,
+        progress=progress,
+    )
+
+
+def _evaluate_partition_split_core(
+    params: GptNeoParams,
+    artifact: SemanticRuntimeArtifact,
+    split: str,
+    ledger_path: str | Path,
+    config: GptNeoConfig,
+    *,
+    progress: EvaluationProgress | None = None,
+    lora_memory: PackedLoraMemory | None = None,
+    lora_config: LoraConfig | None = None,
+    edge_coefficients: jax.Array | None = None,
+) -> SplitGroupEvaluation:
+    supplied_lora_values = (
+        lora_memory is not None,
+        lora_config is not None,
+        edge_coefficients is not None,
+    )
+    if any(supplied_lora_values) and not all(supplied_lora_values):
+        raise ValueError(
+            "semantic split evaluation requires all forced-LoRA values together"
+        )
     if config.vocab_size != artifact.tokenizer_identity.vocab_size:
         raise ValueError("evaluation model vocabulary differs from semantic tokenizer")
     path = Path(ledger_path)
@@ -108,6 +146,9 @@ def evaluate_partition_split(
             config,
             jnp.asarray(batch.input_ids, dtype=jnp.int32),
             jnp.asarray(batch.attention_mask, dtype=jnp.bool_),
+            lora_memory=lora_memory,
+            lora_config=lora_config,
+            edge_coefficients=edge_coefficients,
         )
         mask = jnp.asarray(batch.loss_mask, dtype=jnp.float32)
         losses = per_token_nll(
@@ -125,40 +166,74 @@ def evaluate_partition_split(
     current_loss = 0.0
     current_tokens = 0
     previous_group = ""
-    with path.open("wb") as output:
-        for completed, (batch, groups) in enumerate(
-            _iter_group_batches(artifact, split),
-            start=1,
-        ):
-            row_losses, row_tokens = compiled(batch)
-            losses = np.asarray(row_losses, dtype=np.float64)
-            tokens = np.asarray(row_tokens, dtype=np.int64)
-            for group, loss_sum, active_tokens in zip(groups, losses, tokens, strict=True):
-                if group is None:
-                    if int(active_tokens) != 0:
-                        raise ValueError("padded semantic evaluation row acquired active tokens")
-                    continue
-                if current_group is not None and group != current_group:
-                    if group <= previous_group:
-                        raise ValueError("semantic group-loss stream is not sorted")
-                    _write_group_loss(output, current_group, current_loss, current_tokens)
-                    previous_group = current_group
-                    group_count += 1
-                    current_loss, current_tokens = 0.0, 0
-                current_group = group
-                current_loss += float(loss_sum)
-                current_tokens += int(active_tokens)
-                total_loss += float(loss_sum)
-                total_tokens += int(active_tokens)
-            if progress is not None:
-                progress(split, completed, planned_batches)
-        if current_group is not None:
-            _write_group_loss(output, current_group, current_loss, current_tokens)
-            group_count += 1
-        output.flush()
-        os.fsync(output.fileno())
-    if total_tokens == 0 or group_count == 0:
-        raise ValueError(f"semantic evaluation split contains no tokens: {split}")
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        dir=path.parent,
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as output:
+            for completed, (batch, groups) in enumerate(
+                _iter_group_batches(artifact, split),
+                start=1,
+            ):
+                row_losses, row_tokens = compiled(batch)
+                losses = np.asarray(row_losses, dtype=np.float64)
+                tokens = np.asarray(row_tokens, dtype=np.int64)
+                for group, loss_sum, active_tokens in zip(
+                    groups,
+                    losses,
+                    tokens,
+                    strict=True,
+                ):
+                    if group is None:
+                        if int(active_tokens) != 0:
+                            raise ValueError(
+                                "padded semantic evaluation row acquired active tokens"
+                            )
+                        continue
+                    if current_group is not None and group != current_group:
+                        if group <= previous_group:
+                            raise ValueError(
+                                "semantic group-loss stream is not sorted"
+                            )
+                        _write_group_loss(
+                            output,
+                            current_group,
+                            current_loss,
+                            current_tokens,
+                        )
+                        previous_group = current_group
+                        group_count += 1
+                        current_loss, current_tokens = 0.0, 0
+                    current_group = group
+                    current_loss += float(loss_sum)
+                    current_tokens += int(active_tokens)
+                    total_loss += float(loss_sum)
+                    total_tokens += int(active_tokens)
+                if progress is not None:
+                    progress(split, completed, planned_batches)
+            if current_group is not None:
+                _write_group_loss(
+                    output,
+                    current_group,
+                    current_loss,
+                    current_tokens,
+                )
+                group_count += 1
+            output.flush()
+            os.fsync(output.fileno())
+        if total_tokens == 0 or group_count == 0:
+            raise ValueError(f"semantic evaluation split contains no tokens: {split}")
+        if path.exists():
+            raise FileExistsError(
+                f"semantic group-loss ledger appeared during evaluation: {path}"
+            )
+        os.replace(temporary_path, path)
+        _fsync_directory(path.parent)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
     return SplitGroupEvaluation(
         split=split,
         active_tokens=total_tokens,
@@ -180,11 +255,36 @@ def evaluate_epoch_validation(
     progress: EvaluationProgress | None = None,
 ) -> SemanticEpochValidation:
     """Evaluate held-in/world/control validation and persist empirical-null evidence."""
+    if type(artifact) is not SemanticPartitionArtifact:
+        raise TypeError("semantic-v1 validation requires its strict partition")
+    return _evaluate_epoch_validation_core(
+        params,
+        artifact,
+        epoch,
+        output_directory,
+        model_config or SEMANTIC_TRAINING_PRESET.model_config,
+        tree_format="tinyworlds-p-semantic-validation-tree",
+        replicates=replicates,
+        progress=progress,
+    )
+
+
+def _evaluate_epoch_validation_core(
+    params: GptNeoParams,
+    artifact: SemanticRuntimeArtifact,
+    epoch: int,
+    output_directory: str | Path,
+    model_config: GptNeoConfig,
+    *,
+    tree_format: str,
+    replicates: int = CANONICAL_REPLICATES,
+    progress: EvaluationProgress | None = None,
+) -> SemanticEpochValidation:
     directory = Path(output_directory)
     if directory.exists():
         raise FileExistsError(f"semantic epoch evaluation already exists: {directory}")
     directory.mkdir(parents=True)
-    held = evaluate_partition_split(
+    held = _evaluate_partition_split_core(
         params,
         artifact,
         "base/validation",
@@ -193,7 +293,7 @@ def evaluate_epoch_validation(
         progress=progress,
     )
     evaluations = {
-        (role, world): evaluate_partition_split(
+        (role, world): _evaluate_partition_split_core(
             params,
             artifact,
             f"{role}/{world}/validation",
@@ -247,7 +347,7 @@ def evaluate_epoch_validation(
             "validation": semantic_validation_record(validation),
         },
     )
-    _write_tree(directory, identity, "tinyworlds-p-semantic-validation-tree")
+    _write_tree(directory, identity, tree_format)
     return validation
 
 
@@ -262,6 +362,31 @@ def evaluate_sealed_test_once(
     progress: EvaluationProgress | None = None,
 ) -> SemanticSealedTest:
     """Open sealed test exactly once and report, without changing checkpoint selection."""
+    if type(artifact) is not SemanticPartitionArtifact:
+        raise TypeError("semantic-v1 sealed evaluation requires its strict partition")
+    return _evaluate_sealed_test_once_core(
+        params,
+        artifact,
+        selected_epoch,
+        output_directory,
+        model_config or SEMANTIC_TRAINING_PRESET.model_config,
+        tree_format="tinyworlds-p-semantic-sealed-test-tree",
+        replicates=replicates,
+        progress=progress,
+    )
+
+
+def _evaluate_sealed_test_once_core(
+    params: GptNeoParams,
+    artifact: SemanticRuntimeArtifact,
+    selected_epoch: int,
+    output_directory: str | Path,
+    model_config: GptNeoConfig,
+    *,
+    tree_format: str,
+    replicates: int = CANONICAL_REPLICATES,
+    progress: EvaluationProgress | None = None,
+) -> SemanticSealedTest:
     directory = Path(output_directory)
     if directory.exists():
         raise FileExistsError(f"sealed semantic test was already opened: {directory}")
@@ -273,7 +398,7 @@ def evaluate_sealed_test_once(
             "selected_epoch": selected_epoch,
         },
     )
-    held = evaluate_partition_split(
+    held = _evaluate_partition_split_core(
         params,
         artifact,
         "base/test",
@@ -282,7 +407,7 @@ def evaluate_sealed_test_once(
         progress=progress,
     )
     evaluations = {
-        (role, world): evaluate_partition_split(
+        (role, world): _evaluate_partition_split_core(
             params,
             artifact,
             f"{role}/{world}/test",
@@ -337,7 +462,7 @@ def evaluate_sealed_test_once(
             "test": semantic_validation_record(result),
         },
     )
-    _write_tree(directory, identity, "tinyworlds-p-semantic-sealed-test-tree")
+    _write_tree(directory, identity, tree_format)
     return SemanticSealedTest(selected_epoch, held, result, directory)
 
 
@@ -392,7 +517,7 @@ def semantic_validation_record(validation: SemanticEpochValidation) -> dict[str,
 
 
 def _paired_losses(
-    artifact: SemanticPartitionArtifact,
+    artifact: SemanticRuntimeArtifact,
     world: str,
     split: str,
     world_ledger: Path,
@@ -418,7 +543,7 @@ def _paired_losses(
 
 
 def _iter_group_batches(
-    artifact: SemanticPartitionArtifact,
+    artifact: SemanticRuntimeArtifact,
     split: str,
 ) -> Iterator[tuple[TokenBatch, tuple[str | None, ...]]]:
     path = artifact.root / "indexes" / _index_filename(split)
@@ -461,7 +586,7 @@ def _iter_group_batches(
 def _window(
     tokens: np.ndarray,
     start: int,
-    artifact: SemanticPartitionArtifact,
+    artifact: SemanticRuntimeArtifact,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     length = artifact.preset.context_length
     chunk = tokens[start : start + length + 1]
@@ -478,7 +603,7 @@ def _window(
 
 
 def _empty_window(
-    artifact: SemanticPartitionArtifact,
+    artifact: SemanticRuntimeArtifact,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     length = artifact.preset.context_length
     return (
@@ -498,7 +623,7 @@ def _stack(rows: Sequence[tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
     )
 
 
-def _count_evaluation_batches(artifact: SemanticPartitionArtifact, split: str) -> int:
+def _count_evaluation_batches(artifact: SemanticRuntimeArtifact, split: str) -> int:
     windows = sum(
         math.ceil(max(0, _integer(record, "token_count") - 1) / artifact.preset.context_length)
         for record in _iter_index(artifact.root / "indexes" / _index_filename(split))
@@ -584,6 +709,14 @@ def _write_json(path: Path, value: object) -> None:
         output.write(canonical_json_bytes(value))
         output.flush()
         os.fsync(output.fileno())
+
+
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _file_sha256(path: Path) -> str:

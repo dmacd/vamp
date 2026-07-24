@@ -89,7 +89,9 @@ class LanguageSuiteExample:
             != self.visible_concept_ids
             or any(not value for value in self.visible_concept_ids)
         ):
-            raise ValueError("visible concept IDs must be sorted, unique, and nonempty strings")
+            raise ValueError("visible concept IDs must be sorted unique strings")
+        if self.cue_regime != "cue_hidden_or_ambiguous" and not self.visible_concept_ids:
+            raise ValueError("a visible semantic cue must name at least one concept")
 
     @property
     def task_id(self) -> TaskId:

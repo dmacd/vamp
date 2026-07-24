@@ -94,6 +94,109 @@ selection, model loss, semantic-gap decision, or sealed-test access occurred.
 Training and resume artifacts must bind this exact partition through a
 version-6-native strict boundary before calibration may begin.
 
+## Semantic-v6 Base Gate and First VAMP Experiment
+
+The first downstream experiment is
+`tinyworlds-p-semantic-v6-vamp-chain-v1`. It is a fixed, exploratory
+continual-adaptation study over the canonical semantic-v6 partition. It does
+not change the catalog, partition, comparison stories, base-model gate, or
+checkpoint-selection rule.
+
+### Base training and selection boundary
+
+Semantic-v6 has its own training, resume, validation, selected-checkpoint, and
+publication formats. They reject semantic-v1 and archive-v1 artifacts even
+though the optimizer and GPT-Neo architecture remain scientifically
+unchanged. The run starts from seed zero, uses the registered five-epoch
+schedule, and first trains exactly two epochs. Epoch two must satisfy the
+registered empirical semantic gate and held-in quality requirements before
+epochs three through five can run. Among epochs two through five that satisfy
+the same semantic gate, the checkpoint with the lowest held-in validation NLL
+is selected, with the earlier epoch breaking an exact tie.
+
+Selection publishes the base checkpoint, tokenizer, validation ledgers,
+sample report, and resume state without reading a test index. Adapter training
+begins only from this strict selected-base artifact. The sealed test is not
+part of calibration, continuation, checkpoint selection, parent selection,
+adapter optimization, or router-key construction.
+
+The base runner writes an authenticated optimizer, RNG, schedule, and exact
+next-batch cursor every 1,000 updates and at every epoch boundary. After an
+interruption it selects the newest strict checkpoint, removes only loss-log
+records beyond that checkpoint, and resumes deterministically. Completed
+group-loss ledgers are atomically renamed into place. An incomplete validation
+directory is moved intact under the run's recovery directory before that epoch
+is reevaluated, so a partial ledger is never mistaken for completed evidence.
+
+Before any real update, a separate
+`tinyworlds-p-semantic-v6-gpu-preflight` identity runs exactly two disposable
+updates and one warm validation batch. Its resume format cannot be loaded by
+the real run. It checks finite loss and the 12 GiB allocator limit and
+publishes measured runtime estimates. The single fixed runner stops after a
+new preflight so that proceeding requires a later invocation after review.
+
+### Frozen five-world adaptation study
+
+The task order is exactly `A, B, C, D, E`, using cells `(2,4)`, `(7,4)`,
+`(7,6)`, `(2,6)`, and `(3,2)`. The experiment preset has SHA-256
+`ca16318486600745e8a49903f495819741082f120fa7b95b3f9277efa83ada73`.
+Each of the three trained adapter systems receives exactly 2,000 updates per
+world with rank-eight, alpha-eight LoRA on every supported projection, AdamW
+learning rate `0.001`, weight decay `0.01`, and gradient clipping at `1.0`.
+The systems are one continually overwritten LoRA, five independent root
+LoRAs, and VAMP's immutable pathwise graph. VAMP may contain six nodes and
+five edges. Parent search uses only 128 deterministic validation spans from
+each new world; the root key uses 128 held-in validation spans. Every selected
+span is 256 tokens and at most one span comes from a duplicate-story group.
+
+Task-boundary artifacts persist the three independent random streams, all
+adapter tensors, the VAMP graph, address keys, parent scores, and complete
+update-loss traces. A resumed run reconstructs immutable progress at the last
+complete world and must be tensor-identical to uninterrupted execution. It
+never reconstructs an old semantic or archive compatibility path.
+
+### Evaluation and one-time test transaction
+
+After all adapter tensors are frozen, the runner durably writes one sealed
+transaction binding the partition, selected base, adapter publication, and
+complete experiment config. Only then may any test index be read. A fixed test
+suite selects 128 deterministic 256-token spans per world and evaluates nested
+prefix lengths 16, 32, 64, and 128 against a disjoint 128-token suffix. The
+primary condition is the 64-token prefix. Exact whole-word occurrences from
+the target noun and verb clusters classify each visible prefix as
+cue-sufficient, cue-present, or cue-hidden/ambiguous; this label is an
+evaluation stratum and is never supplied to a router.
+
+The full comparison has four stored methods—frozen base, sequential LoRA,
+independent root LoRA, and VAMP oracle—and five task-free routers—exhaustive,
+Hopfield, uniform-initialized EBT, Hopfield-initialized EBT, and deterministic
+random node. Hopfield uses beta `10` and top-k `4`. EBT uses 20 steps, learning
+rate `0.1`, temperature `1.0`, and entropy penalty `0.01`. Evaluation stores
+every stage, prior task, prefix, and nonempty cue stratum, plus acquisition and
+best-so-far forgetting, parent-transfer diagnostics, persistent and padded
+memory, and synchronized cold/warm routing cost.
+
+Adapter specificity is diagnostic rather than a gate. For each world, the
+final sequential adapter, that world's independent adapter, and that world's
+VAMP oracle path are forced on the world stories and on both already-paired
+comparison arms. The statistic is the adapter's NLL improvement on the world
+minus its improvement on the comparison. Row and column arms remain separate,
+and each receives a deterministic 10,000-replicate paired bootstrap interval.
+Routers are not assigned a control accuracy because comparison stories have no
+task-oracle node.
+
+The base sealed evaluation retains its registered bootstrap, label-swap, and
+Holm statistics, but the VAMP study has no new pass/fail threshold. Its final
+content-addressed Markdown, standalone HTML, JSON, JSONL, ledgers, timings,
+and provenance report is explicitly exploratory and cannot alter the selected
+checkpoint or reinterpret semantic-v6 construction.
+
+The sealed authorization names one durable transaction rather than assuming a
+process cannot fail. If its base evaluation is interrupted, the incomplete
+directory is preserved under that transaction's recovery directory and the
+same bound transaction may finish it. Adapter and final-result publications
+record the largest observed JAX allocator peak and reject a peak above 12 GiB.
+
 ## TinyWorlds-P Semantic-v5 Balance-Eligible Topology
 
 `tinyworlds-p-semantic-v5` is a new benchmark version that addresses the

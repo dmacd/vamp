@@ -1,13 +1,88 @@
 # Development Plan
 
-## Next Decision
+## Current Outcome
 
-Semantic-v6 construction is complete. The next decision is whether to add the
-version-6-native training, checkpoint, resume, and publication boundary and run
-a measured GPU runtime preflight. That work must bind the exact successful
-partition, retain seed zero and the registered empirical-null gate, and pass
-focused resume/parity tests before a fresh calibration starts. Training and the
-sealed test remain closed until that boundary and runtime estimate are reviewed.
+The reviewed semantic-v6 seed-zero calibration completed on the RTX 4090 and
+stopped at its registered two-epoch gate with decision
+`semantic_grid_failure`. The runner is no longer active. It completed 19,460
+optimizer updates in about 2 hours 17 minutes, and its held-in validation NLL
+improved from `1.318863` after epoch one to `1.241619` after epoch two. Its
+9,160,916,224-byte allocator peak was below the fixed 12 GiB limit. Ordinary
+training therefore passed its quality and memory checks.
+
+The intended semantic contrast did not appear. At epoch two, the mean
+target-world-minus-control gap was `-0.001364` nats per token, with a 95%
+paired-bootstrap interval of `[-0.009339, 0.006350]` and a one-sided placebo
+probability of `0.631937`. The registered requirements were a gap of at least
+`ln(1.05) = 0.048790164`, an interval wholly above zero, and a probability at
+most `0.01`. Worlds A and B had small positive point estimates whose intervals
+crossed zero; worlds C, D, and E had negative point estimates. Thus no world
+passed all of its evidence requirements.
+
+This stop prevented epochs three through five, checkpoint selection, all VAMP
+adapter training, and the sealed-test transaction. There is no selected base,
+adapter artifact, or test result. The sealed test remains unopened. The full
+validation evidence and resumable training states are preserved under
+`checkpoints/tinyworlds-p-semantic-v6/work/base-calibration/`, and the live
+journal is under
+`checkpoints/tinyworlds-p-semantic-v6/work/logs/semantic-v6-live-ech8v51b/`.
+Do not rerun the frozen v6 configuration as though it were a new experiment.
+
+The next research decision is benchmark-level, not another attempt to tune the
+trained model against this result. Before defining v7, use only training and
+validation evidence to determine why the held-out semantic cells were not
+harder than their matched controls, then preregister one intervention. The
+sealed v6 test must remain closed, and v6 remains immutable negative evidence.
+
+## Completed Milestone: Semantic-v6 Base Gate Stop; VAMP Not Opened
+
+- **Strict v6 base machinery is complete.** Version-native training, resume,
+  per-group evaluation, empirical-null validation, selected-base publication,
+  and strict loaders reject archive-v1 and semantic-v1 identities. The two-
+  epoch gate remained separate from test access and correctly prevented the
+  epochs-three-through-five continuation. No epoch satisfied the unchanged
+  semantic gap gate, so no selected checkpoint was published.
+- **The VAMP study is frozen.** Experiment config
+  `ca16318486600745e8a49903f495819741082f120fa7b95b3f9277efa83ada73`
+  fixes A-to-E order, three rank-eight adapter systems, 2,000 updates per
+  system and world, validation-only parent/key probes, the four stored methods,
+  five task-free routers, all prefix/cue conditions, timing, memory, and the
+  diagnostic paired-control specificity audit.
+- **Resume and sealed boundaries are implemented.** Base checkpoints retain
+  optimizer, random, cursor, and schedule state every 1,000 updates and at
+  epoch boundaries. The runner resumes the newest strict checkpoint and trims
+  only the later, uncheckpointed loss-log tail. Adapter publications persist
+  all three random streams and one immutable stage artifact per completed
+  world. Evaluation ledgers are atomic, while incomplete validation or sealed
+  attempts are preserved under recovery directories. The final evaluator
+  writes a durable binding only after the base and all adapters are frozen;
+  test indexes cannot be counted or read before that transaction.
+- **Reporting is implemented.** Sequential progress is written live under the
+  printed temporary artifact directory. The final content-addressed bundle
+  includes Markdown and standalone HTML reports, canonical JSON/JSONL,
+  per-group base and forced-adapter ledgers, exact test provenance, the full
+  nine-method matrix, forgetting, transfer, routing cost, memory, and 10,000-
+  replicate specificity intervals. The VAMP result is explicitly exploratory
+  and has no new pass/fail threshold. Adapter and result artifacts persist and
+  enforce the 12 GiB allocator ceiling.
+- **The focused implementation gate passes.** All 61 pinned-environment tests
+  pass across strict partitioning, empirical statistics, training and resume,
+  adaptation persistence, nine-method evaluation, routing/memory accounting,
+  sealed authorization, and paired specificity.
+- **The real validation-only anchor audit passed.** The canonical root and all
+  five worlds each supply 128 deterministic full-length validation spans. All
+  768 sequence hashes are unique, and no test index was read.
+- **The disposable GPU preflight passed.** Preflight
+  `b7f49909368685a5494a3033e0df7df69cf2e8c1064092c541013b873671988d`
+  completed exactly two isolated updates with losses `10.8570` and `10.8511`,
+  measured `0.467411` seconds per warm update and `0.015083` seconds per warm
+  validation batch, and peaked at 9,030,551,296 bytes. Its checkpoints use a
+  separate non-reusable identity. The sealed test remained closed.
+- **The registered calibration stop is complete.** The real run published two
+  validation ledgers and the immutable `semantic_grid_failure` decision. It
+  preserved strict base states but published no selected checkpoint, adapter
+  tensor, VAMP result, or sealed-test report. See
+  [`docs/TW-P_SEMANTIC_V6_BASE_VAMP_EXECUTION_REPORT.md`](docs/TW-P_SEMANTIC_V6_BASE_VAMP_EXECUTION_REPORT.md).
 
 ## Completed Milestone: TinyWorlds-P Semantic-v6 Exact Comparison Feasibility
 

@@ -313,6 +313,66 @@ from apm.data.text.tinyworlds_p_semantic.v6_sample_report import (
     load_v6_sample_report,
     publish_v6_sample_report,
 )
+from apm.data.text.tinyworlds_p_semantic.v6_batching import (
+    count_v6_partition_microbatches,
+    iter_v6_partition_batch_blocks,
+    iter_v6_partition_batches,
+)
+from apm.data.text.tinyworlds_p_semantic.v6_evaluation import (
+    V6SemanticSealedTest,
+    count_v6_evaluation_batches,
+    evaluate_v6_epoch_validation,
+    evaluate_v6_forced_lora_split,
+    evaluate_v6_partition_split,
+    evaluate_v6_sealed_test_once,
+    load_v6_epoch_validation,
+    load_v6_sealed_test,
+)
+from apm.data.text.tinyworlds_p_semantic.v6_milestone import (
+    V6CalibrationAttempt,
+    V6SelectedBase,
+    V6TrainingGateError,
+    finish_v6_base_selection,
+    load_v6_calibration_attempt,
+    load_v6_selected_base,
+    run_v6_calibration_attempt,
+)
+from apm.data.text.tinyworlds_p_semantic.v6_preflight import (
+    V6GpuPreflight,
+    load_v6_gpu_preflight,
+    run_and_publish_v6_gpu_preflight,
+)
+from apm.data.text.tinyworlds_p_semantic.v6_training import (
+    V6_RESUME_FORMAT,
+    V6StreamingTrainingConfig,
+    V6StreamingTrainingResult,
+    init_v6_streaming_train_state,
+    load_latest_v6_streaming_result,
+    load_v6_streaming_checkpoint,
+    run_v6_streaming_base_training,
+    write_v6_streaming_checkpoint,
+)
+from apm.data.text.tinyworlds_p_semantic.v6_vamp_contracts import (
+    V6_VAMP_EXPERIMENT_ID,
+    V6_VAMP_EXPERIMENT_PRESET,
+    V6VampExperimentPreset,
+)
+from apm.data.text.tinyworlds_p_semantic.v6_vamp_curriculum import (
+    V6PreparedVampCurriculum,
+    prepare_v6_vamp_test_suite,
+    prepare_v6_vamp_training_curriculum,
+)
+from apm.data.text.tinyworlds_p_semantic.v6_vamp_publication import (
+    V6VampResultPublication,
+    begin_v6_vamp_sealed_transaction,
+    load_v6_vamp_result,
+    run_or_resume_v6_vamp_sealed_evaluation,
+)
+from apm.data.text.tinyworlds_p_semantic.v6_vamp_training import (
+    V6VampAdaptationPublication,
+    load_v6_vamp_adaptation_publication,
+    train_or_resume_v6_vamp_adaptations,
+)
 
 
 __all__ = [
@@ -473,6 +533,20 @@ __all__ = [
     "V6SemanticPartitionInputs",
     "V6SemanticPartitionPreset",
     "V6SemanticSampleReport",
+    "V6CalibrationAttempt",
+    "V6GpuPreflight",
+    "V6PreparedVampCurriculum",
+    "V6SelectedBase",
+    "V6SemanticSealedTest",
+    "V6StreamingTrainingConfig",
+    "V6StreamingTrainingResult",
+    "V6TrainingGateError",
+    "V6VampAdaptationPublication",
+    "V6VampExperimentPreset",
+    "V6VampResultPublication",
+    "V6_RESUME_FORMAT",
+    "V6_VAMP_EXPERIMENT_ID",
+    "V6_VAMP_EXPERIMENT_PRESET",
     "WordEvidence",
     "WordVector",
     "WorldEmpiricalGap",
@@ -489,6 +563,7 @@ __all__ = [
     "build_v4_partition",
     "build_v5_partition",
     "build_v6_partition",
+    "begin_v6_vamp_sealed_transaction",
     "calibrate_role_margins",
     "capacity_constrained_spherical_kmeans",
     "calibration_decision",
@@ -502,6 +577,10 @@ __all__ = [
     "evaluate_epoch_validation",
     "evaluate_partition_split",
     "evaluate_sealed_test_once",
+    "evaluate_v6_epoch_validation",
+    "evaluate_v6_forced_lora_split",
+    "evaluate_v6_partition_split",
+    "evaluate_v6_sealed_test_once",
     "finish_and_publish_base",
     "holm_rejections",
     "is_construction_group",
@@ -534,6 +613,15 @@ __all__ = [
     "load_v6_partition",
     "load_v6_partition_failure",
     "load_v6_sample_report",
+    "load_v6_calibration_attempt",
+    "load_v6_epoch_validation",
+    "load_v6_gpu_preflight",
+    "load_latest_v6_streaming_result",
+    "load_v6_sealed_test",
+    "load_v6_selected_base",
+    "load_v6_streaming_checkpoint",
+    "load_v6_vamp_adaptation_publication",
+    "load_v6_vamp_result",
     "namespaced_sha256",
     "normalized_centroid",
     "prepare_semantic_evidence",
@@ -555,6 +643,20 @@ __all__ = [
     "role_calibration_fold",
     "run_streaming_base_training",
     "run_calibration_attempt",
+    "run_and_publish_v6_gpu_preflight",
+    "run_or_resume_v6_vamp_sealed_evaluation",
+    "run_v6_calibration_attempt",
+    "run_v6_streaming_base_training",
+    "finish_v6_base_selection",
+    "train_or_resume_v6_vamp_adaptations",
+    "prepare_v6_vamp_test_suite",
+    "prepare_v6_vamp_training_curriculum",
+    "count_v6_evaluation_batches",
+    "count_v6_partition_microbatches",
+    "iter_v6_partition_batch_blocks",
+    "iter_v6_partition_batches",
+    "init_v6_streaming_train_state",
+    "write_v6_streaming_checkpoint",
     "select_best_eligible_epoch",
     "select_lowest_hash_contexts",
     "story_contexts",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import NamedTuple
+from typing import Callable, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -18,6 +18,7 @@ from apm.continual.language_run import (
 )
 from apm.continual.language_tasks import (
     LanguageCurriculum,
+    LanguageTask,
     NodeId,
     RouterBatch,
     TaskId,
@@ -78,6 +79,33 @@ class SequentialLoraRun:
 
 
 @dataclass(frozen=True)
+class SequentialLoraProgress:
+    """Immutable in-progress sequential adapter state between task boundaries."""
+
+    stages: tuple[SequentialLoraStage, ...]
+    current_adapter: LoraEdge
+    rng_key: jax.Array
+    train_config: LmTrainConfig
+    base_parameter_checksum: str
+
+    def __post_init__(self) -> None:
+        if tuple(stage.stage_index for stage in self.stages) != tuple(
+            range(1, len(self.stages) + 1)
+        ):
+            raise ValueError("sequential progress stages must be contiguous")
+        if len({stage.task_id for stage in self.stages}) != len(self.stages):
+            raise ValueError("sequential progress task IDs must be unique")
+        _validate_adapter_snapshot(self.current_adapter, ())
+        _validate_run_contract(
+            tuple(stage.step_losses for stage in self.stages),
+            self.rng_key,
+            self.train_config,
+            self.base_parameter_checksum,
+            allow_empty=True,
+        )
+
+
+@dataclass(frozen=True)
 class IndependentRootAdapter:
     """One independently initialized root LoRA trained for exactly one task."""
 
@@ -109,6 +137,28 @@ class IndependentRootLoraRun:
             self.rng_key,
             self.train_config,
             self.base_parameter_checksum,
+        )
+
+
+@dataclass(frozen=True)
+class IndependentRootLoraProgress:
+    """Immutable in-progress collection of independent root adapters."""
+
+    adapters: tuple[IndependentRootAdapter, ...]
+    rng_key: jax.Array
+    train_config: LmTrainConfig
+    base_parameter_checksum: str
+
+    def __post_init__(self) -> None:
+        task_ids = tuple(adapter.task_id for adapter in self.adapters)
+        if len(set(task_ids)) != len(task_ids):
+            raise ValueError("independent progress task IDs must be unique")
+        _validate_run_contract(
+            tuple(adapter.step_losses for adapter in self.adapters),
+            self.rng_key,
+            self.train_config,
+            self.base_parameter_checksum,
+            allow_empty=True,
         )
 
 
@@ -166,6 +216,177 @@ class _TrainedRootAdapter(NamedTuple):
     step_losses: tuple[float, ...]
 
 
+def init_sequential_lora_progress(
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    lora_config: LoraConfig,
+    train_config: LmTrainConfig,
+    rng_key: jax.Array,
+) -> SequentialLoraProgress:
+    """Initialize one sequential adapter without consuming a task update."""
+    _validate_rng_key(rng_key)
+    initialization_key, training_key = jax.random.split(rng_key)
+    return SequentialLoraProgress(
+        stages=(),
+        current_adapter=init_lora_edge(
+            initialization_key,
+            model_config,
+            lora_config,
+        ),
+        rng_key=training_key,
+        train_config=train_config,
+        base_parameter_checksum=parameter_checksum(base_params, model_config),
+    )
+
+
+def advance_sequential_lora_progress(
+    progress: SequentialLoraProgress,
+    task: LanguageTask,
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    lora_config: LoraConfig,
+    *,
+    training_progress: Callable[[int, float, int], None] | None = None,
+) -> SequentialLoraProgress:
+    """Train the shared sequential adapter for exactly one new task."""
+    if not isinstance(progress, SequentialLoraProgress):
+        raise TypeError("progress must be SequentialLoraProgress")
+    _validate_one_task(task, progress.train_config)
+    if task.task_id in tuple(stage.task_id for stage in progress.stages):
+        raise ValueError(f"sequential task is already complete: {task.task_id}")
+    _require_unchanged_base(
+        progress.base_parameter_checksum,
+        base_params,
+        model_config,
+    )
+    trained = _train_root_adapter(
+        progress.current_adapter,
+        progress.rng_key,
+        task.train_batches,
+        base_params,
+        model_config,
+        _empty_root_memory(model_config, lora_config),
+        lora_config,
+        progress.train_config,
+        progress=training_progress,
+    )
+    _require_unchanged_base(
+        progress.base_parameter_checksum,
+        base_params,
+        model_config,
+    )
+    return SequentialLoraProgress(
+        stages=progress.stages
+        + (
+            SequentialLoraStage(
+                stage_index=len(progress.stages) + 1,
+                task_id=task.task_id,
+                adapter=trained.adapter,
+                step_losses=trained.step_losses,
+            ),
+        ),
+        current_adapter=trained.adapter,
+        rng_key=trained.rng_key,
+        train_config=progress.train_config,
+        base_parameter_checksum=progress.base_parameter_checksum,
+    )
+
+
+def complete_sequential_lora_progress(
+    progress: SequentialLoraProgress,
+) -> SequentialLoraRun:
+    """Freeze nonempty sequential progress as a completed run value."""
+    return SequentialLoraRun(
+        stages=progress.stages,
+        rng_key=progress.rng_key,
+        train_config=progress.train_config,
+        base_parameter_checksum=progress.base_parameter_checksum,
+    )
+
+
+def init_independent_root_lora_progress(
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    train_config: LmTrainConfig,
+    rng_key: jax.Array,
+) -> IndependentRootLoraProgress:
+    """Initialize the deterministic random stream for independent adapters."""
+    _validate_rng_key(rng_key)
+    return IndependentRootLoraProgress(
+        adapters=(),
+        rng_key=rng_key,
+        train_config=train_config,
+        base_parameter_checksum=parameter_checksum(base_params, model_config),
+    )
+
+
+def advance_independent_root_lora_progress(
+    progress: IndependentRootLoraProgress,
+    task: LanguageTask,
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    lora_config: LoraConfig,
+    *,
+    training_progress: Callable[[int, float, int], None] | None = None,
+) -> IndependentRootLoraProgress:
+    """Train one fresh root adapter for exactly one new task."""
+    if not isinstance(progress, IndependentRootLoraProgress):
+        raise TypeError("progress must be IndependentRootLoraProgress")
+    _validate_one_task(task, progress.train_config)
+    if task.task_id in tuple(adapter.task_id for adapter in progress.adapters):
+        raise ValueError(f"independent task is already complete: {task.task_id}")
+    _require_unchanged_base(
+        progress.base_parameter_checksum,
+        base_params,
+        model_config,
+    )
+    initialization_key, training_key, next_rng_key = jax.random.split(
+        progress.rng_key,
+        3,
+    )
+    trained = _train_root_adapter(
+        init_lora_edge(initialization_key, model_config, lora_config),
+        training_key,
+        task.train_batches,
+        base_params,
+        model_config,
+        _empty_root_memory(model_config, lora_config),
+        lora_config,
+        progress.train_config,
+        progress=training_progress,
+    )
+    _require_unchanged_base(
+        progress.base_parameter_checksum,
+        base_params,
+        model_config,
+    )
+    return IndependentRootLoraProgress(
+        adapters=progress.adapters
+        + (
+            IndependentRootAdapter(
+                task_id=task.task_id,
+                adapter=trained.adapter,
+                step_losses=trained.step_losses,
+            ),
+        ),
+        rng_key=next_rng_key,
+        train_config=progress.train_config,
+        base_parameter_checksum=progress.base_parameter_checksum,
+    )
+
+
+def complete_independent_root_lora_progress(
+    progress: IndependentRootLoraProgress,
+) -> IndependentRootLoraRun:
+    """Freeze nonempty independent progress as a completed run value."""
+    return IndependentRootLoraRun(
+        adapters=progress.adapters,
+        rng_key=progress.rng_key,
+        train_config=progress.train_config,
+        base_parameter_checksum=progress.base_parameter_checksum,
+    )
+
+
 def train_sequential_single_lora(
     curriculum: LanguageCurriculum,
     base_params: GptNeoParams,
@@ -176,44 +397,22 @@ def train_sequential_single_lora(
 ) -> SequentialLoraRun:
     """Train one shared LoRA successively across every curriculum task."""
     _validate_training_contract(curriculum, train_config)
-    _validate_rng_key(rng_key)
-    base_checksum = parameter_checksum(base_params, model_config)
-    initialization_key, current_rng_key = jax.random.split(rng_key)
-    current_adapter = init_lora_edge(
-        initialization_key,
+    progress = init_sequential_lora_progress(
+        base_params,
         model_config,
         lora_config,
+        train_config,
+        rng_key,
     )
-    empty_memory = _empty_root_memory(model_config, lora_config)
-    stages: list[SequentialLoraStage] = []
-    for stage_index, task in enumerate(curriculum.tasks, start=1):
-        trained = _train_root_adapter(
-            current_adapter,
-            current_rng_key,
-            task.train_batches,
+    for task in curriculum.tasks:
+        progress = advance_sequential_lora_progress(
+            progress,
+            task,
             base_params,
             model_config,
-            empty_memory,
             lora_config,
-            train_config,
         )
-        current_adapter = trained.adapter
-        current_rng_key = trained.rng_key
-        stages.append(
-            SequentialLoraStage(
-                stage_index=stage_index,
-                task_id=task.task_id,
-                adapter=current_adapter,
-                step_losses=trained.step_losses,
-            )
-        )
-    _require_unchanged_base(base_checksum, base_params, model_config)
-    return SequentialLoraRun(
-        stages=tuple(stages),
-        rng_key=current_rng_key,
-        train_config=train_config,
-        base_parameter_checksum=base_checksum,
-    )
+    return complete_sequential_lora_progress(progress)
 
 
 def train_independent_root_lora(
@@ -226,45 +425,21 @@ def train_independent_root_lora(
 ) -> IndependentRootLoraRun:
     """Train one fresh root adapter per task under the identical update budget."""
     _validate_training_contract(curriculum, train_config)
-    _validate_rng_key(rng_key)
-    base_checksum = parameter_checksum(base_params, model_config)
-    empty_memory = _empty_root_memory(model_config, lora_config)
-    current_rng_key = rng_key
-    adapters: list[IndependentRootAdapter] = []
+    progress = init_independent_root_lora_progress(
+        base_params,
+        model_config,
+        train_config,
+        rng_key,
+    )
     for task in curriculum.tasks:
-        initialization_key, training_key, current_rng_key = jax.random.split(
-            current_rng_key,
-            3,
-        )
-        initial_adapter = init_lora_edge(
-            initialization_key,
-            model_config,
-            lora_config,
-        )
-        trained = _train_root_adapter(
-            initial_adapter,
-            training_key,
-            task.train_batches,
+        progress = advance_independent_root_lora_progress(
+            progress,
+            task,
             base_params,
             model_config,
-            empty_memory,
             lora_config,
-            train_config,
         )
-        adapters.append(
-            IndependentRootAdapter(
-                task_id=task.task_id,
-                adapter=trained.adapter,
-                step_losses=trained.step_losses,
-            )
-        )
-    _require_unchanged_base(base_checksum, base_params, model_config)
-    return IndependentRootLoraRun(
-        adapters=tuple(adapters),
-        rng_key=current_rng_key,
-        train_config=train_config,
-        base_parameter_checksum=base_checksum,
-    )
+    return complete_independent_root_lora_progress(progress)
 
 
 def train_language_adaptation_baselines(
@@ -406,6 +581,15 @@ def _validate_training_contract(
         raise ValueError("all baseline batches must share one sequence width")
 
 
+def _validate_one_task(task: LanguageTask, train_config: LmTrainConfig) -> None:
+    if not isinstance(task, LanguageTask):
+        raise TypeError("adapter progress requires one LanguageTask")
+    _validate_training_contract(
+        LanguageCurriculum(tasks=(task,), max_nodes=2, max_edges=1),
+        train_config,
+    )
+
+
 def _train_root_adapter(
     adapter: LoraEdge,
     rng_key: jax.Array,
@@ -415,6 +599,8 @@ def _train_root_adapter(
     empty_memory: PackedLoraMemory,
     lora_config: LoraConfig,
     train_config: LmTrainConfig,
+    *,
+    progress: Callable[[int, float, int], None] | None = None,
 ) -> _TrainedRootAdapter:
     state = init_candidate_lora_train_state(adapter, rng_key, train_config)
     trained_state, loss_trace = run_candidate_edge_updates(
@@ -427,6 +613,7 @@ def _train_root_adapter(
         jnp.zeros((empty_memory.valid_edge_mask.shape[0],), dtype=jnp.float32),
         0,
         train_config,
+        progress=progress,
     )
     return _TrainedRootAdapter(
         adapter=trained_state.trainable,
@@ -452,11 +639,15 @@ def _validate_run_contract(
     rng_key: jax.Array,
     train_config: LmTrainConfig,
     base_checksum: str,
+    *,
+    allow_empty: bool = False,
 ) -> None:
     if not isinstance(train_config, LmTrainConfig):
         raise TypeError("train_config must be an LmTrainConfig")
     if any(len(losses) != train_config.steps for losses in stage_losses):
         raise ValueError("every task must use the configured update budget")
+    if not stage_losses and not allow_empty:
+        raise ValueError("completed adaptation runs must contain at least one task")
     _validate_rng_key(rng_key)
     if len(base_checksum) != 64 or any(
         character not in "0123456789abcdef" for character in base_checksum

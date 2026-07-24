@@ -19,6 +19,7 @@ from apm.data.text.tinyworlds_p.contracts import (
 )
 from apm.data.text.tinyworlds_p_semantic.contracts import (
     ControlPair,
+    SemanticTrainingPreset,
     WORLD_LABELS,
     require_sha256,
 )
@@ -31,6 +32,7 @@ from apm.data.text.tinyworlds_p_semantic.v5_partition_contracts import (
     V5_SEMANTIC_PARTITION_PRESET,
     V5SemanticPartitionFailure,
 )
+from apm.lm.config import GptNeoConfig
 
 
 V6_BENCHMARK_ID = "tinyworlds-p-semantic-v6"
@@ -44,6 +46,7 @@ V6_PARTITION_FAILURE_TREE_FORMAT = (
 V6_SAMPLE_REPORT_FORMAT = "tinyworlds-p-semantic-v6-sample-report"
 V6_SAMPLE_REPORT_TREE_FORMAT = "tinyworlds-p-semantic-v6-sample-report-tree"
 V6_PARTITION_SCHEMA_VERSION = 1
+V6_TRAINING_CONFIG_VERSION = "tinyworlds-p-semantic-training-v6"
 V6_PARENT_CATALOG_SHA256 = (
     "ea2e69509a421d3240b92fc727f01819e59e5d0d739d0e24afdb732517d391ee"
 )
@@ -136,6 +139,58 @@ class V6SemanticPartitionPreset:
             "topology_selection_method": self.topology_selection_method,
             "version": self.version,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class V6SemanticTrainingPreset:
+    """The frozen seed-zero semantic-v6 base-training contract."""
+
+    version: str = V6_TRAINING_CONFIG_VERSION
+    parameter_seed: int = 0
+    epochs: int = 5
+    calibration_epochs: int = 2
+    context_length: int = 256
+    microbatch_size: int = 32
+    accumulation_microbatches: int = 8
+    maximum_learning_rate: float = 5e-4
+    minimum_learning_rate: float = 5e-5
+    warmup_fraction: float = 0.01
+    adam_beta1: float = 0.9
+    adam_beta2: float = 0.95
+    adam_epsilon: float = 1e-8
+    weight_decay: float = 0.1
+    gradient_clip_norm: float = 1.0
+    state_interval_updates: int = 1_000
+    allocator_peak_limit_bytes: int = 12 * 1024**3
+
+    def __post_init__(self) -> None:
+        reference = SemanticTrainingPreset()
+        if self.version != V6_TRAINING_CONFIG_VERSION:
+            raise ValueError("semantic-v6 training version changed")
+        if self._shared_record != reference.as_record():
+            raise ValueError("semantic-v6 changed the frozen base-training contract")
+
+    @property
+    def model_config(self) -> GptNeoConfig:
+        """Return the registered eight-layer GPT-Neo architecture."""
+        return SemanticTrainingPreset().model_config
+
+    @property
+    def _shared_record(self) -> dict[str, object]:
+        return {
+            **{
+                name: getattr(self, name)
+                for name in SemanticTrainingPreset.__dataclass_fields__
+            },
+            "model": SemanticTrainingPreset().as_record()["model"],
+        }
+
+    def as_record(self) -> dict[str, object]:
+        """Return every behavior-changing v6 training choice."""
+        return {"version": self.version, **self._shared_record}
+
+
+V6_SEMANTIC_TRAINING_PRESET = V6SemanticTrainingPreset()
 
 
 V6_SEMANTIC_PARTITION_PRESET = V6SemanticPartitionPreset()
@@ -249,6 +304,8 @@ class V6SemanticPartitionArtifact:
         object.__setattr__(self, "root", Path(self.root))
         require_sha256(self.partition_sha256, "semantic-v6 partition identity")
         require_sha256(self.manifest_sha256, "semantic-v6 tree identity")
+        if type(self.preset) is not V6SemanticPartitionPreset:
+            raise TypeError("semantic-v6 partition requires its strict preset")
         if type(self.semantic_catalog) is not V4SemanticCatalog:
             raise TypeError("semantic-v6 partition requires the strict v4 catalog")
         if type(self.parent_partition_failure) is not V5SemanticPartitionFailure:
@@ -332,6 +389,8 @@ __all__ = [
     "V6_PARTITION_TREE_FORMAT",
     "V6_SAMPLE_REPORT_FORMAT",
     "V6_SAMPLE_REPORT_TREE_FORMAT",
+    "V6_SEMANTIC_TRAINING_PRESET",
+    "V6_TRAINING_CONFIG_VERSION",
     "V6_SEMANTIC_PARTITION_PRESET",
     "V6_TOPOLOGY_SELECTION_METHOD",
     "V6CandidateFeasibility",
@@ -340,4 +399,5 @@ __all__ = [
     "V6SemanticPartitionInputs",
     "V6SemanticPartitionPreset",
     "V6SemanticSampleReport",
+    "V6SemanticTrainingPreset",
 ]

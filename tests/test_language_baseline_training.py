@@ -8,6 +8,12 @@ import numpy as np
 import pytest
 
 from apm.continual.language_baseline_training import (
+    advance_independent_root_lora_progress,
+    advance_sequential_lora_progress,
+    complete_independent_root_lora_progress,
+    complete_sequential_lora_progress,
+    init_independent_root_lora_progress,
+    init_sequential_lora_progress,
     train_independent_root_lora,
     train_language_adaptation_baselines,
     train_sequential_single_lora,
@@ -232,3 +238,99 @@ def test_training_contract_rejects_different_task_sequence_widths() -> None:
             _train_config(),
             jax.random.PRNGKey(6),
         )
+
+
+def test_task_boundary_resume_matches_uninterrupted_baselines() -> None:
+    config = _model_config()
+    params = init_gpt_neo_params(jax.random.PRNGKey(8), config)
+    lora_config = LoraConfig(rank=1, alpha=1.0)
+    train_config = _train_config(steps=1)
+    tasks = (
+        _task("task-a", (1, 2, 3, 4, 5), evaluated=False),
+        _task("task-b", (5, 4, 3, 2, 1), evaluated=False),
+    )
+    curriculum = _curriculum(tasks)
+    rng_key = jax.random.PRNGKey(27)
+    uninterrupted_sequential = train_sequential_single_lora(
+        curriculum,
+        params,
+        config,
+        lora_config,
+        train_config,
+        rng_key,
+    )
+    uninterrupted_independent = train_independent_root_lora(
+        curriculum,
+        params,
+        config,
+        lora_config,
+        train_config,
+        rng_key,
+    )
+
+    sequential_progress = init_sequential_lora_progress(
+        params,
+        config,
+        lora_config,
+        train_config,
+        rng_key,
+    )
+    independent_progress = init_independent_root_lora_progress(
+        params,
+        config,
+        train_config,
+        rng_key,
+    )
+    sequential_progress = advance_sequential_lora_progress(
+        sequential_progress,
+        tasks[0],
+        params,
+        config,
+        lora_config,
+    )
+    independent_progress = advance_independent_root_lora_progress(
+        independent_progress,
+        tasks[0],
+        params,
+        config,
+        lora_config,
+    )
+    resumed_sequential = complete_sequential_lora_progress(
+        advance_sequential_lora_progress(
+            sequential_progress,
+            tasks[1],
+            params,
+            config,
+            lora_config,
+        )
+    )
+    resumed_independent = complete_independent_root_lora_progress(
+        advance_independent_root_lora_progress(
+            independent_progress,
+            tasks[1],
+            params,
+            config,
+            lora_config,
+        )
+    )
+
+    assert tuple(stage.step_losses for stage in resumed_sequential.stages) == tuple(
+        stage.step_losses for stage in uninterrupted_sequential.stages
+    )
+    assert tuple(adapter.step_losses for adapter in resumed_independent.adapters) == tuple(
+        adapter.step_losses for adapter in uninterrupted_independent.adapters
+    )
+    assert _tree_checksum(resumed_sequential.stages[-1].adapter) == _tree_checksum(
+        uninterrupted_sequential.stages[-1].adapter
+    )
+    assert _tree_checksum(resumed_independent.adapters[-1].adapter) == _tree_checksum(
+        uninterrupted_independent.adapters[-1].adapter
+    )
+    np.testing.assert_array_equal(
+        resumed_sequential.rng_key,
+        uninterrupted_sequential.rng_key,
+    )
+    np.testing.assert_array_equal(
+        resumed_independent.rng_key,
+        uninterrupted_independent.rng_key,
+    )

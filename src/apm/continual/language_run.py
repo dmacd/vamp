@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+from typing import Callable
 
 import jax
 import jax.numpy as jnp
@@ -235,6 +236,7 @@ def advance_language_vamp_run(
     *,
     key_probe_count: int = 256,
     evaluation_microbatch_size: int | None = None,
+    training_progress: Callable[[int, float, int], None] | None = None,
 ) -> LanguageVampRun:
     """Train and commit exactly one candidate edge without mutating prior state."""
     if not isinstance(run, LanguageVampRun):
@@ -294,6 +296,7 @@ def advance_language_vamp_run(
         edge_coefficients_for_node(packed_memory, parent_node_index),
         candidate_index,
         train_config,
+        progress=training_progress,
     )
 
     stage_index = len(run.completed_tasks) + 1

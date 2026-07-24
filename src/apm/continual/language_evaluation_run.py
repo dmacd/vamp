@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 import math
 import struct
+from collections.abc import Callable
 from typing import Literal
 
 import jax
@@ -128,6 +129,9 @@ def evaluate_language_benchmark(
     model_config: GptNeoConfig,
     lora_config: LoraConfig,
     settings: LanguageBenchmarkSettings = LanguageBenchmarkSettings(),
+    *,
+    measurement_sink: Callable[[LanguageConditionMeasurement], None] | None = None,
+    condition_progress: Callable[[int, TaskId, str, int, int], None] | None = None,
 ) -> LanguageEvaluationBenchmark:
     """Evaluate trained adapters on an explicit suite without invoking training."""
     if not isinstance(
@@ -151,6 +155,11 @@ def evaluate_language_benchmark(
         condition.condition_id: condition for condition in suite.conditions
     }
     final_graph = _vamp_graph(adaptations)
+    planned_conditions = sum(
+        len(task_order[:stage]) * len(condition_by_id)
+        for stage in range(1, len(task_order) + 1)
+    )
+    completed_conditions = 0
 
     for stage in range(1, len(task_order) + 1):
         graph = MemoryGraph[LoraEdge](nodes=final_graph.nodes[: stage + 1])
@@ -237,7 +246,7 @@ def evaluate_language_benchmark(
                 for cue_regime, indices in strata:
                     selected_examples = tuple(suite_examples[index] for index in indices)
                     selected_weights = token_weights[np.asarray(indices)]
-                    measurements.extend(
+                    stored_measurements = tuple(
                         LanguageConditionMeasurement(
                             stage=stage,
                             method=method,
@@ -265,7 +274,7 @@ def evaluate_language_benchmark(
                         )
                         for method, values in stored_values.items()
                     )
-                    measurements.extend(
+                    router_measurements = tuple(
                         _router_measurement(
                             stage,
                             task_id,
@@ -279,6 +288,20 @@ def evaluate_language_benchmark(
                             route_value,
                         )
                         for route_value in route_values
+                    )
+                    new_measurements = (*stored_measurements, *router_measurements)
+                    if measurement_sink is not None:
+                        for measurement in new_measurements:
+                            measurement_sink(measurement)
+                    measurements.extend(new_measurements)
+                completed_conditions += 1
+                if condition_progress is not None:
+                    condition_progress(
+                        stage,
+                        task_id,
+                        condition_id,
+                        completed_conditions,
+                        planned_conditions,
                     )
 
     checksum_after = _adaptation_checksum(adaptations)
