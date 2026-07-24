@@ -2,37 +2,71 @@
 
 ## Current Outcome
 
-The reviewed semantic-v6 seed-zero calibration completed on the RTX 4090 and
-stopped at its registered two-epoch gate with decision
-`semantic_grid_failure`. The runner is no longer active. It completed 19,460
-optimizer updates in about 2 hours 17 minutes, and its held-in validation NLL
-improved from `1.318863` after epoch one to `1.241619` after epoch two. Its
-9,160,916,224-byte allocator peak was below the fixed 12 GiB limit. Ordinary
-training therefore passed its quality and memory checks.
+The generic `tinyworlds-q-semantic-v1` query benchmark is implemented and its
+CPU gates pass. It is a separate package and artifact family; no semantic-v6
+file, checkpoint, result, or compatibility path changed. Query-v1 measures
+reviewed four-choice fact knowledge directly rather than using whole-story loss.
 
-The intended semantic contrast did not appear. At epoch two, the mean
-target-world-minus-control gap was `-0.001364` nats per token, with a 95%
-paired-bootstrap interval of `[-0.009339, 0.006350]` and a one-sided placebo
-probability of `0.631937`. The registered requirements were a gap of at least
-`ln(1.05) = 0.048790164`, an interval wholly above zero, and a probability at
-most `0.01`. Worlds A and B had small positive point estimates whose intervals
-crossed zero; worlds C, D, and E had negative point estimates. Thus no world
-passed all of its evidence requirements.
+Implemented surfaces now include immutable concept/fact/template/catalog,
+partition, experiment, and result contracts; fixed rabbit/horse and five-world
+manifests; namespaced 5% construction selection; exact same-sentence predicate
+discovery and provenance review packets; mandatory human review gates; sealed
+catalog publication; fact-withholding partitioning with exact story/token
+ledgers; memory-mapped indexed batching; exact scratch-base training/resume;
+strict accepted-base publication; validation-only parent/router probe
+preparation; real independent, sequential, and VAMP tensor stages; compilation
+into the shared `KnowledgeQuery` scorer; deterministic fact-level bootstraps;
+exact-trigger generation inspection; dynamic 1--100 world capacities and
+schedules; bounded scoring; atomic JSONL ledgers; resource preflight; one-time
+sealed transactions; and schedule-complete descriptive Markdown/standalone-HTML
+reporting. Experiment identities include the complete GPT-Neo architecture,
+all six LoRA target switches, and the derived adapter optimizer contract.
+Selected bases bind the full catalog partition and base-training contract
+rather than an active adapter prefix, allowing one large-catalog base to serve
+the registered nested prefixes.
 
-This stop prevented epochs three through five, checkpoint selection, all VAMP
-adapter training, and the sealed-test transaction. There is no selected base,
-adapter artifact, or test result. The sealed test remains unopened. The full
-validation evidence and resumable training states are preserved under
-`checkpoints/tinyworlds-p-semantic-v6/work/base-calibration/`, and the live
-journal is under
-`checkpoints/tinyworlds-p-semantic-v6/work/logs/semantic-v6-live-ech8v51b/`.
-Do not rerun the frozen v6 configuration as though it were a new experiment.
+The three-concept CPU fixture covers construction exclusion, story-level fact
+leakage, same-sentence evidence accounting, multi-concept exclusion, exact
+candidate balance and tokenizer boundaries, byte-identical partition rebuild,
+catalog/partition/tensor tampering, parent-prefix preservation, sealed-query
+rejection and completion, fact-level statistics, a real tiny GPT-Neo
+uninterrupted-versus-resumed parameter/trace parity check, and resumable
+independent, sequential, and VAMP stage identities. Synthetic manifests at 1,
+5, 10, 20, and 100 worlds cover derived capacities, tensor masks, full and
+milestone schedules, chunking, dynamic reports, and explicit preflight limits.
+The five new tests and 36 focused existing knowledge/training/semantic-v6 tests
+pass in the pinned semantic environment.
 
-The next research decision is benchmark-level, not another attempt to tune the
-trained model against this result. Before defining v7, use only training and
-validation evidence to determine why the held-out semantic cells were not
-harder than their matched controls, then preregister one intervention. The
-sealed v6 test must remain closed, and v6 remains immutable negative evidence.
+The repository-wide default suite finishes with 618 passed, 274 skipped, 11
+deselected, and one pre-existing failure in
+`test_every_router_returns_valid_task_free_decisions_and_suffix_metrics`: a
+float32 router probability sum is `1.0000001`, one ULP outside that test's
+zero-atol assertion. The failing path does not import query-v1. Shared routing
+code is intentionally unchanged so semantic-v6 remains immutable.
+
+The real pilot proposal packet is now published at
+`data/tinyworlds-q-semantic/review/5b01c86812593681133b46effd786d5647dcb3e8cf0308e8482bb54f01b7775b`.
+A fresh 24-worker replay authenticated all 4,967,871 archive records, scanned
+4,967,647 nonempty duplicate groups, and selected 248,051 construction groups.
+The strict-reloaded packet contains 200 ranked candidates for rabbit and 200
+for horse; all 400 have at least sixteen supporting construction groups. Its
+14 GiB replay workspace remains at
+`data/tinyworlds-q-semantic/work/pilot-review-primary`.
+
+The current mandatory gate is human semantic review. No rabbit/horse fact has
+been asserted or approved by automation, so there is no official pilot catalog,
+partition, GPU preflight, base checkpoint, adapter, or sealed result yet. A
+reviewer must reject generic narrative co-occurrences and approve exactly
+twelve facts per pilot world with truth, evidence, trigger closure, answer
+forms, and equal-token distractors. The next authorized sequence is catalog
+publication, independent byte reconstruction of the pilot partition, GPU
+preflight, and registered budget selection. Main catalog work cannot begin
+until the pilot learnability gate passes. See
+[`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
+
+Semantic-v6 remains immutable negative evidence. Its seed-zero calibration
+stopped at `semantic_grid_failure`; its sealed test was never opened, and it
+must not be rerun or reinterpreted as query-v1 evidence.
 
 ## Completed Milestone: Semantic-v6 Base Gate Stop; VAMP Not Opened
 

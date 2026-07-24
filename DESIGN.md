@@ -1,5 +1,171 @@
 # VAMP Technical Design
 
+## TinyWorlds-Q Semantic-v1 Query-Native Knowledge Benchmark
+
+`tinyworlds-q-semantic-v1` is a separate archive-grounded benchmark for direct
+semantic knowledge. It does not reinterpret, import, alias, or modify
+`tinyworlds-p-semantic-v6`; the v6 story-loss stop remains immutable negative
+evidence. Query-v1 binds the same pinned TinyStories archive and GPT-2
+tokenizer identities, but builds its own duplicate-group assignment ledger and
+publishes only under `data/tinyworlds-q-semantic/`,
+`checkpoints/tinyworlds-q-semantic-v1/`, and
+`results/language_cl/tinyworlds-q-semantic-v1/`.
+
+### Semantic authority and sealing
+
+The benchmark's semantic authority is an explicit reviewed catalog, never an
+automated extractor or model judgment. A concept definition owns exact
+normalized surface forms. Each concept owns exactly twelve facts spanning at
+least four relation categories. A fact records its canonical and accepted
+answers, complete trigger closure, a grammatical answer type, and exact
+construction-slice sentence provenance from at least sixteen duplicate groups.
+Every accepted fact binds one extraction candidate and an affirmative human
+decision for truth, answer forms, trigger closure, false distractors, and
+evidence. Rejected reviewed candidates remain in the audit. These decisions,
+all source identities, prompt text, answers, token IDs, evidence, and ordering
+participate in the catalog SHA-256.
+
+The pilot concept prefix is `rabbit, horse`, with surfaces
+`rabbit/rabbits/bunny/bunnies` and `horse/horses/pony/ponies`. The first main
+prefix is `cat, dog, bird, robot, dragon`, with the registered singular,
+plural, kitten/puppy forms. Larger official catalogs must name a parent and
+preserve every parent concept, fact, review, rejected candidate, and query as
+an ordered byte-equivalent prefix.
+
+Duplicate groups are assigned to construction when
+`SHA256("tinyworlds-q-semantic-v1:construction" NUL group_sha256) mod 20 == 0`.
+Construction groups are visible to extraction and human review only. They are
+permanently excluded from every base or adapter model input. Discovery ranks
+exact same-sentence concept/predicate n-grams and retains complete archive
+record, story, group, member, index, and sentence provenance. Discovery output
+is proposal evidence and cannot publish a catalog by itself.
+
+Each fact has three validation paraphrases (two forward and one reverse) and
+five sealed-test paraphrases (three forward and two reverse). Across those
+eight templates, each answer position occurs exactly twice. All four answers
+share a reviewed grammatical type and have equal tokenizer suffix length.
+Catalog publication physically separates metadata, validation templates, and
+sealed test templates. A normal loader authenticates but never deserializes
+the sealed payload. Test deserialization requires one durable transaction that
+binds the catalog, partition, selected base, all adapters, and full experiment
+configuration. An opened transaction may resume after interruption; once its
+result is marked complete it cannot open or deserialize the test again.
+
+### Fact-withholding partition semantics
+
+Matching and assignment operate on complete normalized duplicate groups, so a
+group is assigned once and all exact archive occurrences move together. A
+story-level match determines leakage:
+
+- a non-construction story with no registered trigger for any concept it
+  mentions is eligible for the 96/2/2 base split, including ordinary lexical
+  mentions of target words;
+- a story with exactly one target concept and one or more of that concept's
+  registered triggers is assigned to that concept's 90/10 node split;
+- a fact-bearing story that mentions more than one target concept is excluded;
+  and
+- construction and excluded stories remain in the authenticated assignment
+  and exact-byte ledgers but are not yielded by model-input iterators.
+
+The trigger and concept may occur in different sentences for conservative
+story-level withholding. A group counts as authoritative support for a fact
+only when a registered concept surface and trigger occur in the same sentence.
+Publication requires at least 32 distinct authoritative non-construction node-
+training groups per fact and at least 256 non-fact base-training groups that
+mention each concept. Exact story bytes and little-endian token sequences are
+persisted with archive provenance and offsets. A strict loader rehashes every
+file, reconstructs assignment counts, checks source bindings and directory
+identity, and proves that no construction group entered a model role.
+
+### Training and adaptation persistence
+
+The base trainer reads authenticated split indexes and memory-maps the token
+payload. It shuffles bounded 1,024-document blocks deterministically, preserves
+order inside a block, and creates fixed 32-by-256 token batches without loading
+the corpus into memory. Its resume identity binds the partition, complete
+GPT-Neo architecture, optimizer schedule, seed, accumulation, and planned
+update count. Checkpoints contain parameters, AdamW state, random state, the
+next epoch/block/microbatch cursor, and schedule position; loss rows are
+appended to the printed working directory as they are produced. Resuming trims
+only a post-checkpoint trace tail and must reproduce uninterrupted parameters
+and trace bytes.
+
+A base can cross into adapter work only through the query-v1 selected-base
+publisher. That boundary accepts a complete two-epoch query-native run only
+after both held-in NLL measurements and the measured allocator peak pass the
+registered gate. It writes a strict source-bound GPT-Neo checkpoint and rejects
+semantic-v6 or arbitrary checkpoints. The experiment hash expands and records
+the full model fields, rank-eight all-projection target mask, and derived
+adapter optimizer contract rather than relying on code defaults.
+The selected base binds the full catalog partition and base-training contract,
+not an active adapter prefix, so the same authenticated checkpoint can serve
+preserved 5-, 10-, 20-, and 100-world prefixes.
+
+Adapter preparation accepts the validation-only catalog view. It compiles
+exactly 36 question prefixes per world and deterministically selects the root,
+parent-search, and content-key probes; no answer suffix or sealed template is
+available on this path. Each world materializes at most the registered update
+budget of node batches, then advances independent, continually overwritten,
+and VAMP systems through the existing shared trainers. Every completed world
+publishes a strict real-tensor adaptation artifact containing task order,
+graph, address keys, adapters, training traces, and all three random streams.
+An interrupted run resumes the latest complete prefix and deterministically
+replays only an incomplete world.
+
+### Query evaluation and statistics
+
+Reviewed templates compile into the existing four-candidate `KnowledgeQuery`
+contract. The query wrapper adds catalog, concept, fact, direction, split, and
+template identities while retaining the shared answer-only candidate scoring,
+hard-node scoring, VAMP routing, support, and regret computations. Forward
+questions expose a concept and ask for a property/action; reverse questions
+expose the fact and ask for the concept. VAMP parents and router keys consume
+validation question prefixes only.
+
+Every primary statistic first averages all paraphrases within a fact. Accuracy,
+correct-answer margin, acquisition, specificity, retention, router accuracy,
+and routed regret are then aggregated with 10,000 deterministic fact-resampled
+bootstrap replicates. Facts are resampled within each world and world means
+receive equal weight; templates and tokens are never treated as independent
+observations. Greedy generation is secondary and reports only exact registered-
+trigger recall plus raw outputs. Final reports are descriptive and carry no
+VAMP scientific pass/fail verdict.
+
+### Dynamic execution and resource boundaries
+
+All query-v1 training and evaluation surfaces consume an ordered concept
+manifest. For `N` active worlds, graph capacity is derived as `N + 1` nodes and
+`N` edges; stage prefixes, tensor masks, progress totals, report labels, parent
+search, and result estimates use the same manifest. A large catalog and one
+base partition can serve preserved prefixes of 5, 10, 20, or 100 worlds.
+
+The `full` schedule evaluates every learned world after every stage and is
+bounded to twenty worlds. The `milestone` schedule always records each world's
+acquisition, evaluates all learned worlds at configured milestones, and
+performs a complete final evaluation. Query/node scoring is bounded by a
+configured chunk size, and JSONL ledgers stream to a reported temporary
+directory before atomic publication. Preflight separately estimates training,
+parent search, routing, result storage, and peak memory. The 100-world path is
+the same implementation and fails explicitly when measured allocator or
+projected result bytes exceed frozen limits.
+
+Final publication requires the exact scheduled sealed-test cells for all nine
+registered methods, sixty unique queries per world/cell, 10,000 bootstrap
+replicates, acquisition/specificity/retention effects, ordered generation
+inspection, runtime, and memory evidence. The content identity binds the
+streamed result-ledger SHA-256; strict reload rejects changed renderings or any
+altered result byte.
+
+The retained seed-zero GPT-Neo architecture, two-epoch base optimizer schedule,
+rank-eight all-projection LoRA, and 12 GiB allocator ceiling are fixed in the
+experiment identity. A base proceeds only when held-in epoch-two NLL is at most
+2.2, improves by at least 0.02 from epoch one, remains finite, and fits memory.
+The rabbit/horse pilot tests adapter budgets 500, 1,000, and 2,000 in order and
+selects the first for which both worlds reach 60% validation accuracy and gain
+15 percentage points over base. If none passes, construction stops before the
+main run. Main execution, when authorized by that pilot, uses the fixed order
+`cat, dog, bird, robot, dragon` for independent, sequential, and VAMP systems.
+
 ## TinyWorlds-P Semantic-v6 Exact Comparison Feasibility
 
 `tinyworlds-p-semantic-v6` is a new benchmark version that addresses the
