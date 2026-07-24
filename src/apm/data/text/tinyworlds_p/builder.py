@@ -100,6 +100,15 @@ class _PreparedAllocation:
     ]
 
 
+@dataclass(frozen=True, slots=True)
+class _PreparedControlFeasibility:
+    """Exact split stream and successful controls for one candidate topology."""
+
+    split_assignments_path: Path
+    controls: tuple[ControlSelection, ...]
+    control_group_owners: tuple[tuple[str, str, str], ...]
+
+
 class _ShardWriter:
     """Write deterministic shards, rolling only before a complete story."""
 
@@ -360,9 +369,125 @@ def _prepare_allocations(
     preset: PartitionPreset,
     ingest: ArchiveIngestResult,
     cells: Sequence[WorldCell],
-    allocation_factory,
+    allocation_factory: Callable[[], Iterable[AllocationGroup]],
     seed_identity: str,
 ) -> _PreparedAllocation:
+    eligible_assignments_path = _prepare_split_assignments(
+        inputs,
+        preset,
+        cells,
+        allocation_factory,
+        seed_identity,
+    )
+    assignments_path = inputs.temporary_directory / "assignments.jsonl"
+    evaluation_groups: dict[tuple[str, str], list[AllocationGroup]] = defaultdict(list)
+    split_counter: Counter[tuple[str, str | None, str, str]] = Counter()
+    with assignments_path.open("wb") as output:
+        eligible_iterator = _iter_jsonl(eligible_assignments_path)
+        eligible_current = next(eligible_iterator, None)
+        for archive_group in iter_archive_groups(ingest.groups_path):
+            group_sha256 = _string(archive_group, "normalized_story_sha256")
+            if archive_group.get("status") == "eligible":
+                if eligible_current is None or _string(
+                    eligible_current, "normalized_sha256"
+                ) != group_sha256:
+                    raise ValueError(f"missing eligible assignment for {group_sha256}")
+                assignment = eligible_current
+                eligible_current = next(eligible_iterator, None)
+                allocation_group = _allocation_group_from_record(assignment)
+                domain = _string(assignment, "domain")
+                split = _string(assignment, "split")
+                role = "base" if domain == "base" else "world"
+                world = None if domain == "base" else domain
+                if split in ("validation", "test"):
+                    evaluation_groups[(domain, split)].append(allocation_group)
+                occurrence_count = len(_record_list(archive_group, "occurrences"))
+                token_count = _integer(archive_group, "active_token_count")
+                for measure, amount in (
+                    ("groups", 1),
+                    ("occurrences", occurrence_count),
+                    ("tokens", token_count),
+                ):
+                    split_counter[(role, world, split, measure)] += amount
+                assignment_record = {
+                    "active_token_count": token_count,
+                    "adjective_bucket": allocation_group.adjective_bucket,
+                    "canonical_token_count": allocation_group.canonical_token_count,
+                    "normalized_story_sha256": group_sha256,
+                    "noun_bucket": allocation_group.noun_bucket,
+                    "record_ids": [
+                        _string(occurrence, "record_id")
+                        for occurrence in _record_list(archive_group, "occurrences")
+                    ],
+                    "provenance": archive_group["provenance"],
+                    "recipe": archive_group["recipe"],
+                    "role": role,
+                    "split": split,
+                    "status": "eligible",
+                    "verb_bucket": allocation_group.verb_bucket,
+                    "world": world,
+                }
+            else:
+                assignment_record = {
+                    "active_token_count": _integer(archive_group, "active_token_count"),
+                    "adjective_bucket": None,
+                    "canonical_token_count": None,
+                    "normalized_story_sha256": group_sha256,
+                    "noun_bucket": None,
+                    "record_ids": [
+                        _string(occurrence, "record_id")
+                        for occurrence in _record_list(archive_group, "occurrences")
+                    ],
+                    "provenance": archive_group["provenance"],
+                    "recipe": None,
+                    "role": None,
+                    "split": None,
+                    "status": archive_group["status"],
+                    "verb_bucket": None,
+                    "world": None,
+                }
+            output.write(canonical_record_bytes(assignment_record))
+        if eligible_current is not None:
+            raise ValueError("eligible assignment stream contains an unknown group")
+    _progress(inputs, "splits", 3, 4, "canonical assignment ledger completed")
+    controls, owners = _build_controls(
+        evaluation_groups,
+        cells,
+        preset,
+        seed_identity,
+    )
+    _progress(inputs, "splits", 4, 4, "validation and test controls completed in parallel")
+    split_counts = tuple(
+        SplitCount(
+            role=role,
+            world=world,
+            split=split,
+            group_count=split_counter[(role, world, split, "groups")],
+            occurrence_count=split_counter[(role, world, split, "occurrences")],
+            active_token_count=split_counter[(role, world, split, "tokens")],
+        )
+        for role, world in (("base", None), *(('world', label) for label in WORLD_LABELS))
+        for split in ("train", "validation", "test")
+    )
+    return _PreparedAllocation(
+        assignments_path=assignments_path,
+        controls=controls,
+        control_group_owners=owners,
+        split_counts=split_counts,
+        allocation_groups_by_evaluation_domain={
+            key: tuple(value) for key, value in evaluation_groups.items()
+        },
+    )
+
+
+def _prepare_split_assignments(
+    inputs: PartitionInputs,
+    preset: PartitionPreset,
+    cells: Sequence[WorldCell],
+    allocation_factory: Callable[[], Iterable[AllocationGroup]],
+    seed_identity: str,
+) -> Path:
+    """Allocate every retained group to a domain and deterministic split."""
     cell_labels = {(cell.noun_bucket, cell.verb_bucket): cell.label for cell in cells}
     allocation_runs_directory = inputs.temporary_directory / "allocation-runs"
     assignment_runs_directory = inputs.temporary_directory / "assignment-runs"
@@ -464,104 +589,41 @@ def _prepare_allocations(
         eligible_assignments_path,
         lambda record: (_string(record, "normalized_sha256"),),
     )
-    assignments_path = inputs.temporary_directory / "assignments.jsonl"
+    return eligible_assignments_path
+
+
+def _prepare_control_feasibility(
+    inputs: PartitionInputs,
+    preset: PartitionPreset,
+    cells: Sequence[WorldCell],
+    allocation_factory: Callable[[], Iterable[AllocationGroup]],
+    seed_identity: str,
+) -> _PreparedControlFeasibility:
+    """Run the exact split and control allocator without writing archive evidence."""
+    split_assignments_path = _prepare_split_assignments(
+        inputs,
+        preset,
+        cells,
+        allocation_factory,
+        seed_identity,
+    )
     evaluation_groups: dict[tuple[str, str], list[AllocationGroup]] = defaultdict(list)
-    split_counter: Counter[tuple[str, str | None, str, str]] = Counter()
-    with assignments_path.open("wb") as output:
-        eligible_iterator = _iter_jsonl(eligible_assignments_path)
-        eligible_current = next(eligible_iterator, None)
-        for archive_group in iter_archive_groups(ingest.groups_path):
-            group_sha256 = _string(archive_group, "normalized_story_sha256")
-            if archive_group.get("status") == "eligible":
-                if eligible_current is None or _string(
-                    eligible_current, "normalized_sha256"
-                ) != group_sha256:
-                    raise ValueError(f"missing eligible assignment for {group_sha256}")
-                assignment = eligible_current
-                eligible_current = next(eligible_iterator, None)
-                allocation_group = _allocation_group_from_record(assignment)
-                domain = _string(assignment, "domain")
-                split = _string(assignment, "split")
-                role = "base" if domain == "base" else "world"
-                world = None if domain == "base" else domain
-                if split in ("validation", "test"):
-                    evaluation_groups[(domain, split)].append(allocation_group)
-                occurrence_count = len(_record_list(archive_group, "occurrences"))
-                token_count = _integer(archive_group, "active_token_count")
-                for measure, amount in (
-                    ("groups", 1),
-                    ("occurrences", occurrence_count),
-                    ("tokens", token_count),
-                ):
-                    split_counter[(role, world, split, measure)] += amount
-                assignment_record = {
-                    "active_token_count": token_count,
-                    "adjective_bucket": allocation_group.adjective_bucket,
-                    "canonical_token_count": allocation_group.canonical_token_count,
-                    "normalized_story_sha256": group_sha256,
-                    "noun_bucket": allocation_group.noun_bucket,
-                    "record_ids": [
-                        _string(occurrence, "record_id")
-                        for occurrence in _record_list(archive_group, "occurrences")
-                    ],
-                    "provenance": archive_group["provenance"],
-                    "recipe": archive_group["recipe"],
-                    "role": role,
-                    "split": split,
-                    "status": "eligible",
-                    "verb_bucket": allocation_group.verb_bucket,
-                    "world": world,
-                }
-            else:
-                assignment_record = {
-                    "active_token_count": _integer(archive_group, "active_token_count"),
-                    "adjective_bucket": None,
-                    "canonical_token_count": None,
-                    "normalized_story_sha256": group_sha256,
-                    "noun_bucket": None,
-                    "record_ids": [
-                        _string(occurrence, "record_id")
-                        for occurrence in _record_list(archive_group, "occurrences")
-                    ],
-                    "provenance": archive_group["provenance"],
-                    "recipe": None,
-                    "role": None,
-                    "split": None,
-                    "status": archive_group["status"],
-                    "verb_bucket": None,
-                    "world": None,
-                }
-            output.write(canonical_record_bytes(assignment_record))
-        if eligible_current is not None:
-            raise ValueError("eligible assignment stream contains an unknown group")
-    _progress(inputs, "splits", 3, 4, "canonical assignment ledger completed")
+    for assignment in _iter_jsonl(split_assignments_path):
+        split = _string(assignment, "split")
+        if split in ("validation", "test"):
+            evaluation_groups[
+                (_string(assignment, "domain"), split)
+            ].append(_allocation_group_from_record(assignment))
     controls, owners = _build_controls(
         evaluation_groups,
         cells,
         preset,
         seed_identity,
     )
-    _progress(inputs, "splits", 4, 4, "validation and test controls completed in parallel")
-    split_counts = tuple(
-        SplitCount(
-            role=role,
-            world=world,
-            split=split,
-            group_count=split_counter[(role, world, split, "groups")],
-            occurrence_count=split_counter[(role, world, split, "occurrences")],
-            active_token_count=split_counter[(role, world, split, "tokens")],
-        )
-        for role, world in (("base", None), *(('world', label) for label in WORLD_LABELS))
-        for split in ("train", "validation", "test")
-    )
-    return _PreparedAllocation(
-        assignments_path=assignments_path,
+    return _PreparedControlFeasibility(
+        split_assignments_path=split_assignments_path,
         controls=controls,
         control_group_owners=owners,
-        split_counts=split_counts,
-        allocation_groups_by_evaluation_domain={
-            key: tuple(value) for key, value in evaluation_groups.items()
-        },
     )
 
 
@@ -826,7 +888,13 @@ def _write_shards_and_indexes(
     assignments_path: Path,
     control_owners: Sequence[tuple[str, str, str]],
     publication: Path,
+    *,
+    progress_total_occurrences: int | None = None,
 ) -> tuple[tuple[dict[str, object], ...], Counter[tuple[str, str | None, str]]]:
+    if progress_total_occurrences is not None and (
+        type(progress_total_occurrences) is not int or progress_total_occurrences <= 0
+    ):
+        raise ValueError("publication progress total must be a positive integer")
     control_by_group = {
         group_sha256: (world, split) for group_sha256, world, split in control_owners
     }
@@ -879,7 +947,9 @@ def _write_shards_and_indexes(
                 token_writer,
                 control_by_group,
                 inputs,
-                ingest.audit.eligible_record_count,
+                ingest.audit.eligible_record_count
+                if progress_total_occurrences is None
+                else progress_total_occurrences,
             )
             batches = _chunked(records, _PUBLICATION_BATCH_SIZE)
             for encoded_batch in _ordered_process_map(

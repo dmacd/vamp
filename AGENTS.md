@@ -29,3 +29,9 @@ This file is for agent workflow and project-maintenance guidance.
   unrelated files.
 - Commit only explicitly intended files.
 - Avoid destructive git commands unless the user explicitly requests them.
+
+
+## GPUs
+
+- There is a GPU on this machine, but requires you to run outside your 
+  sandbox to access it. Please do so when appropriate.

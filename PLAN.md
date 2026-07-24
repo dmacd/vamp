@@ -1,5 +1,372 @@
 # Development Plan
 
+## Next Decision
+
+Semantic-v6 construction is complete. The next decision is whether to add the
+version-6-native training, checkpoint, resume, and publication boundary and run
+a measured GPU runtime preflight. That work must bind the exact successful
+partition, retain seed zero and the registered empirical-null gate, and pass
+focused resume/parity tests before a fresh calibration starts. Training and the
+sealed test remain closed until that boundary and runtime estimate are reviewed.
+
+## Completed Milestone: TinyWorlds-P Semantic-v6 Exact Comparison Feasibility
+
+- **The intervention is preregistered (2026-07-23).** `DESIGN.md` binds the
+  semantic-v4 catalog and semantic-v5 failure identities. All 22
+  balance-eligible layouts receive the real split allocator and complete
+  ten-control construction before the unchanged semantic ranking is applied.
+- **The separate implementation is complete.** Version-specific contracts,
+  full-candidate feasibility evidence, strict success and failure loading,
+  publication, validation-only sample reporting, focused tests, and a fixed
+  primary/rebuild runner are implemented. Shared archive code exposes the
+  existing exact split/control preparation step without changing its normal
+  publication behavior or providing a compatibility alias. The final focused
+  CPU suite passes 57 tests, and the new modules compile in the pinned
+  environment.
+- **The real feasibility screen succeeded.** Both archive runs retained
+  2,520,317 unique stories and 479,183,203 scored tokens and reproduced all
+  28,224 parent topology measurements. Seventeen of the 22 balanced layouts
+  completed all validation/test comparisons. Ranks 0, 8, 9, 14, and 21 failed
+  world B's validation column comparison because too few distinct stories
+  remained after the fixed split and global non-reuse rules.
+- **Semantic rank 1 is the registered winner.** Its A-through-E cells are
+  `(2,4), (7,4), (7,6), (2,6), (3,2)`, with scored-token masses `6,136,097`,
+  `5,873,159`, `5,921,676`, `6,114,634`, and `5,440,146`. Every mass lies
+  within 10% of the median. The final allocation has complete comparisons and
+  31,117 deterministic one-to-one pairings.
+- **The partition is strict and independently reproduced.** Partition
+  `3c49e53648332317f078c10ac5494fca7c1aaea39176ffebeb7f8a9fe9096bfa`
+  was built with 50,000-record sort batches and rebuilt from the archive with
+  37,000-record batches. Both complete strict reloads passed. A direct recursive
+  comparison found no difference across their 167 files, and both trees hash to
+  `b5ba1ce33d1cad7eb00bba0b6eec35e2b94c3a6b997a20149081cc61c862279d`.
+- **The pre-training sample report is published.** Report
+  `b9e998d5a6d169e3d630531db690da0adbf82e6fd75639f2acb4aa7525b15579`
+  covers the held-in validation set, all five worlds, and both comparison arms
+  for every world. It includes cluster inventories and exact archive
+  provenance, parses as self-contained HTML, and records that the sealed test
+  was not opened. See
+  [`docs/TW-P_SEMANTIC_V6_EXECUTION_REPORT.md`](docs/TW-P_SEMANTIC_V6_EXECUTION_REPORT.md)
+  and the generated
+  [`sample report`](data/tinyworlds-p-semantic/sample-reports/v6/3c49e53648332317f078c10ac5494fca7c1aaea39176ffebeb7f8a9fe9096bfa/b9e998d5a6d169e3d630531db690da0adbf82e6fd75639f2acb4aa7525b15579/sample-report.md).
+- **No downstream boundary was crossed.** Semantic-v6 has no GPU preflight,
+  optimizer update, checkpoint, model-loss result, semantic-gap decision, or
+  sealed-test evaluation. The successful construction does not by itself
+  authorize training.
+
+## Completed Milestone: TinyWorlds-P Semantic-v5 Control Stop
+
+Semantic-v5 makes one change to the completed v4 partition attempt. It treats
+the unchanged 10% cell-mass rule as an eligibility requirement before semantic
+ranking. The exact v4 catalog and partition failure are immutable parent
+evidence.
+
+### Semantic-v5 Status
+
+- **The intervention is preregistered (2026-07-23).** `DESIGN.md` binds the v4
+  catalog and failure identities and states the new selection order. V5 keeps
+  every word, cluster, source, threshold, nuisance measure, split, control,
+  pairing, and sealed-test rule unchanged. It cannot use model loss or promote
+  a diagnostic candidate under the v4 name.
+- **The separate v5 implementation is complete.** Dedicated contracts,
+  balance-first selection, strict parent/source/settings checks, partition and
+  sample-report formats, structured control-failure evidence, a fixed runner,
+  and focused tests are implemented. The builder independently reproduces all
+  parent topology records before it can select a v5 layout. No v4 artifact is
+  loaded through a compatibility alias.
+- **The balance-first intervention worked.** The real archive replay retained
+  2,520,317 groups and 479,183,203 active tokens and reproduced all 28,224 v4
+  topology measurements. Twenty-two layouts were balance-eligible. V5 selected
+  `(3,4), (4,4), (4,6), (3,6), (2,0)` with masses `9,899,869`, `8,829,612`,
+  `8,742,369`, `10,104,204`, and `9,357,468`; all five pass the unchanged 10%
+  rule.
+- **Exact control allocation stopped the partition.** World B's validation
+  column arm required 2,314 distinct groups, but only 1,511 remained after the
+  fixed split and global no-reuse rules. The shortage occurs before fine
+  nuisance or token matching. V5 therefore did not choose another balanced
+  layout or loosen a tolerance.
+- **The stop is strict and independently reproduced.** Failure
+  `090b54dbc58f6b2e8a2f500987fe1171002839270a241c26b27f53aae88daa11`
+  embeds the exact v4 catalog and parent failure and binds the complete
+  assignment-ledger SHA-256. A fresh 37,000-record-run rebuild reproduced the
+  50,000-record-run assignment ledger and all 54 MB of failure evidence byte
+  for byte. Both strict loaders pass, a recursive comparison finds no
+  difference, and the final focused CPU suite passes 51 tests. See
+  [`docs/TW-P_SEMANTIC_V5_EXECUTION_REPORT.md`](docs/TW-P_SEMANTIC_V5_EXECUTION_REPORT.md)
+  and the generated
+  [`failure audit`](data/tinyworlds-p-semantic/v5/failures/090b54dbc58f6b2e8a2f500987fe1171002839270a241c26b27f53aae88daa11/audit.md).
+- **No downstream boundary was crossed.** V5 has no success partition, sample
+  report, GPU preflight, calibration, checkpoint, or sealed-test result. A
+  different candidate, exact split-level control-feasibility prefilter, changed
+  split size, altered matching design, or control reuse belongs to a later
+  version and cannot reinterpret this result.
+
+## Completed Milestone: TinyWorlds-P Semantic-v4 Partition Stop
+
+`tinyworlds-p-semantic-v4` tests the single fixed-reference intervention
+motivated by the v3 deletion/reseeding cascade. The scientific contract is
+preregistered in `DESIGN.md` before the real construction is run.
+
+### Semantic-v4 Status
+
+- **Contract frozen and implemented (2026-07-22).** V4 binds the
+  canonical v3 failure
+  `ae418bfb73cc0e278f1ba9204c81d101e0b95e9cf050597a491d21489cde6146`
+  and must exactly replay v3's pass-zero, unweighted eight-cluster fit in its
+  original hash namespace. It then applies the unchanged `0.03` margin once
+  against those frozen centroids. It never deletes and reclusters, moves a
+  survivor, or updates a centroid after the boundary screen. Separate v4
+  config, catalog, failure, audit, strict-loader, runner, and test contracts
+  implement this rule without compatibility aliases.
+- **The real fixed-centroid grid passes.** The one-shot screen excludes the
+  exact v3 pass-zero sets: 188 of 978 noun candidates and 81 of 365 verb
+  candidates. The eight clusters retain 790 nouns and 284 verbs; the minimum
+  cluster sizes are 39 nouns and 18 verbs. Maximum noun/verb fit-centroid pair
+  cosines are `0.8735721184` and `0.8916218581`, and retained joint archive
+  token mass is 479,183,203 of 898,327,086 (`53.341729362%`). Catalog
+  `ea2e69509a421d3240b92fc727f01819e59e5d0d739d0e24afdb732517d391ee`
+  therefore clears every frozen gate.
+- **Strict evidence semantics are verified.** Boundary-excluded candidates
+  retain their vector, fit assignment, and measured margin in the v4 ledger;
+  retained cluster inventories use the same fit assignments, while published
+  centroids remain the authenticated all-candidate fit centroids. The loader
+  reconstructs the fit, margins, dispositions, and gates under both pinned and
+  current project numeric environments. An independent real rebuild reproduced
+  all 11 files byte for byte; the self-contained HTML parses without external
+  resources, five catalog fixtures pass, and the catalog-stage focused group
+  passed 44 tests before partition work. See
+  [`docs/TW-P_SEMANTIC_V4_EXECUTION_REPORT.md`](docs/TW-P_SEMANTIC_V4_EXECUTION_REPORT.md)
+  and the generated
+  [`catalog audit`](data/tinyworlds-p-semantic/catalog/v4/ea2e69509a421d3240b92fc727f01819e59e5d0d739d0e24afdb732517d391ee/audit.md).
+- **V4-native partition machinery is implemented and verified.** Separate
+  partition/tree/preset/failure/sample-report contracts reject v1--v3
+  artifacts. The CPU 3-by-3 fixture covers strict reconstruction,
+  construction leakage, global one-to-one pairing, complete validation
+  sampling, cross-worker/run-size byte identity, legacy rejection, and shard
+  tampering. Topology failures now retain every ranked candidate, exact score
+  fractions, source/seed bindings, a strict loader, Markdown/HTML audits, and
+  byte-rebuild enforcement; synthetic tests cover repeat publication and
+  tamper rejection.
+- **The real partition stopped at the frozen topology gate (2026-07-22).** The
+  archive replay retained 2,520,317 groups and exactly 479,183,203 tokens. All
+  28,224 physical topologies passed nonempty, component-visibility, and
+  control-capacity filters. The preregistered semantic-first winner used cells
+  `(1,2), (3,2), (3,4), (1,4), (6,1)` and masses `2,559,355`, `5,440,146`,
+  `9,899,869`, `4,699,583`, and `1,428,732`, violating the fixed 10%-around-
+  median gate. The authenticated failure is
+  `37fca844f6d172de7896e15630f39794ed17b89afdc4cc28611b8a51ba282e07`;
+  an independent replay reproduced its identity and every byte. The complete
+  focused archive/semantic/partition/training CPU gate now passes 47 tests.
+- **V4 is terminal unless a new version is preregistered.** Twenty-two other
+  candidates satisfy the median gate, but selecting one after observing the
+  failure would change the objective order. V4 therefore has no success
+  partition, split allocation, paired controls, sample report, GPU runtime
+  preflight, calibration, checkpoint, or sealed-test result. Any
+  balance-feasibility prefilter, reordered objective, changed tolerance, or
+  diagnostic-candidate choice belongs to semantic-v5 and cannot reinterpret
+  this stop. See the generated
+  [`partition failure audit`](data/tinyworlds-p-semantic/v4/failures/37fca844f6d172de7896e15630f39794ed17b89afdc4cc28611b8a51ba282e07/audit.md).
+
+## Completed Milestone: TinyWorlds-P Semantic-v3 Construction Stop
+
+`tinyworlds-p-semantic-v3` isolates the next intervention suggested by the v2
+stop: semantic words are assigned only to their nearest spherical centroid,
+while token and nuisance balance is deferred to story allocation after the
+catalog is fixed.
+
+### Semantic-v3 Status
+
+- **Semantic-first contract implemented and frozen (2026-07-22).** V3 reuses
+  the exact v1 MiniLM evidence and binds v2 failure artifact
+  `23cedf831ef1ad6331d05b58290705a51fd6da1d0fff65a164d1ec544491be25`.
+  Every real word's raw role score, fold, reference count, conformal value, and
+  cutoff must exactly replay that ledger. V3 removes token-mass capacities and
+  their repair from word clustering, uses unweighted farthest-first spherical
+  k-means with nearest-centroid assignment, and records token mass only after
+  assignment. The eight clusters, `0.03` true-nearest margin, five exclusion
+  passes, word-count floors, `0.90` centroid-pair ceiling, and 40% joint
+  retained-mass gate remained fixed.
+- **Numeric construction provenance is explicit.** A first general-environment
+  preflight preserved every decision and the complete boundary trace but
+  exposed several-billionth serialization differences from the v2 ledger
+  between NumPy 2.5.1 and 1.26.4. Its content-addressed bundle
+  `94614921b5386653f92ee8dc372fc45b566502f9706723df57b257ab4a1252f2`
+  remains preserved but is noncanonical. Before canonical publication, the v3
+  config bound NumPy 1.26.4 and exact v2 score replay. No scientific threshold,
+  cluster assignment, pass trace, or stop decision changed.
+- **The real semantic-first grid reached a narrower automated stop.** The
+  unchanged role/sense screens left 978 noun and 365 verb candidates. Noun
+  boundary failures were `188, 17, 6, 1, 12, 1`; verb failures were `81, 7,
+  0`. Verbs converged after two reclusters. On noun pass five, `crayon` remained
+  below the fixed margin at `0.0296120345`, so v3 stopped. The canonical strict
+  failure is
+  `ae418bfb73cc0e278f1ba9204c81d101e0b95e9cf050597a491d21489cde6146`.
+- **The apparent one-word miss masks a cascade.** A post-stop diagnostic
+  removal and sixth recluster exposed 22 new noun boundary words and a 25-word
+  noun cluster, below the independent 32-word floor. Coverage would remain
+  above 48% and centroid-pair cosines remain below `0.90`; the remaining issue
+  is instability from hard deletion plus full reseeding, not mass balance or
+  corpus coverage. Waiving the last word or extending v3's pass budget is not
+  a valid repair.
+- **Strict implementation and verification are complete.** Separate v3
+  config/catalog/failure formats, semantic-only clustering, nearest-assignment
+  replay, content-addressed Markdown/HTML audits, the fixed cached-evidence
+  runner, and synthetic mass-independence/success/failure/rebuild/tamper tests
+  are implemented. An independent real rebuild reproduced all nine canonical
+  files byte for byte; the cached loader returns the same failure identity.
+  Three focused regression groups pass 153 tests, and all semantic modules,
+  runners, and tests compile. See
+  [`docs/TW-P_SEMANTIC_V3_EXECUTION_REPORT.md`](docs/TW-P_SEMANTIC_V3_EXECUTION_REPORT.md)
+  and the generated
+  [`failure audit`](data/tinyworlds-p-semantic/catalog/v3/failures/ae418bfb73cc0e278f1ba9204c81d101e0b95e9cf050597a491d21489cde6146/audit.md).
+- **No downstream artifact is authorized.** Semantic-v3 has no catalog,
+  partition, sample report, GPU training run, checkpoint, or sealed-test
+  result. Any fixed-centroid boundary screen, stable-core construction, robust
+  objective, changed threshold, or changed pass budget must be preregistered
+  as semantic-v4 rather than used to reinterpret v3.
+
+## Completed Milestone: TinyWorlds-P Semantic-v2 Calibrated Construction Stop
+
+`tinyworlds-p-semantic-v2` is the role-calibrated successor requested after
+semantic-v1 exposed a systematic MiniLM anchor offset. It reuses the exact
+authenticated semantic-v1 encoder evidence, leaves both archive-v1 and
+semantic-v1 immutable, and changes no language-model, partition, semantic
+vector, sense, cluster, retained-mass, or evaluation gate.
+
+### Semantic-v2 Status
+
+- **Cross-fitted role calibration implemented and frozen (2026-07-22).** The
+  raw statistic remains each word's 10th-percentile
+  `context·target-anchor - context·opposite-anchor` margin. Words are assigned
+  to five SHA-256 folds in the `tinyworlds-p-semantic-v2` namespace. For each
+  declared role and held-out fold, the other four folds form a word-level
+  reference distribution; the held-out word receives the finite-sample
+  lower-tail conformal value
+  `(1 + count(reference <= score)) / (reference_count + 1)`. A word is a role
+  outlier only when that value is at most `0.05`. Thus every decision is
+  out-of-fold, role-specific, construction-only, and independent of model
+  loss, partitions, and sealed test. No calibration-panel words are
+  automatically discarded.
+- **Separate v2 contracts and strict artifacts implemented.** The versioned
+  config records the reused v1 evidence contract, fold namespace/count,
+  conformal method and alpha, reference-size floor, all unchanged semantic
+  thresholds, and the deterministic single-prior-word repair used only when
+  indivisible token masses create a greedy packing dead end. The repair
+  preserves descending-mass processing and the exact 90--110% capacity
+  bounds. Content-addressed success/failure builders, exhaustive Markdown and
+  standalone HTML audits, strict calibration replay, tree authentication,
+  tamper rejection, and synthetic byte-rebuild fixtures are implemented.
+- **The real role screen now behaves as calibrated.** Reusing encoder evidence
+  `efd86b448ad78580380ead5e57e809383846b287cd4671746b1cee250e47f434`,
+  the five noun reference sets contain 837--883 words and the verb sets
+  294--326. The calibrated lower tail excluded 51 of 1,066 nouns (4.78%) and
+  19 of 394 verbs (4.82%). The unchanged two-sense gate excluded another 37
+  nouns and 10 verbs, leaving 978 noun and 365 verb candidates for the fixed
+  8-by-8 construction.
+- **The unchanged boundary gate produced the new automated stop.** Noun
+  boundary failures across the initial clustering plus five permitted
+  exclusion/recluster passes were `259, 137, 103, 54, 55, 47`; verb failures
+  were `106, 39, 23, 21, 18, 18`. Both roles therefore still had words below
+  the assigned-cluster margin `0.03` after the pass budget. The authenticated
+  failure bundle is
+  `23cedf831ef1ad6331d05b58290705a51fd6da1d0fff65a164d1ec544491be25`.
+  It contains all word scores, fold/reference evidence, conformal values,
+  sense metrics, pass-level cluster masses and margin distributions, exact
+  story contexts, candidate PCA, and every disposition.
+- **No downstream artifact is authorized.** If the 47 noun and 18 verb
+  failures observed on the terminal pass were also removed, the diagnostic
+  remainder would contain 323 nouns, 140 verbs, and only 98,322,186 joint
+  tokens (10.945% of the 898,327,086-token non-construction archive), well
+  below the independently frozen 40% retained-mass floor. That counterfactual
+  does not extend the pass budget; it shows that more exclusion passes would
+  not rescue this version. Semantic-v2 therefore has no catalog, partition,
+  sample report, GPU training run, checkpoint, or sealed-test result. Any
+  change to the cluster representation, capacity objective, boundary margin,
+  pass count, or retained-mass floor is a separately designed semantic-v3,
+  not a reinterpretation of v2.
+- **Execution and verification are reproducible.** The fixed v2 runner
+  authenticates and reuses the 441 MiB evidence cache, completes construction
+  in about 16 seconds without GPU inference, and subsequently reloads the same
+  failure identity in about four seconds. An independent temporary real-data
+  rebuild reproduced the failure SHA and all nine published files byte for
+  byte. All 142 focused semantic/archive and shared GPT-Neo/checkpoint tests
+  pass. The v2 fixtures cover fold isolation,
+  conformal order invariance, content-addressed 3-by-3 success and failure
+  fixtures, byte-identical rebuilds, calibration replay, and tamper rejection.
+  See
+  [`docs/TW-P_SEMANTIC_V2_EXECUTION_REPORT.md`](docs/TW-P_SEMANTIC_V2_EXECUTION_REPORT.md)
+  and the generated
+  [`failure audit`](data/tinyworlds-p-semantic/catalog/v2/failures/23cedf831ef1ad6331d05b58290705a51fd6da1d0fff65a164d1ec544491be25/audit.md).
+
+## Completed Milestone: TinyWorlds-P Semantic-v1 Construction Stop
+
+`tinyworlds-p-semantic-v1` is implemented as the semantic-conjunction
+successor to archive-v1. It preserves the noun-by-verb factorial experiment,
+but gives noun and verb groups an independently constructed semantic meaning.
+Archive-v1 remains immutable negative evidence; semantic-v1 has separate
+evidence, catalog, partition, sample-report, training, evaluation, and
+checkpoint contracts and provides no compatibility alias.
+
+### Semantic-v1 Status
+
+- **Contracts and implementation complete (2026-07-22).** The new
+  `apm.data.text.tinyworlds_p_semantic` package pins the archive, tokenizer,
+  complete MiniLM snapshot, construction/config identity, role anchors,
+  context sampling, float32 mean-pooled normalized inference, deterministic
+  semantic screens, capacity-constrained spherical clustering, audits,
+  semantic topology, exact archive replay, paired controls, strict loading,
+  validation-only sample reporting, group-loss ledgers, SHA-seeded paired
+  bootstrap/placebo statistics, Holm correction, calibration, resume,
+  selection, sealed-test, and publication boundaries. Fixed runners prepare
+  evidence, build and independently reproduce a partition, and train a fresh
+  seed-zero base only when the preceding artifact gate exists.
+- **Pinned encoder evidence published.** The complete 11-file
+  `sentence-transformers/all-MiniLM-L6-v2` snapshot at revision
+  `b8903db39f65d93ae28d49a37c4f3fa90c5f94e0` has encoder identity
+  `1101bb824cee453866d6dcd2b489b29ad2c55b20de5bbaceda67f38206a21502`.
+  The real CUDA/24-worker preparation published evidence
+  `efd86b448ad78580380ead5e57e809383846b287cd4671746b1cee250e47f434`:
+  247,629 construction groups and 47,172,075 construction tokens are
+  permanently reserved, 898,327,086 eligible tokens remain outside that
+  slice, and 195,492 context/anchor texts were embedded. The evidence cache is
+  independent of later clustering thresholds.
+- **Frozen eight-cluster screen reached its declared automated stop.** Of
+  1,066 nouns, 1,060 failed the strictly positive 10th-percentile role-margin
+  rule. Only `pirate`, `present`, `ship`, `train`, `treat`, and `witch`
+  survived. Of 394 verbs, 305 failed role margin and four failed the
+  multi-sense silhouette gate, leaving 85. Six nouns cannot seed the required
+  eight noun clusters and are far short of the later 32-nouns-per-cluster
+  requirement, so construction failed before clustering. No threshold was
+  relaxed, cluster count changed, word relabelled, or archive-v1 artifact
+  consulted.
+- **Failure evidence is immutable and exhaustive.** The strict failure bundle
+  `ba0c6d40f54522ac74e6f4d1813d997c19b5c21d081b038b0c0357f875d01c8a`
+  contains all 1,460 role words, token masses, exact context counts, measured
+  role margins, measured silhouettes where applicable, dispositions,
+  representative exact archive contexts, and candidate-vector PCA in
+  Markdown and self-contained HTML. See
+  [`docs/TW-P_SEMANTIC_EXECUTION_REPORT.md`](docs/TW-P_SEMANTIC_EXECUTION_REPORT.md)
+  and the generated
+  [`failure audit`](data/tinyworlds-p-semantic/catalog/v1/failures/ba0c6d40f54522ac74e6f4d1813d997c19b5c21d081b038b0c0357f875d01c8a/audit.md).
+- **Downstream work is intentionally inapplicable.** Because no valid
+  semantic-v1 catalog exists, a partition, byte-identical rebuild, sample
+  report, GPU runtime estimate, calibration, checkpoint selection, sealed-test
+  opening, and base publication are not authorized. Both downstream runners
+  authenticate the failure bundle and exit with controlled status 2 before
+  doing work. Any change to anchors, role metric, threshold, vocabulary, or
+  cluster count is a new `tinyworlds-p-semantic-v2` experiment and cannot
+  reinterpret semantic-v1.
+- **Verification remains focused and reproducible.** All 110 collected tests
+  in the semantic, archive-native TinyWorlds-P, GPT-Neo/LoRA, checkpoint, and
+  training-state scope pass; the long real-source module remains opt-in. CPU fixtures cover
+  semantic screen and clustering determinism, construction exclusion,
+  content-addressed success/failure audits, archive-v1 rejection, leakage,
+  exact-byte reconstruction, paired-control coverage, cross-worker/run-size
+  byte identity, tamper rejection, group-loss persistence, empirical-null
+  gates, sample-report isolation, and interrupted/resumed training parity.
+  Real archive/GPU gates remain opt-in; their measured result is retained and
+  is not part of routine tests.
+
 ## Completed Milestone: TinyWorlds-P Archive-Only Calibration Stop
 
 The completed roadmap is `tinyworlds-p-archive-v1`, tracked in

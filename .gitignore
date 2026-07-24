@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 venv/
 ve/
+ve-semantic/
 build/
 dist/
 /data/

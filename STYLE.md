@@ -11,6 +11,12 @@
   human-friendly phasing lines in the output along with a progbar that 
   shows an ETA for the phase and overall task.
 
+- Any long-running tests or tasks driven from code should be parallelized if 
+  possible. A candidate for parallelization is any test or task that takes 
+  more than 30s and will need to be run multiple times. Use up to 75% of 
+  available cores on this machine for parallelization. (check outside sandbox 
+  if you see less than 32 cores) 
+
 - If any sequential, log-like data is generated and used in a report, it 
   should be written to disk in a temporary directory as generated 
   (batches are acceptable to avoid slowing down a loop) instead of 
@@ -97,9 +103,18 @@ reductions, loops, recursion, etc should be a cue to maybe refactor.
   examples.
 
 ## test styles
+
 Not all "should" instructions that imply change from an previous 
 implementation merit extensive test cases. For example, "such-and-such 
 should take dependency injection instead of hard-coded registry for blah" 
 DOES NOT NEED A BUNCH OF TEST CASES TO ENFORCE IT. Its sufficient to just 
 refactor the constructors and call sites, as long as SOME test covers the 
 new behavior (which they will, if its a pure refactor)
+
+### long running tests
+
+Do NOT create long running integration tests that automatically get rerun. 
+If it takes more than 30s, its long-running. In situations where tests 
+validate large artifacts and long run times are unavoidable, mark them 
+skipped by default and then run them intentionally as needed. Long running 
+tests should be parallelized if possible to reduce the run time. 

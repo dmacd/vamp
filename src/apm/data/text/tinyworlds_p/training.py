@@ -307,6 +307,8 @@ def run_streaming_base_training(
     stop_after_epoch: int | None = None,
     stop_after_update: int | None = None,
     progress: Callable[[TrainingCursor, float, int], None] | None = None,
+    identity_namespace: str | None = None,
+    resume_format: str = "tinyworlds-p-archive-training-resume",
 ) -> StreamingTrainingResult:
     """Train or resume from memory-mapped base shards with token-weighted gradients."""
     training_config = config or StreamingTrainingConfig.from_preset()
@@ -321,15 +323,18 @@ def run_streaming_base_training(
         microbatches_per_epoch / training_config.accumulation_microbatches
     )
     planned_updates = updates_per_epoch * training_config.epochs
-    training_sha256 = sha256(
-        canonical_record_bytes(
-            {
-                "partition_sha256": artifact.partition_sha256,
-                "training": training_config.as_record(),
-                "updates_per_epoch": updates_per_epoch,
-            }
-        )
-    ).hexdigest()
+    identity_record = {
+        "partition_sha256": artifact.partition_sha256,
+        "training": training_config.as_record(),
+        "updates_per_epoch": updates_per_epoch,
+    }
+    if identity_namespace is not None:
+        if type(identity_namespace) is not str or not identity_namespace:
+            raise ValueError("training identity namespace must be nonempty text")
+        identity_record["identity_namespace"] = identity_namespace
+    if type(resume_format) is not str or not resume_format:
+        raise ValueError("training resume format must be nonempty text")
+    training_sha256 = sha256(canonical_record_bytes(identity_record)).hexdigest()
     working = Path(working_directory)
     working.mkdir(parents=True, exist_ok=True)
     checkpoints_directory = working / "states"
@@ -347,6 +352,7 @@ def run_streaming_base_training(
             resume_from,
             training_sha256,
             template,
+            resume_format=resume_format,
         )
         if int(state.step) != cursor.optimizer_update:
             raise ValueError("resume state step and cursor update disagree")
@@ -483,6 +489,7 @@ def run_streaming_base_training(
                                     training_sha256,
                                     state,
                                     cursor,
+                                    resume_format=resume_format,
                                 )
                             )
                         if stop_after_update is not None and int(state.step) >= stop_after_update:
@@ -492,6 +499,7 @@ def run_streaming_base_training(
                                 training_sha256,
                                 state,
                                 cursor,
+                                resume_format=resume_format,
                             )
                             checkpoints.append(checkpoint)
                             return StreamingTrainingResult(
@@ -543,6 +551,7 @@ def run_streaming_base_training(
                     training_sha256,
                     state,
                     cursor,
+                    resume_format=resume_format,
                 )
             )
             if stop_after_epoch is not None and epoch + 1 >= stop_after_epoch:
@@ -566,6 +575,8 @@ def write_streaming_checkpoint(
     training_sha256: str,
     state: LmTrainState[GptNeoParams],
     cursor: TrainingCursor,
+    *,
+    resume_format: str = "tinyworlds-p-archive-training-resume",
 ) -> TrainingCheckpoint:
     """Persist complete model/optimizer/RNG state and an exact next-batch cursor."""
     target = Path(directory)
@@ -580,7 +591,7 @@ def write_streaming_checkpoint(
         canonical_record_bytes(
             {
                 "cursor": cursor.as_record(),
-                "format": "tinyworlds-p-archive-training-resume",
+                "format": resume_format,
                 "state_sha256": state_sha256,
                 "training_sha256": training_sha256,
                 "version": 1,
@@ -594,6 +605,8 @@ def load_streaming_checkpoint(
     directory: str | Path,
     training_sha256: str,
     template: LmTrainState[GptNeoParams],
+    *,
+    resume_format: str = "tinyworlds-p-archive-training-resume",
 ) -> tuple[LmTrainState[GptNeoParams], TrainingCursor]:
     """Strictly restore complete state and validate its resume cursor binding."""
     root = Path(directory)
@@ -618,7 +631,7 @@ def load_streaming_checkpoint(
     }:
         raise ValueError("training resume fields changed")
     if (
-        resume["format"] != "tinyworlds-p-archive-training-resume"
+        resume["format"] != resume_format
         or resume["version"] != 1
         or resume["training_sha256"] != training_sha256
     ):
