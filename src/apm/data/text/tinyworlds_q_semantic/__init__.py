@@ -20,7 +20,14 @@ from apm.data.text.tinyworlds_q_semantic.shortlist import (
     PILOT_SHORTLIST_SPECS,
     SemanticReviewShortlist,
 )
-from apm.data.text.tinyworlds_q_semantic.reverse_review import SemanticReverseReview
+from apm.data.text.tinyworlds_q_semantic.pilot_catalog import (
+    build_approved_pilot_catalog,
+)
+from apm.data.text.tinyworlds_q_semantic.preflight import QueryGpuPreflight
+from apm.data.text.tinyworlds_q_semantic.reverse_review import (
+    ReverseReviewApproval,
+    SemanticReverseReview,
+)
 
 
 __all__ = [
@@ -32,11 +39,14 @@ __all__ = [
     "PILOT_SHORTLIST_SPECS",
     "PrimaryReviewApproval",
     "QueryExperimentPreset",
+    "QueryGpuPreflight",
     "QueryPartitionArtifact",
+    "ReverseReviewApproval",
     "SemanticFact",
     "SemanticQueryCatalog",
     "SemanticQueryResult",
     "SemanticQueryTemplate",
     "SemanticReviewShortlist",
     "SemanticReverseReview",
+    "build_approved_pilot_catalog",
 ]

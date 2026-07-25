@@ -25,6 +25,13 @@ evidence. Rejected reviewed candidates remain in the audit. These decisions,
 all source identities, prompt text, answers, token IDs, evidence, and ordering
 participate in the catalog SHA-256.
 
+The extraction candidate's exact predicate must occur with the concept in
+every authoritative construction-evidence sentence. Human-approved trigger
+closure may additionally contain inflections or synonymous surface forms that
+do not each appear in the construction slice. Those reviewed additions enter
+the catalog hash and conservative story-level withholding, but they do not
+retroactively manufacture construction evidence.
+
 The pilot concept prefix is `rabbit, horse`, with surfaces
 `rabbit/rabbits/bunny/bunnies` and `horse/horses/pony/ponies`. The first main
 prefix is `cat, dog, bird, robot, dragon`, with the registered singular,
@@ -176,6 +183,11 @@ The retained seed-zero GPT-Neo architecture, two-epoch base optimizer schedule,
 rank-eight all-projection LoRA, and 12 GiB allocator ceiling are fixed in the
 experiment identity. A base proceeds only when held-in epoch-two NLL is at most
 2.2, improves by at least 0.02 from epoch one, remains finite, and fits memory.
+Before reusable training, a content-addressed GPU preflight runs exactly two
+disposable base updates and warm validation, parent-search, and task-free
+routing probes. It binds the catalog, partition, full dynamic preset, measured
+allocator peak, result-size estimate, and runtime projections; its parameters
+cannot be promoted into the real run.
 The rabbit/horse pilot tests adapter budgets 500, 1,000, and 2,000 in order and
 selects the first for which both worlds reach 60% validation accuracy and gain
 15 percentage points over base. If none passes, construction stops before the

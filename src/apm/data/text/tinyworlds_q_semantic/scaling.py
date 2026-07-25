@@ -199,10 +199,14 @@ def require_preflight_capacity(
     """Fail explicitly when measured or projected resources exceed frozen limits."""
     if estimate.world_count != preset.active_world_count:
         raise ValueError("preflight estimate does not match the active manifest")
-    if measurement.allocator_peak_bytes > preset.allocator_peak_limit_bytes:
+    projected_peak_bytes = max(
+        estimate.estimated_peak_bytes,
+        measurement.allocator_peak_bytes,
+    )
+    if projected_peak_bytes > preset.allocator_peak_limit_bytes:
         raise MemoryError(
-            "measured allocator peak exceeds the frozen limit: "
-            f"{measurement.allocator_peak_bytes} > {preset.allocator_peak_limit_bytes}"
+            "measured or projected allocator peak exceeds the frozen limit: "
+            f"{projected_peak_bytes} > {preset.allocator_peak_limit_bytes}"
         )
     projected_result_bytes = max(
         estimate.estimated_result_bytes,

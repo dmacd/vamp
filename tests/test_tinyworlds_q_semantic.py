@@ -66,6 +66,9 @@ from apm.data.text.tinyworlds_q_semantic.partition import (
     load_query_partition,
     tree_sha256,
 )
+from apm.data.text.tinyworlds_q_semantic.pilot_catalog import (
+    build_approved_pilot_catalog,
+)
 from apm.data.text.tinyworlds_q_semantic.queries import (
     compile_semantic_queries,
     validation_question_prefixes,
@@ -85,8 +88,11 @@ from apm.data.text.tinyworlds_q_semantic.review import (
     publish_review_packet,
 )
 from apm.data.text.tinyworlds_q_semantic.reverse_review import (
+    approve_all_reverse_choices,
     build_pilot_reverse_review,
+    load_reverse_review_approval,
     publish_reverse_review,
+    publish_reverse_review_approval,
 )
 from apm.data.text.tinyworlds_q_semantic.scaling import (
     PreflightMeasurement,
@@ -482,6 +488,27 @@ def test_pilot_review_shortlist_is_compact_supported_and_publishable(
     reverse_markdown = (reverse_root / "review.md").read_text(encoding="utf-8")
     assert reverse_markdown.count("| [ ] | `") == 24
     assert "approve all reverse choices" in reverse_markdown
+    reverse_approval = approve_all_reverse_choices(
+        reverse_review,
+        reviewer="fixture-reviewer",
+        reviewed_at="2026-07-25T00:01:00Z",
+    )
+    reverse_approval_root = publish_reverse_review_approval(
+        reverse_approval,
+        tmp_path,
+    )
+    assert load_reverse_review_approval(reverse_approval_root) == reverse_approval
+    catalog = build_approved_pilot_catalog(
+        review_packet=packet,
+        shortlist=shortlist,
+        primary_approval=approval,
+        reverse_review=reverse_review,
+        reverse_approval=reverse_approval,
+        tokenizer=_OneTokenPerWordTokenizer(),  # type: ignore[arg-type]
+    )
+    assert len(catalog.facts) == 24
+    assert len(catalog.templates) == 24 * 8
+    assert len(catalog.rejected_candidates) == 8
 
 
 def test_partition_fact_withholding_rebuild_and_tampering(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from hashlib import sha256
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -146,6 +147,56 @@ class SemanticReverseReview:
         }
         if include_hash:
             record["reverse_review_sha256"] = self.reverse_review_sha256
+        return record
+
+
+@dataclass(frozen=True, slots=True)
+class ReverseReviewApproval:
+    """One explicit human approval of every fact-specific reverse choice."""
+
+    reverse_review_sha256: str
+    reviewer: str
+    reviewed_at: str
+    approved_proposal_ids: tuple[str, ...]
+    approval_sha256: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        require_sha256(self.reverse_review_sha256, "reverse approval review")
+        if any(
+            type(value) is not str or not value.strip()
+            for value in (self.reviewer, self.reviewed_at)
+        ):
+            raise ValueError("reverse approval reviewer and time are required")
+        expected = tuple(spec.proposal_id for spec in PILOT_REVERSE_CHOICE_SPECS)
+        if self.approved_proposal_ids != expected:
+            raise ValueError("reverse approval must name every proposal in order")
+        object.__setattr__(
+            self,
+            "approval_sha256",
+            record_sha256(self.as_record(include_hash=False)),
+        )
+
+    def as_record(self, *, include_hash: bool = True) -> dict[str, object]:
+        """Return the explicit affirmative reverse decisions."""
+        record: dict[str, object] = {
+            "benchmark_id": BENCHMARK_ID,
+            "decisions": [
+                {
+                    "false_distractors_approved": True,
+                    "grammatical_type_approved": True,
+                    "proposal_id": proposal_id,
+                    "token_lengths_approved": True,
+                }
+                for proposal_id in self.approved_proposal_ids
+            ],
+            "format": "tinyworlds-q-semantic-reverse-approval-v1",
+            "reverse_review_sha256": self.reverse_review_sha256,
+            "reviewed_at": self.reviewed_at,
+            "reviewer": self.reviewer,
+            "schema_version": SCHEMA_VERSION,
+        }
+        if include_hash:
+            record["approval_sha256"] = self.approval_sha256
         return record
 
 
@@ -293,6 +344,170 @@ def publish_reverse_review(
     return root
 
 
+def approve_all_reverse_choices(
+    review: SemanticReverseReview,
+    *,
+    reviewer: str,
+    reviewed_at: str,
+) -> ReverseReviewApproval:
+    """Translate an explicit approve-all instruction into a bound record."""
+    return ReverseReviewApproval(
+        reverse_review_sha256=review.reverse_review_sha256,
+        reviewer=reviewer,
+        reviewed_at=reviewed_at,
+        approved_proposal_ids=tuple(
+            proposal.spec.proposal_id for proposal in review.proposals
+        ),
+    )
+
+
+def publish_reverse_review_approval(
+    approval: ReverseReviewApproval,
+    output_root: str | Path,
+) -> Path:
+    """Atomically publish the human reverse-choice approval."""
+    root = Path(output_root) / "reverse-approvals" / approval.approval_sha256
+    approval_payload = canonical_json_bytes(approval.as_record())
+    summary_payload = (
+        "# TinyWorlds-Q reverse-choice approval\n\n"
+        f"Approval: `{approval.approval_sha256}`  \n"
+        f"Reverse review: `{approval.reverse_review_sha256}`  \n"
+        f"Reviewer: `{approval.reviewer}`  \n"
+        f"Reviewed at: `{approval.reviewed_at}`\n\n"
+        f"All reverse-choice gates are affirmative for all "
+        f"{len(approval.approved_proposal_ids)} approved facts.\n"
+    ).encode("utf-8")
+    content_payloads = {
+        "approval.json": approval_payload,
+        "approval.md": summary_payload,
+    }
+    payloads = {
+        **content_payloads,
+        "manifest.json": canonical_json_bytes(
+            {
+                "approval_sha256": approval.approval_sha256,
+                "files": [
+                    {
+                        "name": name,
+                        "sha256": sha256(payload).hexdigest(),
+                        "size_bytes": len(payload),
+                    }
+                    for name, payload in sorted(content_payloads.items())
+                ],
+                "format": "tinyworlds-q-semantic-reverse-approval-v1",
+                "reverse_review_sha256": approval.reverse_review_sha256,
+                "schema_version": SCHEMA_VERSION,
+            }
+        ),
+    }
+    if root.exists():
+        if (
+            {path.name for path in root.iterdir()} != set(payloads)
+            or any(
+                not (root / name).is_file()
+                or (root / name).read_bytes() != payload
+                for name, payload in payloads.items()
+            )
+        ):
+            raise FileExistsError("existing reverse approval changed")
+        return root
+    root.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".reverse-approval-", dir=root.parent))
+    try:
+        for name, payload in payloads.items():
+            (staging / name).write_bytes(payload)
+        os.replace(staging, root)
+    except BaseException:
+        for path in sorted(staging.rglob("*"), reverse=True):
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                path.rmdir()
+        if staging.exists():
+            staging.rmdir()
+        raise
+    return root
+
+
+def load_reverse_review_approval(directory: str | Path) -> ReverseReviewApproval:
+    """Strictly authenticate and reconstruct one reverse approval."""
+    root = Path(directory)
+    manifest = _load_canonical_json(root / "manifest.json")
+    if (
+        manifest.get("format") != "tinyworlds-q-semantic-reverse-approval-v1"
+        or manifest.get("schema_version") != SCHEMA_VERSION
+    ):
+        raise ValueError("reverse approval manifest identity changed")
+    file_records = manifest.get("files")
+    if type(file_records) is not list or any(type(item) is not dict for item in file_records):
+        raise ValueError("reverse approval manifest files are invalid")
+    expected_names = {"manifest.json", *(str(item.get("name")) for item in file_records)}
+    if {path.name for path in root.iterdir()} != expected_names:
+        raise ValueError("reverse approval tree entries changed")
+    for item in file_records:
+        name = item.get("name")
+        size_bytes = item.get("size_bytes")
+        expected_sha256 = item.get("sha256")
+        if type(name) is not str or type(size_bytes) is not int or type(expected_sha256) is not str:
+            raise ValueError("reverse approval file identity is invalid")
+        payload = (root / name).read_bytes()
+        if len(payload) != size_bytes or sha256(payload).hexdigest() != expected_sha256:
+            raise ValueError("reverse approval file changed")
+    record = _load_canonical_json(root / "approval.json")
+    decisions = record.get("decisions")
+    if type(decisions) is not list or any(type(item) is not dict for item in decisions):
+        raise ValueError("reverse approval decisions are invalid")
+    gates = (
+        "false_distractors_approved",
+        "grammatical_type_approved",
+        "token_lengths_approved",
+    )
+    if any(any(item.get(gate) is not True for gate in gates) for item in decisions):
+        raise ValueError("reverse approval contains a non-affirmative gate")
+    approval = ReverseReviewApproval(
+        reverse_review_sha256=_text(record, "reverse_review_sha256"),
+        reviewer=_text(record, "reviewer"),
+        reviewed_at=_text(record, "reviewed_at"),
+        approved_proposal_ids=tuple(_text(item, "proposal_id") for item in decisions),
+    )
+    expected_summary = (
+        "# TinyWorlds-Q reverse-choice approval\n\n"
+        f"Approval: `{approval.approval_sha256}`  \n"
+        f"Reverse review: `{approval.reverse_review_sha256}`  \n"
+        f"Reviewer: `{approval.reviewer}`  \n"
+        f"Reviewed at: `{approval.reviewed_at}`\n\n"
+        f"All reverse-choice gates are affirmative for all "
+        f"{len(approval.approved_proposal_ids)} approved facts.\n"
+    )
+    if (
+        record != approval.as_record()
+        or manifest.get("approval_sha256") != approval.approval_sha256
+        or manifest.get("reverse_review_sha256") != approval.reverse_review_sha256
+        or root.name != approval.approval_sha256
+        or (root / "approval.md").read_text(encoding="utf-8") != expected_summary
+    ):
+        raise ValueError("reverse approval semantic content changed")
+    return approval
+
+
+def _load_canonical_json(path: Path) -> dict[str, object]:
+    payload = path.read_bytes()
+    try:
+        value = json.loads(payload)
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"invalid reverse approval JSON: {path.name}") from error
+    if type(value) is not dict or canonical_json_bytes(value) != payload:
+        raise ValueError(f"reverse approval JSON is not canonical: {path.name}")
+    return value
+
+
+def _text(record: dict[str, object], field: str) -> str:
+    value = record.get(field)
+    if type(value) is not str or not value:
+        raise ValueError(f"reverse approval {field} must be nonempty text")
+    return value
+
+
 def render_reverse_review_markdown(review: SemanticReverseReview) -> str:
     """Render one short row per approved fact's reverse query."""
     lines = [
@@ -324,10 +539,14 @@ def render_reverse_review_markdown(review: SemanticReverseReview) -> str:
 
 __all__ = [
     "PILOT_REVERSE_CHOICE_SPECS",
+    "ReverseReviewApproval",
     "ReverseChoiceProposal",
     "ReverseChoiceSpec",
     "SemanticReverseReview",
     "build_pilot_reverse_review",
+    "approve_all_reverse_choices",
+    "load_reverse_review_approval",
     "publish_reverse_review",
+    "publish_reverse_review_approval",
     "render_reverse_review_markdown",
 ]

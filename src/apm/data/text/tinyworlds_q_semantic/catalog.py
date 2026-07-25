@@ -203,6 +203,8 @@ def validate_catalog_against_review_packet(
             raise ValueError(f"fact {fact.fact_id} does not bind a review candidate")
         if (
             candidate.concept_id != fact.concept_id
+            or candidate.relation_category != fact.relation_category
+            or candidate.predicate not in fact.trigger_forms
             or not set(fact.supporting_story_groups).issubset(
                 candidate.supporting_story_groups
             )
@@ -211,14 +213,16 @@ def validate_catalog_against_review_packet(
             raise ValueError(f"fact {fact.fact_id} changed reviewed evidence semantics")
         concept = concept_by_id[fact.concept_id]
         if any(
-            not any(
+            not (
                 _contains_surface(item.sentence_text, concept.surface_forms)
-                and _contains_surface(item.sentence_text, (trigger,))
-                for item in fact.evidence
+                and _contains_surface(
+                    item.sentence_text,
+                    (candidate.predicate,),
+                )
             )
-            for trigger in fact.trigger_forms
+            for item in fact.evidence
         ):
-            raise ValueError(f"fact {fact.fact_id} lacks same-sentence trigger closure")
+            raise ValueError(f"fact {fact.fact_id} changed authoritative evidence")
     for rejected in catalog.rejected_candidates:
         candidate = candidate_by_id.get(rejected.candidate_id)
         if candidate is None or (

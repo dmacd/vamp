@@ -3,10 +3,12 @@
 ## Outcome
 
 The query-native benchmark engine and CPU verification fixtures are complete.
-The interactive user approved all 24 primary pilot fact proposals. Fact-specific
-reverse choices still await explicit review; no catalog was published, no GPU
-work was started, and no sealed test was opened. This is an implementation and
-review milestone, not a scientific result.
+The interactive user approved all 24 primary pilot facts and all 24
+fact-specific reverse choices. The official catalog and partition are
+published, a fresh archive replay reproduced both byte-for-byte, and the GPU
+preflight passed. The real base has not started, no adapter exists, and no
+sealed test was opened. This is an operational construction milestone, not a
+scientific result.
 
 `tinyworlds-q-semantic-v1` is isolated under its own Python package and the
 registered roots `data/tinyworlds-q-semantic/`,
@@ -65,8 +67,8 @@ catalog parent nesting, sealed access, deterministic statistics, dynamic
 capacity/schedules, bounded scoring, strict report coverage, and resumable
 stage identity. The pilot-specific fixture also verifies the 24-row primary
 review queue, 8-row backup set, evidence support, equal answer-token lengths,
-compact publication, strict primary-approval reload, and the fact-specific
-reverse queue. The fixtures run a tiny GPT-Neo base both uninterrupted and
+compact publication, strict primary/reverse-approval reload, and approved
+catalog compilation. The fixtures run a tiny GPT-Neo base both uninterrupted and
 through an interruption and verify identical parameters and progress bytes.
 A focused compatibility run passes 36 existing tests across knowledge tasks,
 candidate scoring, knowledge training/evaluation, semantic statistics,
@@ -124,19 +126,43 @@ It binds compact shortlist
 and records all five fact gates as affirmative for every primary proposal. No
 backup proposal was promoted.
 
+## Approved catalog, partition, and preflight
+
+The user instruction `Approve all reverse choices` was recorded at
+`2026-07-25T04:40:14Z` as approval
+`bc184647bfec6f33c04a0e527d1c70e4c1415555695fedbf5d09d4066a41bbb8`.
+It binds the corrected fact-specific reverse sheet and records all falsity,
+grammatical-type, and tokenizer-length gates as affirmative.
+
+Official pilot catalog
+`5c9c892e5d010370f9533e73c8b0ad9c9a79c244db9e2a5d7f2b4e12d4a8aa4f`
+contains exactly 12 facts per world, 72 validation templates, and 120 sealed
+test templates. An independent catalog publication has the same recursive tree
+hash. Normal loading authenticated but did not deserialize the sealed file.
+
+Partition
+`419e6c8b6362add9af081885066559cc34b18f5c7044894f343c7caf0091ad0c`
+retains 4,502,964 base groups and 857,498,081 base tokens. Rabbit and horse have
+171,823 and 22,227 node-training groups. The weakest individual fact still has
+320 authoritative training groups, and ordinary lexical exposure is 11,344
+rabbit groups and 3,859 horse groups. All 248,051 construction groups and 826
+multi-concept fact-bearing groups remain outside model inputs. A fresh replay
+using different sort-run boundaries reproduced all files; both complete trees
+hash to `7b8c50a68cfcde41dc1579836ab7bb431fd85a4652c0fd036ab8986adae87f9f`.
+
+GPU preflight
+`6519ee1a5820a039c7b3f8e016b149fd7a90bb23fd5c0cb468a430cd6ed84eb8`
+ran on an RTX 4090 with JAX 0.6.2. Its two disposable update losses were
+`10.859072643` and `10.853386662`; warm update time was `0.488339` seconds,
+warm validation-batch time was `0.020196` seconds, and allocator peak was
+7,417,784,832 bytes. The projected result ledger is 1,658,880 bytes. All frozen
+limits passed, and the disposable state is not reusable.
+
 ## Open gate
 
-Primary fact review is complete. The remaining semantic gate is the 24-row
-fact-specific reverse-choice sheet
-[`reverse approval sheet`](../data/tinyworlds-q-semantic/reverse-reviews/32f206833ce828fb954628d9063821c853579b96ffbf567d5dd0a2fc5e0ce9c0/review.md).
-The earlier shared placeholders were not approved and cannot be used: another
-target concept is not a false distractor for shared facts such as `animal`,
-`tail`, or `fast`. The corrected sheet binds the primary approval and verifies
-equal GPT-2 token lengths, but its semantic falsity decisions remain human.
-Publishing a pilot catalog or starting a GPU optimizer before that explicit
-approval would violate the benchmark design.
-
-After review, the required sequence is an independent byte rebuild of the pilot
-partition, GPU resource preflight, fresh seed-zero base training, 500/1,000/2,000
-update pilot selection, and the two-world sequential/VAMP persistence exercise.
-Only a passing pilot freezes and opens the five-world main construction.
+The next required step is the fresh seed-zero two-epoch base: 18,530 optimizer
+updates per epoch, projected at roughly 5:01:38 plus validation. It must reach
+held-in NLL at most 2.2, improve by at least 0.02 across epochs, remain finite,
+and stay below 12 GiB. Only then may the 500/1,000/2,000-update independent
+adapter selection and selected-budget sequential/VAMP persistence exercise run.
+The main catalog remains unauthorized until both pilot worlds pass learnability.

@@ -110,6 +110,85 @@ class StorySemanticMatch:
 
 
 @dataclass(frozen=True, slots=True)
+class _StorySemanticMatcher:
+    """One catalog-scoped set of compiled conservative leakage matchers."""
+
+    concepts: tuple[ConceptDefinition, ...]
+    facts: tuple[SemanticFact, ...]
+    concept_patterns: dict[str, tuple[re.Pattern[str], ...]]
+    trigger_patterns: dict[str, tuple[re.Pattern[str], ...]]
+
+    @classmethod
+    def compile(
+        cls,
+        concepts: tuple[ConceptDefinition, ...],
+        facts: tuple[SemanticFact, ...],
+    ) -> _StorySemanticMatcher:
+        return cls(
+            concepts=concepts,
+            facts=facts,
+            concept_patterns={
+                concept.concept_id: tuple(
+                    _surface_pattern(form) for form in concept.surface_forms
+                )
+                for concept in concepts
+            },
+            trigger_patterns={
+                fact.fact_id: tuple(
+                    _surface_pattern(form) for form in fact.trigger_forms
+                )
+                for fact in facts
+            },
+        )
+
+    def match(self, story_text: str) -> StorySemanticMatch:
+        normalized_story = normalize_story_identity(story_text)
+        mentioned = tuple(
+            concept.concept_id
+            for concept in self.concepts
+            if any(
+                pattern.search(normalized_story)
+                for pattern in self.concept_patterns[concept.concept_id]
+            )
+        )
+        mentioned_set = set(mentioned)
+        triggered = tuple(
+            fact.fact_id
+            for fact in self.facts
+            if fact.concept_id in mentioned_set
+            and any(
+                pattern.search(normalized_story)
+                for pattern in self.trigger_patterns[fact.fact_id]
+            )
+        )
+        if not triggered:
+            return StorySemanticMatch(mentioned, (), ())
+        triggered_set = set(triggered)
+        normalized_sentences = tuple(
+            normalize_story_identity(sentence)
+            for sentence in _SENTENCE_BOUNDARY.split(story_text)
+            if sentence.strip()
+        )
+        authoritative = tuple(
+            fact.fact_id
+            for fact in self.facts
+            if fact.fact_id in triggered_set
+            and any(
+                any(
+                    pattern.search(sentence)
+                    for pattern in self.concept_patterns[fact.concept_id]
+                )
+                and any(
+                    pattern.search(sentence)
+                    for pattern in self.trigger_patterns[fact.fact_id]
+                )
+                for sentence in normalized_sentences
+            )
+        )
+        return StorySemanticMatch(mentioned, triggered, authoritative)
+
+
+@dataclass(frozen=True, slots=True)
 class QueryPartitionAssignment:
     """One no-replacement duplicate-group assignment with leakage evidence."""
 
@@ -171,42 +250,7 @@ def match_story_semantics(
     facts: tuple[SemanticFact, ...],
 ) -> StorySemanticMatch:
     """Match leakage at story level and authority only within one sentence."""
-    normalized_story = normalize_story_identity(story_text)
-    normalized_sentences = tuple(
-        normalize_story_identity(sentence)
-        for sentence in _SENTENCE_BOUNDARY.split(story_text)
-        if sentence.strip()
-    )
-    concept_patterns = {
-        concept.concept_id: tuple(_surface_pattern(form) for form in concept.surface_forms)
-        for concept in concepts
-    }
-    trigger_patterns = {
-        fact.fact_id: tuple(_surface_pattern(form) for form in fact.trigger_forms)
-        for fact in facts
-    }
-    mentioned = tuple(
-        concept.concept_id
-        for concept in concepts
-        if any(pattern.search(normalized_story) for pattern in concept_patterns[concept.concept_id])
-    )
-    triggered = tuple(
-        fact.fact_id
-        for fact in facts
-        if fact.concept_id in mentioned
-        and any(pattern.search(normalized_story) for pattern in trigger_patterns[fact.fact_id])
-    )
-    authoritative = tuple(
-        fact.fact_id
-        for fact in facts
-        if fact.fact_id in triggered
-        and any(
-            any(pattern.search(sentence) for pattern in concept_patterns[fact.concept_id])
-            and any(pattern.search(sentence) for pattern in trigger_patterns[fact.fact_id])
-            for sentence in normalized_sentences
-        )
-    )
-    return StorySemanticMatch(mentioned, triggered, authoritative)
+    return _StorySemanticMatcher.compile(concepts, facts).match(story_text)
 
 
 def assign_story_group(
@@ -216,7 +260,19 @@ def assign_story_group(
     preset: QueryPartitionPreset = QUERY_PARTITION_PRESET,
 ) -> QueryPartitionAssignment:
     """Assign one complete duplicate group without exposing construction evidence."""
-    match = match_story_semantics(group.normalized_text, concepts, facts)
+    return _assign_story_group(
+        group,
+        _StorySemanticMatcher.compile(concepts, facts),
+        preset,
+    )
+
+
+def _assign_story_group(
+    group: QueryStoryGroup,
+    matcher: _StorySemanticMatcher,
+    preset: QueryPartitionPreset,
+) -> QueryPartitionAssignment:
+    match = matcher.match(group.normalized_text)
     if is_construction_group(group.normalized_story_sha256):
         return QueryPartitionAssignment(
             group.normalized_story_sha256,
@@ -307,6 +363,10 @@ def build_query_partition(
     staging = Path(tempfile.mkdtemp(prefix="query-partition-", dir=work_root))
     print(f"TinyWorlds-Q partition temporary artifacts: {staging}", flush=True)
     fact_order = {fact.fact_id: index for index, fact in enumerate(catalog.facts)}
+    semantic_matcher = _StorySemanticMatcher.compile(
+        catalog.concepts,
+        catalog.facts,
+    )
     count_values: dict[tuple[str, str | None, str | None], list[int]] = {}
     training_support = {fact.fact_id: 0 for fact in catalog.facts}
     lexical_exposure = {concept.concept_id: 0 for concept in catalog.concepts}
@@ -361,10 +421,9 @@ def build_query_partition(
                     raise ValueError("query source groups must be strictly hash sorted")
                 previous_group_sha256 = group.normalized_story_sha256
                 processed_group_count += 1
-                assignment = assign_story_group(
+                assignment = _assign_story_group(
                     group,
-                    catalog.concepts,
-                    catalog.facts,
+                    semantic_matcher,
                     preset,
                 )
                 assignments.write(canonical_json_bytes(assignment.as_record()))

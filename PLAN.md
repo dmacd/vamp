@@ -73,17 +73,35 @@ The interactive user approved all 24 primary proposals at
 records affirmative truth, evidence, trigger-closure, answer-form, and forward-
 distractor gates for every primary row. No backup was promoted.
 
-The remaining semantic gate is fact-specific reverse-choice review. A shared
-concept distractor pool is invalid for overlapping facts such as `animal`,
-`tail`, and `fast`, so primary approval did not promote the original unapproved
-reverse placeholders. Corrected 24-row reverse review
-`32f206833ce828fb954628d9063821c853579b96ffbf567d5dd0a2fc5e0ce9c0`
-binds the primary approval and uses three proposed false concepts of equal
-GPT-2 length per fact. After explicit reverse approval, the authorized sequence
-is catalog publication, independent byte reconstruction of the pilot partition,
-GPU preflight, and registered budget selection. There is still no official
-pilot catalog, partition, GPU checkpoint, adapter, or sealed result. Main
-catalog work cannot begin until the pilot learnability gate passes. See
+The interactive user approved all 24 fact-specific reverse choices at
+`2026-07-25T04:40:14Z`. Reverse approval
+`bc184647bfec6f33c04a0e527d1c70e4c1415555695fedbf5d09d4066a41bbb8`
+binds corrected review
+`32f206833ce828fb954628d9063821c853579b96ffbf567d5dd0a2fc5e0ce9c0`.
+Official catalog
+`5c9c892e5d010370f9533e73c8b0ad9c9a79c244db9e2a5d7f2b4e12d4a8aa4f`
+contains 24 facts, 72 validation queries, and 120 physically separated sealed
+queries. Validation-only strict reload passed; sealed prompts were not
+deserialized.
+
+Pilot partition
+`419e6c8b6362add9af081885066559cc34b18f5c7044894f343c7caf0091ad0c`
+passed every construction, leakage, fact-support, and lexical-exposure gate.
+Its weakest fact has 320 non-construction training groups; rabbit and horse
+retain 11,344 and 3,859 ordinary lexical base groups. A fresh 24-worker archive
+replay with 37,000-record sort runs reproduced the complete 12 GiB tree
+byte-for-byte; both trees hash to
+`7b8c50a68cfcde41dc1579836ab7bb431fd85a4652c0fd036ab8986adae87f9f`.
+
+GPU preflight
+`6519ee1a5820a039c7b3f8e016b149fd7a90bb23fd5c0cb468a430cd6ed84eb8`
+passed on the RTX 4090. Two disposable updates had finite NLLs `10.859072643`
+and `10.853386662`; the warm update took `0.488339` seconds and allocator peak
+was 7,417,784,832 bytes, below 12 GiB. It projects 18,530 updates per epoch and
+about 5:01:38 for the registered two-epoch base. The next gate is that fresh
+seed-zero base and its held-in NLL decision; no reusable base, adapter, or
+sealed result exists yet. Main catalog work cannot begin until the pilot
+learnability gate passes. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration
