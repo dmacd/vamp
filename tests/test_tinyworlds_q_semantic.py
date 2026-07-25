@@ -6,9 +6,15 @@ from pathlib import Path
 import shutil
 import string
 
+import jax
+import numpy as np
 import pytest
 
+from apm.continual.language_baseline_training import IndependentRootAdapter
+from apm.continual.language_tasks import RouterBatch
 from apm.data.text.tinyworlds_q_semantic.adaptation import (
+    PreparedQueryAdaptation,
+    QueryTaskProbeSet,
     materialize_query_language_task,
     prepare_query_adaptation,
 )
@@ -18,6 +24,10 @@ from apm.data.text.tinyworlds_q_semantic.approval import (
     publish_primary_review_approval,
 )
 from apm.data.text.tinyworlds_p.normalization import normalized_story_bytes_sha256
+from apm.data.text.tinyworlds_p.contracts import (
+    CANONICAL_ARCHIVE_IDENTITY,
+    CANONICAL_TOKENIZER_IDENTITY,
+)
 from apm.data.text.tinyworlds_q_semantic.catalog import (
     build_reviewed_catalog,
     load_sealed_catalog,
@@ -34,6 +44,7 @@ from apm.data.text.tinyworlds_q_semantic.contracts import (
     ConceptDefinition,
     FactReviewDecision,
     QueryExperimentPreset,
+    QueryPartitionArtifact,
     SemanticFact,
     SemanticQueryCatalog,
     SemanticQueryResult,
@@ -56,6 +67,7 @@ from apm.data.text.tinyworlds_q_semantic.execution import (
     publish_stage_artifact,
     select_pilot_budget,
 )
+from apm.data.text.tinyworlds_q_semantic.evaluation import PilotBudgetEvaluation
 from apm.data.text.tinyworlds_q_semantic.manifests import (
     MAIN_CONCEPTS,
     PILOT_CONCEPTS,
@@ -69,8 +81,17 @@ from apm.data.text.tinyworlds_q_semantic.partition import (
 from apm.data.text.tinyworlds_q_semantic.pilot_catalog import (
     build_approved_pilot_catalog,
 )
+from apm.data.text.tinyworlds_q_semantic.pilot import (
+    load_semantic_pilot_result,
+    publish_semantic_pilot_result,
+)
+from apm.data.text.tinyworlds_q_semantic.pilot_sweep import (
+    load_pilot_independent_sweep,
+    publish_pilot_independent_sweep_stage,
+)
 from apm.data.text.tinyworlds_q_semantic.queries import (
     compile_semantic_queries,
+    stack_semantic_router_batches,
     validation_question_prefixes,
 )
 from apm.data.text.tinyworlds_q_semantic.report import (
@@ -122,6 +143,14 @@ from apm.data.text.tinyworlds_q_semantic.statistics import (
     inspect_generation,
     specificity_effect,
 )
+from apm.data.text.tinyworlds_q_semantic.selected_base import (
+    QueryBaseEpochEvidence,
+    QuerySelectedBase,
+)
+from apm.data.text.tinyworlds_q_semantic.training import QuerySplitNll
+from apm.lm.checkpoint import BaseCheckpointRef
+from apm.lm.lora import init_lora_edge
+from apm.memory.graph import TaskId
 from apm.data.text.tinyworlds_q_semantic.training import (
     QueryBaseTrainingConfig,
     run_query_base_training,
@@ -368,6 +397,16 @@ def test_review_catalog_sealing_and_query_compilation(
     assert len(validation_question_prefixes(validation)) == len(validation.templates)
     compiled = compile_semantic_queries(validation, _TOKENIZER)
     assert len(compiled) == len(validation.templates)
+    stacked_prefixes = stack_semantic_router_batches(
+        compiled[:7],
+        _TOKENIZER.pad_token_id,
+    )
+    assert stacked_prefixes.input_ids.shape[0] == 7
+    assert stacked_prefixes.input_ids.shape == stacked_prefixes.attention_mask.shape
+    assert tuple(stacked_prefixes.attention_mask.sum(axis=1)) == tuple(
+        query.knowledge_query.router_batch.attention_mask.sum()
+        for query in compiled[:7]
+    )
     assert all(
         candidate.competence_batch.loss_mask.sum()
         == compiled_query.knowledge_query.candidates[0].competence_batch.loss_mask.sum()
@@ -957,6 +996,108 @@ def test_operational_gates_and_resumable_stage_parity(tmp_path: Path) -> None:
         for budget, accuracy in ((500, 0.55), (1_000, 0.61), (2_000, 0.80))
     )
     assert select_pilot_budget(pilot_results, preset) == 1_000
+
+    def result_rows(
+        method: str,
+        concept_id: str,
+        correct_count: int,
+        stage: int,
+        adapter_concept_id: str | None,
+    ) -> tuple[SemanticQueryResult, ...]:
+        return tuple(
+            SemanticQueryResult(
+                stage=stage,
+                method=method,
+                concept_id=concept_id,
+                fact_id=f"fact-{concept_id}-{index % 12:02d}",
+                template_id=f"{concept_id}-q-{index:02d}",
+                direction="forward",
+                split="validation",
+                adapter_concept_id=adapter_concept_id,
+                candidate_nll=(
+                    (1.0, 2.0, 2.0, 2.0)
+                    if index < correct_count
+                    else (3.0, 1.0, 2.0, 2.0)
+                ),
+                correct_candidate_index=0,
+                predicted_candidate_index=0 if index < correct_count else 1,
+                answer_correct=index < correct_count,
+                correct_answer_margin=1.0 if index < correct_count else -2.0,
+                selected_node_index=None,
+                oracle_node_index=None,
+                routed_regret=None,
+            )
+            for index in range(36)
+        )
+
+    budget_evaluations = tuple(
+        PilotBudgetEvaluation(
+            PilotBudgetResult(
+                updates,
+                tuple(
+                    (concept_id, correct_count / 36)
+                    for concept_id in preset.concept_ids
+                ),
+                tuple((concept_id, 0.5) for concept_id in preset.concept_ids),
+            ),
+            tuple(
+                row
+                for concept_id in preset.concept_ids
+                for row in (
+                    result_rows("base", concept_id, 18, 0, None)
+                    + result_rows(
+                        "independent",
+                        concept_id,
+                        correct_count,
+                        preset.concept_ids.index(concept_id) + 1,
+                        concept_id,
+                    )
+                )
+            ),
+            "a" * 64,
+        )
+        for updates, correct_count in ((500, 18), (1_000, 24), (2_000, 27))
+    )
+    selected_validation = tuple(
+        row
+        for method in REQUIRED_QUERY_METHODS
+        for stage, concepts in (
+            ((0, preset.concept_ids),)
+            if method == "base"
+            else ((1, ("cat",)), (2, preset.concept_ids))
+        )
+        for concept_id in concepts
+        for row in result_rows(
+            method,
+            concept_id,
+            24,
+            stage,
+            concept_id if method == "independent" else None,
+        )
+    )
+    pilot = publish_semantic_pilot_result(
+        tmp_path / "pilot-results",
+        catalog_sha256="1" * 64,
+        partition_sha256="2" * 64,
+        selected_base_sha256="3" * 64,
+        preflight_sha256="4" * 64,
+        preset=preset,
+        budgets=budget_evaluations,
+        independent_sweep_sha256="5" * 64,
+        independent_sweep_manifest_sha256="6" * 64,
+        selected_adaptation_manifest_sha256="7" * 64,
+        selected_validation_results=selected_validation,
+        resume_verified=True,
+        runtime_seconds=1.0,
+        allocator_peak_bytes=1,
+    )
+    assert pilot.selected_updates == 1_000
+    assert load_semantic_pilot_result(pilot.root) == pilot
+    with (pilot.root / "selected-validation.jsonl").open("ab") as stream:
+        stream.write(b"tamper")
+    with pytest.raises(ValueError, match="file changed"):
+        load_semantic_pilot_result(pilot.root)
+
     artifacts = tuple(
         (
             publish_stage_artifact(
@@ -989,3 +1130,134 @@ def test_operational_gates_and_resumable_stage_parity(tmp_path: Path) -> None:
         stream.write(b"tamper")
     with pytest.raises(ValueError, match="payload changed"):
         load_stage_artifact(first.root, preset, system="sequential")
+
+
+def test_pilot_independent_sweep_round_trip_and_tampering(tmp_path: Path) -> None:
+    preset = QueryExperimentPreset(("cat",), adapter_updates=2_000)
+    partition_root = tmp_path / "partition"
+    partition_root.mkdir()
+    partition = QueryPartitionArtifact(
+        root=partition_root,
+        partition_sha256="1" * 64,
+        manifest_sha256="2" * 64,
+        catalog_sha256="3" * 64,
+        archive_identity=CANONICAL_ARCHIVE_IDENTITY,
+        tokenizer_identity=CANONICAL_TOKENIZER_IDENTITY,
+        pad_token_id=0,
+        eos_token_id=1,
+        concept_ids=preset.concept_ids,
+        counts=(),
+        files=(),
+    )
+    router_batch = RouterBatch(
+        input_ids=np.asarray([[1]], dtype=np.int32),
+        attention_mask=np.asarray([[True]], dtype=np.bool_),
+        target_ids=np.asarray([[1]], dtype=np.int32),
+        loss_mask=np.asarray([[True]], dtype=np.bool_),
+    )
+    prepared = PreparedQueryAdaptation(
+        catalog_sha256=partition.catalog_sha256,
+        partition_sha256=partition.partition_sha256,
+        config_sha256=preset.config_sha256,
+        concept_ids=preset.concept_ids,
+        root_query_ids=("root-query",),
+        root_validation_probes=(router_batch,),
+        task_probes=(
+            QueryTaskProbeSet(
+                concept_id="cat",
+                parent_query_ids=("parent-query",),
+                content_key_query_ids=("content-query",),
+                parent_probes=(router_batch,),
+                content_key_probes=(router_batch,),
+            ),
+        ),
+        preparation_sha256="4" * 64,
+    )
+    selected_directory = tmp_path / "selected"
+    selected_directory.mkdir()
+    selected = QuerySelectedBase(
+        directory=selected_directory,
+        selection_sha256="5" * 64,
+        catalog_sha256=partition.catalog_sha256,
+        partition_sha256=partition.partition_sha256,
+        base_config_sha256="6" * 64,
+        training_sha256="7" * 64,
+        epoch_evidence=(
+            QueryBaseEpochEvidence(1, QuerySplitNll("validation", 1, 1.5)),
+            QueryBaseEpochEvidence(2, QuerySplitNll("validation", 1, 1.4)),
+        ),
+        allocator_peak_bytes=1,
+        checkpoint=BaseCheckpointRef(
+            selected_directory,
+            "8" * 64,
+            "9" * 64,
+        ),
+    )
+    adapter = init_lora_edge(
+        jax.random.PRNGKey(0),
+        preset.model_config,
+        preset.lora_config,
+    )
+    adapters_by_budget = {
+        budget: (
+            IndependentRootAdapter(
+                TaskId("cat"),
+                adapter,
+                (1.0,) * budget,
+            ),
+        )
+        for budget in preset.pilot_update_budgets
+    }
+    destination = tmp_path / "sweep" / "stages" / "stage-001"
+    published = publish_pilot_independent_sweep_stage(
+        destination,
+        prepared,
+        partition,
+        selected,
+        preset,
+        ("cat",),
+        adapters_by_budget,
+        (np.asarray([10, 11], dtype=np.uint32),),
+    )
+    loaded = load_pilot_independent_sweep(
+        destination,
+        prepared,
+        partition,
+        selected,
+        preset,
+    )
+    assert loaded.sweep_sha256 == published.sweep_sha256
+    assert tuple(item.updates for item in loaded.budgets) == (500, 1_000, 2_000)
+    assert tuple(len(item.adapters[0].step_losses) for item in loaded.budgets) == (
+        500,
+        1_000,
+        2_000,
+    )
+    rebuilt_destination = tmp_path / "rebuilt-sweep" / "stages" / "stage-001"
+    rebuilt = publish_pilot_independent_sweep_stage(
+        rebuilt_destination,
+        prepared,
+        partition,
+        selected,
+        preset,
+        ("cat",),
+        adapters_by_budget,
+        (np.asarray([10, 11], dtype=np.uint32),),
+    )
+    assert rebuilt.sweep_sha256 == published.sweep_sha256
+    assert (rebuilt_destination / "manifest.json").read_bytes() == (
+        destination / "manifest.json"
+    ).read_bytes()
+    assert (rebuilt_destination / "sweep.safetensors").read_bytes() == (
+        destination / "sweep.safetensors"
+    ).read_bytes()
+    with (destination / "sweep.safetensors").open("ab") as stream:
+        stream.write(b"tamper")
+    with pytest.raises(ValueError, match="tensor file changed"):
+        load_pilot_independent_sweep(
+            destination,
+            prepared,
+            partition,
+            selected,
+            preset,
+        )

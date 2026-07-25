@@ -4,25 +4,50 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import gc
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import tempfile
+import time
 
+from apm.continual.language_adaptation_artifact import (
+    load_language_adaptation_artifact,
+)
+from apm.data.text.tinyworlds_q_semantic.adaptation import (
+    prepare_query_adaptation,
+    train_or_resume_query_adaptations,
+)
 from apm.data.text.tinyworlds_q_semantic.catalog import load_validation_catalog
 from apm.data.text.tinyworlds_q_semantic.contracts import (
     QueryExperimentPreset,
     canonical_json_bytes,
     record_sha256,
 )
-from apm.data.text.tinyworlds_q_semantic.execution import BaseQualityDecision
+from apm.data.text.tinyworlds_q_semantic.execution import (
+    BaseQualityDecision,
+    select_pilot_budget,
+)
+from apm.data.text.tinyworlds_q_semantic.evaluation import (
+    evaluate_pilot_budget,
+    evaluate_staged_semantic_queries,
+)
 from apm.data.text.tinyworlds_q_semantic.manifests import PILOT_CONCEPTS
 from apm.data.text.tinyworlds_q_semantic.partition import load_query_partition
 from apm.data.text.tinyworlds_q_semantic.preflight import (
     load_query_gpu_preflight,
     run_and_publish_query_gpu_preflight,
 )
+from apm.data.text.tinyworlds_q_semantic.pilot import (
+    load_semantic_pilot_result,
+    publish_semantic_pilot_result,
+)
+from apm.data.text.tinyworlds_q_semantic.pilot_sweep import (
+    train_or_resume_pilot_independent_sweep,
+)
+from apm.data.text.tinyworlds_q_semantic.queries import compile_semantic_queries
 from apm.data.text.tinyworlds_q_semantic.selected_base import (
     QueryBaseEpochEvidence,
     load_query_selected_base,
@@ -38,6 +63,7 @@ from apm.data.text.tinyworlds_q_semantic.training import (
     query_base_training_identity,
     run_query_base_training,
 )
+from apm.lm.checkpoint import load_gpt_neo_checkpoint
 from apm.lm.text import TokenizersTextTokenizer
 
 
@@ -45,6 +71,9 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = REPOSITORY_ROOT / "data" / "tinyworlds-q-semantic"
 CHECKPOINT_ROOT = REPOSITORY_ROOT / "checkpoints" / "tinyworlds-q-semantic-v1"
 WORK_ROOT = CHECKPOINT_ROOT / "work"
+RESULT_ROOT = (
+    REPOSITORY_ROOT / "results" / "language_cl" / "tinyworlds-q-semantic-v1"
+)
 TOKENIZER_DIRECTORY = (
     REPOSITORY_ROOT / "checkpoints" / "tinystories-8m" / "tokenizer"
 )
@@ -54,6 +83,21 @@ CATALOG_SHA256 = (
 PARTITION_SHA256 = (
     "419e6c8b6362add9af081885066559cc34b18f5c7044894f343c7caf0091ad0c"
 )
+
+
+def _eta(seconds: float) -> str:
+    remaining = max(0, round(seconds))
+    hours, remainder = divmod(remaining, 3_600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _file_sha256(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(4 * 1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _sources():
@@ -331,13 +375,20 @@ def _run_base(sources, preflight):
     )
     working = WORK_ROOT / f"pilot-base-{training_sha256}"
     working.mkdir(parents=True, exist_ok=True)
+    phase_started = time.monotonic()
+    print(
+        f"Phase: seed-zero base training ({planned_updates:,} optimizer updates).",
+        flush=True,
+    )
 
     def training_progress(cursor, nll: float, planned: int) -> None:
         update = cursor.optimizer_update
         if update == 1 or update % 100 == 0 or update == planned:
+            elapsed = time.monotonic() - phase_started
+            remaining = elapsed * (planned - update) / max(1, update)
             print(
                 f"TinyWorlds-Q base update {update:,}/{planned:,}; "
-                f"NLL {nll:.6f}",
+                f"NLL {nll:.6f}; phase ETA {_eta(remaining)}",
                 flush=True,
             )
 
@@ -451,19 +502,297 @@ def _run_base(sources, preflight):
     return selected
 
 
+def _matching_pilot_result(catalog, partition, selected_base, preflight):
+    root = RESULT_ROOT / "pilot"
+    if not root.is_dir():
+        return None
+    matches = []
+    for path in sorted(root.iterdir()):
+        record_path = path / "pilot.json"
+        if not path.is_dir() or len(path.name) != 64 or not record_path.is_file():
+            continue
+        payload = record_path.read_bytes()
+        record = json.loads(payload)
+        if type(record) is not dict or canonical_json_bytes(record) != payload:
+            raise ValueError(f"noncanonical semantic pilot candidate: {path}")
+        if (
+            record.get("catalog_sha256") != catalog.catalog_sha256
+            or record.get("partition_sha256") != partition.partition_sha256
+            or record.get("selected_base_sha256") != selected_base.selection_sha256
+            or record.get("preflight_sha256") != preflight.preflight_sha256
+        ):
+            continue
+        matches.append(load_semantic_pilot_result(path))
+    if len(matches) > 1:
+        raise RuntimeError("multiple pilot results bind the same frozen inputs")
+    return matches[0] if matches else None
+
+
+def _run_pilot_budget(
+    queries,
+    loaded_base,
+    budget_snapshot,
+    preset,
+):
+    def evaluation_progress(phase: str, completed: int, total: int) -> None:
+        print(f"Pilot validation {phase}: {completed:,}/{total:,} chunks", flush=True)
+
+    evaluation = evaluate_pilot_budget(
+        queries,
+        loaded_base,
+        budget_snapshot.adapters,
+        budget_snapshot.tensor_checksum,
+        preset,
+        progress=evaluation_progress,
+    )
+    print(
+        "Pilot budget "
+        f"{preset.adapter_updates:,}: "
+        + ", ".join(
+            f"{concept_id}={accuracy:.3f}"
+            for concept_id, accuracy in evaluation.budget.concept_accuracy
+        )
+        + f"; passed={evaluation.budget.passes}",
+        flush=True,
+    )
+    return evaluation
+
+
+def _run_pilot(sources, preflight, selected_base):
+    catalog, partition, tokenizer, registered_preset = sources
+    existing = _matching_pilot_result(
+        catalog,
+        partition,
+        selected_base,
+        preflight,
+    )
+    if existing is not None:
+        print(f"Using strict pilot result {existing.root}.", flush=True)
+        return existing
+    loaded_base = load_gpt_neo_checkpoint(selected_base.checkpoint)
+    overall_started = time.monotonic()
+    maximum_budget = max(registered_preset.pilot_update_budgets)
+    maximum_preset = replace(
+        registered_preset,
+        adapter_updates=maximum_budget,
+    )
+    maximum_prepared = prepare_query_adaptation(
+        catalog,
+        partition,
+        tokenizer,
+        maximum_preset,
+    )
+    maximum_training_updates = (
+        3 * registered_preset.active_world_count * maximum_budget
+    )
+    concept_index = {
+        concept_id: index
+        for index, concept_id in enumerate(registered_preset.concept_ids)
+    }
+
+    def sweep_progress(
+        concept_id: str,
+        update: int,
+        loss: float,
+        phase_total: int,
+    ) -> None:
+        if update != 1 and update % 100 != 0 and update != phase_total:
+            return
+        completed = concept_index[concept_id] * maximum_budget + update
+        elapsed = time.monotonic() - overall_started
+        remaining = elapsed * (maximum_training_updates - completed) / max(1, completed)
+        print(
+            f"Pilot independent/{concept_id} update {update:,}/{phase_total:,}; "
+            f"loss {loss:.6f}; conservative ETA {_eta(remaining)}",
+            flush=True,
+        )
+
+    print(
+        "Phase: pilot independent sweep with exact 500/1,000/2,000 snapshots.",
+        flush=True,
+    )
+    sweep = train_or_resume_pilot_independent_sweep(
+        maximum_prepared,
+        partition,
+        selected_base,
+        CHECKPOINT_ROOT / "pilot-independent-sweep" / maximum_preset.config_sha256,
+        maximum_preset,
+        progress=sweep_progress,
+    )
+    queries = tuple(
+        query
+        for query in compile_semantic_queries(catalog, tokenizer)
+        if query.concept_id in registered_preset.concept_ids
+    )
+    budget_evaluations = tuple(
+        _run_pilot_budget(
+            queries,
+            loaded_base,
+            sweep.budget(budget),
+            replace(registered_preset, adapter_updates=budget),
+        )
+        for budget in registered_preset.pilot_update_budgets
+    )
+    selected_updates = select_pilot_budget(
+        tuple(item.budget for item in budget_evaluations),
+        registered_preset,
+    )
+    selected_preset = replace(
+        registered_preset,
+        adapter_updates=selected_updates,
+    )
+    selected_prepared = prepare_query_adaptation(
+        catalog,
+        partition,
+        tokenizer,
+        selected_preset,
+    )
+    selected_working = (
+        CHECKPOINT_ROOT / "pilot-adaptations" / selected_preset.config_sha256
+    )
+    selected_snapshot = sweep.budget(selected_updates)
+    selected_total_updates = (
+        registered_preset.active_world_count * maximum_budget
+        + 2 * registered_preset.active_world_count * selected_updates
+    )
+    method_index = {"sequential": 0, "vamp": 1}
+
+    def selected_progress(
+        method: str,
+        concept_id: str,
+        step: int,
+        loss: float,
+        phase_total: int,
+    ) -> None:
+        if step != 1 and step % 100 != 0 and step != phase_total:
+            return
+        completed = (
+            registered_preset.active_world_count * maximum_budget
+            + (
+                concept_index[concept_id] * 2 + method_index[method]
+            )
+            * selected_updates
+            + step
+        )
+        elapsed = time.monotonic() - overall_started
+        remaining = elapsed * (selected_total_updates - completed) / max(1, completed)
+        print(
+            f"Selected pilot {method}/{concept_id} update {step:,}/{phase_total:,}; "
+            f"loss {loss:.6f}; overall ETA {_eta(remaining)}",
+            flush=True,
+        )
+
+    print(
+        f"Phase: selected {selected_updates:,}-update sequential and VAMP exercise.",
+        flush=True,
+    )
+    trained = train_or_resume_query_adaptations(
+        selected_prepared,
+        partition,
+        selected_base,
+        selected_working,
+        selected_preset,
+        progress=selected_progress,
+        independent_adapters=selected_snapshot.adapters,
+        independent_rng_by_stage=sweep.rng_by_stage,
+        additional_config_hashes={"pilot-independent-sweep": sweep.sweep_sha256},
+    )
+    before_resume = load_language_adaptation_artifact(
+        selected_working
+        / "stages"
+        / f"stage-{selected_preset.active_world_count:03d}"
+    )
+    resumed = train_or_resume_query_adaptations(
+        selected_prepared,
+        partition,
+        selected_base,
+        selected_working,
+        selected_preset,
+        independent_adapters=selected_snapshot.adapters,
+        independent_rng_by_stage=sweep.rng_by_stage,
+        additional_config_hashes={"pilot-independent-sweep": sweep.sweep_sha256},
+    )
+    resume_verified = (
+        trained.adaptation.tensor_checksum == before_resume.tensor_checksum
+        and resumed.adaptation.tensor_checksum == before_resume.tensor_checksum
+        and resumed.stage_directory
+        == (
+            selected_working
+            / "stages"
+            / f"stage-{selected_preset.active_world_count:03d}"
+        ).resolve()
+    )
+    if not resume_verified:
+        raise RuntimeError("selected pilot adaptation resume changed immutable state")
+    stage_artifacts = tuple(
+        load_language_adaptation_artifact(
+            selected_working / "stages" / f"stage-{stage:03d}"
+        )
+        for stage in range(1, selected_preset.active_world_count + 1)
+    )
+    selected_queries = tuple(
+        query
+        for query in compile_semantic_queries(catalog, tokenizer)
+        if query.concept_id in selected_preset.concept_ids
+    )
+
+    def evaluation_progress(phase: str, completed: int, total: int) -> None:
+        print(f"Selected pilot {phase}: {completed:,}/{total:,} chunks", flush=True)
+
+    selected_results = evaluate_staged_semantic_queries(
+        selected_queries,
+        loaded_base,
+        stage_artifacts,
+        selected_preset,
+        tokenizer.pad_token_id,
+        progress=evaluation_progress,
+    )
+    peak = max(
+        allocator_peak_bytes(),
+        trained.allocator_peak_bytes,
+        resumed.allocator_peak_bytes,
+    )
+    result = publish_semantic_pilot_result(
+        RESULT_ROOT / "pilot",
+        catalog_sha256=catalog.catalog_sha256,
+        partition_sha256=partition.partition_sha256,
+        selected_base_sha256=selected_base.selection_sha256,
+        preflight_sha256=preflight.preflight_sha256,
+        preset=registered_preset,
+        budgets=budget_evaluations,
+        independent_sweep_sha256=sweep.sweep_sha256,
+        independent_sweep_manifest_sha256=_file_sha256(
+            sweep.stage_directory / "manifest.json"
+        ),
+        selected_adaptation_manifest_sha256=_file_sha256(
+            resumed.stage_directory / "manifest.json"
+        ),
+        selected_validation_results=selected_results,
+        resume_verified=resume_verified,
+        runtime_seconds=time.monotonic() - overall_started,
+        allocator_peak_bytes=peak,
+    )
+    print(f"Pilot result: {result.pilot_sha256}", flush=True)
+    print(f"Pilot report directory: {result.root}", flush=True)
+    print("The sealed test was not opened.", flush=True)
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--stage",
-        choices=("preflight", "base"),
+        choices=("preflight", "base", "pilot"),
         default="preflight",
         help="highest registered pilot stage to execute",
     )
     args = parser.parse_args()
     sources = _sources()
     preflight = _run_preflight(sources)
-    if args.stage == "base":
-        _run_base(sources, preflight)
+    if args.stage in ("base", "pilot"):
+        selected_base = _run_base(sources, preflight)
+        if args.stage == "pilot":
+            _run_pilot(sources, preflight, selected_base)
     return 0
 
 

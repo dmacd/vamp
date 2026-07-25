@@ -16,6 +16,12 @@ from apm.data.text.tinyworlds_q_semantic.manifests import (
     MAIN_CONCEPTS,
     PILOT_CONCEPTS,
 )
+from apm.data.text.tinyworlds_q_semantic.evaluation import PilotBudgetEvaluation
+from apm.data.text.tinyworlds_q_semantic.pilot import SemanticPilotResult
+from apm.data.text.tinyworlds_q_semantic.pilot_sweep import (
+    PilotIndependentBudget,
+    PilotIndependentSweep,
+)
 from apm.data.text.tinyworlds_q_semantic.shortlist import (
     PILOT_SHORTLIST_SPECS,
     SemanticReviewShortlist,
@@ -37,12 +43,16 @@ __all__ = [
     "MAIN_CONCEPTS",
     "PILOT_CONCEPTS",
     "PILOT_SHORTLIST_SPECS",
+    "PilotBudgetEvaluation",
+    "PilotIndependentBudget",
+    "PilotIndependentSweep",
     "PrimaryReviewApproval",
     "QueryExperimentPreset",
     "QueryGpuPreflight",
     "QueryPartitionArtifact",
     "ReverseReviewApproval",
     "SemanticFact",
+    "SemanticPilotResult",
     "SemanticQueryCatalog",
     "SemanticQueryResult",
     "SemanticQueryTemplate",

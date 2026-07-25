@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from itertools import islice
@@ -15,6 +15,7 @@ import numpy as np
 from apm.continual.language_adaptation_artifact import (
     LanguageAdaptationArtifact,
     extract_language_adaptation_artifact,
+    flatten_lora_edge,
     load_language_adaptation_artifact,
     save_language_adaptation_artifact,
 )
@@ -398,9 +399,35 @@ def train_or_resume_query_adaptations(
     preset: QueryExperimentPreset,
     *,
     progress: AdaptationProgress | None = None,
+    independent_adapters: tuple[IndependentRootAdapter, ...] | None = None,
+    independent_rng_by_stage: tuple[np.ndarray, ...] | None = None,
+    additional_config_hashes: Mapping[str, str] | None = None,
 ) -> QueryAdaptationRun:
     """Train all three systems and persist real immutable tensors after each world."""
     _require_preparation_bindings(prepared, artifact, preset)
+    _validate_independent_override(
+        independent_adapters,
+        independent_rng_by_stage,
+        preset,
+    )
+    extra_hashes = dict(additional_config_hashes or {})
+    tuple(
+        (
+            require_identifier(name, "additional adaptation config hash"),
+            require_sha256(digest, name),
+        )
+        for name, digest in extra_hashes.items()
+    )
+    if independent_adapters is not None:
+        if "query-independent-override" in extra_hashes:
+            raise ValueError("independent override hash is derived internally")
+        extra_hashes["query-independent-override"] = (
+            _independent_override_sha256(
+                independent_adapters,
+                independent_rng_by_stage,
+                preset,
+            )
+        )
     if type(selected_base) is not QuerySelectedBase:
         raise TypeError("query adaptation requires a strict q-native selected base")
     selected_base = load_query_selected_base(
@@ -429,6 +456,7 @@ def train_or_resume_query_adaptations(
             artifact,
             selected_base,
             preset,
+            extra_hashes,
         )
     else:
         sequential_key, independent_key, vamp_key = jax.random.split(
@@ -480,13 +508,26 @@ def train_or_resume_query_adaptations(
             preset.lora_config,
             training_progress=_method_progress(progress, "sequential", concept_id),
         )
-        independent = advance_independent_root_lora_progress(
-            independent,
-            task,
-            base_params,
-            loaded_base.config,
-            preset.lora_config,
-            training_progress=_method_progress(progress, "independent", concept_id),
+        independent = (
+            advance_independent_root_lora_progress(
+                independent,
+                task,
+                base_params,
+                loaded_base.config,
+                preset.lora_config,
+                training_progress=_method_progress(
+                    progress,
+                    "independent",
+                    concept_id,
+                ),
+            )
+            if independent_adapters is None
+            else IndependentRootLoraProgress(
+                adapters=independent_adapters[:stage_index],
+                rng_key=jnp.asarray(independent_rng_by_stage[stage_index - 1]),
+                train_config=preset.adapter_train_config,
+                base_parameter_checksum=independent.base_parameter_checksum,
+            )
         )
         parent = score_parent_nodes(
             vamp,
@@ -518,7 +559,13 @@ def train_or_resume_query_adaptations(
             _completed_baselines(sequential, independent, vamp, preset),
             loaded_base.config,
             preset.lora_config,
-            config_hashes=_config_hashes(prepared, artifact, selected_base, preset),
+            config_hashes=_config_hashes(
+                prepared,
+                artifact,
+                selected_base,
+                preset,
+                extra_hashes,
+            ),
         )
         save_language_adaptation_artifact(
             stages_root / f"stage-{stage_index:03d}",
@@ -635,10 +682,17 @@ def _restore_progress(
     partition: QueryPartitionArtifact,
     selected_base: QuerySelectedBase,
     preset: QueryExperimentPreset,
+    additional_config_hashes: Mapping[str, str],
 ) -> tuple[SequentialLoraProgress, IndependentRootLoraProgress, LanguageVampRun]:
     base_checkpoint = selected_base.checkpoint
     loaded_base = load_gpt_neo_checkpoint(base_checkpoint)
-    expected_hashes = _config_hashes(prepared, partition, selected_base, preset)
+    expected_hashes = _config_hashes(
+        prepared,
+        partition,
+        selected_base,
+        preset,
+        additional_config_hashes,
+    )
     if (
         artifact_state.base_checkpoint.manifest_sha256
         != base_checkpoint.manifest_sha256
@@ -723,8 +777,9 @@ def _config_hashes(
     artifact: QueryPartitionArtifact,
     selected_base: QuerySelectedBase,
     preset: QueryExperimentPreset,
+    additional_config_hashes: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
-    return {
+    required = {
         "query-base-manifest": selected_base.checkpoint.manifest_sha256,
         "query-base-parameters": selected_base.checkpoint.parameter_checksum,
         "query-base-selection": selected_base.selection_sha256,
@@ -733,6 +788,67 @@ def _config_hashes(
         "query-partition": artifact.partition_sha256,
         "query-preparation": prepared.preparation_sha256,
     }
+    extras = dict(additional_config_hashes or {})
+    collisions = set(required).intersection(extras)
+    if collisions:
+        raise ValueError(f"additional adaptation config hashes collide: {collisions}")
+    return {**required, **extras}
+
+
+def _validate_independent_override(
+    adapters: tuple[IndependentRootAdapter, ...] | None,
+    rng_by_stage: tuple[np.ndarray, ...] | None,
+    preset: QueryExperimentPreset,
+) -> None:
+    if (adapters is None) != (rng_by_stage is None):
+        raise ValueError("independent adapters and RNG snapshots must be supplied together")
+    if adapters is None:
+        return
+    if (
+        type(adapters) is not tuple
+        or tuple(str(adapter.task_id) for adapter in adapters) != preset.concept_ids
+        or any(
+            len(adapter.step_losses) != preset.adapter_updates
+            for adapter in adapters
+        )
+        or type(rng_by_stage) is not tuple
+        or len(rng_by_stage) != preset.active_world_count
+        or any(
+            np.asarray(rng).shape != (2,)
+            or np.asarray(rng).dtype != np.dtype(np.uint32)
+            for rng in rng_by_stage
+        )
+    ):
+        raise ValueError("independent adapter override changed the active pilot contract")
+
+
+def _independent_override_sha256(
+    adapters: tuple[IndependentRootAdapter, ...],
+    rng_by_stage: tuple[np.ndarray, ...],
+    preset: QueryExperimentPreset,
+) -> str:
+    digest = sha256()
+    digest.update(BENCHMARK_ID.encode("ascii"))
+    digest.update(b"\0independent-override\0")
+    digest.update(preset.config_sha256.encode("ascii"))
+    for adapter in adapters:
+        digest.update(str(adapter.task_id).encode("utf-8"))
+        digest.update(np.asarray(adapter.step_losses, dtype=np.float64).tobytes())
+        for name, value in sorted(
+            flatten_lora_edge(
+                adapter.adapter,
+                preset.model_config,
+                preset.lora_config,
+            ).items()
+        ):
+            array = np.ascontiguousarray(value)
+            digest.update(name.encode("utf-8"))
+            digest.update(array.dtype.str.encode("ascii"))
+            digest.update(np.asarray(array.shape, dtype=np.int64).tobytes())
+            digest.update(array.tobytes())
+    for rng in rng_by_stage:
+        digest.update(np.ascontiguousarray(rng, dtype=np.uint32).tobytes())
+    return digest.hexdigest()
 
 
 def _require_preparation_bindings(

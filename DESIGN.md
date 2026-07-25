@@ -135,6 +135,18 @@ graph, address keys, adapters, training traces, and all three random streams.
 An interrupted run resumes the latest complete prefix and deterministically
 replays only an incomplete world.
 
+The pilot trains one deterministic 2,000-update independent trajectory per
+world and persists exact adapter/trace snapshots at absolute updates 500,
+1,000, and 2,000. This makes the three learnability measurements genuine
+prefixes of the same seed-zero optimizer trajectory and keeps worst-case pilot
+training within the preflight's 12,000-update projection. Only matching
+independent snapshots contribute to selection. After all three budgets are
+measured, the smallest passing budget trains sequential and VAMP stages while
+reusing the selected independent snapshots. Those full stage artifacts bind
+the independent-sweep hash, are strict-reloaded through the completed-stage
+resume path, and are evaluated at both world stages. This exercise cannot
+consult sealed prompts or tune the main configuration against a VAMP score.
+
 ### Query evaluation and statistics
 
 Reviewed templates compile into the existing four-candidate `KnowledgeQuery`
@@ -144,6 +156,22 @@ hard-node scoring, VAMP routing, support, and regret computations. Forward
 questions expose a concept and ask for a property/action; reverse questions
 expose the fact and ask for the concept. VAMP parents and router keys consume
 validation question prefixes only.
+
+Stage evaluation right-pads and stacks only router prefixes. Candidate answers
+remain in separate competence batches and only their suffix tokens receive
+loss. Reference scores are produced in bounded query chunks. Each stored
+adapter, VAMP oracle path, and task-free router is projected through the shared
+knowledge evaluator, so candidate margins, node accuracy, and routed regret do
+not acquire a query-v1-specific numerical definition. Independent adapters are
+also scored against other learned worlds to retain node-specificity evidence.
+
+The pilot result is a content-addressed validation-only bundle. It binds the
+catalog, partition, preflight, selected base, all three budget configs and
+tensor/manifest identities, exact per-query JSONL ledgers, selected-budget
+resume parity, runtime, and allocator peak. Its Markdown and standalone HTML
+are derived views. Publishing this bundle proves pilot learnability and
+operational integrity only; it never creates a VAMP scientific verdict or test
+authorization.
 
 Every primary statistic first averages all paraphrases within a fact. Accuracy,
 correct-answer margin, acquisition, specificity, retention, router accuracy,

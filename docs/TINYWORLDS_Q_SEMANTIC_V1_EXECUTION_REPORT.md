@@ -6,9 +6,9 @@ The query-native benchmark engine and CPU verification fixtures are complete.
 The interactive user approved all 24 primary pilot facts and all 24
 fact-specific reverse choices. The official catalog and partition are
 published, a fresh archive replay reproduced both byte-for-byte, and the GPU
-preflight passed. The real base has not started, no adapter exists, and no
-sealed test was opened. This is an operational construction milestone, not a
-scientific result.
+preflight passed. The real seed-zero base is running and has durable exact-
+resume states; no selected base or adapter exists yet, and no sealed test was
+opened. This is an operational execution milestone, not a scientific result.
 
 `tinyworlds-q-semantic-v1` is isolated under its own Python package and the
 registered roots `data/tinyworlds-q-semantic/`,
@@ -47,6 +47,13 @@ registered roots `data/tinyworlds-q-semantic/`,
   The staged runner trains real rank-eight tensors for independent, sequential,
   and VAMP systems and persists graph, address, trace, RNG, and tensor state at
   every completed world.
+- The real pilot runner snapshots one 2,000-update independent trajectory per
+  world at all three registered budgets, reconstructs its declared accuracy
+  from exact validation rows, and selects only from matching independent
+  adapters. It then trains sequential and VAMP only at that selected budget,
+  verifies a strict no-op resume, and evaluates specificity, VAMP oracle, and
+  all task-free routers without deserializing test prompts. The worst case is
+  the preflighted 12,000 adapter updates.
 - Reviewed prompts compile into the existing answer-only four-candidate scorer,
   preserving hard-node, routing, VAMP, support, and regret behavior.
 - Statistical units are facts. The production default is 10,000 deterministic
@@ -61,7 +68,7 @@ registered roots `data/tinyworlds-q-semantic/`,
 
 ## Verification
 
-The new CPU fixtures pass six tests. They cover construction and
+The new CPU fixtures pass seven tests. They cover construction and
 leakage rules, candidate/token boundaries, exact rebuild and tamper rejection,
 catalog parent nesting, sealed access, deterministic statistics, dynamic
 capacity/schedules, bounded scoring, strict report coverage, and resumable
@@ -70,6 +77,10 @@ review queue, 8-row backup set, evidence support, equal answer-token lengths,
 compact publication, strict primary/reverse-approval reload, and approved
 catalog compilation. The fixtures run a tiny GPT-Neo base both uninterrupted and
 through an interruption and verify identical parameters and progress bytes.
+A focused pilot-publication path additionally checks prefix-only router
+stacking, all-budget accuracy reconstruction, dynamic validation schedule
+coverage, canonical ledgers, exact safetensors sweep reload, and result-file
+tamper rejection.
 A focused compatibility run passes 36 existing tests across knowledge tasks,
 candidate scoring, knowledge training/evaluation, semantic statistics,
 semantic-v6 partitioning, and semantic-v6 VAMP.
@@ -158,11 +169,18 @@ warm validation-batch time was `0.020196` seconds, and allocator peak was
 7,417,784,832 bytes. The projected result ledger is 1,658,880 bytes. All frozen
 limits passed, and the disposable state is not reusable.
 
-## Open gate
+## Active base gate
 
-The next required step is the fresh seed-zero two-epoch base: 18,530 optimizer
-updates per epoch, projected at roughly 5:01:38 plus validation. It must reach
-held-in NLL at most 2.2, improve by at least 0.02 across epochs, remain finite,
-and stay below 12 GiB. Only then may the 500/1,000/2,000-update independent
-adapter selection and selected-budget sequential/VAMP persistence exercise run.
-The main catalog remains unauthorized until both pilot worlds pass learnability.
+The fresh two-epoch base is active at
+`checkpoints/tinyworlds-q-semantic-v1/work/pilot-base-6fbf5f5e5a7ab4cd3c862884a8b64f08e931d4fe209d57376ebda10c9c5f4bac`.
+Its early loss is finite and below 1.5 after 5,000 optimizer updates; this is
+training evidence only, not the gate statistic. Resume states at every
+1,000-update boundary through 5,000 bind the exact cursor, optimizer, RNG,
+model, and trace.
+
+The run must still complete 18,530 updates per epoch, report held-in NLL at most
+2.2, improve by at least 0.02 across epochs, remain finite, and stay below 12
+GiB. On success, the now-implemented pilot stage will execute the
+500/1,000/2,000-update selection and selected-budget sequential/VAMP exercise.
+The main catalog remains unauthorized until both pilot worlds pass
+learnability.

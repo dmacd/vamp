@@ -36,7 +36,7 @@ also covers the compact 24-primary/8-backup review queue, evidence support,
 token balance, and publication. Synthetic manifests at 1,
 5, 10, 20, and 100 worlds cover derived capacities, tensor masks, full and
 milestone schedules, chunking, dynamic reports, and explicit preflight limits.
-The six new tests and 36 focused existing knowledge/training/semantic-v6 tests
+The seven new tests and 36 focused existing knowledge/training/semantic-v6 tests
 pass in the pinned semantic environment.
 
 The repository-wide default suite finishes with 618 passed, 274 skipped, 11
@@ -98,10 +98,24 @@ GPU preflight
 passed on the RTX 4090. Two disposable updates had finite NLLs `10.859072643`
 and `10.853386662`; the warm update took `0.488339` seconds and allocator peak
 was 7,417,784,832 bytes, below 12 GiB. It projects 18,530 updates per epoch and
-about 5:01:38 for the registered two-epoch base. The next gate is that fresh
-seed-zero base and its held-in NLL decision; no reusable base, adapter, or
-sealed result exists yet. Main catalog work cannot begin until the pilot
-learnability gate passes. See
+about 5:01:38 for the registered two-epoch base. The real seed-zero run is now
+active under
+`checkpoints/tinyworlds-q-semantic-v1/work/pilot-base-6fbf5f5e5a7ab4cd3c862884a8b64f08e931d4fe209d57376ebda10c9c5f4bac`.
+Its finite early training curve has passed 5,000 optimizer updates and exact
+resume states exist at each 1,000-update boundary through 5,000. The next hard evidence
+is epoch-one held-in validation; no reusable base, adapter, or sealed result
+exists yet.
+
+The pilot runner now continues beyond that base boundary. It snapshots one
+independent trajectory per world at all three registered budgets, keeping the
+worst case within the preflighted 12,000 updates. It derives the learnability
+decision solely from matching independent-adapter validation, trains and
+strictly resumes the selected sequential/VAMP state, evaluates independent,
+sequential, VAMP-oracle, and all task-free routed methods in bounded chunks,
+and publishes authenticated JSONL plus Markdown/standalone-HTML evidence. Its
+focused compilation, accuracy-reconstruction, schedule-coverage, resume, and
+tamper tests pass. Main catalog work cannot begin until the running base and
+pilot learnability gates pass. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration

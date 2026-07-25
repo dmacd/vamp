@@ -14,7 +14,7 @@ from apm.continual.knowledge_evaluation import (
     evaluate_knowledge_method,
 )
 from apm.continual.knowledge_tasks import KnowledgeCandidate, KnowledgeQuery
-from apm.continual.language_tasks import build_prefix_suffix_batches
+from apm.continual.language_tasks import RouterBatch, build_prefix_suffix_batches
 from apm.data.text.tinyworlds_q_semantic.catalog import ValidationCatalogView
 from apm.data.text.tinyworlds_q_semantic.contracts import (
     SemanticQueryCatalog,
@@ -281,6 +281,45 @@ def validation_question_prefixes(
     return tuple(template.prompt_token_ids for template in catalog.templates)
 
 
+def stack_semantic_router_batches(
+    queries: tuple[CompiledSemanticQuery, ...],
+    pad_token_id: int,
+) -> RouterBatch:
+    """Right-pad and stack query prefixes without exposing answer tokens."""
+    if (
+        type(queries) is not tuple
+        or not queries
+        or any(type(query) is not CompiledSemanticQuery for query in queries)
+    ):
+        raise ValueError("semantic routing requires compiled query values")
+    if type(pad_token_id) is not int or pad_token_id < 0:
+        raise ValueError("semantic routing pad_token_id must be nonnegative")
+    batches = tuple(query.knowledge_query.router_batch for query in queries)
+    if any(batch.input_ids.shape[0] != 1 for batch in batches):
+        raise ValueError("each semantic router prefix must contain exactly one row")
+    maximum_width = max(batch.input_ids.shape[1] for batch in batches)
+
+    def stack(field: str, padding_value: int | bool) -> np.ndarray:
+        return np.concatenate(
+            tuple(
+                np.pad(
+                    getattr(batch, field),
+                    ((0, 0), (0, maximum_width - batch.input_ids.shape[1])),
+                    constant_values=padding_value,
+                )
+                for batch in batches
+            ),
+            axis=0,
+        )
+
+    return RouterBatch(
+        input_ids=stack("input_ids", pad_token_id),
+        attention_mask=stack("attention_mask", False),
+        target_ids=stack("target_ids", pad_token_id),
+        loss_mask=stack("loss_mask", False),
+    )
+
+
 def iter_semantic_score_chunks(
     queries: tuple[CompiledSemanticQuery, ...],
     base_params: GptNeoParams,
@@ -327,5 +366,6 @@ __all__ = [
     "evaluate_semantic_method",
     "iter_semantic_score_chunks",
     "project_semantic_result",
+    "stack_semantic_router_batches",
     "validation_question_prefixes",
 ]

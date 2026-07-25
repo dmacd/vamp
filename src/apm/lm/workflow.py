@@ -229,6 +229,7 @@ def run_resumable_candidate_edge_updates(
     *,
     stop_update: int | None = None,
     validation_function: CandidateValidationFunction | None = None,
+    progress: Callable[[int, float, int], None] | None = None,
 ) -> tuple[LmTrainState[LoraEdge], LmLossTrace, tuple[CandidateTrainingCheckpoint, ...]]:
     """Resume to one absolute update and retain power-of-two checkpoints."""
     _require_training_batches(batches)
@@ -290,6 +291,8 @@ def run_resumable_candidate_edge_updates(
         )
         scalar_loss = float(loss)
         losses.append(scalar_loss)
+        if progress is not None:
+            progress(update, scalar_loss, train_config.steps)
         if update in checkpoint_updates:
             checkpoints.append(checkpoint(current_state, scalar_loss))
     return current_state, LmLossTrace(tuple(losses)), tuple(checkpoints)
