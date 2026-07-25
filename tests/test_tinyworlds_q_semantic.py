@@ -89,6 +89,12 @@ from apm.data.text.tinyworlds_q_semantic.scaling import (
     score_in_chunks,
     write_atomic_jsonl,
 )
+from apm.data.text.tinyworlds_q_semantic.shortlist import (
+    PILOT_SHORTLIST_SPECS,
+    build_pilot_review_shortlist,
+    pilot_shortlist_predicates,
+    publish_review_shortlist,
+)
 from apm.data.text.tinyworlds_q_semantic.source import (
     QueryStoryGroup,
     QueryStoryOccurrence,
@@ -111,6 +117,16 @@ from apm.lm.training_state_artifact import lm_train_state_checksum
 
 
 _TOKENIZER = CharTokenizer.from_training_text(string.printable)
+
+
+class _OneTokenPerWordTokenizer:
+    vocab_size = 50_257
+
+    def encode(self, text: str, *, add_eos: bool = False) -> tuple[int, ...]:
+        tokens = tuple(range(1, len(text.split()) + 1))
+        return tokens + ((50_256,) if add_eos else ())
+
+
 _CONCEPTS = tuple(
     ConceptDefinition(concept_id, (concept_id, f"{concept_id}s"))
     for concept_id in ("cat", "dog", "pig")
@@ -396,6 +412,51 @@ def test_review_catalog_sealing_and_query_compilation(
         stream.write(b" ")
     with pytest.raises(ValueError, match="catalog file changed"):
         load_validation_catalog(tampered_catalog)
+
+
+def test_pilot_review_shortlist_is_compact_supported_and_publishable(
+    tmp_path: Path,
+) -> None:
+    predicates = pilot_shortlist_predicates()
+    predicate_text = ", ".join(predicate.predicate for predicate in predicates)
+    groups = tuple(
+        _find_group(
+            f"A {concept.concept_id} example {evidence_index} shows {predicate_text}.",
+            800_000 + concept_index * 100 + evidence_index,
+            construction=True,
+        )
+        for concept_index, concept in enumerate(PILOT_CONCEPTS)
+        for evidence_index in range(16)
+    )
+    packet = build_review_packet(
+        tuple(sorted(groups, key=lambda item: item.normalized_story_sha256)),
+        PILOT_CONCEPTS,
+        predicates,
+    )
+    shortlist = build_pilot_review_shortlist(
+        packet,
+        _OneTokenPerWordTokenizer(),  # type: ignore[arg-type]
+    )
+    assert tuple(proposal.spec for proposal in shortlist.proposals) == PILOT_SHORTLIST_SPECS
+    assert all(proposal.supporting_group_count == 16 for proposal in shortlist.proposals)
+    assert all(
+        len(set(map(len, proposal.answer_token_ids))) == 1
+        for proposal in shortlist.proposals
+    )
+    assert {
+        concept.concept_id: sum(
+            proposal.spec.concept_id == concept.concept_id
+            and proposal.spec.priority == "primary"
+            for proposal in shortlist.proposals
+        )
+        for concept in PILOT_CONCEPTS
+    } == {"rabbit": 12, "horse": 12}
+    root = publish_review_shortlist(shortlist, tmp_path)
+    review = (root / "review.md").read_text(encoding="utf-8")
+    assert review.count("| [ ] | `") == 24
+    assert "approve all primaries" in review
+    assert (root / "shortlist.json").is_file()
+    assert (root / "review-form.tsv").read_text(encoding="utf-8").count("\n") == 33
 
 
 def test_partition_fact_withholding_rebuild_and_tampering(

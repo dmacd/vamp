@@ -57,13 +57,15 @@ registered roots `data/tinyworlds-q-semantic/`,
 
 ## Verification
 
-The new three-concept CPU fixture passes five tests. It covers construction and
+The new CPU fixtures pass six tests. They cover construction and
 leakage rules, candidate/token boundaries, exact rebuild and tamper rejection,
 catalog parent nesting, sealed access, deterministic statistics, dynamic
 capacity/schedules, bounded scoring, strict report coverage, and resumable
-stage identity. It also runs a tiny GPT-Neo base both uninterrupted and through
-an interruption and verifies identical parameters and progress bytes. A
-focused compatibility run passes 36 existing tests across knowledge tasks,
+stage identity. The pilot-specific fixture also verifies the 24-row primary
+review queue, 8-row backup set, evidence support, equal answer-token lengths,
+and compact publication. The fixtures run a tiny GPT-Neo base both uninterrupted
+and through an interruption and verify identical parameters and progress bytes.
+A focused compatibility run passes 36 existing tests across knowledge tasks,
 candidate scoring, knowledge training/evaluation, semantic statistics,
 semantic-v6 partitioning, and semantic-v6 VAMP.
 
@@ -97,10 +99,25 @@ standalone HTML with exact sentence provenance are in the
 The 14 GiB streamed replay workspace is retained under
 `data/tinyworlds-q-semantic/work/pilot-review-primary`.
 
+The 400-candidate file is retained only as the raw discovery audit. It is not a
+document a reviewer is expected to read sequentially. A second targeted pass
+over the retained duplicate-group index published evidence packet
+`1603f089988125c2a0782d5bb41ebb0ce113ec466ed6248b14ad4a8e0040d071`
+for the 29 exact predicates used by a reviewer-ready shortlist. Compact
+shortlist `ad00bafb6bc5adef50a76f2b1ff7230bce02e46b04526d7bf81753a01dc5dd65`
+contains twelve primary proposals and four backups for each pilot concept. Its
+smallest rabbit and horse proposal supports are respectively 27 and 18
+construction groups. Every proposed answer set has equal GPT-2 suffix length.
+The concise 66-line decision sheet is the intended human surface:
+[`pilot approval sheet`](../data/tinyworlds-q-semantic/review-shortlists/ad00bafb6bc5adef50a76f2b1ff7230bce02e46b04526d7bf81753a01dc5dd65/review.md).
+The same directory contains detailed evidence, exact token IDs, standalone
+HTML, canonical JSON, and an editable TSV form.
+
 ## Open gate
 
-Human review is intentionally not automated. A reviewer must now approve or
-reject the rabbit/horse proposals and construct the full semantic ledger.
+Human review is intentionally not automated. A reviewer can approve all 24
+primary rows or name rejections, edits, and promoted backups from the compact
+sheet. Those decisions must then be recorded in the full semantic ledger.
 Until that happens, publishing a pilot catalog or starting a GPU optimizer
 would violate the benchmark design.
 

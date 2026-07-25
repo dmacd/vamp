@@ -40,6 +40,17 @@ exact same-sentence concept/predicate n-grams and retains complete archive
 record, story, group, member, index, and sentence provenance. Discovery output
 is proposal evidence and cannot publish a catalog by itself.
 
+The complete discovery packet is an audit appendix, not the human decision
+queue. A compact shortlist binds one targeted evidence packet, the pinned
+tokenizer identity, proposed facts, accepted and trigger forms, proposed false
+choices, exact answer-token suffixes, support counts, and deterministic
+representative sentences. Its primary surface contains exactly twelve rows per
+pilot concept and keeps four alternatives per concept in a separate backup
+section. The full evidence remains addressable by candidate hash when a row
+needs closer inspection. Neither ranking, shortlisting, nor a checked-looking
+render creates semantic authority; only an explicit recorded human decision
+can promote a proposal into the catalog.
+
 Each fact has three validation paraphrases (two forward and one reverse) and
 five sealed-test paraphrases (three forward and two reverse). Across those
 eight templates, each answer position occurs exactly twice. All four answers

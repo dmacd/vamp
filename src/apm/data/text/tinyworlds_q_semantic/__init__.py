@@ -15,6 +15,10 @@ from apm.data.text.tinyworlds_q_semantic.manifests import (
     MAIN_CONCEPTS,
     PILOT_CONCEPTS,
 )
+from apm.data.text.tinyworlds_q_semantic.shortlist import (
+    PILOT_SHORTLIST_SPECS,
+    SemanticReviewShortlist,
+)
 
 
 __all__ = [
@@ -23,10 +27,12 @@ __all__ = [
     "FactReviewDecision",
     "MAIN_CONCEPTS",
     "PILOT_CONCEPTS",
+    "PILOT_SHORTLIST_SPECS",
     "QueryExperimentPreset",
     "QueryPartitionArtifact",
     "SemanticFact",
     "SemanticQueryCatalog",
     "SemanticQueryResult",
     "SemanticQueryTemplate",
+    "SemanticReviewShortlist",
 ]

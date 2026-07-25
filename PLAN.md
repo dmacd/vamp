@@ -25,16 +25,18 @@ Selected bases bind the full catalog partition and base-training contract
 rather than an active adapter prefix, allowing one large-catalog base to serve
 the registered nested prefixes.
 
-The three-concept CPU fixture covers construction exclusion, story-level fact
+The CPU fixtures cover construction exclusion, story-level fact
 leakage, same-sentence evidence accounting, multi-concept exclusion, exact
 candidate balance and tokenizer boundaries, byte-identical partition rebuild,
 catalog/partition/tensor tampering, parent-prefix preservation, sealed-query
 rejection and completion, fact-level statistics, a real tiny GPT-Neo
 uninterrupted-versus-resumed parameter/trace parity check, and resumable
-independent, sequential, and VAMP stage identities. Synthetic manifests at 1,
+independent, sequential, and VAMP stage identities. The pilot-specific fixture
+also covers the compact 24-primary/8-backup review queue, evidence support,
+token balance, and publication. Synthetic manifests at 1,
 5, 10, 20, and 100 worlds cover derived capacities, tensor masks, full and
 milestone schedules, chunking, dynamic reports, and explicit preflight limits.
-The five new tests and 36 focused existing knowledge/training/semantic-v6 tests
+The six new tests and 36 focused existing knowledge/training/semantic-v6 tests
 pass in the pinned semantic environment.
 
 The repository-wide default suite finishes with 618 passed, 274 skipped, 11
@@ -53,15 +55,27 @@ for horse; all 400 have at least sixteen supporting construction groups. Its
 14 GiB replay workspace remains at
 `data/tinyworlds-q-semantic/work/pilot-review-primary`.
 
+The raw 400-candidate packet is now explicitly an audit appendix, not a human
+work queue. A targeted replay over the retained index published the 29-predicate
+evidence packet
+`1603f089988125c2a0782d5bb41ebb0ce113ec466ed6248b14ad4a8e0040d071`
+and compact shortlist
+`ad00bafb6bc5adef50a76f2b1ff7230bce02e46b04526d7bf81753a01dc5dd65`.
+The concise `review.md` is 66 lines: twelve primary proposals per concept,
+four backups per concept, one representative sentence and support count per
+primary, reviewed-form placeholders, exact trigger closure, and tokenizer-
+balanced false choices. Detailed evidence, exact token IDs, HTML, canonical
+JSON, and an editable TSV remain alongside it for drill-down.
+
 The current mandatory gate is human semantic review. No rabbit/horse fact has
 been asserted or approved by automation, so there is no official pilot catalog,
 partition, GPU preflight, base checkpoint, adapter, or sealed result yet. A
-reviewer must reject generic narrative co-occurrences and approve exactly
-twelve facts per pilot world with truth, evidence, trigger closure, answer
-forms, and equal-token distractors. The next authorized sequence is catalog
-publication, independent byte reconstruction of the pilot partition, GPU
-preflight, and registered budget selection. Main catalog work cannot begin
-until the pilot learnability gate passes. See
+reviewer can approve all primary rows or identify edits, rejections, and backup
+promotions from the compact sheet; approval covers truth, evidence, trigger
+closure, answer forms, and equal-token distractors. The next authorized
+sequence is catalog publication, independent byte reconstruction of the pilot
+partition, GPU preflight, and registered budget selection. Main catalog work
+cannot begin until the pilot learnability gate passes. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration
