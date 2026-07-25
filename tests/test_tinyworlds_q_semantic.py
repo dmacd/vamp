@@ -5,11 +5,13 @@ from hashlib import sha256
 from pathlib import Path
 import shutil
 import string
+from types import SimpleNamespace
 
 import jax
 import numpy as np
 import pytest
 
+from apm.data.text.tinyworlds_q_semantic import evaluation as semantic_evaluation
 from apm.continual.language_baseline_training import IndependentRootAdapter
 from apm.continual.language_tasks import RouterBatch
 from apm.data.text.tinyworlds_q_semantic.adaptation import (
@@ -57,6 +59,8 @@ from apm.data.text.tinyworlds_q_semantic.curriculum import (
     validate_active_catalog_prefix,
 )
 from apm.data.text.tinyworlds_q_semantic.execution import (
+    AMENDED_PILOT_LEARNABILITY_POLICY,
+    ORIGINAL_PILOT_LEARNABILITY_POLICY,
     BaseQualityDecision,
     PilotBudgetResult,
     begin_sealed_test,
@@ -65,9 +69,19 @@ from apm.data.text.tinyworlds_q_semantic.execution import (
     load_stage_artifact,
     publish_sealed_transaction,
     publish_stage_artifact,
+    pilot_budget_passes,
     select_pilot_budget,
 )
 from apm.data.text.tinyworlds_q_semantic.evaluation import PilotBudgetEvaluation
+from apm.data.text.tinyworlds_q_semantic.queries import project_semantic_result
+from apm.data.text.tinyworlds_q_semantic.main_freeze import (
+    load_main_experiment_freeze,
+    publish_main_experiment_freeze,
+)
+from apm.data.text.tinyworlds_q_semantic.main_shortlist import (
+    MAIN_SHORTLIST_SPECS,
+    build_main_review_shortlist,
+)
 from apm.data.text.tinyworlds_q_semantic.manifests import (
     MAIN_CONCEPTS,
     PILOT_CONCEPTS,
@@ -87,6 +101,10 @@ from apm.data.text.tinyworlds_q_semantic.pilot import (
     publish_semantic_pilot_failure,
     publish_semantic_pilot_result,
 )
+from apm.data.text.tinyworlds_q_semantic.pilot_authorization import (
+    load_semantic_pilot_protocol_amendment,
+    publish_semantic_pilot_protocol_amendment,
+)
 from apm.data.text.tinyworlds_q_semantic.pilot_sweep import (
     load_pilot_independent_sweep,
     publish_pilot_independent_sweep_stage,
@@ -95,6 +113,9 @@ from apm.data.text.tinyworlds_q_semantic.queries import (
     compile_semantic_queries,
     stack_semantic_router_batches,
     validation_question_prefixes,
+)
+from apm.data.text.tinyworlds_q_semantic.query_protocol import (
+    REGISTERED_QUERY_PROTOCOL,
 )
 from apm.data.text.tinyworlds_q_semantic.report import (
     REQUIRED_QUERY_METHODS,
@@ -132,6 +153,7 @@ from apm.data.text.tinyworlds_q_semantic.shortlist import (
     build_pilot_review_shortlist,
     pilot_shortlist_predicates,
     publish_review_shortlist,
+    shortlist_predicates,
 )
 from apm.data.text.tinyworlds_q_semantic.source import (
     QueryStoryGroup,
@@ -550,6 +572,39 @@ def test_pilot_review_shortlist_is_compact_supported_and_publishable(
     assert len(catalog.facts) == 24
     assert len(catalog.templates) == 24 * 8
     assert len(catalog.rejected_candidates) == 8
+
+
+def test_main_review_shortlist_uses_the_dynamic_five_world_manifest() -> None:
+    predicates = shortlist_predicates(MAIN_SHORTLIST_SPECS)
+    predicate_text = ", ".join(predicate.predicate for predicate in predicates)
+    groups = tuple(
+        _find_group(
+            f"A {concept.concept_id} example {evidence_index} shows {predicate_text}.",
+            900_000 + concept_index * 100 + evidence_index,
+            construction=True,
+        )
+        for concept_index, concept in enumerate(MAIN_CONCEPTS)
+        for evidence_index in range(16)
+    )
+    packet = build_review_packet(
+        tuple(sorted(groups, key=lambda item: item.normalized_story_sha256)),
+        MAIN_CONCEPTS,
+        predicates,
+    )
+    shortlist = build_main_review_shortlist(
+        packet,
+        _OneTokenPerWordTokenizer(),  # type: ignore[arg-type]
+    )
+    assert tuple(proposal.spec for proposal in shortlist.proposals) == (
+        MAIN_SHORTLIST_SPECS
+    )
+    assert tuple(item.concept_id for item in shortlist.reverse_choices) == tuple(
+        concept.concept_id for concept in MAIN_CONCEPTS
+    )
+    assert len(shortlist.proposals) == 5 * 16
+    assert sum(
+        proposal.spec.priority == "primary" for proposal in shortlist.proposals
+    ) == 5 * 12
 
 
 def test_partition_fact_withholding_rebuild_and_tampering(
@@ -985,6 +1040,95 @@ def test_fact_statistics_generation_and_atomic_ledgers(
         )
 
 
+def test_semantic_projection_normalizes_float32_margin() -> None:
+    candidate_nll = np.asarray(
+        [0.12345679, 25.987654, 40.0, 50.0],
+        dtype=np.float32,
+    )
+    scorer_margin = float(
+        np.min(np.delete(candidate_nll, 0)) - float(candidate_nll[0])
+    )
+    query = SimpleNamespace(
+        template_id="rabbit-color-validation-0",
+        concept_id="rabbit",
+        fact_id="rabbit-color",
+        direction="forward",
+        split="validation",
+    )
+    scorer_result = SimpleNamespace(
+        stage=0,
+        method="base",
+        query_id=query.template_id,
+        task_id=query.concept_id,
+        proof_id=query.fact_id,
+        candidate_nll=candidate_nll,
+        correct_candidate_index=0,
+        predicted_candidate_index=0,
+        candidate_correct=True,
+        candidate_margin=scorer_margin,
+        selected_node_index=None,
+        task_oracle_node_index=None,
+        routed_regret=None,
+    )
+
+    projected = project_semantic_result(query, scorer_result)
+    exact_margin = float(candidate_nll[1]) - float(candidate_nll[0])
+    assert projected.correct_answer_margin == exact_margin
+    assert projected.correct_answer_margin != scorer_margin
+
+
+def test_root_adapter_scoring_unwraps_semantic_queries(monkeypatch) -> None:
+    knowledge_query = object()
+    semantic_query = SimpleNamespace(knowledge_query=knowledge_query)
+    packed = object()
+    monkeypatch.setattr(
+        semantic_evaluation,
+        "pack_root_adapter",
+        lambda adapter, model_config, lora_config: (object(), packed),
+    )
+    monkeypatch.setattr(
+        semantic_evaluation,
+        "edge_coefficients_for_node",
+        lambda actual_packed, node_index: np.asarray([1.0], dtype=np.float32),
+    )
+    received_queries = []
+
+    def score_candidates(
+        base_params,
+        model_config,
+        actual_packed,
+        lora_config,
+        queries,
+        edge_coefficients,
+        *,
+        evaluation_microbatch_size,
+    ):
+        received_queries.append(queries)
+        return np.zeros((len(queries), 4), dtype=np.float32)
+
+    monkeypatch.setattr(
+        semantic_evaluation,
+        "score_edge_coefficient_candidates",
+        score_candidates,
+    )
+    base = SimpleNamespace(params=object(), config=object())
+    preset = SimpleNamespace(
+        lora_config=object(),
+        query_chunk_size=1,
+    )
+
+    scores = semantic_evaluation._score_root_adapter(  # noqa: SLF001
+        (semantic_query,),
+        base,
+        object(),
+        preset,
+        progress=None,
+        phase="fixture",
+    )
+    assert received_queries == [(knowledge_query,)]
+    assert scores.shape == (1, 4)
+
+
 def test_operational_gates_and_resumable_stage_parity(tmp_path: Path) -> None:
     assert BaseQualityDecision((2.1, 2.0), 1, 2).passed
     assert BaseQualityDecision((2.1, 2.09), 1, 2).reason == "epoch_improvement_below_0.02"
@@ -997,7 +1141,14 @@ def test_operational_gates_and_resumable_stage_parity(tmp_path: Path) -> None:
         )
         for budget, accuracy in ((500, 0.55), (1_000, 0.61), (2_000, 0.80))
     )
-    assert select_pilot_budget(pilot_results, preset) == 1_000
+    assert (
+        select_pilot_budget(
+            pilot_results,
+            preset,
+            ORIGINAL_PILOT_LEARNABILITY_POLICY,
+        )
+        == 1_000
+    )
 
     def result_rows(
         method: str,
@@ -1084,6 +1235,8 @@ def test_operational_gates_and_resumable_stage_parity(tmp_path: Path) -> None:
         selected_base_sha256="3" * 64,
         preflight_sha256="4" * 64,
         preset=preset,
+        learnability_policy=ORIGINAL_PILOT_LEARNABILITY_POLICY,
+        protocol_amendment_sha256=None,
         budgets=budget_evaluations,
         independent_sweep_sha256="5" * 64,
         independent_sweep_manifest_sha256="6" * 64,
@@ -1096,16 +1249,25 @@ def test_operational_gates_and_resumable_stage_parity(tmp_path: Path) -> None:
     assert pilot.selected_updates == 1_000
     assert load_semantic_pilot_result(pilot.root) == pilot
 
+    failed_counts = {
+        500: {"cat": 22, "dog": 21},
+        1_000: {"cat": 22, "dog": 20},
+        2_000: {"cat": 23, "dog": 22},
+    }
     failed_evaluations = tuple(
         PilotBudgetEvaluation(
             PilotBudgetResult(
                 updates,
-                (("cat", 22 / 36), ("dog", 21 / 36)),
+                tuple(
+                    (concept_id, failed_counts[updates][concept_id] / 36)
+                    for concept_id in preset.concept_ids
+                ),
                 (("cat", 0.5), ("dog", 0.5)),
             ),
             tuple(
                 row
-                for concept_id, correct_count in (("cat", 22), ("dog", 21))
+                for concept_id in preset.concept_ids
+                for correct_count in (failed_counts[updates][concept_id],)
                 for row in (
                     result_rows("base", concept_id, 18, 0, None)
                     + result_rows(
@@ -1134,6 +1296,79 @@ def test_operational_gates_and_resumable_stage_parity(tmp_path: Path) -> None:
         allocator_peak_bytes=1,
     )
     assert load_semantic_pilot_failure(failure.root) == failure
+    assert not any(
+        pilot_budget_passes(
+            evaluation.budget,
+            ORIGINAL_PILOT_LEARNABILITY_POLICY,
+        )
+        for evaluation in failed_evaluations
+    )
+    assert pilot_budget_passes(
+        failed_evaluations[-1].budget,
+        AMENDED_PILOT_LEARNABILITY_POLICY,
+    )
+    amendment = publish_semantic_pilot_protocol_amendment(
+        tmp_path / "pilot-amendments",
+        failure,
+        preset,
+        reviewer="fixture-reviewer",
+        decided_at="2026-07-25T12:00:00Z",
+        rationale=(
+            "The pilot established absolute learnability while the original "
+            "acquisition threshold was ceiling-sensitive."
+        ),
+    )
+    assert amendment.selected_updates == 2_000
+    assert (
+        load_semantic_pilot_protocol_amendment(amendment.root, failure, preset)
+        == amendment
+    )
+    amended_pilot = publish_semantic_pilot_result(
+        tmp_path / "amended-pilot-results",
+        catalog_sha256="1" * 64,
+        partition_sha256="2" * 64,
+        selected_base_sha256="3" * 64,
+        preflight_sha256="4" * 64,
+        preset=preset,
+        learnability_policy=AMENDED_PILOT_LEARNABILITY_POLICY,
+        protocol_amendment_sha256=amendment.amendment_sha256,
+        budgets=failed_evaluations,
+        independent_sweep_sha256="5" * 64,
+        independent_sweep_manifest_sha256="6" * 64,
+        selected_adaptation_manifest_sha256="7" * 64,
+        selected_validation_results=selected_validation,
+        resume_verified=True,
+        runtime_seconds=1.0,
+        allocator_peak_bytes=1,
+    )
+    main_preset = QueryExperimentPreset(
+        tuple(concept.concept_id for concept in MAIN_CONCEPTS),
+        adapter_updates=2_000,
+    )
+    main_freeze = publish_main_experiment_freeze(
+        tmp_path / "main-freezes",
+        amended_pilot,
+        amendment,
+        failure,
+        preset,
+        main_preset,
+        authorized_by="fixture-reviewer",
+        authorized_at="2026-07-25T13:00:00Z",
+        authorization="Proceed to the five-world main construction.",
+    )
+    assert main_freeze.selected_updates == 2_000
+    assert main_freeze.query_protocol_sha256 == REGISTERED_QUERY_PROTOCOL.protocol_sha256
+    assert (
+        load_main_experiment_freeze(
+            main_freeze.root,
+            amended_pilot,
+            amendment,
+            failure,
+            preset,
+            main_preset,
+        )
+        == main_freeze
+    )
     failure_report = (failure.root / "report.md").read_text()
     assert "learnability stop" in failure_report
     assert "Sequential/VAMP and main execution therefore remained unauthorized" in failure_report

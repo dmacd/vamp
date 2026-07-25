@@ -525,7 +525,9 @@ def _validate_run(run: LanguageVampRun) -> None:
         if not all(math.isinf(value) for value in metrics.parent_mean_node_nll[node_index:]):
             raise ValueError("parent scores for padded nodes must be infinite")
         expected_metric_tasks = tuple(
-            completed.task_id for completed in run.completed_tasks[:node_index]
+            completed.task_id
+            for completed in run.completed_tasks[:node_index]
+            if completed.test_examples
         )
         if tuple(metric.task_id for metric in metrics.task_metrics) != expected_metric_tasks:
             raise ValueError("stage task metrics must cover all completed tasks in order")

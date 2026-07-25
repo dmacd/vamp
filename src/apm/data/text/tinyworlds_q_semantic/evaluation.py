@@ -465,7 +465,7 @@ def _score_root_adapter(
             base.config,
             packed,
             preset.lora_config,
-            chunk,
+            tuple(query.knowledge_query for query in chunk),
             np.repeat(coefficients, len(chunk), axis=0),
             evaluation_microbatch_size=preset.query_chunk_size,
         )

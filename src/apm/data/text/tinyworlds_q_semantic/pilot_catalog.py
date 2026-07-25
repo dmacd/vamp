@@ -5,25 +5,24 @@ from __future__ import annotations
 from apm.data.text.tinyworlds_q_semantic.approval import PrimaryReviewApproval
 from apm.data.text.tinyworlds_q_semantic.catalog import (
     build_reviewed_catalog,
-    make_query_template,
 )
 from apm.data.text.tinyworlds_q_semantic.contracts import (
     FactReviewDecision,
     RejectedFactCandidate,
     SemanticFact,
     SemanticQueryCatalog,
-    SemanticQueryTemplate,
 )
 from apm.data.text.tinyworlds_q_semantic.manifests import PILOT_CONCEPTS
 from apm.data.text.tinyworlds_q_semantic.reverse_review import (
-    PILOT_REVERSE_CHOICE_SPECS,
     ReverseReviewApproval,
     SemanticReverseReview,
 )
 from apm.data.text.tinyworlds_q_semantic.review import SemanticReviewPacket
+from apm.data.text.tinyworlds_q_semantic.query_protocol import (
+    make_registered_fact_templates,
+)
 from apm.data.text.tinyworlds_q_semantic.shortlist import (
     PILOT_SHORTLIST_SPECS,
-    ReviewShortlistSpec,
     SemanticReviewShortlist,
 )
 from apm.lm.text import TextTokenizer
@@ -95,12 +94,18 @@ def build_approved_pilot_catalog(
     templates = tuple(
         template
         for spec in primary_specs
-        for template in _fact_templates(
+        for template in make_registered_fact_templates(
             fact_by_proposal[spec.proposal_id],
-            spec,
-            reverse_by_proposal[spec.proposal_id].clue_prompt,
-            reverse_by_proposal[spec.proposal_id].distractors,
-            tokenizer,
+            next(
+                concept
+                for concept in PILOT_CONCEPTS
+                if concept.concept_id == spec.concept_id
+            ),
+            forward_prompt=spec.forward_prompt,
+            forward_distractors=spec.distractors,
+            reverse_prompt=reverse_by_proposal[spec.proposal_id].clue_prompt,
+            reverse_distractors=reverse_by_proposal[spec.proposal_id].distractors,
+            tokenizer=tokenizer,
         )
     )
     rejected_candidates = tuple(
@@ -150,71 +155,4 @@ def _validate_authority_chain(
         raise ValueError("pilot reverse authority chain changed")
     if primary_approval.reviewer != reverse_approval.reviewer:
         raise ValueError("pilot fact and reverse approvals require one reviewer identity")
-
-
-def _fact_templates(
-    fact: SemanticFact,
-    spec: ReviewShortlistSpec,
-    reverse_prompt: str,
-    reverse_distractors: tuple[str, str, str],
-    tokenizer: TextTokenizer,
-) -> tuple[SemanticQueryTemplate, ...]:
-    forward_prompt = spec.forward_prompt
-    forward_distractors = spec.distractors
-    concept = next(
-        concept for concept in PILOT_CONCEPTS if concept.concept_id == fact.concept_id
-    )
-    plural = concept.surface_forms[1]
-    forward_prompts = (
-        forward_prompt,
-        f"Answer this question about {plural}. {forward_prompt}",
-        f"Choose the correct response. {forward_prompt}",
-        f"Use general knowledge about {plural}. {forward_prompt}",
-        f"Select the best completion for this {concept.concept_id} fact. "
-        f"{forward_prompt}",
-    )
-    reverse_prompts = (
-        reverse_prompt,
-        f"Choose the concept that fits this fact. {reverse_prompt}",
-        f"Identify the matching concept. {reverse_prompt}",
-    )
-    layouts = (
-        (
-            "validation",
-            (
-                ("forward", forward_prompts[0], forward_distractors),
-                ("forward", forward_prompts[1], forward_distractors),
-                ("reverse", reverse_prompts[0], reverse_distractors),
-            ),
-        ),
-        (
-            "test",
-            (
-                ("forward", forward_prompts[2], forward_distractors),
-                ("forward", forward_prompts[3], forward_distractors),
-                ("forward", forward_prompts[4], forward_distractors),
-                ("reverse", reverse_prompts[1], reverse_distractors),
-                ("reverse", reverse_prompts[2], reverse_distractors),
-            ),
-        ),
-    )
-    return tuple(
-        make_query_template(
-            fact,
-            concept,
-            template_id=f"{fact.fact_id}-{split}-{paraphrase_index:02d}",
-            direction=direction,
-            prompt_text=prompt,
-            distractors=distractors,
-            split=split,
-            paraphrase_index=paraphrase_index,
-            tokenizer=tokenizer,
-        )
-        for split, split_layout in layouts
-        for paraphrase_index, (direction, prompt, distractors) in enumerate(
-            split_layout
-        )
-    )
-
-
 __all__ = ["build_approved_pilot_catalog"]

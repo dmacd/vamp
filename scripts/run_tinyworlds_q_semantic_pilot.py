@@ -27,7 +27,9 @@ from apm.data.text.tinyworlds_q_semantic.contracts import (
     record_sha256,
 )
 from apm.data.text.tinyworlds_q_semantic.execution import (
+    ORIGINAL_PILOT_LEARNABILITY_POLICY,
     BaseQualityDecision,
+    pilot_budget_passes,
     select_pilot_budget,
 )
 from apm.data.text.tinyworlds_q_semantic.evaluation import (
@@ -45,6 +47,10 @@ from apm.data.text.tinyworlds_q_semantic.pilot import (
     load_semantic_pilot_result,
     publish_semantic_pilot_failure,
     publish_semantic_pilot_result,
+)
+from apm.data.text.tinyworlds_q_semantic.pilot_authorization import (
+    load_semantic_pilot_protocol_amendment,
+    publish_semantic_pilot_protocol_amendment,
 )
 from apm.data.text.tinyworlds_q_semantic.pilot_sweep import (
     train_or_resume_pilot_independent_sweep,
@@ -556,11 +562,71 @@ def _matching_pilot_failure(catalog, partition, selected_base, preflight):
     return matches[0] if matches else None
 
 
+def _matching_pilot_amendment(failure, preset):
+    root = RESULT_ROOT / "pilot-amendment"
+    if not root.is_dir():
+        return None
+    matches = []
+    for path in sorted(root.iterdir()):
+        record_path = path / "amendment.json"
+        if not path.is_dir() or len(path.name) != 64 or not record_path.is_file():
+            continue
+        payload = record_path.read_bytes()
+        record = json.loads(payload)
+        if type(record) is not dict or canonical_json_bytes(record) != payload:
+            raise ValueError(f"noncanonical semantic pilot amendment: {path}")
+        if record.get("failure_sha256") != failure.failure_sha256:
+            continue
+        matches.append(
+            load_semantic_pilot_protocol_amendment(path, failure, preset)
+        )
+    if len(matches) > 1:
+        raise RuntimeError("multiple protocol amendments bind the pilot failure")
+    return matches[0] if matches else None
+
+
+def _run_pilot_amendment(
+    sources,
+    preflight,
+    selected_base,
+    *,
+    reviewer: str,
+    decided_at: str,
+    rationale: str,
+):
+    catalog, partition, _tokenizer, preset = sources
+    failure = _matching_pilot_failure(
+        catalog,
+        partition,
+        selected_base,
+        preflight,
+    )
+    if failure is None:
+        raise RuntimeError("pilot protocol amendment requires the preserved failure")
+    existing = _matching_pilot_amendment(failure, preset)
+    if existing is not None:
+        print(f"Using strict pilot amendment {existing.root}.", flush=True)
+        return existing
+    amendment = publish_semantic_pilot_protocol_amendment(
+        RESULT_ROOT / "pilot-amendment",
+        failure,
+        preset,
+        reviewer=reviewer,
+        decided_at=decided_at,
+        rationale=rationale,
+    )
+    print(f"Pilot protocol amendment: {amendment.amendment_sha256}", flush=True)
+    print(f"Amendment report: {amendment.root / 'report.md'}", flush=True)
+    print("The original failure remains immutable; the sealed test was not opened.", flush=True)
+    return amendment
+
+
 def _run_pilot_budget(
     queries,
     loaded_base,
     budget_snapshot,
     preset,
+    policy,
 ):
     def evaluation_progress(phase: str, completed: int, total: int) -> None:
         print(f"Pilot validation {phase}: {completed:,}/{total:,} chunks", flush=True)
@@ -585,7 +651,7 @@ def _run_pilot_budget(
             )
             for concept_id, accuracy in evaluation.budget.concept_accuracy
         )
-        + f"; passed={evaluation.budget.passes}",
+        + f"; passed={pilot_budget_passes(evaluation.budget, policy)}",
         flush=True,
     )
     return evaluation
@@ -608,9 +674,26 @@ def _run_pilot(sources, preflight, selected_base):
         selected_base,
         preflight,
     )
-    if existing_failure is not None:
+    amendment = (
+        None
+        if existing_failure is None
+        else _matching_pilot_amendment(existing_failure, registered_preset)
+    )
+    if existing_failure is not None and amendment is None:
         raise RuntimeError(
-            f"pilot learnability previously failed: {existing_failure.root}"
+            "pilot learnability previously failed without a protocol amendment: "
+            f"{existing_failure.root}"
+        )
+    policy = (
+        ORIGINAL_PILOT_LEARNABILITY_POLICY
+        if amendment is None
+        else amendment.policy
+    )
+    if amendment is not None:
+        print(
+            "Continuing under strict pilot amendment "
+            f"{amendment.amendment_sha256}; original failure preserved.",
+            flush=True,
         )
     loaded_base = load_gpt_neo_checkpoint(selected_base.checkpoint)
     overall_started = time.monotonic()
@@ -673,10 +756,16 @@ def _run_pilot(sources, preflight, selected_base):
             loaded_base,
             sweep.budget(budget),
             replace(registered_preset, adapter_updates=budget),
+            policy,
         )
         for budget in registered_preset.pilot_update_budgets
     )
-    if not any(item.budget.passes for item in budget_evaluations):
+    if not any(
+        pilot_budget_passes(item.budget, policy)
+        for item in budget_evaluations
+    ):
+        if amendment is not None:
+            raise RuntimeError("amended pilot policy did not authorize any budget")
         failure = publish_semantic_pilot_failure(
             RESULT_ROOT / "pilot-failure",
             catalog_sha256=catalog.catalog_sha256,
@@ -700,6 +789,7 @@ def _run_pilot(sources, preflight, selected_base):
     selected_updates = select_pilot_budget(
         tuple(item.budget for item in budget_evaluations),
         registered_preset,
+        policy,
     )
     selected_preset = replace(
         registered_preset,
@@ -823,6 +913,10 @@ def _run_pilot(sources, preflight, selected_base):
         selected_base_sha256=selected_base.selection_sha256,
         preflight_sha256=preflight.preflight_sha256,
         preset=registered_preset,
+        learnability_policy=policy,
+        protocol_amendment_sha256=(
+            None if amendment is None else amendment.amendment_sha256
+        ),
         budgets=budget_evaluations,
         independent_sweep_sha256=sweep.sweep_sha256,
         independent_sweep_manifest_sha256=_file_sha256(
@@ -846,16 +940,35 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--stage",
-        choices=("preflight", "base", "pilot"),
+        choices=("preflight", "base", "amendment", "pilot"),
         default="preflight",
         help="highest registered pilot stage to execute",
     )
+    parser.add_argument("--reviewer")
+    parser.add_argument("--decided-at")
+    parser.add_argument("--rationale")
     args = parser.parse_args()
     sources = _sources()
     preflight = _run_preflight(sources)
-    if args.stage in ("base", "pilot"):
+    if args.stage in ("base", "amendment", "pilot"):
         selected_base = _run_base(sources, preflight)
-        if args.stage == "pilot":
+        if args.stage == "amendment":
+            if any(
+                value is None
+                for value in (args.reviewer, args.decided_at, args.rationale)
+            ):
+                parser.error(
+                    "--stage amendment requires --reviewer, --decided-at, and --rationale"
+                )
+            _run_pilot_amendment(
+                sources,
+                preflight,
+                selected_base,
+                reviewer=args.reviewer,
+                decided_at=args.decided_at,
+                rationale=args.rationale,
+            )
+        elif args.stage == "pilot":
             _run_pilot(sources, preflight, selected_base)
     return 0
 

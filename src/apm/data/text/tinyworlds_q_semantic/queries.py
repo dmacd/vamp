@@ -245,13 +245,22 @@ def project_semantic_result(
     *,
     adapter_concept_id: str | None = None,
 ) -> SemanticQueryResult:
-    """Project one shared scorer row without changing any numeric result."""
+    """Project one shared scorer row without changing any scorer decision."""
     if (
         result.query_id != query.template_id
         or result.task_id != query.concept_id
         or result.proof_id != query.fact_id
     ):
         raise ValueError("knowledge result does not align with semantic query metadata")
+    candidate_nll = tuple(float(value) for value in result.candidate_nll)
+    correct_answer_margin = (
+        min(
+            value
+            for index, value in enumerate(candidate_nll)
+            if index != result.correct_candidate_index
+        )
+        - candidate_nll[result.correct_candidate_index]
+    )
     return SemanticQueryResult(
         stage=result.stage,
         method=result.method,
@@ -261,11 +270,14 @@ def project_semantic_result(
         direction=query.direction,  # type: ignore[arg-type]
         split=query.split,  # type: ignore[arg-type]
         adapter_concept_id=adapter_concept_id,
-        candidate_nll=tuple(float(value) for value in result.candidate_nll),  # type: ignore[arg-type]
+        candidate_nll=candidate_nll,  # type: ignore[arg-type]
         correct_candidate_index=result.correct_candidate_index,
         predicted_candidate_index=result.predicted_candidate_index,
         answer_correct=result.candidate_correct,
-        correct_answer_margin=result.candidate_margin,
+        # The shared scorer permits float32 subtraction error in its redundant
+        # margin field.  Recompute from the exact values serialized by this
+        # public contract so the row remains internally self-authenticating.
+        correct_answer_margin=correct_answer_margin,
         selected_node_index=result.selected_node_index,
         oracle_node_index=result.task_oracle_node_index,
         routed_regret=result.routed_regret,

@@ -7,11 +7,18 @@ The interactive user approved all 24 primary pilot facts and all 24
 fact-specific reverse choices. The official catalog and partition are
 published, a fresh archive replay reproduced both byte-for-byte, and the GPU
 preflight passed. The real seed-zero base completed, passed every quality and
-memory gate, and published a strict selected base. The independent pilot sweep
-then completed, but no registered budget passed both learnability conditions
-for both worlds. The mandatory pilot gate stopped sequential/VAMP and main
-execution. No sealed test was opened. This is an operational stop, not a
-scientific VAMP result.
+memory gate, and published a strict selected base.
+
+The independent sweep failed the original 15-percentage-point acquisition
+gate for rabbit; that authenticated stop remains immutable. The user then
+authorized an explicit prospective amendment that retains 60% absolute
+validation accuracy and makes acquisition descriptive. Under that policy,
+2,000 updates passed for both worlds. The selected independent, sequential,
+and VAMP validation exercise and exact resume check completed, and the
+five-world main configuration is frozen. Main construction evidence and a
+compact 60-fact approval sheet are published; human approval is now the next
+gate. No sealed test was opened. Neither the original stop nor the operational
+pilot is a scientific VAMP result.
 
 `tinyworlds-q-semantic-v1` is isolated under its own Python package and the
 registered roots `data/tinyworlds-q-semantic/`,
@@ -71,7 +78,7 @@ registered roots `data/tinyworlds-q-semantic/`,
 
 ## Verification
 
-The new CPU fixtures pass seven tests. They cover construction and
+The focused query/language CPU suite passes 13 tests. The fixtures cover construction and
 leakage rules, candidate/token boundaries, exact rebuild and tamper rejection,
 catalog parent nesting, sealed access, deterministic statistics, dynamic
 capacity/schedules, bounded scoring, strict report coverage, and resumable
@@ -84,8 +91,10 @@ A focused pilot-publication path additionally checks prefix-only router
 stacking, all-budget accuracy reconstruction, dynamic validation schedule
 coverage, canonical ledgers, exact safetensors sweep reload, and result-file
 tamper rejection. It now also covers authenticated all-budget failure
-publication and failure-ledger tamper rejection.
-A focused compatibility run passes 36 existing tests across knowledge tasks,
+publication and failure-ledger tamper rejection. A five-world fixture also
+verifies the dynamic 80-proposal shortlist, 60-primary count, and ordered
+reverse-choice manifest while preserving the exact published pilot hash.
+A broader focused run passes 56 tests across query-v1, knowledge tasks,
 candidate scoring, knowledge training/evaluation, semantic statistics,
 semantic-v6 partitioning, and semantic-v6 VAMP.
 
@@ -186,7 +195,7 @@ is published with the complete training trace and source bindings.
 
 The completed base authorized the fixed 500/1,000/2,000-update pilot selection.
 
-## Pilot learnability stop
+## Pilot learnability stop under the original policy
 
 The runner trained one deterministic 2,000-update independent trajectory for
 each pilot world and persisted exact snapshots at all three registered budgets.
@@ -205,5 +214,69 @@ worlds. Failure artifact
 `aad4811425c10b0faf5f6f452067e35a58d6cee397970711951e50bfad2247f5`
 binds the source identities, selected base, preflight, sweep tensors, exact
 validation JSONL ledgers, report, and allocator evidence. The sealed test was
-not opened. Selected-budget sequential/VAMP and the main catalog remain
-unauthorized under the frozen plan.
+not opened. At this point, selected-budget sequential/VAMP and the main catalog
+were unauthorized under the original frozen plan.
+
+## Explicit amendment and completed operational pilot
+
+After inspecting the result, the user concluded that the adapters and dataset
+were viable and that the relative acquisition threshold was too sensitive to
+rabbit's stronger base. Amendment
+`2855b647928700a119ea6e95365379719ad733d45c6ede20cafcd1593a64458c`
+records that decision without changing the original failure. It binds the
+exact sweep and original policy, keeps the 60% absolute-accuracy gate, makes
+acquisition mandatory descriptive evidence, and authorizes only the selected
+pilot sequential/VAMP exercise. Its rationale is that permitted ordinary
+lexical exposure can raise a base score and compress the available relative
+gain even when the adapter crosses the absolute learnability target.
+
+Under amended policy
+`6ad9a22d3ecc3dd1ebe0172a5d8b6acd8d0519f0014013ccfe82ce2e968adb29`,
+2,000 is the first passing budget. Rabbit reaches `0.638889` from `0.555556`
+(`+0.083333`), while horse reaches `0.611111` from `0.250000`
+(`+0.361111`). Acquisition remains visible rather than being discarded.
+
+The runner reused the matching independent snapshots, trained the two-world
+sequential and VAMP stages, evaluated the nine registered validation methods,
+and strict-reloaded the completed stage through the no-op resume path. Pilot
+result `55c97f2a649ea434f79e729b2eaff01753a254ce0a5c26e53a1095d4df0364c7`
+binds selected config
+`b7993126e437737ab6a178e0119b7acaf8bfeef9e00b4f88aaa8885b7abb8e5f`,
+adaptation manifest
+`f2c3a8a9b71e3953cc4e65ed56608fdae62a1558e303ad89b0cbd4c47b7f46d9`,
+all exact rows, policy, amendment, runtime, and allocator evidence. The
+reported `228.116898` seconds is the final resume/evaluation invocation, not a
+sum of earlier independent training and retries. The pilot gives no VAMP
+scientific verdict, and the sealed test remained closed.
+
+## Frozen main configuration and review status
+
+Main freeze
+`82d0d3258e0e723588d151387c0151156b408770df1f84bcb5450ac72f9327ff`
+records the user's instruction to proceed. It fixes order
+`cat, dog, bird, robot, dragon`, a fresh seed-zero base, 2,000 rank-eight
+adapter updates, the exact three-validation/five-test query protocol,
+answer-suffix-only scoring, all nine methods, 10,000 fact-resampled bootstrap
+replicates with equal world weights, validation-only parent/router inputs, and
+one sealed opening after all artifacts and settings are frozen.
+
+A construction-only archive scan published raw discovery packet
+`7164cd2cc18be5ba29d7106a44f23dbec5bf39a9a962b9c441ccf07501a8132f`.
+A targeted 118-predicate scan published evidence packet
+`ce1b06c7f7a325cedded9970ac008329c93d97d29c84344b93d22b450db14374`.
+Both remain proposal audits and model inputs cannot read their construction
+groups.
+
+Compact main shortlist
+`fe2f78e92e1c4e0d26280f2741beea728ea3125c932c3126b770da6cd90104cc`
+contains twelve primaries and four backups for each of five worlds. Every row
+binds exact answer tokens, three false choices, trigger closure, full candidate
+provenance, and representative evidence. All 60 primaries meet the 16-group
+construction minimum; the tightest are robot battery (17 groups), robot metal
+and fixed (18 each), and dragon roar (20). The intended human surface is the
+[`main approval sheet`](../data/tinyworlds-q-semantic/review-shortlists/fe2f78e92e1c4e0d26280f2741beea728ea3125c932c3126b770da6cd90104cc/review.md).
+
+No main proposal is approved yet. Consequently, no main catalog, partition,
+validation sample report, GPU preflight, base/adapters, or sealed transaction
+exists. Primary fact approval is the next boundary; reverse-choice approval
+will remain a separate decision.

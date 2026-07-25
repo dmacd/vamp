@@ -19,7 +19,14 @@ from apm.data.text.tinyworlds_q_semantic.contracts import (
     require_sha256,
 )
 from apm.data.text.tinyworlds_q_semantic.evaluation import PilotBudgetEvaluation
-from apm.data.text.tinyworlds_q_semantic.execution import select_pilot_budget
+from apm.data.text.tinyworlds_q_semantic.execution import (
+    AMENDED_PILOT_LEARNABILITY_POLICY,
+    ORIGINAL_PILOT_LEARNABILITY_POLICY,
+    PilotBudgetResult,
+    PilotLearnabilityPolicy,
+    pilot_budget_passes,
+    select_pilot_budget,
+)
 from apm.data.text.tinyworlds_q_semantic.report import REQUIRED_QUERY_METHODS
 from apm.data.text.tinyworlds_q_semantic.scaling import evaluation_schedule
 
@@ -36,6 +43,8 @@ class SemanticPilotResult:
     pilot_sha256: str
     selected_updates: int
     selected_config_sha256: str
+    learnability_policy_sha256: str
+    protocol_amendment_sha256: str | None
     sealed_test_opened: bool
 
     def __post_init__(self) -> None:
@@ -43,8 +52,14 @@ class SemanticPilotResult:
         for value, label in (
             (self.pilot_sha256, "pilot result"),
             (self.selected_config_sha256, "selected pilot config"),
+            (self.learnability_policy_sha256, "pilot learnability policy"),
         ):
             require_sha256(value, label)
+        if self.protocol_amendment_sha256 is not None:
+            require_sha256(
+                self.protocol_amendment_sha256,
+                "pilot protocol amendment",
+            )
         if not self.root.is_dir():
             raise FileNotFoundError(self.root)
         if type(self.selected_updates) is not int or self.selected_updates <= 0:
@@ -81,6 +96,8 @@ def publish_semantic_pilot_result(
     selected_base_sha256: str,
     preflight_sha256: str,
     preset: QueryExperimentPreset,
+    learnability_policy: PilotLearnabilityPolicy,
+    protocol_amendment_sha256: str | None,
     budgets: tuple[PilotBudgetEvaluation, ...],
     independent_sweep_sha256: str,
     independent_sweep_manifest_sha256: str,
@@ -107,9 +124,14 @@ def publish_semantic_pilot_result(
         (selected_adaptation_manifest_sha256, "selected pilot adaptation manifest"),
     ):
         require_sha256(value, label)
+    _validate_pilot_authorization(
+        learnability_policy,
+        protocol_amendment_sha256,
+    )
     selected_updates = select_pilot_budget(
         tuple(item.budget for item in budgets),
         preset,
+        learnability_policy,
     )
     selected_config = replace(preset, adapter_updates=selected_updates)
     if (
@@ -139,7 +161,12 @@ def publish_semantic_pilot_result(
     )
     selected_ledger = _result_ledger(selected_validation_results)
     budget_records = tuple(
-        _budget_record(item, dict(budget_ledgers)[item.budget.updates], preset)
+        _budget_record(
+            item,
+            dict(budget_ledgers)[item.budget.updates],
+            preset,
+            learnability_policy,
+        )
         for item in budgets
     )
     core = {
@@ -149,8 +176,11 @@ def publish_semantic_pilot_result(
         "format": PILOT_RESULT_FORMAT,
         "independent_sweep_manifest_sha256": independent_sweep_manifest_sha256,
         "independent_sweep_sha256": independent_sweep_sha256,
+        "learnability_policy": learnability_policy.as_record(),
+        "learnability_policy_sha256": learnability_policy.policy_sha256,
         "partition_sha256": partition_sha256,
         "preflight_sha256": preflight_sha256,
+        "protocol_amendment_sha256": protocol_amendment_sha256,
         "resume_verified": resume_verified,
         "runtime_seconds": float(runtime_seconds),
         "sealed_test_opened": False,
@@ -173,6 +203,8 @@ def publish_semantic_pilot_result(
             budget_records,
             selected_updates,
             selected_config.config_sha256,
+            learnability_policy,
+            protocol_amendment_sha256,
             resume_verified,
             float(runtime_seconds),
             allocator_peak_bytes,
@@ -248,7 +280,13 @@ def publish_semantic_pilot_failure(
     if (
         tuple(item.budget.updates for item in budgets)
         != preset.pilot_update_budgets
-        or any(item.budget.passes for item in budgets)
+        or any(
+            pilot_budget_passes(
+                item.budget,
+                ORIGINAL_PILOT_LEARNABILITY_POLICY,
+            )
+            for item in budgets
+        )
     ):
         raise ValueError("pilot failure requires every registered budget to fail")
     if (
@@ -260,7 +298,12 @@ def publish_semantic_pilot_failure(
         (item.budget.updates, _result_ledger(item.results)) for item in budgets
     )
     budget_records = tuple(
-        _budget_record(item, dict(budget_ledgers)[item.budget.updates], preset)
+        _budget_record(
+            item,
+            dict(budget_ledgers)[item.budget.updates],
+            preset,
+            ORIGINAL_PILOT_LEARNABILITY_POLICY,
+        )
         for item in budgets
     )
     core = {
@@ -443,11 +486,26 @@ def load_semantic_pilot_result(root: str | Path) -> SemanticPilotResult:
             != budget.get("results_sha256")
         ):
             raise ValueError("pilot budget result ledger identity changed")
+    policy = _policy_from_result_record(pilot)
+    amendment = pilot.get("protocol_amendment_sha256")
+    if amendment is not None and type(amendment) is not str:
+        raise ValueError("pilot protocol amendment identity changed")
+    _validate_pilot_authorization(policy, amendment)
+    budget_results = tuple(_pilot_budget_from_record(record) for record in raw_budgets)
+    selected_updates = int(pilot["selected_updates"])
+    if selected_updates != select_pilot_budget(
+        budget_results,
+        _preset_from_selected_result(pilot, budget_results),
+        policy,
+    ):
+        raise ValueError("pilot selected budget changed")
     return SemanticPilotResult(
         root=directory.resolve(),
         pilot_sha256=pilot_sha256,
-        selected_updates=int(pilot["selected_updates"]),
+        selected_updates=selected_updates,
         selected_config_sha256=str(pilot["selected_config_sha256"]),
+        learnability_policy_sha256=policy.policy_sha256,
+        protocol_amendment_sha256=amendment,
         sealed_test_opened=False,
     )
 
@@ -457,6 +515,8 @@ def render_semantic_pilot_report(
     budgets: tuple[dict[str, object], ...],
     selected_updates: int,
     selected_config_sha256: str,
+    learnability_policy: PilotLearnabilityPolicy,
+    protocol_amendment_sha256: str | None,
     resume_verified: bool,
     runtime_seconds: float,
     allocator_peak_bytes: int,
@@ -469,7 +529,11 @@ def render_semantic_pilot_report(
     accuracy_headers = tuple(
         heading
         for concept_id in concept_ids
-        for heading in (f"{concept_id.title()} base", f"{concept_id.title()} adapter")
+        for heading in (
+            f"{concept_id.title()} base",
+            f"{concept_id.title()} adapter",
+            f"{concept_id.title()} gain",
+        )
     )
     lines = [
         "# TinyWorlds-Q semantic pilot result",
@@ -479,12 +543,26 @@ def render_semantic_pilot_report(
         "The sealed test was not opened. This pilot applies only the mandatory "
         "learnability and operational gates; it does not assign a VAMP verdict.",
         "",
+        f"Learnability policy: `{learnability_policy.policy_sha256}` "
+        f"(`{learnability_policy.policy_id}`)",
+        *(
+            ()
+            if protocol_amendment_sha256 is None
+            else (f"Protocol amendment: `{protocol_amendment_sha256}`",)
+        ),
+        *(
+            ("Acquisition remains descriptive and is not an authorization gate.",)
+            if learnability_policy.acquisition_role == "descriptive"
+            else ()
+        ),
+        "",
         "| " + " | ".join(("Updates", *accuracy_headers, "Passed")) + " |",
         "| " + " | ".join(("---:", *("---:" for _ in accuracy_headers), ":---:")) + " |",
     ]
     for budget in budgets:
         base = dict(budget["base_accuracy"])  # type: ignore[arg-type]
         adapted = dict(budget["concept_accuracy"])  # type: ignore[arg-type]
+        acquisition = dict(budget["acquisition"])  # type: ignore[arg-type]
         lines.append(
             "| "
             + " | ".join(
@@ -496,6 +574,7 @@ def render_semantic_pilot_report(
                         for value in (
                             f"{base[concept_id]:.6f}",
                             f"{adapted[concept_id]:.6f}",
+                            f"{acquisition[concept_id]:+.6f}",
                         )
                     ),
                     str(budget["passed"]),
@@ -579,6 +658,7 @@ def _budget_record(
     evaluation: PilotBudgetEvaluation,
     ledger: bytes,
     preset: QueryExperimentPreset,
+    policy: PilotLearnabilityPolicy,
 ) -> dict[str, object]:
     base = dict(evaluation.budget.base_accuracy)
     return {
@@ -595,10 +675,100 @@ def _budget_record(
             preset,
             adapter_updates=evaluation.budget.updates,
         ).config_sha256,
-        "passed": evaluation.budget.passes,
+        "passed": pilot_budget_passes(evaluation.budget, policy),
         "results_sha256": sha256(ledger).hexdigest(),
         "updates": evaluation.budget.updates,
     }
+
+
+def _validate_pilot_authorization(
+    policy: PilotLearnabilityPolicy,
+    protocol_amendment_sha256: str | None,
+) -> None:
+    if policy == ORIGINAL_PILOT_LEARNABILITY_POLICY:
+        if protocol_amendment_sha256 is not None:
+            raise ValueError("original pilot policy cannot cite an amendment")
+        return
+    if policy == AMENDED_PILOT_LEARNABILITY_POLICY:
+        if protocol_amendment_sha256 is None:
+            raise ValueError("amended pilot policy requires its authorization artifact")
+        require_sha256(protocol_amendment_sha256, "pilot protocol amendment")
+        return
+    raise ValueError("unregistered pilot learnability policy")
+
+
+def _policy_from_result_record(
+    record: dict[str, object],
+) -> PilotLearnabilityPolicy:
+    raw = record.get("learnability_policy")
+    if type(raw) is not dict:
+        raise ValueError("pilot learnability policy changed")
+    try:
+        policy = PilotLearnabilityPolicy(
+            policy_id=str(raw["policy_id"]),
+            minimum_accuracy=float(raw["minimum_accuracy"]),
+            acquisition_role=str(raw["acquisition_role"]),  # type: ignore[arg-type]
+            minimum_acquisition=(
+                None
+                if raw["minimum_acquisition"] is None
+                else float(raw["minimum_acquisition"])
+            ),
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("pilot learnability policy changed") from error
+    if (
+        policy.as_record() != raw
+        or policy.policy_sha256 != record.get("learnability_policy_sha256")
+    ):
+        raise ValueError("pilot learnability policy identity changed")
+    return policy
+
+
+def _pilot_budget_from_record(record: object) -> PilotBudgetResult:
+    if type(record) is not dict:
+        raise ValueError("pilot budget record changed")
+
+    def pairs(field: str) -> tuple[tuple[str, float], ...]:
+        raw = record.get(field)
+        if type(raw) is not list:
+            raise ValueError(f"pilot {field} changed")
+        result = []
+        for pair in raw:
+            if (
+                type(pair) is not list
+                or len(pair) != 2
+                or type(pair[0]) is not str
+                or type(pair[1]) not in (int, float)
+            ):
+                raise ValueError(f"pilot {field} changed")
+            result.append((pair[0], float(pair[1])))
+        return tuple(result)
+
+    updates = record.get("updates")
+    if type(updates) is not int:
+        raise ValueError("pilot budget updates changed")
+    return PilotBudgetResult(
+        updates,
+        pairs("concept_accuracy"),
+        pairs("base_accuracy"),
+    )
+
+
+def _preset_from_selected_result(
+    record: dict[str, object],
+    budgets: tuple[PilotBudgetResult, ...],
+) -> QueryExperimentPreset:
+    raw = record.get("selected_config")
+    if type(raw) is not dict or not budgets:
+        raise ValueError("pilot selected config changed")
+    concept_ids = tuple(concept_id for concept_id, _ in budgets[0].concept_accuracy)
+    adapter_updates = record.get("selected_updates")
+    if type(adapter_updates) is not int:
+        raise ValueError("pilot selected updates changed")
+    preset = QueryExperimentPreset(concept_ids, adapter_updates=adapter_updates)
+    if raw != preset.as_record() or record.get("selected_config_sha256") != preset.config_sha256:
+        raise ValueError("pilot selected config identity changed")
+    return preset
 
 
 def _verify_publication_files(

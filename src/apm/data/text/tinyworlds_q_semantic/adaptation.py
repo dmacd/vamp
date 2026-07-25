@@ -693,6 +693,7 @@ def _restore_progress(
         preset,
         additional_config_hashes,
     )
+    actual_hashes = dict(artifact_state.config_hashes)
     if (
         artifact_state.base_checkpoint.manifest_sha256
         != base_checkpoint.manifest_sha256
@@ -701,7 +702,12 @@ def _restore_progress(
         or artifact_state.model_config != loaded_base.config
         or artifact_state.lora_config != preset.lora_config
         or artifact_state.train_config != preset.adapter_train_config
-        or dict(artifact_state.config_hashes) != expected_hashes
+        or set(actual_hashes)
+        != set(expected_hashes) | {"lora", "model", "training"}
+        or any(
+            actual_hashes.get(name) != digest
+            for name, digest in expected_hashes.items()
+        )
     ):
         raise ValueError("query adaptation resume identity changed")
     task_count = len(artifact_state.task_order)

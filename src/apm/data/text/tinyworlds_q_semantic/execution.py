@@ -10,6 +10,7 @@ from math import isfinite
 import os
 from pathlib import Path
 import tempfile
+from typing import Literal
 
 from apm.data.text.tinyworlds_q_semantic.contracts import (
     QueryExperimentPreset,
@@ -21,6 +22,68 @@ from apm.data.text.tinyworlds_q_semantic.contracts import (
 
 STAGE_ARTIFACT_FORMAT = "tinyworlds-q-semantic-stage-v1"
 SEALED_TRANSACTION_FORMAT = "tinyworlds-q-semantic-sealed-transaction-v1"
+
+PilotAcquisitionRole = Literal["gate", "descriptive"]
+
+
+@dataclass(frozen=True, slots=True)
+class PilotLearnabilityPolicy:
+    """One hashable rule for turning validation evidence into pilot authorization."""
+
+    policy_id: str
+    minimum_accuracy: float
+    acquisition_role: PilotAcquisitionRole
+    minimum_acquisition: float | None
+
+    def __post_init__(self) -> None:
+        if type(self.policy_id) is not str or not self.policy_id:
+            raise ValueError("pilot policy_id must be nonempty")
+        if (
+            type(self.minimum_accuracy) is not float
+            or not isfinite(self.minimum_accuracy)
+            or not 0.0 <= self.minimum_accuracy <= 1.0
+        ):
+            raise ValueError("pilot minimum accuracy must be a finite probability")
+        if self.acquisition_role not in ("gate", "descriptive"):
+            raise ValueError("pilot acquisition role must be gate or descriptive")
+        if self.acquisition_role == "gate":
+            if (
+                type(self.minimum_acquisition) is not float
+                or not isfinite(self.minimum_acquisition)
+                or not 0.0 <= self.minimum_acquisition <= 1.0
+            ):
+                raise ValueError("gated pilot acquisition requires a finite probability")
+        elif self.minimum_acquisition is not None:
+            raise ValueError("descriptive pilot acquisition cannot declare a threshold")
+
+    @property
+    def policy_sha256(self) -> str:
+        """Hash the complete authorization rule independently of training config."""
+        return record_sha256(self.as_record())
+
+    def as_record(self) -> dict[str, object]:
+        """Return the canonical policy record."""
+        return {
+            "acquisition_role": self.acquisition_role,
+            "minimum_accuracy": self.minimum_accuracy,
+            "minimum_acquisition": self.minimum_acquisition,
+            "policy_id": self.policy_id,
+        }
+
+
+ORIGINAL_PILOT_LEARNABILITY_POLICY = PilotLearnabilityPolicy(
+    policy_id="original-accuracy-and-acquisition-gates",
+    minimum_accuracy=0.60,
+    acquisition_role="gate",
+    minimum_acquisition=0.15,
+)
+
+AMENDED_PILOT_LEARNABILITY_POLICY = PilotLearnabilityPolicy(
+    policy_id="post-pilot-absolute-accuracy-gate",
+    minimum_accuracy=0.60,
+    acquisition_role="descriptive",
+    minimum_acquisition=None,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,20 +155,43 @@ class PilotBudgetResult:
             raise ValueError("pilot and base accuracies must align by concept")
 
     @property
-    def passes(self) -> bool:
-        """Return whether every pilot world clears accuracy and acquisition gates."""
+    def acquisition(self) -> tuple[tuple[str, float], ...]:
+        """Return the paired absolute accuracy gain for every pilot world."""
         base_by_concept = dict(self.base_accuracy)
-        return all(
-            accuracy >= 0.60 and accuracy - base_by_concept[concept_id] >= 0.15
+        return tuple(
+            (concept_id, accuracy - base_by_concept[concept_id])
             for concept_id, accuracy in self.concept_accuracy
         )
+
+
+def pilot_budget_passes(
+    result: PilotBudgetResult,
+    policy: PilotLearnabilityPolicy,
+) -> bool:
+    """Apply one explicit policy to immutable per-world validation evidence."""
+    if not isinstance(result, PilotBudgetResult):
+        raise TypeError("pilot policy requires a PilotBudgetResult")
+    if not isinstance(policy, PilotLearnabilityPolicy):
+        raise TypeError("pilot policy must be a PilotLearnabilityPolicy")
+    acquisition_by_concept = dict(result.acquisition)
+    return all(
+        accuracy >= policy.minimum_accuracy
+        and (
+            policy.acquisition_role == "descriptive"
+            or acquisition_by_concept[concept_id] >= policy.minimum_acquisition
+        )
+        for concept_id, accuracy in result.concept_accuracy
+    )
 
 
 def select_pilot_budget(
     results: tuple[PilotBudgetResult, ...],
     preset: QueryExperimentPreset,
+    policy: PilotLearnabilityPolicy,
 ) -> int:
-    """Select the smallest registered budget that passes both pilot worlds."""
+    """Select the smallest registered budget passing one explicit policy."""
+    if not isinstance(policy, PilotLearnabilityPolicy):
+        raise TypeError("pilot selection requires an explicit learnability policy")
     by_budget = {result.updates: result for result in results}
     if len(results) != len(by_budget) or set(by_budget) != set(preset.pilot_update_budgets):
         raise ValueError("pilot results must cover every registered update budget")
@@ -118,10 +204,12 @@ def select_pilot_budget(
     passing = tuple(
         budget
         for budget in preset.pilot_update_budgets
-        if by_budget[budget].passes
+        if pilot_budget_passes(by_budget[budget], policy)
     )
     if not passing:
-        raise RuntimeError("pilot learnability gate failed at 500, 1000, and 2000 updates")
+        raise RuntimeError(
+            "pilot learnability policy failed at 500, 1000, and 2000 updates"
+        )
     return passing[0]
 
 

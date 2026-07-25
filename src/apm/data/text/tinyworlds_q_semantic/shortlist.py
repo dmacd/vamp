@@ -19,6 +19,7 @@ from apm.data.text.tinyworlds_p.normalization import normalize_story_identity
 from apm.data.text.tinyworlds_q_semantic.contracts import (
     BENCHMARK_ID,
     SCHEMA_VERSION,
+    ConceptDefinition,
     StoryProvenance,
     canonical_json_bytes,
     record_sha256,
@@ -185,7 +186,7 @@ class ReviewShortlistProposal:
 
 @dataclass(frozen=True, slots=True)
 class ReverseReviewChoices:
-    """Reviewed reverse-query choices for one pilot concept."""
+    """Reviewed reverse-query choices for one concept."""
 
     concept_id: str
     distractors: tuple[str, str, str]
@@ -245,12 +246,32 @@ class SemanticReviewShortlist:
             type(item) is not ReviewShortlistProposal for item in self.proposals
         ):
             raise TypeError("shortlist proposals must be immutable records")
-        if tuple(item.spec for item in self.proposals) != PILOT_SHORTLIST_SPECS:
-            raise ValueError("pilot shortlist proposal order or content changed")
+        specifications = tuple(item.spec for item in self.proposals)
+        concept_ids = tuple(dict.fromkeys(spec.concept_id for spec in specifications))
+        if (
+            not concept_ids
+            or len({spec.proposal_id for spec in specifications})
+            != len(specifications)
+            or any(
+                sum(spec.concept_id == concept_id for spec in specifications) != 16
+                or sum(
+                    spec.concept_id == concept_id and spec.priority == "primary"
+                    for spec in specifications
+                )
+                != 12
+                or sum(
+                    spec.concept_id == concept_id and spec.priority == "backup"
+                    for spec in specifications
+                )
+                != 4
+                for concept_id in concept_ids
+            )
+        ):
+            raise ValueError("shortlist requires twelve primaries and four backups per concept")
         if type(self.reverse_choices) is not tuple or tuple(
             item.concept_id for item in self.reverse_choices
-        ) != tuple(concept.concept_id for concept in PILOT_CONCEPTS):
-            raise ValueError("pilot reverse choices must follow the concept manifest")
+        ) != concept_ids:
+            raise ValueError("shortlist reverse choices must follow the concept manifest")
         if type(self.tokenizer_identity) is not TokenizerIdentity:
             raise TypeError("shortlist tokenizer identity is invalid")
         object.__setattr__(
@@ -347,9 +368,16 @@ PILOT_SHORTLIST_SPECS = tuple(
 
 def pilot_shortlist_predicates() -> tuple[PredicateDefinition, ...]:
     """Return the small exact-predicate set needed by the pilot shortlist."""
+    return shortlist_predicates(PILOT_SHORTLIST_SPECS)
+
+
+def shortlist_predicates(
+    specifications: tuple[ReviewShortlistSpec, ...],
+) -> tuple[PredicateDefinition, ...]:
+    """Return the exact predicate/category manifest needed by one shortlist."""
     predicate_categories = {
         (spec.source_predicate, spec.relation_category)
-        for spec in PILOT_SHORTLIST_SPECS
+        for spec in specifications
     }
     categories_by_predicate = {
         predicate: {
@@ -372,38 +400,72 @@ def build_pilot_review_shortlist(
     tokenizer: TextTokenizer,
 ) -> SemanticReviewShortlist:
     """Compile the supported pilot proposals into one compact decision surface."""
-    if packet.concepts != PILOT_CONCEPTS:
-        raise ValueError("pilot shortlist requires the exact pilot concept manifest")
-    expected_predicates = pilot_shortlist_predicates()
-    if packet.predicates != expected_predicates:
-        raise ValueError("pilot shortlist review packet changed its targeted predicates")
+    return build_review_shortlist(
+        packet,
+        PILOT_SHORTLIST_SPECS,
+        (
+            ("rabbit", ("horse", "cat", "dog")),
+            ("horse", ("rabbit", "cat", "dog")),
+        ),
+        tokenizer,
+    )
+
+
+def build_review_shortlist(
+    packet: SemanticReviewPacket,
+    specifications: tuple[ReviewShortlistSpec, ...],
+    reverse_distractors: tuple[tuple[str, tuple[str, str, str]], ...],
+    tokenizer: TextTokenizer,
+) -> SemanticReviewShortlist:
+    """Compile one supported ordered manifest into a compact decision surface."""
+    concept_ids = tuple(concept.concept_id for concept in packet.concepts)
+    specification_concepts = tuple(
+        dict.fromkeys(spec.concept_id for spec in specifications)
+    )
+    if concept_ids != specification_concepts:
+        raise ValueError("shortlist specifications changed the review concept manifest")
+    expected_predicates = shortlist_predicates(specifications)
+    available_predicates = {
+        (predicate.predicate, predicate.relation_category)
+        for predicate in packet.predicates
+    }
+    if any(
+        (predicate.predicate, predicate.relation_category)
+        not in available_predicates
+        for predicate in expected_predicates
+    ):
+        raise ValueError("shortlist review packet omits a targeted predicate")
     if tokenizer.vocab_size != CANONICAL_TOKENIZER_IDENTITY.vocab_size:
-        raise ValueError("pilot shortlist requires the pinned tokenizer vocabulary")
+        raise ValueError("shortlist requires the pinned tokenizer vocabulary")
     candidates = {
         (candidate.concept_id, candidate.predicate): candidate
         for candidate in packet.candidates
     }
     proposals = tuple(
-        _compile_proposal(spec, candidates.get((spec.concept_id, spec.source_predicate)), tokenizer)
-        for spec in PILOT_SHORTLIST_SPECS
+        _compile_proposal(
+            spec,
+            candidates.get((spec.concept_id, spec.source_predicate)),
+            tokenizer,
+            packet.concepts,
+        )
+        for spec in specifications
     )
     reverse_prompt = "Which concept does this fact describe? Answer:"
-    reverse_distractors = {
-        "rabbit": ("horse", "cat", "dog"),
-        "horse": ("rabbit", "cat", "dog"),
-    }
+    distractors_by_concept = dict(reverse_distractors)
+    if tuple(distractors_by_concept) != concept_ids:
+        raise ValueError("reverse distractors changed the review concept manifest")
     reverse_choices = tuple(
         ReverseReviewChoices(
             concept_id=concept.concept_id,
-            distractors=reverse_distractors[concept.concept_id],
+            distractors=distractors_by_concept[concept.concept_id],
             prompt_token_ids=tokenizations[0],
             combined_candidate_token_ids=tokenizations[1],
         )
-        for concept in PILOT_CONCEPTS
+        for concept in packet.concepts
         for tokenizations in (
             _tokenize_choices(
                 reverse_prompt,
-                (concept.concept_id, *reverse_distractors[concept.concept_id]),
+                (concept.concept_id, *distractors_by_concept[concept.concept_id]),
                 tokenizer,
             ),
         )
@@ -419,6 +481,7 @@ def _compile_proposal(
     spec: ReviewShortlistSpec,
     candidate: ReviewCandidate | None,
     tokenizer: TextTokenizer,
+    concepts: tuple[ConceptDefinition, ...],
 ) -> ReviewShortlistProposal:
     if candidate is None:
         raise ValueError(f"shortlist source evidence is missing: {spec.proposal_id}")
@@ -434,7 +497,11 @@ def _compile_proposal(
         source_candidate_id=candidate.candidate_id,
         supporting_group_count=len(candidate.supporting_story_groups),
         source_candidate_sha256=record_sha256(candidate.as_record()),
-        representative_evidence=select_representative_evidence(candidate, spec),
+        representative_evidence=select_representative_evidence(
+            candidate,
+            spec,
+            concepts,
+        ),
         prompt_token_ids=prompt_tokens,
         combined_candidate_token_ids=combined,
     )
@@ -443,11 +510,12 @@ def _compile_proposal(
 def select_representative_evidence(
     candidate: ReviewCandidate,
     spec: ReviewShortlistSpec,
+    concepts: tuple[ConceptDefinition, ...],
 ) -> tuple[StoryProvenance, ...]:
     """Choose three short, close co-occurrences from distinct source groups."""
     ranked = sorted(
         candidate.evidence,
-        key=lambda evidence: _evidence_rank(evidence, spec),
+        key=lambda evidence: _evidence_rank(evidence, spec, concepts),
     )
     selected: list[StoryProvenance] = []
     seen_groups: set[str] = set()
@@ -470,12 +538,13 @@ def select_representative_evidence(
 def _evidence_rank(
     evidence: StoryProvenance,
     spec: ReviewShortlistSpec,
-) -> tuple[int, int, int, str, str]:
+    concepts: tuple[ConceptDefinition, ...],
+) -> tuple[int, int, int, int, int, str, str]:
     normalized_sentence = normalize_story_identity(evidence.sentence_text)
     words = tuple(_WORD.findall(normalized_sentence))
     concept_surfaces = next(
         concept.surface_forms
-        for concept in PILOT_CONCEPTS
+        for concept in concepts
         if concept.concept_id == spec.concept_id
     )
     concept_positions = tuple(
@@ -497,6 +566,20 @@ def _evidence_rank(
         raise ValueError(
             f"review evidence lost its exact co-occurrence: {spec.proposal_id}"
         )
+    concept_name_pattern = "|".join(re.escape(form) for form in concept_surfaces)
+    title_predicate = re.escape(spec.source_predicate.title())
+    proper_name_penalty = int(
+        re.search(
+            rf"\b(?:named|called)\s+{title_predicate}\b|"
+            rf"\b(?:{concept_name_pattern})\s*,\s*{title_predicate}\b",
+            evidence.sentence_text,
+        )
+        is not None
+    )
+    predicate_follows_concept_penalty = int(
+        spec.relation_category == "taxonomy"
+        and min(predicate_positions) > min(concept_positions)
+    )
     distance = min(
         abs(concept_position - predicate_position)
         for concept_position in concept_positions
@@ -504,6 +587,8 @@ def _evidence_rank(
     )
     dialogue_penalty = int("\"" in evidence.sentence_text or "\n" in evidence.sentence_text)
     return (
+        proper_name_penalty,
+        predicate_follows_concept_penalty,
         dialogue_penalty,
         distance,
         len(words),
@@ -595,8 +680,9 @@ def _shortlist_payloads(shortlist: SemanticReviewShortlist) -> dict[str, bytes]:
 
 def render_review_shortlist_markdown(shortlist: SemanticReviewShortlist) -> str:
     """Render detailed proposal evidence and exact token boundaries."""
+    run_label = _shortlist_run_label(shortlist)
     lines = [
-        "# TinyWorlds-Q pilot semantic shortlist details",
+        f"# TinyWorlds-Q {run_label} semantic shortlist details",
         "",
         "The concise decision sheet is `review.md`. Use this detailed file only to ",
         "inspect additional evidence and tokenizer boundaries. The complete audit is ",
@@ -685,8 +771,14 @@ def render_review_shortlist_markdown(shortlist: SemanticReviewShortlist) -> str:
 
 def render_primary_review_markdown(shortlist: SemanticReviewShortlist) -> str:
     """Render a one-page primary decision queue with backups kept separate."""
+    concept_ids = _shortlist_concept_ids(shortlist)
+    pilot = concept_ids == tuple(concept.concept_id for concept in PILOT_CONCEPTS)
     lines = [
-        "# TinyWorlds-Q rabbit/horse approval sheet",
+        (
+            "# TinyWorlds-Q rabbit/horse approval sheet"
+            if pilot
+            else "# TinyWorlds-Q five-world main approval sheet"
+        ),
         "",
         "This is the review queue. You do not need to read the complete evidence audit.",
         "Approving a row means its truth, answer forms, trigger closure, distractors,",
@@ -694,19 +786,23 @@ def render_primary_review_markdown(shortlist: SemanticReviewShortlist) -> str:
         "you want two more examples or exact token IDs.",
         "",
         "Reply with **approve all primaries**, or list exceptions such as",
-        "`reject rabbit-proposal-12; promote rabbit-proposal-13`.",
+        (
+            "`reject rabbit-proposal-12; promote rabbit-proposal-13`."
+            if pilot
+            else "`reject cat-proposal-12; promote cat-proposal-13`."
+        ),
         "",
     ]
-    for concept in PILOT_CONCEPTS:
+    for concept_id in concept_ids:
         concept_proposals = tuple(
             proposal
             for proposal in shortlist.proposals
-            if proposal.spec.concept_id == concept.concept_id
+            if proposal.spec.concept_id == concept_id
             and proposal.spec.priority == "primary"
         )
         lines.extend(
             (
-                f"## {concept.concept_id.title()} — 12 primary proposals",
+                f"## {concept_id.title()} — 12 primary proposals",
                 "",
                 "| Approve | ID | Fact | Answer; false choices | Triggers | Groups | Example evidence |",
                 "|---|---|---|---|---|---:|---|",
@@ -794,14 +890,32 @@ def render_review_shortlist_html(
     markdown: str,
 ) -> str:
     """Render a standalone compact HTML surface without remote dependencies."""
+    run_label = _shortlist_run_label(shortlist)
     return (
         "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
-        "<title>TinyWorlds-Q pilot semantic shortlist</title>"
+        f"<title>TinyWorlds-Q {run_label} semantic shortlist</title>"
         "<style>body{font:15px/1.5 system-ui;max-width:1050px;margin:2rem auto;"
         "padding:0 1rem;color:#17202a}pre{white-space:pre-wrap;overflow-wrap:anywhere;"
         "background:#f7f8fa;padding:1.25rem;border-radius:8px}</style></head>"
         f"<body data-shortlist-sha256=\"{shortlist.shortlist_sha256}\">"
         f"<pre>{html.escape(markdown)}</pre></body></html>\n"
+    )
+
+
+def _shortlist_concept_ids(
+    shortlist: SemanticReviewShortlist,
+) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(proposal.spec.concept_id for proposal in shortlist.proposals)
+    )
+
+
+def _shortlist_run_label(shortlist: SemanticReviewShortlist) -> str:
+    return (
+        "pilot"
+        if _shortlist_concept_ids(shortlist)
+        == tuple(concept.concept_id for concept in PILOT_CONCEPTS)
+        else "main"
     )
 
 
@@ -811,7 +925,9 @@ __all__ = [
     "ReviewShortlistSpec",
     "SemanticReviewShortlist",
     "build_pilot_review_shortlist",
+    "build_review_shortlist",
     "pilot_shortlist_predicates",
+    "shortlist_predicates",
     "publish_review_shortlist",
     "render_review_form_tsv",
     "render_primary_review_markdown",

@@ -276,6 +276,55 @@ def test_two_task_transition_is_immutable_stable_and_deterministic() -> None:
     assert second_run.stage_metrics == repeated_second_run.stage_metrics
 
 
+def test_vamp_accepts_prefix_scored_tasks_without_story_metrics() -> None:
+    config = _model_config()
+    params = init_gpt_neo_params(jax.random.PRNGKey(11), config)
+    source_task = _task("query-task", (1, 2, 3, 4, 5))
+    task = LanguageTask(
+        task_id=source_task.task_id,
+        train_batches=source_task.train_batches,
+        validation_examples=(),
+        test_examples=(),
+        parent_probes=source_task.parent_probes,
+        content_key_probes=source_task.content_key_probes,
+    )
+    lora_config = LoraConfig(rank=2, alpha=2.0)
+    train_config = LmTrainConfig(
+        learning_rate=1e-2,
+        steps=1,
+        batch_size=1,
+        weight_decay=0.0,
+    )
+    initial = init_language_vamp_run(
+        _base_reference(params, config),
+        params,
+        config,
+        task.parent_probes,
+        jax.random.PRNGKey(12),
+        max_nodes=2,
+        max_edges=1,
+        key_probe_count=1,
+    )
+    completed = advance_language_vamp_run(
+        initial,
+        task,
+        params,
+        config,
+        lora_config,
+        train_config,
+        score_parent_nodes(
+            initial,
+            task.parent_probes,
+            params,
+            config,
+            lora_config,
+        ),
+        key_probe_count=1,
+    )
+    assert completed.completed_tasks == (task,)
+    assert completed.stage_metrics[0].task_metrics == ()
+
+
 def test_init_requires_exact_probe_count_and_advance_rejects_node_collisions() -> None:
     config = _model_config()
     params = init_gpt_neo_params(jax.random.PRNGKey(2), config)

@@ -36,8 +36,10 @@ also covers the compact 24-primary/8-backup review queue, evidence support,
 token balance, and publication. Synthetic manifests at 1,
 5, 10, 20, and 100 worlds cover derived capacities, tensor masks, full and
 milestone schedules, chunking, dynamic reports, and explicit preflight limits.
-The seven new tests and 36 focused existing knowledge/training/semantic-v6 tests
-pass in the pinned semantic environment.
+The focused query/language suite now passes 13 tests, including the dynamic
+five-world shortlist and exact preservation of the published pilot shortlist.
+A broader 56-test query, knowledge, scoring, training, statistics, and
+semantic-v6 compatibility run also passes in the pinned semantic environment.
 
 The repository-wide default suite finishes with 618 passed, 274 skipped, 11
 deselected, and one pre-existing failure in
@@ -108,18 +110,48 @@ was 7,557,684,224 bytes. All base gates passed, and selected base
 is published. That base authorized the fixed pilot sweep.
 
 The registered independent sweep completed one exact 2,000-update trajectory
-per world and preserved its 500/1,000/2,000 snapshots. Rabbit base accuracy was
-`0.555556`; its adapter accuracies were `0.611111`, `0.611111`, and `0.638889`,
-for gains of only `0.055556`, `0.055556`, and `0.083333`. Horse base accuracy
-was `0.250000`; its adapter accuracies were `0.583333`, `0.555556`, and
-`0.611111`. No budget passed both the 60% accuracy and 15-point acquisition
-gates for both worlds. Authenticated failure
+per world and preserved its 500/1,000/2,000 snapshots. Under the original
+preregistered policy, no budget passed both the 60% accuracy and 15-point
+acquisition gates for both worlds. Authenticated failure
 `aad4811425c10b0faf5f6f452067e35a58d6cee397970711951e50bfad2247f5`
-contains every exact validation row plus Markdown and standalone HTML. The
-runner stopped before selected-budget sequential/VAMP, main catalog work, or
-sealed-test access. The generic downstream code and its focused compilation,
-accuracy-reconstruction, schedule-coverage, resume, failure-publication, and
-tamper tests pass, but execution remains unauthorized. See
+remains immutable evidence of that stop.
+
+After reviewing the ceiling-sensitive rabbit baseline, the interactive user
+authorized explicit amendment
+`2855b647928700a119ea6e95365379719ad733d45c6ede20cafcd1593a64458c`.
+It keeps 60% absolute validation accuracy as the learnability gate and makes
+acquisition a mandatory descriptive statistic. It neither rewrites the
+failure nor opens sealed test data. Under the amended policy, 2,000 updates is
+the first budget where both worlds pass: rabbit reaches `0.638889` from a
+`0.555556` base (`+0.083333`), and horse reaches `0.611111` from `0.250000`
+(`+0.361111`).
+
+The selected two-world independent, sequential, and VAMP exercise completed,
+all nine validation methods were written to the bounded ledger, and an exact
+completed-stage no-op resume passed. Pilot result
+`55c97f2a649ea434f79e729b2eaff01753a254ce0a5c26e53a1095d4df0364c7`
+binds policy, amendment, tensors, ledgers, runtime, and memory. It is an
+operational pilot only and gives VAMP no scientific verdict. The sealed test
+remains closed.
+
+The five-world main configuration is now frozen at
+`82d0d3258e0e723588d151387c0151156b408770df1f84bcb5450ac72f9327ff`.
+It fixes order `cat, dog, bird, robot, dragon`, a fresh seed-zero base, 2,000
+adapter updates, the exact query/scoring protocol, all nine methods, 10,000
+fact-resampled bootstrap replicates, validation-only routing, and a single
+sealed opening after all artifacts are frozen.
+
+Main construction review is ready. Raw discovery packet
+`7164cd2cc18be5ba29d7106a44f23dbec5bf39a9a962b9c441ccf07501a8132f`
+and targeted evidence packet
+`ce1b06c7f7a325cedded9970ac008329c93d97d29c84344b93d22b450db14374`
+remain non-authoritative audits. Compact shortlist
+`fe2f78e92e1c4e0d26280f2741beea728ea3125c932c3126b770da6cd90104cc`
+contains 12 primaries and 4 backups per world, exact token-balanced choices,
+reviewed trigger proposals, and construction support; the smallest primary
+support is 17 groups. Human approval of the main primary and reverse choices
+is the next gate. No main catalog, partition, model input, GPU update, or
+sealed-test access has occurred. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration

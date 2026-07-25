@@ -52,11 +52,12 @@ queue. A compact shortlist binds one targeted evidence packet, the pinned
 tokenizer identity, proposed facts, accepted and trigger forms, proposed false
 choices, exact answer-token suffixes, support counts, and deterministic
 representative sentences. Its primary surface contains exactly twelve rows per
-pilot concept and keeps four alternatives per concept in a separate backup
-section. The full evidence remains addressable by candidate hash when a row
-needs closer inspection. Neither ranking, shortlisting, nor a checked-looking
-render creates semantic authority; only an explicit recorded human decision
-can promote a proposal into the catalog.
+concept and keeps four alternatives per concept in a separate backup section.
+The same manifest-driven implementation publishes the two-world pilot and
+five-world main surfaces. The full evidence remains addressable by candidate
+hash when a row needs closer inspection. Neither ranking, shortlisting, nor a
+checked-looking render creates semantic authority; only an explicit recorded
+human decision can promote a proposal into the catalog.
 
 Each fact has three validation paraphrases (two forward and one reverse) and
 five sealed-test paraphrases (three forward and two reverse). Across those
@@ -178,8 +179,29 @@ validation-only failure bundle before raising the mandatory stop. That bundle
 binds the same frozen sources and independent-sweep tensors, every budget's
 base accuracy, adapter accuracy, acquisition delta, exact per-query JSONL, and
 allocator evidence. It contains no selected budget or selected adaptation.
-Strict retry loading treats that failure as terminal for the frozen inputs, so
-it cannot be silently re-evaluated into main authorization.
+Strict retry loading treats that failure as terminal under its exact policy,
+so it cannot be silently re-evaluated into main authorization.
+
+The original pilot did stop this way: both worlds needed 60% absolute accuracy
+and a 15-percentage-point acquisition delta, and rabbit missed the latter at
+all budgets despite exceeding the absolute threshold. That failure remains
+immutable. A later user-authorized protocol-amendment artifact may reference
+the exact failure and sweep, preserve their bytes, name a new policy, and
+explain the change. It cannot mutate or relabel the original result. The
+registered amendment keeps 60% absolute accuracy as the pilot gate and makes
+acquisition mandatory descriptive evidence because permitted lexical exposure
+made the relative threshold ceiling-sensitive. Under that amendment, the
+smallest passing budget is 2,000 updates. Sequential/VAMP completion and exact
+resume remain operational requirements before main authorization, and sealed
+prompts remain unavailable throughout.
+
+Main execution is separately frozen by a content-addressed authorization that
+binds the failure, amendment, completed pilot result, concept order, 2,000
+updates, fresh seed-zero base, exact query protocol, answer-only scoring, nine
+methods, fact-level bootstrap contract, validation-only parent/router inputs,
+and one sealed opening after all artifacts are frozen. Main fact extraction
+and human review may proceed after that freeze, but no proposal becomes a fact
+until the primary and reverse approval artifacts are recorded.
 
 Every primary statistic first averages all paraphrases within a fact. Accuracy,
 correct-answer margin, acquisition, specificity, retention, router accuracy,
@@ -224,11 +246,13 @@ disposable base updates and warm validation, parent-search, and task-free
 routing probes. It binds the catalog, partition, full dynamic preset, measured
 allocator peak, result-size estimate, and runtime projections; its parameters
 cannot be promoted into the real run.
-The rabbit/horse pilot tests adapter budgets 500, 1,000, and 2,000 in order and
-selects the first for which both worlds reach 60% validation accuracy and gain
-15 percentage points over base. If none passes, construction stops before the
-main run. Main execution, when authorized by that pilot, uses the fixed order
-`cat, dog, bird, robot, dragon` for independent, sequential, and VAMP systems.
+The original rabbit/horse policy tested adapter budgets 500, 1,000, and 2,000
+in order and required both worlds to reach 60% validation accuracy and gain 15
+percentage points over base. Its failure is retained. The registered amendment
+selects the first budget where both worlds reach 60%, reports acquisition
+without thresholding it, and selected 2,000. Main execution uses the separately
+frozen order `cat, dog, bird, robot, dragon` for independent, sequential, and
+VAMP systems.
 
 ## TinyWorlds-P Semantic-v6 Exact Comparison Feasibility
 
