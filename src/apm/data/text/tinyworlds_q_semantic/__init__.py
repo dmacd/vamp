@@ -17,7 +17,10 @@ from apm.data.text.tinyworlds_q_semantic.manifests import (
     PILOT_CONCEPTS,
 )
 from apm.data.text.tinyworlds_q_semantic.evaluation import PilotBudgetEvaluation
-from apm.data.text.tinyworlds_q_semantic.pilot import SemanticPilotResult
+from apm.data.text.tinyworlds_q_semantic.pilot import (
+    SemanticPilotFailure,
+    SemanticPilotResult,
+)
 from apm.data.text.tinyworlds_q_semantic.pilot_sweep import (
     PilotIndependentBudget,
     PilotIndependentSweep,
@@ -52,6 +55,7 @@ __all__ = [
     "QueryPartitionArtifact",
     "ReverseReviewApproval",
     "SemanticFact",
+    "SemanticPilotFailure",
     "SemanticPilotResult",
     "SemanticQueryCatalog",
     "SemanticQueryResult",

@@ -98,24 +98,28 @@ GPU preflight
 passed on the RTX 4090. Two disposable updates had finite NLLs `10.859072643`
 and `10.853386662`; the warm update took `0.488339` seconds and allocator peak
 was 7,417,784,832 bytes, below 12 GiB. It projects 18,530 updates per epoch and
-about 5:01:38 for the registered two-epoch base. The real seed-zero run is now
-active under
+about 5:01:38 for the registered two-epoch base. The real seed-zero run
+completed under
 `checkpoints/tinyworlds-q-semantic-v1/work/pilot-base-6fbf5f5e5a7ab4cd3c862884a8b64f08e931d4fe209d57376ebda10c9c5f4bac`.
-Its finite early training curve has passed 5,000 optimizer updates and exact
-resume states exist at each 1,000-update boundary through 5,000. The next hard evidence
-is epoch-one held-in validation; no reusable base, adapter, or sealed result
-exists yet.
+Held-in validation NLL improved from `1.231696441` after epoch one to
+`1.157588485` after epoch two, a `0.074107956` improvement. The allocator peak
+was 7,557,684,224 bytes. All base gates passed, and selected base
+`91b1dd7cf314fcdf81509d6421a3a33621f7106a54161d0aa080911dc1db4961`
+is published. That base authorized the fixed pilot sweep.
 
-The pilot runner now continues beyond that base boundary. It snapshots one
-independent trajectory per world at all three registered budgets, keeping the
-worst case within the preflighted 12,000 updates. It derives the learnability
-decision solely from matching independent-adapter validation, trains and
-strictly resumes the selected sequential/VAMP state, evaluates independent,
-sequential, VAMP-oracle, and all task-free routed methods in bounded chunks,
-and publishes authenticated JSONL plus Markdown/standalone-HTML evidence. Its
-focused compilation, accuracy-reconstruction, schedule-coverage, resume, and
-tamper tests pass. Main catalog work cannot begin until the running base and
-pilot learnability gates pass. See
+The registered independent sweep completed one exact 2,000-update trajectory
+per world and preserved its 500/1,000/2,000 snapshots. Rabbit base accuracy was
+`0.555556`; its adapter accuracies were `0.611111`, `0.611111`, and `0.638889`,
+for gains of only `0.055556`, `0.055556`, and `0.083333`. Horse base accuracy
+was `0.250000`; its adapter accuracies were `0.583333`, `0.555556`, and
+`0.611111`. No budget passed both the 60% accuracy and 15-point acquisition
+gates for both worlds. Authenticated failure
+`aad4811425c10b0faf5f6f452067e35a58d6cee397970711951e50bfad2247f5`
+contains every exact validation row plus Markdown and standalone HTML. The
+runner stopped before selected-budget sequential/VAMP, main catalog work, or
+sealed-test access. The generic downstream code and its focused compilation,
+accuracy-reconstruction, schedule-coverage, resume, failure-publication, and
+tamper tests pass, but execution remains unauthorized. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration

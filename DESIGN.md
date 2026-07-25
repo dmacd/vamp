@@ -173,6 +173,14 @@ are derived views. Publishing this bundle proves pilot learnability and
 operational integrity only; it never creates a VAMP scientific verdict or test
 authorization.
 
+When no budget passes, the runner instead publishes a content-addressed
+validation-only failure bundle before raising the mandatory stop. That bundle
+binds the same frozen sources and independent-sweep tensors, every budget's
+base accuracy, adapter accuracy, acquisition delta, exact per-query JSONL, and
+allocator evidence. It contains no selected budget or selected adaptation.
+Strict retry loading treats that failure as terminal for the frozen inputs, so
+it cannot be silently re-evaluated into main authorization.
+
 Every primary statistic first averages all paraphrases within a fact. Accuracy,
 correct-answer margin, acquisition, specificity, retention, router accuracy,
 and routed regret are then aggregated with 10,000 deterministic fact-resampled

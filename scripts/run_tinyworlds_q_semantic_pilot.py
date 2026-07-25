@@ -41,7 +41,9 @@ from apm.data.text.tinyworlds_q_semantic.preflight import (
     run_and_publish_query_gpu_preflight,
 )
 from apm.data.text.tinyworlds_q_semantic.pilot import (
+    load_semantic_pilot_failure,
     load_semantic_pilot_result,
+    publish_semantic_pilot_failure,
     publish_semantic_pilot_result,
 )
 from apm.data.text.tinyworlds_q_semantic.pilot_sweep import (
@@ -528,6 +530,32 @@ def _matching_pilot_result(catalog, partition, selected_base, preflight):
     return matches[0] if matches else None
 
 
+def _matching_pilot_failure(catalog, partition, selected_base, preflight):
+    root = RESULT_ROOT / "pilot-failure"
+    if not root.is_dir():
+        return None
+    matches = []
+    for path in sorted(root.iterdir()):
+        record_path = path / "failure.json"
+        if not path.is_dir() or len(path.name) != 64 or not record_path.is_file():
+            continue
+        payload = record_path.read_bytes()
+        record = json.loads(payload)
+        if type(record) is not dict or canonical_json_bytes(record) != payload:
+            raise ValueError(f"noncanonical semantic pilot failure: {path}")
+        if (
+            record.get("catalog_sha256") != catalog.catalog_sha256
+            or record.get("partition_sha256") != partition.partition_sha256
+            or record.get("selected_base_sha256") != selected_base.selection_sha256
+            or record.get("preflight_sha256") != preflight.preflight_sha256
+        ):
+            continue
+        matches.append(load_semantic_pilot_failure(path))
+    if len(matches) > 1:
+        raise RuntimeError("multiple pilot failures bind the same frozen inputs")
+    return matches[0] if matches else None
+
+
 def _run_pilot_budget(
     queries,
     loaded_base,
@@ -545,11 +573,16 @@ def _run_pilot_budget(
         preset,
         progress=evaluation_progress,
     )
+    base_accuracy = dict(evaluation.budget.base_accuracy)
     print(
         "Pilot budget "
         f"{preset.adapter_updates:,}: "
         + ", ".join(
-            f"{concept_id}={accuracy:.3f}"
+            (
+                f"{concept_id}=base {base_accuracy[concept_id]:.3f}, "
+                f"adapter {accuracy:.3f}, "
+                f"gain {accuracy - base_accuracy[concept_id]:+.3f}"
+            )
             for concept_id, accuracy in evaluation.budget.concept_accuracy
         )
         + f"; passed={evaluation.budget.passes}",
@@ -569,6 +602,16 @@ def _run_pilot(sources, preflight, selected_base):
     if existing is not None:
         print(f"Using strict pilot result {existing.root}.", flush=True)
         return existing
+    existing_failure = _matching_pilot_failure(
+        catalog,
+        partition,
+        selected_base,
+        preflight,
+    )
+    if existing_failure is not None:
+        raise RuntimeError(
+            f"pilot learnability previously failed: {existing_failure.root}"
+        )
     loaded_base = load_gpt_neo_checkpoint(selected_base.checkpoint)
     overall_started = time.monotonic()
     maximum_budget = max(registered_preset.pilot_update_budgets)
@@ -633,6 +676,27 @@ def _run_pilot(sources, preflight, selected_base):
         )
         for budget in registered_preset.pilot_update_budgets
     )
+    if not any(item.budget.passes for item in budget_evaluations):
+        failure = publish_semantic_pilot_failure(
+            RESULT_ROOT / "pilot-failure",
+            catalog_sha256=catalog.catalog_sha256,
+            partition_sha256=partition.partition_sha256,
+            selected_base_sha256=selected_base.selection_sha256,
+            preflight_sha256=preflight.preflight_sha256,
+            preset=registered_preset,
+            budgets=budget_evaluations,
+            independent_sweep_sha256=sweep.sweep_sha256,
+            independent_sweep_manifest_sha256=_file_sha256(
+                sweep.stage_directory / "manifest.json"
+            ),
+            allocator_peak_bytes=allocator_peak_bytes(),
+        )
+        print(f"Pilot failure: {failure.failure_sha256}", flush=True)
+        print(f"Pilot failure report: {failure.root / 'report.md'}", flush=True)
+        print("The sealed test was not opened.", flush=True)
+        raise RuntimeError(
+            "pilot learnability gate failed at 500, 1000, and 2000 updates"
+        )
     selected_updates = select_pilot_budget(
         tuple(item.budget for item in budget_evaluations),
         registered_preset,

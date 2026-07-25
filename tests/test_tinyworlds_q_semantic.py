@@ -82,7 +82,9 @@ from apm.data.text.tinyworlds_q_semantic.pilot_catalog import (
     build_approved_pilot_catalog,
 )
 from apm.data.text.tinyworlds_q_semantic.pilot import (
+    load_semantic_pilot_failure,
     load_semantic_pilot_result,
+    publish_semantic_pilot_failure,
     publish_semantic_pilot_result,
 )
 from apm.data.text.tinyworlds_q_semantic.pilot_sweep import (
@@ -1093,6 +1095,53 @@ def test_operational_gates_and_resumable_stage_parity(tmp_path: Path) -> None:
     )
     assert pilot.selected_updates == 1_000
     assert load_semantic_pilot_result(pilot.root) == pilot
+
+    failed_evaluations = tuple(
+        PilotBudgetEvaluation(
+            PilotBudgetResult(
+                updates,
+                (("cat", 22 / 36), ("dog", 21 / 36)),
+                (("cat", 0.5), ("dog", 0.5)),
+            ),
+            tuple(
+                row
+                for concept_id, correct_count in (("cat", 22), ("dog", 21))
+                for row in (
+                    result_rows("base", concept_id, 18, 0, None)
+                    + result_rows(
+                        "independent",
+                        concept_id,
+                        correct_count,
+                        preset.concept_ids.index(concept_id) + 1,
+                        concept_id,
+                    )
+                )
+            ),
+            "8" * 64,
+        )
+        for updates in preset.pilot_update_budgets
+    )
+    failure = publish_semantic_pilot_failure(
+        tmp_path / "pilot-failures",
+        catalog_sha256="1" * 64,
+        partition_sha256="2" * 64,
+        selected_base_sha256="3" * 64,
+        preflight_sha256="4" * 64,
+        preset=preset,
+        budgets=failed_evaluations,
+        independent_sweep_sha256="5" * 64,
+        independent_sweep_manifest_sha256="6" * 64,
+        allocator_peak_bytes=1,
+    )
+    assert load_semantic_pilot_failure(failure.root) == failure
+    failure_report = (failure.root / "report.md").read_text()
+    assert "learnability stop" in failure_report
+    assert "Sequential/VAMP and main execution therefore remained unauthorized" in failure_report
+    with (failure.root / "budget-0500-validation.jsonl").open("ab") as stream:
+        stream.write(b"tamper")
+    with pytest.raises(ValueError, match="file changed"):
+        load_semantic_pilot_failure(failure.root)
+
     with (pilot.root / "selected-validation.jsonl").open("ab") as stream:
         stream.write(b"tamper")
     with pytest.raises(ValueError, match="file changed"):

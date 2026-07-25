@@ -25,6 +25,7 @@ from apm.data.text.tinyworlds_q_semantic.scaling import evaluation_schedule
 
 
 PILOT_RESULT_FORMAT = "tinyworlds-q-semantic-pilot-result-v1"
+PILOT_FAILURE_FORMAT = "tinyworlds-q-semantic-pilot-failure-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,26 @@ class SemanticPilotResult:
             raise ValueError("selected pilot updates must be positive")
         if self.sealed_test_opened is not False:
             raise ValueError("pilot publication cannot open the sealed test")
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticPilotFailure:
+    """One strict validation-only pilot stop and its published directory."""
+
+    root: Path
+    failure_sha256: str
+    reason: str
+    sealed_test_opened: bool
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "root", Path(self.root))
+        require_sha256(self.failure_sha256, "pilot failure")
+        if not self.root.is_dir():
+            raise FileNotFoundError(self.root)
+        if self.reason != "pilot_learnability_gate_failed":
+            raise ValueError("pilot failure reason changed")
+        if self.sealed_test_opened is not False:
+            raise ValueError("pilot failure publication cannot open the sealed test")
 
 
 def publish_semantic_pilot_result(
@@ -118,20 +139,7 @@ def publish_semantic_pilot_result(
     )
     selected_ledger = _result_ledger(selected_validation_results)
     budget_records = tuple(
-        {
-            "adaptation_tensor_checksum": item.adaptation_tensor_checksum,
-            "base_accuracy": [list(value) for value in item.budget.base_accuracy],
-            "concept_accuracy": [
-                list(value) for value in item.budget.concept_accuracy
-            ],
-            "config_sha256": replace(
-                preset,
-                adapter_updates=item.budget.updates,
-            ).config_sha256,
-            "passed": item.budget.passes,
-            "results_sha256": sha256(dict(budget_ledgers)[item.budget.updates]).hexdigest(),
-            "updates": item.budget.updates,
-        }
+        _budget_record(item, dict(budget_ledgers)[item.budget.updates], preset)
         for item in budgets
     )
     core = {
@@ -211,6 +219,190 @@ def publish_semantic_pilot_result(
     return load_semantic_pilot_result(destination)
 
 
+def publish_semantic_pilot_failure(
+    output_root: str | Path,
+    *,
+    catalog_sha256: str,
+    partition_sha256: str,
+    selected_base_sha256: str,
+    preflight_sha256: str,
+    preset: QueryExperimentPreset,
+    budgets: tuple[PilotBudgetEvaluation, ...],
+    independent_sweep_sha256: str,
+    independent_sweep_manifest_sha256: str,
+    allocator_peak_bytes: int,
+) -> SemanticPilotFailure:
+    """Publish exact all-budget evidence when no pilot budget passes."""
+    for value, label in (
+        (catalog_sha256, "pilot failure catalog"),
+        (partition_sha256, "pilot failure partition"),
+        (selected_base_sha256, "pilot failure selected base"),
+        (preflight_sha256, "pilot failure preflight"),
+        (independent_sweep_sha256, "pilot failure independent sweep"),
+        (
+            independent_sweep_manifest_sha256,
+            "pilot failure independent sweep manifest",
+        ),
+    ):
+        require_sha256(value, label)
+    if (
+        tuple(item.budget.updates for item in budgets)
+        != preset.pilot_update_budgets
+        or any(item.budget.passes for item in budgets)
+    ):
+        raise ValueError("pilot failure requires every registered budget to fail")
+    if (
+        type(allocator_peak_bytes) is not int
+        or not 0 <= allocator_peak_bytes <= preset.allocator_peak_limit_bytes
+    ):
+        raise ValueError("pilot failure allocator evidence is invalid")
+    budget_ledgers = tuple(
+        (item.budget.updates, _result_ledger(item.results)) for item in budgets
+    )
+    budget_records = tuple(
+        _budget_record(item, dict(budget_ledgers)[item.budget.updates], preset)
+        for item in budgets
+    )
+    core = {
+        "allocator_peak_bytes": allocator_peak_bytes,
+        "budgets": list(budget_records),
+        "catalog_sha256": catalog_sha256,
+        "config": preset.as_record(),
+        "config_sha256": preset.config_sha256,
+        "format": PILOT_FAILURE_FORMAT,
+        "independent_sweep_manifest_sha256": independent_sweep_manifest_sha256,
+        "independent_sweep_sha256": independent_sweep_sha256,
+        "partition_sha256": partition_sha256,
+        "preflight_sha256": preflight_sha256,
+        "reason": "pilot_learnability_gate_failed",
+        "sealed_test_opened": False,
+        "selected_base_sha256": selected_base_sha256,
+    }
+    failure_sha256 = record_sha256(core)
+    destination = Path(output_root) / failure_sha256
+    if destination.exists():
+        return load_semantic_pilot_failure(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".pilot-failure-", dir=destination.parent))
+    try:
+        markdown = render_semantic_pilot_failure_report(
+            failure_sha256,
+            budget_records,
+            allocator_peak_bytes,
+        )
+        payloads = {
+            "failure.json": canonical_json_bytes(
+                {**core, "failure_sha256": failure_sha256}
+            ),
+            "report.md": markdown.encode("utf-8"),
+            "report.html": (
+                "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
+                "<title>TinyWorlds-Q pilot failure</title>"
+                "<style>body{font:15px/1.5 system-ui;max-width:1000px;margin:2rem auto;"
+                "padding:0 1rem}pre{white-space:pre-wrap;background:#f5f7f9;"
+                "padding:1.25rem;border-radius:8px}</style></head>"
+                f"<body data-failure-sha256=\"{failure_sha256}\"><pre>"
+                f"{html.escape(markdown)}</pre></body></html>\n"
+            ).encode("utf-8"),
+            **{
+                f"budget-{updates:04d}-validation.jsonl": payload
+                for updates, payload in budget_ledgers
+            },
+        }
+        for name, payload in payloads.items():
+            _write_file(staging / name, payload)
+        manifest = {
+            "files": [
+                {
+                    "name": name,
+                    "sha256": sha256(payload).hexdigest(),
+                    "size_bytes": len(payload),
+                }
+                for name, payload in sorted(payloads.items())
+            ],
+            "format": PILOT_FAILURE_FORMAT,
+            "failure_sha256": failure_sha256,
+        }
+        _write_file(staging / "manifest.json", canonical_json_bytes(manifest))
+        os.replace(staging, destination)
+    except BaseException:
+        _remove_tree(staging)
+        raise
+    return load_semantic_pilot_failure(destination)
+
+
+def load_semantic_pilot_failure(root: str | Path) -> SemanticPilotFailure:
+    """Authenticate one complete pilot stop without reading sealed data."""
+    directory = Path(root)
+    manifest = _canonical_json(directory / "manifest.json")
+    failure = _canonical_json(directory / "failure.json")
+    required = {
+        "allocator_peak_bytes",
+        "budgets",
+        "catalog_sha256",
+        "config",
+        "config_sha256",
+        "failure_sha256",
+        "format",
+        "independent_sweep_manifest_sha256",
+        "independent_sweep_sha256",
+        "partition_sha256",
+        "preflight_sha256",
+        "reason",
+        "sealed_test_opened",
+        "selected_base_sha256",
+    }
+    if (
+        set(manifest) != {"files", "format", "failure_sha256"}
+        or set(failure) != required
+        or manifest.get("format") != PILOT_FAILURE_FORMAT
+        or failure.get("format") != PILOT_FAILURE_FORMAT
+        or failure.get("failure_sha256") != manifest.get("failure_sha256")
+        or directory.name != manifest.get("failure_sha256")
+    ):
+        raise ValueError("pilot failure identity changed")
+    failure_sha256 = str(manifest["failure_sha256"])
+    core = {key: value for key, value in failure.items() if key != "failure_sha256"}
+    if record_sha256(core) != failure_sha256:
+        raise ValueError("pilot failure content hash changed")
+    payload_by_name = _verify_publication_files(directory, manifest)
+    if failure.get("sealed_test_opened") is not False:
+        raise PermissionError("pilot failure claims sealed-test access")
+    budgets = failure.get("budgets")
+    if type(budgets) is not list or not budgets or any(
+        type(record) is not dict for record in budgets
+    ):
+        raise ValueError("pilot failure budget records changed")
+    for budget in budgets:
+        updates = budget.get("updates")
+        name = f"budget-{updates:04d}-validation.jsonl" if type(updates) is int else ""
+        if (
+            set(budget)
+            != {
+                "acquisition",
+                "adaptation_tensor_checksum",
+                "base_accuracy",
+                "concept_accuracy",
+                "config_sha256",
+                "passed",
+                "results_sha256",
+                "updates",
+            }
+            or not name
+            or name not in payload_by_name
+            or sha256(payload_by_name[name]).hexdigest()
+            != budget.get("results_sha256")
+            or budget.get("passed") is not False
+        ):
+            raise ValueError("pilot failure budget ledger changed")
+    return SemanticPilotFailure(
+        root=directory.resolve(),
+        failure_sha256=failure_sha256,
+        reason=str(failure["reason"]),
+        sealed_test_opened=False,
+    )
+
+
 def load_semantic_pilot_result(root: str | Path) -> SemanticPilotResult:
     """Authenticate one complete pilot publication without reading sealed data."""
     directory = Path(root)
@@ -228,30 +420,7 @@ def load_semantic_pilot_result(root: str | Path) -> SemanticPilotResult:
     core = {key: value for key, value in pilot.items() if key != "pilot_sha256"}
     if record_sha256(core) != pilot_sha256:
         raise ValueError("pilot result content hash changed")
-    raw_files = manifest.get("files")
-    if type(raw_files) is not list or any(type(item) is not dict for item in raw_files):
-        raise ValueError("pilot result file descriptors changed")
-    expected_names = {"manifest.json"}
-    payload_by_name = {}
-    for descriptor in raw_files:
-        if set(descriptor) != {"name", "sha256", "size_bytes"}:
-            raise ValueError("pilot result file descriptor changed")
-        name = descriptor["name"]
-        if type(name) is not str or Path(name).name != name:
-            raise ValueError("pilot result filename changed")
-        payload = (directory / name).read_bytes()
-        if (
-            len(payload) != descriptor["size_bytes"]
-            or sha256(payload).hexdigest() != descriptor["sha256"]
-        ):
-            raise ValueError(f"pilot result file changed: {name}")
-        payload_by_name[name] = payload
-        expected_names.add(name)
-    if (
-        {path.name for path in directory.iterdir()} != expected_names
-        or any(not path.is_file() or path.is_symlink() for path in directory.iterdir())
-    ):
-        raise ValueError("pilot result tree entries changed")
+    payload_by_name = _verify_publication_files(directory, manifest)
     if pilot.get("sealed_test_opened") is not False:
         raise PermissionError("pilot result claims sealed-test access")
     if sha256(payload_by_name["selected-validation.jsonl"]).hexdigest() != pilot.get(
@@ -348,6 +517,133 @@ def render_semantic_pilot_report(
     return "\n".join(lines)
 
 
+def render_semantic_pilot_failure_report(
+    failure_sha256: str,
+    budgets: tuple[dict[str, object], ...],
+    allocator_peak_bytes: int,
+) -> str:
+    """Render the mandatory all-budget pilot stop with acquisition deltas."""
+    first_base = budgets[0]["base_accuracy"]
+    if type(first_base) is not list:
+        raise ValueError("pilot failure base accuracies changed")
+    concept_ids = tuple(str(value[0]) for value in first_base)
+    headers = tuple(
+        heading
+        for concept_id in concept_ids
+        for heading in (
+            f"{concept_id.title()} base",
+            f"{concept_id.title()} adapter",
+            f"{concept_id.title()} gain",
+        )
+    )
+    lines = [
+        "# TinyWorlds-Q semantic pilot learnability stop",
+        "",
+        f"Failure: `{failure_sha256}`",
+        "",
+        "The sealed test was not opened. No registered update budget passed both "
+        "the 60% accuracy and 15-percentage-point acquisition gates for both worlds. "
+        "Sequential/VAMP and main execution therefore remained unauthorized.",
+        "",
+        "| " + " | ".join(("Updates", *headers, "Passed")) + " |",
+        "| " + " | ".join(("---:", *("---:" for _ in headers), ":---:")) + " |",
+    ]
+    for budget in budgets:
+        base = dict(budget["base_accuracy"])  # type: ignore[arg-type]
+        adapted = dict(budget["concept_accuracy"])  # type: ignore[arg-type]
+        acquisition = dict(budget["acquisition"])  # type: ignore[arg-type]
+        lines.append(
+            "| "
+            + " | ".join(
+                (
+                    str(budget["updates"]),
+                    *(
+                        value
+                        for concept_id in concept_ids
+                        for value in (
+                            f"{base[concept_id]:.6f}",
+                            f"{adapted[concept_id]:.6f}",
+                            f"{acquisition[concept_id]:+.6f}",
+                        )
+                    ),
+                    str(budget["passed"]),
+                )
+            )
+            + " |"
+        )
+    lines.extend(("", f"Allocator peak: `{allocator_peak_bytes}` bytes", ""))
+    return "\n".join(lines)
+
+
+def _budget_record(
+    evaluation: PilotBudgetEvaluation,
+    ledger: bytes,
+    preset: QueryExperimentPreset,
+) -> dict[str, object]:
+    base = dict(evaluation.budget.base_accuracy)
+    return {
+        "acquisition": [
+            [concept_id, accuracy - base[concept_id]]
+            for concept_id, accuracy in evaluation.budget.concept_accuracy
+        ],
+        "adaptation_tensor_checksum": evaluation.adaptation_tensor_checksum,
+        "base_accuracy": [list(value) for value in evaluation.budget.base_accuracy],
+        "concept_accuracy": [
+            list(value) for value in evaluation.budget.concept_accuracy
+        ],
+        "config_sha256": replace(
+            preset,
+            adapter_updates=evaluation.budget.updates,
+        ).config_sha256,
+        "passed": evaluation.budget.passes,
+        "results_sha256": sha256(ledger).hexdigest(),
+        "updates": evaluation.budget.updates,
+    }
+
+
+def _verify_publication_files(
+    directory: Path,
+    manifest: dict[str, object],
+) -> dict[str, bytes]:
+    raw_files = manifest.get("files")
+    if (
+        type(raw_files) is not list
+        or not raw_files
+        or any(type(item) is not dict for item in raw_files)
+    ):
+        raise ValueError("pilot publication file descriptors changed")
+    expected_names = {"manifest.json"}
+    payload_by_name = {}
+    for descriptor in raw_files:
+        assert type(descriptor) is dict
+        if set(descriptor) != {"name", "sha256", "size_bytes"}:
+            raise ValueError("pilot publication file descriptor changed")
+        name = descriptor["name"]
+        if (
+            type(name) is not str
+            or Path(name).name != name
+            or name in payload_by_name
+        ):
+            raise ValueError("pilot publication filename changed")
+        path = directory / name
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"pilot publication file entry changed: {name}")
+        payload = path.read_bytes()
+        if (
+            len(payload) != descriptor["size_bytes"]
+            or sha256(payload).hexdigest() != descriptor["sha256"]
+        ):
+            raise ValueError(f"pilot publication file changed: {name}")
+        payload_by_name[name] = payload
+        expected_names.add(name)
+    if (
+        {path.name for path in directory.iterdir()} != expected_names
+        or any(not path.is_file() or path.is_symlink() for path in directory.iterdir())
+    ):
+        raise ValueError("pilot publication tree entries changed")
+    return payload_by_name
+
+
 def _result_ledger(results: tuple[SemanticQueryResult, ...]) -> bytes:
     if not results:
         raise ValueError("pilot result ledger cannot be empty")
@@ -419,9 +715,14 @@ def _remove_tree(root: Path) -> None:
 
 
 __all__ = [
+    "PILOT_FAILURE_FORMAT",
     "PILOT_RESULT_FORMAT",
+    "SemanticPilotFailure",
     "SemanticPilotResult",
+    "load_semantic_pilot_failure",
     "load_semantic_pilot_result",
+    "publish_semantic_pilot_failure",
     "publish_semantic_pilot_result",
+    "render_semantic_pilot_failure_report",
     "render_semantic_pilot_report",
 ]
