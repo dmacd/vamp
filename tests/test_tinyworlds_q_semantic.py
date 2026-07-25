@@ -78,6 +78,10 @@ from apm.data.text.tinyworlds_q_semantic.main_freeze import (
     load_main_experiment_freeze,
     publish_main_experiment_freeze,
 )
+from apm.data.text.tinyworlds_q_semantic.main_reverse_review import (
+    MAIN_REVERSE_CHOICE_SPECS,
+    build_main_reverse_review,
+)
 from apm.data.text.tinyworlds_q_semantic.main_shortlist import (
     MAIN_SHORTLIST_SPECS,
     build_main_review_shortlist,
@@ -605,6 +609,20 @@ def test_main_review_shortlist_uses_the_dynamic_five_world_manifest() -> None:
     assert sum(
         proposal.spec.priority == "primary" for proposal in shortlist.proposals
     ) == 5 * 12
+    approval = approve_all_primary_proposals(
+        shortlist,
+        reviewer="fixture-reviewer",
+        reviewed_at="2026-07-25T00:00:00Z",
+    )
+    reverse_review = build_main_reverse_review(
+        shortlist,
+        approval,
+        _OneTokenPerWordTokenizer(),  # type: ignore[arg-type]
+    )
+    assert tuple(proposal.spec for proposal in reverse_review.proposals) == (
+        MAIN_REVERSE_CHOICE_SPECS
+    )
+    assert len(reverse_review.proposals) == 5 * 12
 
 
 def test_partition_fact_withholding_rebuild_and_tampering(

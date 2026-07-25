@@ -17,6 +17,10 @@ from apm.data.text.tinyworlds_q_semantic.manifests import (
     PILOT_CONCEPTS,
 )
 from apm.data.text.tinyworlds_q_semantic.main_freeze import MainExperimentFreeze
+from apm.data.text.tinyworlds_q_semantic.main_reverse_review import (
+    MAIN_REVERSE_CHOICE_SPECS,
+    build_main_reverse_review,
+)
 from apm.data.text.tinyworlds_q_semantic.main_shortlist import (
     MAIN_SHORTLIST_SPECS,
     build_main_review_shortlist,
@@ -64,6 +68,7 @@ __all__ = [
     "MAIN_CONCEPTS",
     "MainExperimentFreeze",
     "MAIN_SHORTLIST_SPECS",
+    "MAIN_REVERSE_CHOICE_SPECS",
     "PILOT_CONCEPTS",
     "PILOT_SHORTLIST_SPECS",
     "PilotBudgetEvaluation",
@@ -89,4 +94,5 @@ __all__ = [
     "REGISTERED_QUERY_PROTOCOL",
     "build_approved_pilot_catalog",
     "build_main_review_shortlist",
+    "build_main_reverse_review",
 ]

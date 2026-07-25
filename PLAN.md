@@ -149,9 +149,15 @@ remain non-authoritative audits. Compact shortlist
 `fe2f78e92e1c4e0d26280f2741beea728ea3125c932c3126b770da6cd90104cc`
 contains 12 primaries and 4 backups per world, exact token-balanced choices,
 reviewed trigger proposals, and construction support; the smallest primary
-support is 17 groups. Human approval of the main primary and reverse choices
-is the next gate. No main catalog, partition, model input, GPU update, or
-sealed-test access has occurred. See
+support is 17 groups. The interactive user approved all 60 primaries at
+`2026-07-25T22:38:51Z`; approval
+`8b0f2868b216b837f2b2c90c0f7faaa141874fe87b2387c6fecd62faed8f616b`
+records all five affirmative gates and promotes no backup. Fact-specific
+reverse review
+`c805da6c075920f85a58b0c4ed25ee4aa6dac2e5763e2578648efd0c0800e1f0`
+contains 60 one-token four-choice rows and is the next human gate. No main
+catalog, partition, model input, GPU update, or sealed-test access has
+occurred. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration

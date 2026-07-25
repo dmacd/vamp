@@ -14,10 +14,10 @@ from apm.data.text.tinyworlds_q_semantic.contracts import (
     SCHEMA_VERSION,
     canonical_json_bytes,
     record_sha256,
+    require_identifier,
     require_sha256,
 )
 from apm.data.text.tinyworlds_q_semantic.shortlist import (
-    PILOT_SHORTLIST_SPECS,
     SemanticReviewShortlist,
 )
 
@@ -42,13 +42,18 @@ class PrimaryReviewApproval:
             for value in (self.reviewer, self.reviewed_at)
         ):
             raise ValueError("primary approval reviewer and time are required")
-        expected = tuple(
-            spec.proposal_id
-            for spec in PILOT_SHORTLIST_SPECS
-            if spec.priority == "primary"
-        )
-        if self.approved_proposal_ids != expected:
-            raise ValueError("primary approval must name every primary proposal in order")
+        if (
+            type(self.approved_proposal_ids) is not tuple
+            or not self.approved_proposal_ids
+            or len(self.approved_proposal_ids) % 12 != 0
+            or len(set(self.approved_proposal_ids))
+            != len(self.approved_proposal_ids)
+        ):
+            raise ValueError(
+                "primary approval requires complete unique twelve-fact worlds"
+            )
+        for proposal_id in self.approved_proposal_ids:
+            require_identifier(proposal_id, "approved primary proposal")
         object.__setattr__(
             self,
             "approval_sha256",

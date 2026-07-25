@@ -15,10 +15,10 @@ authorized an explicit prospective amendment that retains 60% absolute
 validation accuracy and makes acquisition descriptive. Under that policy,
 2,000 updates passed for both worlds. The selected independent, sequential,
 and VAMP validation exercise and exact resume check completed, and the
-five-world main configuration is frozen. Main construction evidence and a
-compact 60-fact approval sheet are published; human approval is now the next
-gate. No sealed test was opened. Neither the original stop nor the operational
-pilot is a scientific VAMP result.
+five-world main configuration is frozen. Main construction evidence is
+published, all 60 primary facts are approved, and the separate fact-specific
+reverse sheet awaits human approval. No sealed test was opened. Neither the
+original stop nor the operational pilot is a scientific VAMP result.
 
 `tinyworlds-q-semantic-v1` is isolated under its own Python package and the
 registered roots `data/tinyworlds-q-semantic/`,
@@ -276,7 +276,19 @@ construction minimum; the tightest are robot battery (17 groups), robot metal
 and fixed (18 each), and dragon roar (20). The intended human surface is the
 [`main approval sheet`](../data/tinyworlds-q-semantic/review-shortlists/fe2f78e92e1c4e0d26280f2741beea728ea3125c932c3126b770da6cd90104cc/review.md).
 
-No main proposal is approved yet. Consequently, no main catalog, partition,
-validation sample report, GPU preflight, base/adapters, or sealed transaction
-exists. Primary fact approval is the next boundary; reverse-choice approval
-will remain a separate decision.
+The user's instruction `Approve all primaries` was recorded at
+`2026-07-25T22:38:51Z` as approval
+`8b0f2868b216b837f2b2c90c0f7faaa141874fe87b2387c6fecd62faed8f616b`.
+It binds the exact shortlist and records truth, answer forms, trigger closure,
+forward distractors, and evidence as affirmative for all 60 primaries. No
+backup was promoted.
+
+Fact-specific reverse review
+`c805da6c075920f85a58b0c4ed25ee4aa6dac2e5763e2578648efd0c0800e1f0`
+contains 60 clues with one correct and three proposed false concepts. Every
+candidate suffix is exactly one GPT-2 token. The intended human surface is the
+[`main reverse approval sheet`](../data/tinyworlds-q-semantic/reverse-reviews/c805da6c075920f85a58b0c4ed25ee4aa6dac2e5763e2578648efd0c0800e1f0/review.md).
+
+Reverse choices are not approved yet. Consequently, no main catalog,
+partition, validation sample report, GPU preflight, base/adapters, or sealed
+transaction exists. Reverse-choice approval is the next boundary.

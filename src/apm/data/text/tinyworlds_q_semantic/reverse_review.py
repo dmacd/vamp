@@ -24,6 +24,7 @@ from apm.data.text.tinyworlds_q_semantic.contracts import (
 )
 from apm.data.text.tinyworlds_q_semantic.shortlist import (
     PILOT_SHORTLIST_SPECS,
+    ReviewShortlistSpec,
     SemanticReviewShortlist,
 )
 from apm.lm.text import TextTokenizer
@@ -111,7 +112,7 @@ class ReverseChoiceProposal:
 
 @dataclass(frozen=True, slots=True)
 class SemanticReverseReview:
-    """The complete unapproved reverse-choice queue for approved pilot facts."""
+    """The complete unapproved reverse-choice queue for approved facts."""
 
     shortlist_sha256: str
     primary_approval_sha256: str
@@ -122,10 +123,20 @@ class SemanticReverseReview:
     def __post_init__(self) -> None:
         require_sha256(self.shortlist_sha256, "reverse review shortlist")
         require_sha256(self.primary_approval_sha256, "reverse primary approval")
-        if type(self.proposals) is not tuple or tuple(
-            proposal.spec for proposal in self.proposals
-        ) != PILOT_REVERSE_CHOICE_SPECS:
-            raise ValueError("reverse review proposal order or content changed")
+        if (
+            type(self.proposals) is not tuple
+            or not self.proposals
+            or any(
+                type(proposal) is not ReverseChoiceProposal
+                for proposal in self.proposals
+            )
+            or len(self.proposals) % 12 != 0
+            or len({proposal.spec.proposal_id for proposal in self.proposals})
+            != len(self.proposals)
+        ):
+            raise ValueError(
+                "reverse review requires complete unique twelve-fact worlds"
+            )
         if type(self.tokenizer_identity) is not TokenizerIdentity:
             raise TypeError("reverse review tokenizer identity is invalid")
         object.__setattr__(
@@ -167,9 +178,18 @@ class ReverseReviewApproval:
             for value in (self.reviewer, self.reviewed_at)
         ):
             raise ValueError("reverse approval reviewer and time are required")
-        expected = tuple(spec.proposal_id for spec in PILOT_REVERSE_CHOICE_SPECS)
-        if self.approved_proposal_ids != expected:
-            raise ValueError("reverse approval must name every proposal in order")
+        if (
+            type(self.approved_proposal_ids) is not tuple
+            or not self.approved_proposal_ids
+            or len(self.approved_proposal_ids) % 12 != 0
+            or len(set(self.approved_proposal_ids))
+            != len(self.approved_proposal_ids)
+        ):
+            raise ValueError(
+                "reverse approval requires complete unique twelve-fact worlds"
+            )
+        for proposal_id in self.approved_proposal_ids:
+            require_identifier(proposal_id, "approved reverse proposal")
         object.__setattr__(
             self,
             "approval_sha256",
@@ -246,15 +266,36 @@ def build_pilot_reverse_review(
     tokenizer: TextTokenizer,
 ) -> SemanticReverseReview:
     """Compile fact-specific false concepts after primary fact approval."""
+    return build_reverse_review(
+        shortlist,
+        approval,
+        PILOT_SHORTLIST_SPECS,
+        PILOT_REVERSE_CHOICE_SPECS,
+        tokenizer,
+    )
+
+
+def build_reverse_review(
+    shortlist: SemanticReviewShortlist,
+    approval: PrimaryReviewApproval,
+    shortlist_specs: tuple[ReviewShortlistSpec, ...],
+    reverse_specs: tuple[ReverseChoiceSpec, ...],
+    tokenizer: TextTokenizer,
+) -> SemanticReverseReview:
+    """Compile one manifest's fact-specific false concepts after fact approval."""
     if approval.shortlist_sha256 != shortlist.shortlist_sha256:
         raise ValueError("reverse review approval and shortlist do not match")
     if tokenizer.vocab_size != CANONICAL_TOKENIZER_IDENTITY.vocab_size:
         raise ValueError("reverse review requires the pinned tokenizer vocabulary")
     primary_specs = tuple(
-        spec for spec in PILOT_SHORTLIST_SPECS if spec.priority == "primary"
+        spec for spec in shortlist_specs if spec.priority == "primary"
     )
+    if approval.approved_proposal_ids != tuple(
+        spec.proposal_id for spec in primary_specs
+    ):
+        raise ValueError("reverse review requires every primary approval in order")
     if tuple((spec.proposal_id, spec.concept_id) for spec in primary_specs) != tuple(
-        (spec.proposal_id, spec.concept_id) for spec in PILOT_REVERSE_CHOICE_SPECS
+        (spec.proposal_id, spec.concept_id) for spec in reverse_specs
     ):
         raise ValueError("reverse review no longer covers every approved primary")
     return SemanticReverseReview(
@@ -262,7 +303,7 @@ def build_pilot_reverse_review(
         primary_approval_sha256=approval.approval_sha256,
         proposals=tuple(
             _compile_reverse_proposal(spec, tokenizer)
-            for spec in PILOT_REVERSE_CHOICE_SPECS
+            for spec in reverse_specs
         ),
     )
 
@@ -510,10 +551,19 @@ def _text(record: dict[str, object], field: str) -> str:
 
 def render_reverse_review_markdown(review: SemanticReverseReview) -> str:
     """Render one short row per approved fact's reverse query."""
+    concept_ids = tuple(
+        dict.fromkeys(proposal.spec.concept_id for proposal in review.proposals)
+    )
+    pilot = concept_ids == ("rabbit", "horse")
     lines = [
-        "# TinyWorlds-Q pilot reverse-choice approval sheet",
+        (
+            "# TinyWorlds-Q pilot reverse-choice approval sheet"
+            if pilot
+            else "# TinyWorlds-Q five-world main reverse-choice approval sheet"
+        ),
         "",
-        "The 24 primary fact decisions are already recorded. This final semantic",
+        f"The {len(review.proposals)} primary fact decisions are already recorded. "
+        + ("This final semantic" if pilot else "This separate semantic"),
         "review checks that each reverse clue has one correct concept and three",
         "genuinely false concepts. All four choices have equal GPT-2 token length.",
         "",
@@ -544,6 +594,7 @@ __all__ = [
     "ReverseChoiceSpec",
     "SemanticReverseReview",
     "build_pilot_reverse_review",
+    "build_reverse_review",
     "approve_all_reverse_choices",
     "load_reverse_review_approval",
     "publish_reverse_review",
