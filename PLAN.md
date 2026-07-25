@@ -67,15 +67,23 @@ primary, reviewed-form placeholders, exact trigger closure, and tokenizer-
 balanced false choices. Detailed evidence, exact token IDs, HTML, canonical
 JSON, and an editable TSV remain alongside it for drill-down.
 
-The current mandatory gate is human semantic review. No rabbit/horse fact has
-been asserted or approved by automation, so there is no official pilot catalog,
-partition, GPU preflight, base checkpoint, adapter, or sealed result yet. A
-reviewer can approve all primary rows or identify edits, rejections, and backup
-promotions from the compact sheet; approval covers truth, evidence, trigger
-closure, answer forms, and equal-token distractors. The next authorized
-sequence is catalog publication, independent byte reconstruction of the pilot
-partition, GPU preflight, and registered budget selection. Main catalog work
-cannot begin until the pilot learnability gate passes. See
+The interactive user approved all 24 primary proposals at
+`2026-07-25T04:30:07Z`. Approval artifact
+`fbe0db124a77ce0215b2632d12cc97320e7eeda60de77b3fe8d48384eaef539b`
+records affirmative truth, evidence, trigger-closure, answer-form, and forward-
+distractor gates for every primary row. No backup was promoted.
+
+The remaining semantic gate is fact-specific reverse-choice review. A shared
+concept distractor pool is invalid for overlapping facts such as `animal`,
+`tail`, and `fast`, so primary approval did not promote the original unapproved
+reverse placeholders. Corrected 24-row reverse review
+`32f206833ce828fb954628d9063821c853579b96ffbf567d5dd0a2fc5e0ce9c0`
+binds the primary approval and uses three proposed false concepts of equal
+GPT-2 length per fact. After explicit reverse approval, the authorized sequence
+is catalog publication, independent byte reconstruction of the pilot partition,
+GPU preflight, and registered budget selection. There is still no official
+pilot catalog, partition, GPU checkpoint, adapter, or sealed result. Main
+catalog work cannot begin until the pilot learnability gate passes. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration

@@ -12,6 +12,11 @@ from apm.data.text.tinyworlds_q_semantic.adaptation import (
     materialize_query_language_task,
     prepare_query_adaptation,
 )
+from apm.data.text.tinyworlds_q_semantic.approval import (
+    approve_all_primary_proposals,
+    load_primary_review_approval,
+    publish_primary_review_approval,
+)
 from apm.data.text.tinyworlds_p.normalization import normalized_story_bytes_sha256
 from apm.data.text.tinyworlds_q_semantic.catalog import (
     build_reviewed_catalog,
@@ -78,6 +83,10 @@ from apm.data.text.tinyworlds_q_semantic.review import (
     is_construction_group,
     load_review_packet,
     publish_review_packet,
+)
+from apm.data.text.tinyworlds_q_semantic.reverse_review import (
+    build_pilot_reverse_review,
+    publish_reverse_review,
 )
 from apm.data.text.tinyworlds_q_semantic.scaling import (
     PreflightMeasurement,
@@ -457,6 +466,22 @@ def test_pilot_review_shortlist_is_compact_supported_and_publishable(
     assert "approve all primaries" in review
     assert (root / "shortlist.json").is_file()
     assert (root / "review-form.tsv").read_text(encoding="utf-8").count("\n") == 33
+    approval = approve_all_primary_proposals(
+        shortlist,
+        reviewer="fixture-reviewer",
+        reviewed_at="2026-07-25T00:00:00Z",
+    )
+    approval_root = publish_primary_review_approval(approval, tmp_path)
+    assert load_primary_review_approval(approval_root) == approval
+    reverse_review = build_pilot_reverse_review(
+        shortlist,
+        approval,
+        _OneTokenPerWordTokenizer(),  # type: ignore[arg-type]
+    )
+    reverse_root = publish_reverse_review(reverse_review, tmp_path)
+    reverse_markdown = (reverse_root / "review.md").read_text(encoding="utf-8")
+    assert reverse_markdown.count("| [ ] | `") == 24
+    assert "approve all reverse choices" in reverse_markdown
 
 
 def test_partition_fact_withholding_rebuild_and_tampering(

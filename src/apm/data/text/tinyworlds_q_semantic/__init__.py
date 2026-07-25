@@ -1,5 +1,6 @@
 """Query-native archive-grounded semantic continual-learning benchmark."""
 
+from apm.data.text.tinyworlds_q_semantic.approval import PrimaryReviewApproval
 from apm.data.text.tinyworlds_q_semantic.contracts import (
     BENCHMARK_ID,
     ConceptDefinition,
@@ -19,6 +20,7 @@ from apm.data.text.tinyworlds_q_semantic.shortlist import (
     PILOT_SHORTLIST_SPECS,
     SemanticReviewShortlist,
 )
+from apm.data.text.tinyworlds_q_semantic.reverse_review import SemanticReverseReview
 
 
 __all__ = [
@@ -28,6 +30,7 @@ __all__ = [
     "MAIN_CONCEPTS",
     "PILOT_CONCEPTS",
     "PILOT_SHORTLIST_SPECS",
+    "PrimaryReviewApproval",
     "QueryExperimentPreset",
     "QueryPartitionArtifact",
     "SemanticFact",
@@ -35,4 +38,5 @@ __all__ = [
     "SemanticQueryResult",
     "SemanticQueryTemplate",
     "SemanticReviewShortlist",
+    "SemanticReverseReview",
 ]

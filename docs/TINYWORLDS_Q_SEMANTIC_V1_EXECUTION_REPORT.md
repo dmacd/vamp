@@ -3,8 +3,10 @@
 ## Outcome
 
 The query-native benchmark engine and CPU verification fixtures are complete.
-No real semantic fact was approved, no GPU work was started, and no sealed test
-was opened. This is an implementation milestone, not a scientific result.
+The interactive user approved all 24 primary pilot fact proposals. Fact-specific
+reverse choices still await explicit review; no catalog was published, no GPU
+work was started, and no sealed test was opened. This is an implementation and
+review milestone, not a scientific result.
 
 `tinyworlds-q-semantic-v1` is isolated under its own Python package and the
 registered roots `data/tinyworlds-q-semantic/`,
@@ -63,8 +65,9 @@ catalog parent nesting, sealed access, deterministic statistics, dynamic
 capacity/schedules, bounded scoring, strict report coverage, and resumable
 stage identity. The pilot-specific fixture also verifies the 24-row primary
 review queue, 8-row backup set, evidence support, equal answer-token lengths,
-and compact publication. The fixtures run a tiny GPT-Neo base both uninterrupted
-and through an interruption and verify identical parameters and progress bytes.
+compact publication, strict primary-approval reload, and the fact-specific
+reverse queue. The fixtures run a tiny GPT-Neo base both uninterrupted and
+through an interruption and verify identical parameters and progress bytes.
 A focused compatibility run passes 36 existing tests across knowledge tasks,
 candidate scoring, knowledge training/evaluation, semantic statistics,
 semantic-v6 partitioning, and semantic-v6 VAMP.
@@ -113,13 +116,25 @@ The concise 66-line decision sheet is the intended human surface:
 The same directory contains detailed evidence, exact token IDs, standalone
 HTML, canonical JSON, and an editable TSV form.
 
+The user instruction `Approve all primaries` was recorded at
+`2026-07-25T04:30:07Z` as approval artifact
+`fbe0db124a77ce0215b2632d12cc97320e7eeda60de77b3fe8d48384eaef539b`.
+It binds compact shortlist
+`ad00bafb6bc5adef50a76f2b1ff7230bce02e46b04526d7bf81753a01dc5dd65`
+and records all five fact gates as affirmative for every primary proposal. No
+backup proposal was promoted.
+
 ## Open gate
 
-Human review is intentionally not automated. A reviewer can approve all 24
-primary rows or name rejections, edits, and promoted backups from the compact
-sheet. Those decisions must then be recorded in the full semantic ledger.
-Until that happens, publishing a pilot catalog or starting a GPU optimizer
-would violate the benchmark design.
+Primary fact review is complete. The remaining semantic gate is the 24-row
+fact-specific reverse-choice sheet
+[`reverse approval sheet`](../data/tinyworlds-q-semantic/reverse-reviews/32f206833ce828fb954628d9063821c853579b96ffbf567d5dd0a2fc5e0ce9c0/review.md).
+The earlier shared placeholders were not approved and cannot be used: another
+target concept is not a false distractor for shared facts such as `animal`,
+`tail`, or `fast`. The corrected sheet binds the primary approval and verifies
+equal GPT-2 token lengths, but its semantic falsity decisions remain human.
+Publishing a pilot catalog or starting a GPU optimizer before that explicit
+approval would violate the benchmark design.
 
 After review, the required sequence is an independent byte rebuild of the pilot
 partition, GPU resource preflight, fresh seed-zero base training, 500/1,000/2,000

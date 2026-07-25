@@ -55,6 +55,11 @@ Each fact has three validation paraphrases (two forward and one reverse) and
 five sealed-test paraphrases (three forward and two reverse). Across those
 eight templates, each answer position occurs exactly twice. All four answers
 share a reviewed grammatical type and have equal tokenizer suffix length.
+Reverse distractors are reviewed per fact rather than reused as one concept
+pool: another concept that also satisfies the exposed fact is not a false
+distractor. Primary fact approval and reverse-choice approval are distinct,
+content-addressed human decisions, so approving facts cannot implicitly approve
+unseen or semantically invalid reverse choices.
 Catalog publication physically separates metadata, validation templates, and
 sealed test templates. A normal loader authenticates but never deserializes
 the sealed payload. Test deserialization requires one durable transaction that
