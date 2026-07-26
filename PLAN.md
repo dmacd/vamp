@@ -202,8 +202,11 @@ specificity cell. The five-world sealed ledger is 9,900 rows and a conservative
 10,137,600 bytes, not the accepted v1 preflight's 8,100-primary-row / 8,294,400-
 byte approximation. The immutable preflight still authenticates; its measured
 training/memory evidence is unchanged, and the corrected projection is far
-below the frozen 4 GiB limit. New preflights use the complete count. The sealed
-test remains closed. See
+below the frozen 4 GiB limit. New preflights use the complete count. The final
+report and validation loaders now reconstruct every canonical result row,
+recheck schedule/routing coverage, and recompute registered fact effects and
+derived final renderings during recovery; byte hashes alone are not treated as
+semantic parity. The sealed test remains closed. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration

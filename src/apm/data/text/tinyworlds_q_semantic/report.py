@@ -34,6 +34,9 @@ from apm.data.text.tinyworlds_q_semantic.scaling import (
     evaluation_schedule,
     render_schedule_report,
 )
+from apm.data.text.tinyworlds_q_semantic.result_stream import (
+    load_semantic_result_ledger,
+)
 from apm.data.text.tinyworlds_q_semantic.statistics import (
     BootstrapEstimate,
     CANONICAL_BOOTSTRAP_REPLICATES,
@@ -337,7 +340,12 @@ def load_semantic_report(
     }
     if any(result.get(field) != value for field, value in expected.items()):
         raise ValueError("semantic report frozen source binding changed")
-    if _canonical_jsonl_count(root / "results.jsonl") != result.get("result_count"):
+    results = load_semantic_result_ledger(root / "results.jsonl")
+    expected_result_count = estimate_resources(
+        preset,
+        queries_per_world=60,
+    ).result_rows
+    if len(results) != result.get("result_count") or len(results) != expected_result_count:
         raise ValueError("semantic report result count changed")
     if (
         (root / "results.jsonl").stat().st_size != result.get("result_bytes")
@@ -345,6 +353,39 @@ def load_semantic_report(
         or (root / "results.jsonl").stat().st_size > preset.result_size_limit_bytes
     ):
         raise ValueError("semantic report result-size accounting changed")
+    _validate_report_coverage(preset, results)
+    if result.get("bootstrap_replicates") != CANONICAL_BOOTSTRAP_REPLICATES:
+        raise ValueError("semantic report bootstrap count changed")
+    effects = compute_registered_final_effects(results, preset)
+    summaries = _condition_summaries(
+        average_paraphrases(results),
+        CANONICAL_BOOTSTRAP_REPLICATES,
+    )
+    if (
+        result.get("effects") != [item.as_record() for item in effects]
+        or result.get("summaries") != [item.as_record() for item in summaries]
+    ):
+        raise ValueError("semantic report fact-level analysis changed")
+    generation = _generation_records(result, preset)
+    runtime_seconds = _runtime_record(result)
+    memory_bytes = _memory_record(result, preset)
+    markdown = render_semantic_report(
+        root.name,
+        preset,
+        summaries,
+        effects,
+        generation,
+        runtime_seconds,
+        memory_bytes,
+    )
+    if (
+        (root / "report.md").read_text(encoding="utf-8") != markdown
+        or (root / "report.html").read_text(encoding="utf-8")
+        != _standalone_html(root.name, markdown)
+        or (root / "schedule.md").read_text(encoding="utf-8")
+        != render_schedule_report(preset)
+    ):
+        raise ValueError("semantic report derived rendering changed")
     return SemanticReportArtifact(
         root=root.resolve(),
         report_sha256=root.name,
@@ -638,7 +679,35 @@ def _verify_existing(root: Path, report_sha256: str) -> None:
         ):
             raise ValueError("semantic report tree entries changed")
         result_record = _canonical_json(root / "result.json")
-        if result_record.get("report_sha256") != report_sha256:
+        required_result_fields = {
+            "adapters_sha256",
+            "bootstrap_replicates",
+            "catalog_sha256",
+            "config",
+            "config_sha256",
+            "effects",
+            "final_evaluation_protocol",
+            "final_evaluation_protocol_sha256",
+            "format",
+            "generation",
+            "memory_bytes",
+            "partition_sha256",
+            "preflight_sha256",
+            "report_sha256",
+            "result_bytes",
+            "result_count",
+            "result_size_limit_bytes",
+            "results_sha256",
+            "runtime_seconds",
+            "selected_base_sha256",
+            "summaries",
+            "transaction_sha256",
+        }
+        if (
+            set(result_record) != required_result_fields
+            or result_record.get("format") != REPORT_FORMAT
+            or result_record.get("report_sha256") != report_sha256
+        ):
             raise ValueError("semantic report result identity changed")
         if (
             result_record.get("final_evaluation_protocol")
@@ -683,15 +752,76 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _canonical_jsonl_count(path: Path) -> int:
-    count = 0
-    with path.open("rb") as source:
-        for line in source:
-            record = json.loads(line)
-            if type(record) is not dict or canonical_json_bytes(record) != line:
-                raise ValueError("semantic report result ledger is noncanonical")
-            count += 1
-    return count
+def _generation_records(
+    report: dict[str, object],
+    preset: QueryExperimentPreset,
+) -> tuple[GenerationInspection, ...]:
+    raw = report.get("generation")
+    if type(raw) is not list or any(type(item) is not dict for item in raw):
+        raise ValueError("semantic report generation records changed")
+    records = tuple(_generation_record(item) for item in raw)  # type: ignore[arg-type]
+    if tuple(item.concept_id for item in records) != preset.concept_ids:
+        raise ValueError("semantic report generation concept order changed")
+    return records
+
+
+def _generation_record(record: dict[str, object]) -> GenerationInspection:
+    recalled = record.get("recalled_fact_ids")
+    recall = record.get("recall")
+    if (
+        set(record)
+        != {"concept_id", "output", "prompt", "recall", "recalled_fact_ids"}
+        or type(record.get("concept_id")) is not str
+        or type(record.get("prompt")) is not str
+        or type(record.get("output")) is not str
+        or type(recalled) is not list
+        or any(type(fact_id) is not str for fact_id in recalled)
+        or len(set(recalled)) != len(recalled)
+        or type(recall) not in (int, float)
+        or not isfinite(float(recall))
+    ):
+        raise ValueError("semantic report generation record changed")
+    return GenerationInspection(
+        concept_id=record["concept_id"],  # type: ignore[arg-type]
+        prompt=record["prompt"],  # type: ignore[arg-type]
+        output=record["output"],  # type: ignore[arg-type]
+        recalled_fact_ids=tuple(recalled),  # type: ignore[arg-type]
+        recall=float(recall),
+    )
+
+
+def _runtime_record(report: dict[str, object]) -> dict[str, float]:
+    raw = report.get("runtime_seconds")
+    if (
+        type(raw) is not dict
+        or not raw
+        or any(type(name) is not str for name in raw)
+        or any(
+            type(value) not in (int, float)
+            or not isfinite(float(value))
+            or float(value) < 0.0
+            for value in raw.values()
+        )
+    ):
+        raise ValueError("semantic report runtime record changed")
+    return {name: float(value) for name, value in raw.items()}
+
+
+def _memory_record(
+    report: dict[str, object],
+    preset: QueryExperimentPreset,
+) -> dict[str, int]:
+    raw = report.get("memory_bytes")
+    if (
+        type(raw) is not dict
+        or not raw
+        or any(type(name) is not str for name in raw)
+        or any(type(value) is not int or value < 0 for value in raw.values())
+        or type(raw.get("allocator_peak")) is not int
+        or raw["allocator_peak"] > preset.allocator_peak_limit_bytes
+    ):
+        raise ValueError("semantic report memory record changed")
+    return dict(raw)  # type: ignore[arg-type]
 
 
 def _standalone_html(report_sha256: str, markdown: str) -> str:

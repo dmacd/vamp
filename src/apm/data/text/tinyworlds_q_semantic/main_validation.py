@@ -38,6 +38,9 @@ from apm.data.text.tinyworlds_q_semantic.scaling import (
     estimate_resources,
     evaluation_schedule,
 )
+from apm.data.text.tinyworlds_q_semantic.result_stream import (
+    load_semantic_result_ledger,
+)
 from apm.data.text.tinyworlds_q_semantic.selected_base import QuerySelectedBase
 
 
@@ -397,13 +400,15 @@ def load_main_validation_artifact(
     results_sha256 = _text(record, "results_sha256")
     result_count = _integer(record, "result_count")
     ledger = root / "validation-results.jsonl"
+    loaded_results = load_semantic_result_ledger(ledger)
     if (
         result_count != validation_estimate.result_rows
         or _file_sha256(ledger) != results_sha256
-        or _canonical_jsonl_count(ledger) != result_count
+        or len(loaded_results) != result_count
         or ledger.stat().st_size > preset.result_size_limit_bytes
     ):
         raise ValueError("main validation result ledger changed")
+    _validate_validation_results(loaded_results, preset)
     markdown = _render_validation_report(record)
     if (
         (root / "validation.md").read_text(encoding="utf-8") != markdown
@@ -691,17 +696,6 @@ def _verify_files(root: Path, manifest: dict[str, object]) -> None:
         or any(path.is_symlink() or not path.is_file() for path in root.iterdir())
     ):
         raise ValueError("main validation tree entries changed")
-
-
-def _canonical_jsonl_count(path: Path) -> int:
-    count = 0
-    with path.open("rb") as source:
-        for line in source:
-            record = json.loads(line)
-            if type(record) is not dict or canonical_json_bytes(record) != line:
-                raise ValueError("main validation ledger is noncanonical")
-            count += 1
-    return count
 
 
 def _validation_candidate_matches(

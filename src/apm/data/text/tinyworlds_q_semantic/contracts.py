@@ -1116,6 +1116,96 @@ class SemanticQueryResult:
             "template_id": self.template_id,
         }
 
+    @classmethod
+    def from_record(cls, record: dict[str, object]) -> SemanticQueryResult:
+        """Reconstruct and validate one canonical result-ledger row."""
+        if type(record) is not dict:
+            raise ValueError("semantic result record must be a JSON object")
+        required = {
+            "adapter_concept_id",
+            "answer_correct",
+            "candidate_nll",
+            "concept_id",
+            "correct_answer_margin",
+            "correct_candidate_index",
+            "direction",
+            "fact_id",
+            "format",
+            "method",
+            "oracle_node_index",
+            "predicted_candidate_index",
+            "routed_regret",
+            "selected_node_index",
+            "split",
+            "stage",
+            "template_id",
+        }
+        candidate_nll = record.get("candidate_nll")
+        numeric_fields = (
+            record.get("correct_answer_margin"),
+            record.get("routed_regret"),
+        )
+        optional_indexes = (
+            record.get("selected_node_index"),
+            record.get("oracle_node_index"),
+        )
+        if (
+            set(record) != required
+            or record.get("format") != RESULT_FORMAT
+            or type(candidate_nll) is not list
+            or len(candidate_nll) != 4
+            or any(type(value) not in (int, float) for value in candidate_nll)
+            or type(record.get("stage")) is not int
+            or type(record.get("correct_candidate_index")) is not int
+            or type(record.get("predicted_candidate_index")) is not int
+            or type(record.get("answer_correct")) is not bool
+            or type(numeric_fields[0]) not in (int, float)
+            or (
+                numeric_fields[1] is not None
+                and type(numeric_fields[1]) not in (int, float)
+            )
+            or any(
+                value is not None and type(value) is not int
+                for value in optional_indexes
+            )
+            or any(
+                type(record.get(field)) is not str
+                for field in (
+                    "concept_id",
+                    "direction",
+                    "fact_id",
+                    "method",
+                    "split",
+                    "template_id",
+                )
+            )
+            or (
+                record.get("adapter_concept_id") is not None
+                and type(record.get("adapter_concept_id")) is not str
+            )
+        ):
+            raise ValueError("semantic result record fields changed")
+        return cls(
+            stage=record["stage"],  # type: ignore[arg-type]
+            method=record["method"],  # type: ignore[arg-type]
+            concept_id=record["concept_id"],  # type: ignore[arg-type]
+            fact_id=record["fact_id"],  # type: ignore[arg-type]
+            template_id=record["template_id"],  # type: ignore[arg-type]
+            direction=record["direction"],  # type: ignore[arg-type]
+            split=record["split"],  # type: ignore[arg-type]
+            adapter_concept_id=record["adapter_concept_id"],  # type: ignore[arg-type]
+            candidate_nll=tuple(candidate_nll),  # type: ignore[arg-type]
+            correct_candidate_index=record["correct_candidate_index"],  # type: ignore[arg-type]
+            predicted_candidate_index=record["predicted_candidate_index"],  # type: ignore[arg-type]
+            answer_correct=record["answer_correct"],  # type: ignore[arg-type]
+            correct_answer_margin=float(numeric_fields[0]),
+            selected_node_index=optional_indexes[0],  # type: ignore[arg-type]
+            oracle_node_index=optional_indexes[1],  # type: ignore[arg-type]
+            routed_regret=(
+                None if numeric_fields[1] is None else float(numeric_fields[1])
+            ),
+        )
+
 
 def _close(left: float, right: float) -> bool:
     return abs(left - right) <= 1e-9 * max(1.0, abs(left), abs(right))

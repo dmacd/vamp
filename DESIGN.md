@@ -275,6 +275,12 @@ forced independent-adapter by query-world matrix remains in the authenticated
 ledger and feeds the specificity effect, but is not pooled into the headline
 matching-independent accuracy.
 
+Strict validation/report recovery reconstructs each canonical result record
+through the public result contract, reruns exact schedule and routing coverage,
+and recomputes registered fact-level analyses. Final report reload additionally
+regenerates Markdown, HTML, and the dynamic schedule. Matching file hashes are
+necessary but are not by themselves sufficient recovery evidence.
+
 Before a sealed transaction can open, a content-addressed validation freeze
 must bind the selected base, preflight, validation-only probe preparation,
 every immutable stage tensor/manifest, exact validation ledger, no-op resume

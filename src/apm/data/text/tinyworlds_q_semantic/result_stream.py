@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -97,6 +98,32 @@ def stream_semantic_results(
     )
 
 
+def load_semantic_result_ledger(
+    path: str | Path,
+) -> tuple[SemanticQueryResult, ...]:
+    """Strictly reconstruct every canonical row in one semantic result ledger."""
+    ledger = Path(path)
+    with ledger.open("rb") as source:
+        lines = tuple(source)
+    try:
+        records = tuple(json.loads(line) for line in lines)
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError("semantic result ledger contains invalid JSON") from error
+    if (
+        not records
+        or any(type(record) is not dict for record in records)
+        or any(
+            canonical_json_bytes(record) != line
+            for record, line in zip(records, lines)
+        )
+    ):
+        raise ValueError("semantic result ledger is empty or noncanonical")
+    return tuple(
+        SemanticQueryResult.from_record(record)
+        for record in records
+    )
+
+
 def _results_sha256(results: tuple[SemanticQueryResult, ...]) -> str:
     if type(results) is not tuple or not results:
         raise ValueError("semantic result producer returned no result tuple")
@@ -118,5 +145,6 @@ __all__ = [
     "SemanticResultProducer",
     "SemanticResultSink",
     "StreamedSemanticResultLedger",
+    "load_semantic_result_ledger",
     "stream_semantic_results",
 ]

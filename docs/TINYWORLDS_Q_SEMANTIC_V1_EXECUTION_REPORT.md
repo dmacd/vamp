@@ -376,5 +376,7 @@ and 96-token greedy generation from each world's matching final independent
 adapter. Headline condition summaries use primary matching adapter/path rows;
 forced cross-world independent rows are retained for specificity without being
 pooled into matching-adapter accuracy. The protocol enters the validation
-freeze before any test prompt can be deserialized. The sealed test remains
-closed.
+freeze before any test prompt can be deserialized. Strict recovery reconstructs
+all canonical result rows, rechecks method/schedule/routing coverage, recomputes
+registered fact effects, and regenerates the final report views. The sealed
+test remains closed.
