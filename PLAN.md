@@ -182,11 +182,18 @@ base at 3:21:12. The first attempt correctly stopped before an update because
 `ve-semantic` has CPU-only JAX; the accepted run used the existing CUDA JAX
 0.6.2 `ve` environment on the RTX 4090. Shared pilot/main base orchestration
 and the registered main launcher are implemented and focused tests pass. The
-fresh resumable base is actively training under identity
-`001e16d8908ae593ffc23b423a1a672e005c3cf7b35dacbb09636d1807a96d93`;
-complete 1,000-update checkpoints are being persisted and the run remains
-finite with no memory stop. The exact main adapter/validation runner and a
-separately guarded sealed runner are implemented. Final-analysis protocol
+fresh base completed all 28,912 updates under training identity
+`001e16d8908ae593ffc23b423a1a672e005c3cf7b35dacbb09636d1807a96d93`.
+Held-in NLL improved from `1.266449873` to `1.189207350`, a
+`0.077242523` reduction, over 13,288,046 active validation tokens. Allocator
+peak was 9,032,018,176 bytes, below 12 GiB, so every base gate passed. Strict
+selected base
+`0777adef5291c416d53af23ac6694bcfd308f0f6534883e4cc7cede2254783a2`
+is published; its launcher wall interval was approximately 3:49. A fresh
+launcher invocation authenticated the full partition and preflight, strict-
+loaded that selection, and exited without another optimizer step. The exact
+main adapter/validation runner and a separately guarded sealed runner are
+implemented. Final-analysis protocol
 `489042464fd4243e1780d585c4ba7ed6cd1134c9f7a5bf3d7e6f2fb4aaa8712a`
 fixes all nine methods, acquisition and retention for every non-base method,
 independent cross-world specificity, accuracy and margin effects, router node

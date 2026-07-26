@@ -18,9 +18,9 @@ and VAMP validation exercise and exact resume check completed, and the
 five-world main configuration is frozen. Main construction evidence is
 published, and all 60 primary facts and all 60 fact-specific reverse rows are
 approved. The official main catalog and partition reproduce byte-for-byte,
-GPU preflight passed, and the fresh main base is actively training. No sealed
-test was opened. Neither the original stop nor the operational pilot is a
-scientific VAMP result.
+GPU preflight passed, and the fresh main base completed and passed every
+quality and memory gate. No sealed test was opened. Neither the original stop
+nor the operational pilot is a scientific VAMP result.
 
 `tinyworlds-q-semantic-v1` is isolated under its own Python package and the
 registered roots `data/tinyworlds-q-semantic/`,
@@ -359,14 +359,24 @@ CUDA-enabled `ve`; no dependency or frozen setting changed. JAX pool
 preallocation is disabled in subsequent launchers so reserved pool size cannot
 be confused with measured model peak.
 
-Base orchestration is now common to pilot and main manifests. It discovers the
+Base orchestration is common to pilot and main manifests. It discovers the
 exact latest optimizer/RNG/data cursor, resumes the registered training
 identity, atomically records held-in NLL after each epoch, carries the accepted
 preflight memory peak across resume boundaries, and publishes only after both
-NLL gates and the memory gate pass. The real run is active under training
-identity
-`001e16d8908ae593ffc23b423a1a672e005c3cf7b35dacbb09636d1807a96d93`
-and is persisting complete 1,000-update checkpoints while remaining finite.
+NLL gates and the memory gate pass. The real run completed all 28,912 updates
+under training identity
+`001e16d8908ae593ffc23b423a1a672e005c3cf7b35dacbb09636d1807a96d93`.
+Held-in validation covered 13,288,046 active tokens. NLL improved from
+`1.266449873` after epoch one to `1.189207350` after epoch two, a
+`0.077242523` reduction. Allocator peak was 9,032,018,176 bytes (8.412 GiB),
+below 12 GiB. The launcher wall interval was approximately 3:49. Every base
+gate passed, and strict selected base
+`0777adef5291c416d53af23ac6694bcfd308f0f6534883e4cc7cede2254783a2`
+is published with parameter checksum
+`242c5b9582d284af9b4c0aca6e6b0cc76ba86a1aaa5ba2d3346d14aa29409f82`.
+A fresh launcher invocation authenticated the full partition and preflight,
+strict-loaded the selection, and exited without another optimizer step. No
+sealed query was opened.
 
 The adapter/validation launcher and separately guarded sealed launcher are now
 implemented. Final protocol

@@ -299,6 +299,18 @@ disposable base updates and warm validation, parent-search, and task-free
 routing probes. It binds the catalog, partition, full dynamic preset, measured
 allocator peak, result-size estimate, and runtime projections; its parameters
 cannot be promoted into the real run.
+
+The canonical five-world scratch base is selection
+`0777adef5291c416d53af23ac6694bcfd308f0f6534883e4cc7cede2254783a2`,
+trained under identity
+`001e16d8908ae593ffc23b423a1a672e005c3cf7b35dacbb09636d1807a96d93`.
+Its held-in NLLs are `1.266449873` and `1.189207350`; the `0.077242523`
+improvement and 9,032,018,176-byte allocator peak satisfy the frozen base
+gates. This selection, rather than any semantic-v6 parameter artifact, is the
+only base authorized for the five-world adapters. A completed-launcher replay
+must strict-load this selection and return without changing optimizer state;
+that no-op replay passed before adapter launch.
+
 The original rabbit/horse policy tested adapter budgets 500, 1,000, and 2,000
 in order and required both worlds to reach 60% validation accuracy and gain 15
 percentage points over base. Its failure is retained. The registered amendment
