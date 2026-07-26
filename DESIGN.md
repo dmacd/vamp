@@ -281,6 +281,14 @@ and recomputes registered fact-level analyses. Final report reload additionally
 regenerates Markdown, HTML, and the dynamic schedule. Matching file hashes are
 necessary but are not by themselves sufficient recovery evidence.
 
+The shared knowledge scorer supplies a task-oracle node for every direct
+semantic query, including base, independent, sequential, and VAMP-oracle rows.
+That field is hard-node provenance, not proof that routing occurred. Strict
+query recovery therefore requires an oracle node for every method, while only
+the five task-free routed methods may carry a selected node and routed regret.
+This distinction preserves the shared scorer's result semantics instead of
+normalizing away non-router oracle evidence in the query wrapper.
+
 Before a sealed transaction can open, a content-addressed validation freeze
 must bind the selected base, preflight, validation-only probe preparation,
 every immutable stage tensor/manifest, exact validation ledger, no-op resume
@@ -289,6 +297,13 @@ The sealed runner authenticates that chain before writing the durable open
 marker. A retry may resume the same opened transaction or idempotently close an
 already published matching report, but a completed transaction cannot evaluate
 or deserialize test prompts again.
+
+Runtime evidence distinguishes the current `adaptation_or_resume` invocation
+from `adaptation_stage_wall_interval`. The latter is the elapsed filesystem
+interval from creation of the dedicated adaptation workspace to publication of
+the final immutable stage manifest. It survives a publication-layer retry and
+must be described as a wall interval, not summed accelerator compute time,
+because a genuinely interrupted run may include idle time between stages.
 
 The retained seed-zero GPT-Neo architecture, two-epoch base optimizer schedule,
 rank-eight all-projection LoRA, and 12 GiB allocator ceiling are fixed in the

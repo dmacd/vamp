@@ -154,6 +154,15 @@ def main() -> int:
         adaptation_root / "stages" / f"stage-{stage:03d}"
         for stage in range(1, preset.active_world_count + 1)
     )
+    adaptation_started_ns = adaptation_root.stat().st_mtime_ns
+    adaptation_completed_ns = (
+        stage_directories[-1] / "manifest.json"
+    ).stat().st_mtime_ns
+    if adaptation_completed_ns < adaptation_started_ns:
+        raise ValueError("main adaptation stage timestamps are inconsistent")
+    adaptation_stage_wall_interval = (
+        adaptation_completed_ns - adaptation_started_ns
+    ) / 1_000_000_000
 
     print("Phase 5/6: evaluating and freezing validation-only query results.", flush=True)
     validation_root = RESULT_ROOT / "main-validation"
@@ -219,6 +228,7 @@ def main() -> int:
             resume_verified=True,
             runtime_seconds={
                 "adaptation_or_resume": adaptation_seconds,
+                "adaptation_stage_wall_interval": adaptation_stage_wall_interval,
                 "validation_evaluation": validation_seconds,
             },
             allocator_peak_bytes=max(

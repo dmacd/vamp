@@ -213,7 +213,41 @@ below the frozen 4 GiB limit. New preflights use the complete count. The final
 report and validation loaders now reconstruct every canonical result row,
 recheck schedule/routing coverage, and recompute registered fact effects and
 derived final renderings during recovery; byte hashes alone are not treated as
-semantic parity. The sealed test remains closed. See
+semantic parity.
+
+All 30,000 main adapter updates are complete: 2,000 updates for each of the
+sequential, independent, and VAMP systems in each of the five ordered worlds.
+All five immutable tensor stages strict-load, and a completed-stage no-op
+resume reproduces final tensor checksum
+`f2e744d2ebb1d182e74ada95970ce126bb93cc0fec370b535e07d6e889241878`.
+VAMP attached cat, dog, robot, and dragon to root and attached bird to dog.
+The measured stage-persistence wall interval was `1839.455669` seconds; the
+recovery invocation itself spent `9.685603` seconds in adaptation/no-op resume.
+
+The first complete validation evaluation exposed a publication-check bug: the
+shared knowledge scorer correctly records the task-oracle node for every
+direct-query row, while the new strict validator had incorrectly treated that
+field as router-only. The validator and final-report recovery now require
+oracle-node evidence for every method and reserve selected-node/regret fields
+for the five routed methods. The failed attempt published no validation
+artifact and opened no test data. A fresh deterministic-schedule evaluation
+then published 5,940-row validation freeze
+`a32636c0a467cf4e95253cf19792d5eda0ede556e059376988cc410b7ba6dfb0`
+with result-ledger SHA-256
+`8baa895b9f234c79eabcbd140e503c2c7a7609f4af37f79a6c39b8f2a704e9b9`.
+Its aggregate validation accuracies are base `0.372222`, independent
+`0.564815`, sequential `0.438889`, VAMP oracle `0.531481`, exhaustive
+`0.468519`, Hopfield `0.414815`, uniform EBT `0.464815`, Hopfield EBT
+`0.464815`, and deterministic random `0.411111`. Validation took `602.319236`
+seconds and allocator peak remained 9,032,018,176 bytes.
+
+Closed sealed transaction
+`ce92e165fcc3f58b449253a628e7616ef254c700c225db45ab88708f8f8de946`
+binds the catalog, partition, selected base, preset, and exact validation
+freeze. It has no open or completion marker. The immediate gate is to commit
+this pre-test source and documentation state, then run the separately guarded
+sealed launcher once without changing any model, template, method, or setting.
+The sealed test remains closed. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration

@@ -574,21 +574,23 @@ def _validate_validation_results(
                 raise ValueError("main independent specificity coverage changed")
         elif len(method_rows) != len(primary):
             raise ValueError(f"main validation has unexpected adapter rows for {method}")
+        if any(row.oracle_node_index is None for row in method_rows):
+            raise ValueError(
+                f"main validation oracle-node evidence is missing for {method}"
+            )
         if method in SEMANTIC_ROUTED_METHODS:
             if any(
-                row.selected_node_index is None
-                or row.oracle_node_index is None
-                or row.routed_regret is None
+                row.selected_node_index is None or row.routed_regret is None
                 for row in method_rows
             ):
                 raise ValueError(f"main validation routing evidence is missing for {method}")
         elif any(
-            row.selected_node_index is not None
-            or row.oracle_node_index is not None
-            or row.routed_regret is not None
+            row.selected_node_index is not None or row.routed_regret is not None
             for row in method_rows
         ):
-            raise ValueError(f"main validation has unexpected routing evidence for {method}")
+            raise ValueError(
+                f"main validation has unexpected routed evidence for {method}"
+            )
 
 
 def _validation_summaries(

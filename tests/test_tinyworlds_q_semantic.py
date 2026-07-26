@@ -1010,7 +1010,7 @@ def test_fact_statistics_generation_and_atomic_ledgers(
             answer_correct=correct,
             correct_answer_margin=margin,
             selected_node_index=1 if routed else None,
-            oracle_node_index=1 if routed else None,
+            oracle_node_index=("cat", "dog", "pig").index(fact.concept_id) + 1,
             routed_regret=0.0 if routed else None,
         )
 
@@ -1609,7 +1609,7 @@ def test_main_validation_requires_every_method_and_template(
             answer_correct=True,
             correct_answer_margin=1.0,
             selected_node_index=1 if method in SEMANTIC_ROUTED_METHODS else None,
-            oracle_node_index=1 if method in SEMANTIC_ROUTED_METHODS else None,
+            oracle_node_index=1,
             routed_regret=0.0 if method in SEMANTIC_ROUTED_METHODS else None,
         )
         for method in SEMANTIC_QUERY_METHODS
@@ -1618,10 +1618,18 @@ def test_main_validation_requires_every_method_and_template(
     main_validation_module._validate_validation_results(results, preset)
     with pytest.raises(ValueError, match="coverage"):
         main_validation_module._validate_validation_results(results[:-1], preset)
-    with pytest.raises(ValueError, match="unexpected routing"):
+    with pytest.raises(ValueError, match="oracle-node evidence"):
         main_validation_module._validate_validation_results(
             (
-                replace(results[0], oracle_node_index=1),
+                replace(results[0], oracle_node_index=None),
+                *results[1:],
+            ),
+            preset,
+        )
+    with pytest.raises(ValueError, match="unexpected routed evidence"):
+        main_validation_module._validate_validation_results(
+            (
+                replace(results[0], selected_node_index=1),
                 *results[1:],
             ),
             preset,

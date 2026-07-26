@@ -19,8 +19,10 @@ five-world main configuration is frozen. Main construction evidence is
 published, and all 60 primary facts and all 60 fact-specific reverse rows are
 approved. The official main catalog and partition reproduce byte-for-byte,
 GPU preflight passed, and the fresh main base completed and passed every
-quality and memory gate. No sealed test was opened. Neither the original stop
-nor the operational pilot is a scientific VAMP result.
+quality and memory gate. All five main adapter stages, validation-only scoring,
+strict no-op resume, and the closed sealed transaction are now complete. No
+sealed test was opened. Neither the original stop nor the operational pilot is
+a scientific VAMP result.
 
 `tinyworlds-q-semantic-v1` is isolated under its own Python package and the
 registered roots `data/tinyworlds-q-semantic/`,
@@ -390,3 +392,73 @@ freeze before any test prompt can be deserialized. Strict recovery reconstructs
 all canonical result rows, rechecks method/schedule/routing coverage, recomputes
 registered fact effects, and regenerates the final report views. The sealed
 test remains closed.
+
+## Main adapters and validation freeze
+
+The main launcher completed 30,000 adapter updates: 2,000 updates for each of
+the sequential, independent, and VAMP systems in each ordered world. Every
+world boundary published one immutable stage, and a second completed-stage
+load returned without an optimizer step and reproduced the final tensor
+checksum.
+
+| Stage | Task prefix | Manifest SHA-256 | Tensor checksum |
+|---:|---|---|---|
+| 1 | cat | `7e6e948bf07792893af7cb638c7023deb0e378b2e1bd0910112df2e9fcf6cf8c` | `dadb063a725b2ea5f7c67937b87130174c1971fb3fe63b99dce0e8200fa7b82b` |
+| 2 | cat, dog | `00685dfa97a3b56040cac4b3a74ced279fee444a403017af4501b3838b5e05b0` | `f384b78e2263fff2282445d373fab3cd01981138a488513db8ef94806a1b3e36` |
+| 3 | cat, dog, bird | `22bb48cd270e7f1d9e6787455f66c04dee8c8431aff53069147ea983015db9dd` | `a20b554601844493256feba32f3b357638fed7ef987198b87329f8b6d151dc8c` |
+| 4 | cat, dog, bird, robot | `e93c190072d2ee24aebac6fb1c5234cba3596d0501aa8650a0c68cdefa0c40fd` | `31e2063b800bd9da544a21be95b217ce5a966c07e25c788da6bb77ed666a7826` |
+| 5 | cat, dog, bird, robot, dragon | `3bdf2e13b39f01377333c6dff1c3aa083ea7f7a538a07a5440c424f77e8fd933` | `f2e744d2ebb1d182e74ada95970ce126bb93cc0fec370b535e07d6e889241878` |
+
+VAMP selected root as parent for cat, dog, robot, and dragon. Bird selected
+dog, producing the only depth-two path. These decisions used validation
+question prefixes only. The elapsed interval from creation of the dedicated
+adaptation workspace to the fifth-stage manifest was `1839.455669` seconds.
+The later strict no-op recovery invocation took `9.685603` seconds; the report
+keeps these values separate instead of presenting resume overhead as training
+time.
+
+The first complete 5,940-row validation evaluation reached the publication
+validator and revealed a contract error before any artifact was published:
+the shared `KnowledgeQuery` scorer supplies a task-oracle node for every
+direct-query row, but the strict query validator had treated that field as
+router-only. The corrected contract requires oracle-node provenance for every
+method and permits selected-node/regret fields only for task-free routed
+methods. The focused 11-test query suite passes that regression. The failed
+publication attempt and a deliberately interrupted runtime-accounting retry
+remain preserved as temporary ledgers; neither deserialized a sealed prompt.
+
+The successful fresh scoring pass published validation freeze
+`a32636c0a467cf4e95253cf19792d5eda0ede556e059376988cc410b7ba6dfb0`.
+It contains 5,940 canonical rows with ledger SHA-256
+`8baa895b9f234c79eabcbd140e503c2c7a7609f4af37f79a6c39b8f2a704e9b9`,
+projects the exact 9,900 sealed rows and 10,137,600 bytes, records
+`602.319236` seconds for validation, and retains the 9,032,018,176-byte
+allocator peak.
+
+| Method | Primary validation rows | Accuracy | Mean margin |
+|---|---:|---:|---:|
+| base | 180 | 0.372222 | -0.759204 |
+| independent | 540 | 0.564815 | 0.224021 |
+| sequential | 540 | 0.438889 | -0.509908 |
+| VAMP oracle | 540 | 0.531481 | 0.173905 |
+| exhaustive router | 540 | 0.468519 | -0.136217 |
+| Hopfield router | 540 | 0.414815 | -0.404019 |
+| uniform EBT router | 540 | 0.464815 | -0.135940 |
+| Hopfield EBT router | 540 | 0.464815 | -0.144814 |
+| deterministic random node | 540 | 0.411111 | -0.476841 |
+
+The two complete validation passes used the same frozen tensors and schedule,
+but independent GPU compilation changed 10,833 of 23,760 serialized candidate
+NLL values by a mean absolute `0.000718866` and maximum `0.016455650`. Nine of
+5,940 predicted choices and four correctness flags changed; every routed node
+selection was identical. This is reported as observed floating-kernel
+variation rather than byte-identical evaluation. The second complete pass is
+the sole published validation artifact; no selection or setting was changed
+from either pass.
+
+Closed transaction
+`ce92e165fcc3f58b449253a628e7616ef254c700c225db45ab88708f8f8de946`
+binds the catalog, partition, selected base, main preset, and exact validation
+freeze. It has neither an open marker nor a completion marker. The next and
+only authorized model action is the separately guarded sealed launcher after
+this pre-test state is committed.
