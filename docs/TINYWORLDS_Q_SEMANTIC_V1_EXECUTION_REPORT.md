@@ -20,9 +20,10 @@ published, and all 60 primary facts and all 60 fact-specific reverse rows are
 approved. The official main catalog and partition reproduce byte-for-byte,
 GPU preflight passed, and the fresh main base completed and passed every
 quality and memory gate. All five main adapter stages, validation-only scoring,
-strict no-op resume, and the closed sealed transaction are now complete. No
-sealed test was opened. Neither the original stop nor the operational pilot is
-a scientific VAMP result.
+strict no-op resume, and the one authorized sealed transaction are now
+complete. The sealed result is atomically published and the transaction is
+durably closed. Neither the original stop, the operational pilot, nor the main
+descriptive result is a scientific VAMP pass/fail verdict.
 
 `tinyworlds-q-semantic-v1` is isolated under its own Python package and the
 registered roots `data/tinyworlds-q-semantic/`,
@@ -82,11 +83,12 @@ registered roots `data/tinyworlds-q-semantic/`,
 
 ## Verification
 
-The focused query/language CPU suite passes 13 tests. The fixtures cover construction and
-leakage rules, candidate/token boundaries, exact rebuild and tamper rejection,
-catalog parent nesting, sealed access, deterministic statistics, dynamic
-capacity/schedules, bounded scoring, strict report coverage, and resumable
-stage identity. The pilot-specific fixture also verifies the 24-row primary
+The focused query/language CPU suite passes 11 tests. The fixtures cover
+construction and leakage rules, candidate/token boundaries, exact rebuild and
+tamper rejection, catalog parent nesting, sealed access, deterministic
+statistics, dynamic capacity/schedules, bounded scoring, strict report
+coverage, and resumable stage identity. The pilot-specific fixture also
+verifies the 24-row primary
 review queue, 8-row backup set, evidence support, equal answer-token lengths,
 compact publication, strict primary/reverse-approval reload, and approved
 catalog compilation. The fixtures run a tiny GPT-Neo base both uninterrupted and
@@ -98,20 +100,19 @@ tamper rejection. It now also covers authenticated all-budget failure
 publication and failure-ledger tamper rejection. A five-world fixture also
 verifies the dynamic 80-proposal shortlist, 60-primary count, and ordered
 reverse-choice manifest while preserving the exact published pilot hash.
-A broader focused run passes 56 tests across query-v1, knowledge tasks,
+A broader focused run passes 80 tests across query-v1, knowledge tasks,
 candidate scoring, knowledge training/evaluation, semantic statistics,
 semantic-v6 partitioning, and semantic-v6 VAMP.
 
-The repository-wide default suite reports 618 passed, 274 skipped, 11
-deselected, and one unrelated pre-existing failure. The failure is the strict
-zero-atol assertion in
-`test_every_router_returns_valid_task_free_decisions_and_suffix_metrics`, where
-two float32 probability rows sum to `1.0000001`. That test does not import the
-query-v1 package; shared routing behavior was left unchanged to preserve the
-semantic-v6 evidence boundary.
+The repository-wide default suite reports 626 passed, 274 skipped, and 11
+deselected. The shared Hopfield softmax validity assertion retains its existing
+`1e-6` tolerance for one-ULP float32 sums; no semantic-v6 result artifact was
+changed.
 
-The tests run in `ve-semantic`; the system Python lacks the repository's optional
-`optax` dependency and therefore cannot collect the broader LM modules.
+The complete default collection ran in `ve-semantic`; the final focused and
+compatibility gates also pass in the CUDA-enabled `ve`. The system Python lacks
+the repository's optional `optax` dependency and therefore cannot collect the
+broader LM modules.
 
 ## Real pilot review packet
 
@@ -334,8 +335,8 @@ routing compatibility selection pass. The complete default non-opt-in
 collection reports 626 passed, 274 registered resource skips, and 11 marker
 deselections. One router assertion uses the existing `1e-6` probability
 tolerance because Hopfield softmax sums can differ from one by one `float32`
-ULP. This source state is the main-partition checkpoint; GPU preflight remains
-before the fresh base and adapters.
+ULP. This source state formed the main-partition checkpoint before the later
+GPU preflight, fresh base, and adapter runs.
 
 GPU preflight
 `28380737a808e4288c9b8b51cd6a97e9c64c60e23a59b51e10fd2ea565e14641`
@@ -459,6 +460,68 @@ from either pass.
 Closed transaction
 `ce92e165fcc3f58b449253a628e7616ef254c700c225db45ab88708f8f8de946`
 binds the catalog, partition, selected base, main preset, and exact validation
-freeze. It has neither an open marker nor a completion marker. The next and
-only authorized model action is the separately guarded sealed launcher after
-this pre-test state is committed.
+freeze.
+
+## Final sealed main result
+
+The separately guarded launcher authenticated the complete pre-test chain,
+durably wrote the sole opening marker, deserialized the 300 sealed templates,
+and evaluated the exact registered full schedule. It streamed 9,900 canonical
+rows into a 5,025,203-byte JSONL ledger, ran the five frozen 96-token greedy
+generation prompts, computed 10,000 deterministic fact-resampled replicates,
+atomically published the report, and wrote the matching completion marker.
+Transaction
+`ce92e165fcc3f58b449253a628e7616ef254c700c225db45ab88708f8f8de946`
+therefore names exactly one completed result:
+`8f34f8fe9f791ae822b2cdde35ebb1cb24b9a4f7efab0c68e0cf600f694a9986`.
+Strict reconstruction verifies the ledger, all registered effects, Markdown,
+standalone HTML, dynamic schedule, manifest hashes, and terminal transaction
+binding.
+
+Final-stage primary test results average the five paraphrases within each of
+60 facts before giving each world equal weight:
+
+| Method | Accuracy | 95% interval | Mean margin | 95% interval |
+|---|---:|---:|---:|---:|
+| base | 0.360000 | [0.290000, 0.430000] | -0.756509 | [-1.059492, -0.449740] |
+| independent | 0.603333 | [0.536667, 0.670000] | 0.489586 | [0.214394, 0.750516] |
+| sequential | 0.446667 | [0.380000, 0.513333] | -0.370716 | [-0.678799, -0.056012] |
+| VAMP oracle | 0.603333 | [0.536667, 0.670000] | 0.463723 | [0.174623, 0.735034] |
+| exhaustive router | 0.450000 | [0.380000, 0.520000] | -0.255805 | [-0.557146, 0.039686] |
+| Hopfield router | 0.446667 | [0.373333, 0.516667] | -0.404955 | [-0.712612, -0.097564] |
+| uniform EBT router | 0.443333 | [0.380000, 0.510000] | -0.253909 | [-0.549063, 0.039352] |
+| Hopfield EBT router | 0.446667 | [0.380000, 0.513333] | -0.242984 | [-0.544524, 0.058295] |
+| deterministic random node | 0.433333 | [0.366667, 0.500000] | -0.382035 | [-0.689523, -0.080876] |
+
+Independent adapters acquire `+0.243333` accuracy over base (95% interval
+`[0.193333, 0.293333]`) and retain exactly that accuracy at the final stage
+(retention change `0.000000`, interval `[0.000000, 0.000000]`). Their
+cross-world node specificity is `+0.256667` accuracy (interval
+`[0.181667, 0.330000]`). Sequential training initially acquires `+0.236667`
+(interval `[0.186667, 0.290000]`) but loses `0.150000` by the final stage
+(interval `[-0.200000, -0.103333]`). VAMP oracle paths acquire `+0.243333`
+and likewise show zero final accuracy loss. The final task-free methods reach
+only `0.443333`--`0.450000` accuracy; exhaustive, uniform EBT, and Hopfield EBT
+select the correct world node on `0.590000`, `0.593333`, and `0.600000` of
+queries respectively. The gap between those task-free results and the
+`0.603333` oracle result therefore localizes the main VAMP limitation to
+routing rather than loss of the stored node knowledge. Registered routed
+regret is `0.000000` in every final task-free cell under the shared scorer's
+registered definition.
+
+All five matching independent adapters produced zero exact registered-trigger
+recall under the secondary greedy prompt. Cat and bird emitted only end tokens;
+dog and robot emitted generic happiness/friendship statements; dragon emitted
+generic happiness/fun statements. This negative generation observation does
+not alter the primary four-choice statistics, but it shows that the measured
+answer-ranking knowledge did not transfer to this open-ended prompting mode.
+
+Sealed evaluation took `638.502606` seconds, generation took `32.231832`
+seconds, and fact analysis took `1.059834` seconds. Peak allocation was
+9,032,018,176 bytes against the 12 GiB limit. The full Markdown and standalone
+HTML reports are under
+`results/language_cl/tinyworlds-q-semantic-v1/main-report/2aa99c394f83ca4b/8f34f8fe9f791ae822b2cdde35ebb1cb24b9a4f7efab0c68e0cf600f694a9986/`.
+These measurements are descriptive evidence; no scientific pass/fail label is
+attached. A post-publication strict semantic reload recomputed the coverage,
+effects, and derived views and returned the same report identity. The final
+11-test focused suite and 80-test compatibility selection both pass.

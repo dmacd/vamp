@@ -298,6 +298,17 @@ marker. A retry may resume the same opened transaction or idempotently close an
 already published matching report, but a completed transaction cannot evaluate
 or deserialize test prompts again.
 
+The canonical five-world execution exercised that boundary exactly once.
+Transaction
+`ce92e165fcc3f58b449253a628e7616ef254c700c225db45ab88708f8f8de946`
+is durably opened and completed by descriptive report
+`8f34f8fe9f791ae822b2cdde35ebb1cb24b9a4f7efab0c68e0cf600f694a9986`.
+Its 9,900-row ledger, 10,000-replicate fact analysis, generation records,
+runtime/memory evidence, Markdown, HTML, and dynamic schedule all strict-load
+from their frozen bindings. This completion is terminal for that transaction:
+future invocations may authenticate and return the report but cannot obtain a
+second test view.
+
 Runtime evidence distinguishes the current `adaptation_or_resume` invocation
 from `adaptation_stage_wall_interval`. The latter is the elapsed filesystem
 interval from creation of the dedicated adaptation workspace to publication of

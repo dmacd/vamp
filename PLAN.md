@@ -244,10 +244,30 @@ seconds and allocator peak remained 9,032,018,176 bytes.
 Closed sealed transaction
 `ce92e165fcc3f58b449253a628e7616ef254c700c225db45ab88708f8f8de946`
 binds the catalog, partition, selected base, preset, and exact validation
-freeze. It has no open or completion marker. The immediate gate is to commit
-this pre-test source and documentation state, then run the separately guarded
-sealed launcher once without changing any model, template, method, or setting.
-The sealed test remains closed. See
+freeze. The separately guarded launcher durably opened that sole transaction,
+evaluated all 9,900 scheduled rows, ran the frozen generation inspection and
+10,000-replicate fact analysis, atomically published result
+`8f34f8fe9f791ae822b2cdde35ebb1cb24b9a4f7efab0c68e0cf600f694a9986`,
+and wrote its matching completion marker. Strict file hashes and semantic
+reconstruction pass for the 5,025,203-byte JSONL ledger and all derived report
+views.
+
+The final five-world test accuracy is `0.360000` for base, `0.603333` for
+independent adapters, `0.446667` for the overwritten sequential adapter,
+`0.603333` for VAMP oracle paths, and `0.443333`--`0.450000` for the three
+exhaustive/EBT task-free routes. Independent acquisition is `+0.243333`
+(95% fact-resampled interval `[0.193333, 0.293333]`), with zero measured final
+accuracy loss and `+0.256667` node specificity. Sequential acquisition is
+`+0.236667`, followed by `-0.150000` retention loss. VAMP oracle also has zero
+measured accuracy loss; its best final task-free router-node accuracy is
+`0.600000`, identifying routing as the principal gap to the oracle result.
+All five secondary greedy generations have zero exact registered-trigger
+recall. Sealed evaluation, generation, and fact analysis took `638.502606`,
+`32.231832`, and `1.059834` seconds; peak allocation remained
+9,032,018,176 bytes. This is descriptive evidence and carries no scientific
+pass/fail label. A post-publication strict semantic reload reproduced the exact
+report identity, and the final 11-test focused plus 80-test compatibility gates
+pass. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration
