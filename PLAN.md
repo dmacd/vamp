@@ -187,12 +187,15 @@ fresh resumable base is actively training under identity
 complete 1,000-update checkpoints are being persisted and the run remains
 finite with no memory stop. The exact main adapter/validation runner and a
 separately guarded sealed runner are implemented. Final-analysis protocol
-`7f88e460341f4698fadbf20e9665ad9ec4a8b7b011bc067ca8a2ccd4594c5760`
+`489042464fd4243e1780d585c4ba7ed6cd1134c9f7a5bf3d7e6f2fb4aaa8712a`
 fixes all nine methods, acquisition and retention for every non-base method,
 independent cross-world specificity, accuracy and margin effects, router node
 accuracy/regret, 10,000 fact bootstraps, and 96-token greedy generation from
-the matching final independent adapter. It enters the validation freeze before
-test access.
+the matching final independent adapter. Headline condition summaries use only
+the primary matching adapter/path rows; the forced cross-world independent
+matrix enters the specificity effect and ledger instead of being pooled into
+independent accuracy. The protocol enters the validation freeze before test
+access.
 
 Resource accounting now explicitly includes every forced independent-adapter
 specificity cell. The five-world sealed ledger is 9,900 rows and a conservative

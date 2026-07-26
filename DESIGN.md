@@ -269,6 +269,12 @@ inspection, runtime, and memory evidence. The content identity binds the
 streamed result-ledger SHA-256; strict reload rejects changed renderings or any
 altered result byte.
 
+Condition accuracy, margin, router accuracy, and routed regret summarize only
+the primary matching adapter or oracle/path row at each stage and method. The
+forced independent-adapter by query-world matrix remains in the authenticated
+ledger and feeds the specificity effect, but is not pooled into the headline
+matching-independent accuracy.
+
 Before a sealed transaction can open, a content-addressed validation freeze
 must bind the selected base, preflight, validation-only probe preparation,
 every immutable stage tensor/manifest, exact validation ledger, no-op resume

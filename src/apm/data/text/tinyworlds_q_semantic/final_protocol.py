@@ -26,6 +26,7 @@ class SemanticFinalEvaluationProtocol:
     bootstrap_replicates: int
     generation_method: str
     generation_max_new_tokens: int
+    condition_summary: str
     result_row_accounting: str
     estimated_bytes_per_result_row: int
 
@@ -40,6 +41,8 @@ class SemanticFinalEvaluationProtocol:
             or self.generation_method != "independent"
             or type(self.generation_max_new_tokens) is not int
             or self.generation_max_new_tokens <= 0
+            or self.condition_summary
+            != "stage-method-primary-matching-fact-average"
             or self.result_row_accounting
             != "base-plus-scheduled-methods-plus-independent-specificity-matrix"
             or self.estimated_bytes_per_result_row != 1_024
@@ -51,6 +54,7 @@ class SemanticFinalEvaluationProtocol:
         return {
             "acquisition_methods": list(self.acquisition_methods),
             "bootstrap_replicates": self.bootstrap_replicates,
+            "condition_summary": self.condition_summary,
             "effect_metrics": list(self.effect_metrics),
             "generation_max_new_tokens": self.generation_max_new_tokens,
             "generation_method": self.generation_method,
@@ -80,6 +84,7 @@ REGISTERED_FINAL_EVALUATION_PROTOCOL = SemanticFinalEvaluationProtocol(
     bootstrap_replicates=CANONICAL_BOOTSTRAP_REPLICATES,
     generation_method="independent",
     generation_max_new_tokens=96,
+    condition_summary="stage-method-primary-matching-fact-average",
     result_row_accounting=(
         "base-plus-scheduled-methods-plus-independent-specificity-matrix"
     ),

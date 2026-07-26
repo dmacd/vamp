@@ -370,8 +370,11 @@ and is persisting complete 1,000-update checkpoints while remaining finite.
 
 The adapter/validation launcher and separately guarded sealed launcher are now
 implemented. Final protocol
-`7f88e460341f4698fadbf20e9665ad9ec4a8b7b011bc067ca8a2ccd4594c5760`
+`489042464fd4243e1780d585c4ba7ed6cd1134c9f7a5bf3d7e6f2fb4aaa8712a`
 fixes the full method/effect matrix, routing metrics, 10,000 fact bootstraps,
 and 96-token greedy generation from each world's matching final independent
-adapter. It enters the validation freeze before any test prompt can be
-deserialized. The sealed test remains closed.
+adapter. Headline condition summaries use primary matching adapter/path rows;
+forced cross-world independent rows are retained for specificity without being
+pooled into matching-adapter accuracy. The protocol enters the validation
+freeze before any test prompt can be deserialized. The sealed test remains
+closed.

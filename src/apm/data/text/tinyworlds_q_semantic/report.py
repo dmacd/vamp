@@ -387,13 +387,22 @@ def _condition_summaries(
     observations: tuple[FactObservation, ...],
     replicates: int,
 ) -> tuple[BootstrapEstimate, ...]:
+    primary = tuple(
+        item
+        for item in observations
+        if (
+            item.adapter_concept_id == item.concept_id
+            if item.method == "independent"
+            else item.adapter_concept_id is None
+        )
+    )
     keys = tuple(
         sorted(
             {
-                (item.stage, item.method, item.split, item.adapter_concept_id)
-                for item in observations
+                (item.stage, item.method, item.split)
+                for item in primary
             },
-            key=lambda item: (item[0], item[1], item[2], item[3] or ""),
+            key=lambda item: (item[0], item[1], item[2]),
         )
     )
     return tuple(
@@ -402,9 +411,8 @@ def _condition_summaries(
         for rows in (
             tuple(
                 item
-                for item in observations
-                if (item.stage, item.method, item.split, item.adapter_concept_id)
-                == key
+                for item in primary
+                if (item.stage, item.method, item.split) == key
             ),
         )
         for metric in (
@@ -426,14 +434,13 @@ def _condition_summaries(
                 rows,
                 metric,  # type: ignore[arg-type]
                 replicates=replicates,
-                identity=f"stage-{key[0]}:{key[1]}:{key[2]}:{key[3] or 'none'}",
+                identity=f"stage-{key[0]}:{key[1]}:{key[2]}:primary",
             ),
         )
         for estimate in (
             BootstrapEstimate(
                 metric=(
-                    f"stage-{key[0]}:{key[1]}:{key[2]}:"
-                    f"{key[3] or 'none'}:{metric}"
+                    f"stage-{key[0]}:{key[1]}:{key[2]}:primary:{metric}"
                 ),
                 point=raw_estimate.point,
                 lower=raw_estimate.lower,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from hashlib import sha256
+import json
 from pathlib import Path
 import shutil
 import string
@@ -1151,6 +1152,8 @@ def test_fact_statistics_generation_and_atomic_ledgers(
         runtime_seconds={"training": 1.0},
         memory_bytes={"allocator_peak": 1},
     )
+    published_record = json.loads((published.root / "result.json").read_bytes())
+    assert len(published_record["summaries"]) == 80
     assert publish_semantic_report(
         tmp_path / "reports",
         catalog_sha256=semantic_fixture.catalog.catalog_sha256,
