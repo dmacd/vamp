@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 import json
 import math
@@ -37,6 +37,7 @@ from apm.data.text.tinyworlds_q_semantic.scaling import (
     PreflightMeasurement,
     ResourceEstimate,
     estimate_resources,
+    evaluation_schedule,
     projected_runtime_seconds,
     require_preflight_capacity,
 )
@@ -391,9 +392,22 @@ def load_query_gpu_preflight(
         ),
         estimated_peak_bytes=_integer(estimate_record, "estimated_peak_bytes"),
     )
-    if estimate != estimate_resources(preset):
+    corrected_estimate = estimate_resources(preset)
+    # The first pilot/main v1 preflights counted the matching independent
+    # adapter as one ordinary method and omitted the forced cross-adapter rows.
+    # Those immutable measurements remain valid evidence: reconstruct that
+    # exact historical count, then apply the corrected storage gate as an
+    # additional requirement.  Newly published preflights use the corrected
+    # estimate directly.
+    legacy_rows = len(evaluation_schedule(preset)) * 60 * 9
+    legacy_estimate = replace(
+        corrected_estimate,
+        result_rows=legacy_rows,
+        estimated_result_bytes=legacy_rows * 1_024,
+    )
+    if estimate not in (corrected_estimate, legacy_estimate):
         raise ValueError("query GPU preflight resource estimate changed")
-    require_preflight_capacity(preset, estimate, measurement)
+    require_preflight_capacity(preset, corrected_estimate, measurement)
     losses = _number_list(record, "losses")
     runtime = _mapping(record, "runtime_seconds")
     loaded = QueryGpuPreflight(

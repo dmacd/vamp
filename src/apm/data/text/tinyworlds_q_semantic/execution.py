@@ -508,8 +508,6 @@ def complete_sealed_test(
 ) -> Path:
     """Close the one test transaction after a durable result publication."""
     require_sha256(result_sha256, "sealed result")
-    if not transaction.test_access_authorized:
-        raise PermissionError("sealed test is not in one authenticated open transaction")
     path = transaction.root / "sealed-complete.json"
     payload = canonical_json_bytes(
         {
@@ -518,13 +516,45 @@ def complete_sealed_test(
             "transaction_sha256": transaction.transaction_sha256,
         }
     )
-    if path.exists() and path.read_bytes() != payload:
-        raise FileExistsError("sealed transaction already names a different result")
-    if not path.exists():
-        temporary = transaction.root / ".sealed-complete.json.tmp"
-        temporary.write_bytes(payload)
-        os.replace(temporary, path)
+    if path.exists():
+        if path.read_bytes() != payload:
+            raise FileExistsError("sealed transaction already names a different result")
+        return path
+    if not transaction.test_access_authorized:
+        raise PermissionError("sealed test is not in one authenticated open transaction")
+    temporary = transaction.root / ".sealed-complete.json.tmp"
+    temporary.write_bytes(payload)
+    os.replace(temporary, path)
     return path
+
+
+def completed_sealed_result_sha256(
+    transaction: SealedTestTransaction,
+) -> str | None:
+    """Return the strictly authenticated result identity, if the transaction closed."""
+    if not transaction.transaction_authenticated:
+        raise PermissionError("sealed transaction is not durably authenticated")
+    path = transaction.root / "sealed-complete.json"
+    if not path.exists():
+        return None
+    record = _load_canonical_json(path)
+    if (
+        set(record) != {"result_sha256", "status", "transaction_sha256"}
+        or record.get("status") != "complete"
+        or record.get("transaction_sha256") != transaction.transaction_sha256
+    ):
+        raise ValueError("sealed completion binding changed")
+    result_sha256 = _string(record, "result_sha256")
+    require_sha256(result_sha256, "sealed completed result")
+    expected_open = canonical_json_bytes(
+        {
+            "status": "opened",
+            "transaction_sha256": transaction.transaction_sha256,
+        }
+    )
+    if (transaction.root / "sealed-open.json").read_bytes() != expected_open:
+        raise ValueError("sealed completion lacks its authenticated opening")
+    return result_sha256
 
 
 def _load_canonical_json(path: Path) -> dict[str, object]:
@@ -585,6 +615,7 @@ __all__ = [
     "SealedTestTransaction",
     "StageArtifact",
     "begin_sealed_test",
+    "completed_sealed_result_sha256",
     "complete_sealed_test",
     "latest_stage_artifact",
     "load_sealed_transaction",

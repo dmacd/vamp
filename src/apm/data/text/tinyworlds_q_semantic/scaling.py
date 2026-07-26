@@ -162,7 +162,27 @@ def estimate_resources(
         stage * preset.parent_probe_count
         for stage in range(1, world_count + 1)
     )
-    result_rows = len(cells) * queries_per_world * method_count
+    # Base is scored once for every active world.  At a learned stage, every
+    # scheduled query world has one row for each non-base method, while the
+    # independent system is additionally forced through every adapter in that
+    # learned prefix to measure node specificity.  Count that cross-adapter
+    # matrix explicitly; treating independent as one ordinary method
+    # underestimates large milestone ledgers substantially.
+    nonbase_nonindependent_methods = method_count - 2
+    if nonbase_nonindependent_methods < 0:
+        raise ValueError("resource estimates require base and independent methods")
+    scheduled_worlds_by_stage = {
+        stage: sum(cell.stage == stage for cell in cells)
+        for stage in range(1, world_count + 1)
+    }
+    result_rows = queries_per_world * (
+        world_count
+        + sum(
+            scheduled_worlds
+            * (nonbase_nonindependent_methods + stage)
+            for stage, scheduled_worlds in scheduled_worlds_by_stage.items()
+        )
+    )
     routing_scores = sum(
         queries_per_world * method_count * (cell.stage + 1)
         for cell in cells

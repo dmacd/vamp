@@ -26,6 +26,7 @@ from apm.data.text.tinyworlds_q_semantic.queries import (
     iter_semantic_score_chunks,
     stack_semantic_router_batches,
 )
+from apm.data.text.tinyworlds_q_semantic.result_stream import SemanticResultSink
 from apm.data.text.tinyworlds_q_semantic.scaling import evaluation_schedule
 from apm.lm.candidate_scoring import score_edge_coefficient_candidates
 from apm.lm.checkpoint import LoadedGptNeoCheckpoint
@@ -50,6 +51,14 @@ _ROUTER_METHODS = (
     ("vamp_ebt_hopfield", "vamp_ebt_hopfield"),
     ("deterministic_random_node", "vamp_random"),
 )
+SEMANTIC_QUERY_METHODS = (
+    "base",
+    "independent",
+    "sequential",
+    "vamp_oracle",
+    *(method for _router, method in _ROUTER_METHODS),
+)
+SEMANTIC_ROUTED_METHODS = tuple(method for _router, method in _ROUTER_METHODS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +225,7 @@ def evaluate_staged_semantic_queries(
     pad_token_id: int,
     *,
     progress: EvaluationProgress | None = None,
+    result_sink: SemanticResultSink | None = None,
 ) -> tuple[SemanticQueryResult, ...]:
     """Evaluate every registered method on the manifest-derived stage schedule."""
     if (
@@ -255,15 +265,18 @@ def evaluate_staged_semantic_queries(
         progress=progress,
         phase="base validation",
     )
-    base_rows = evaluate_semantic_method(
-        queries,
-        final_hard_scores,
-        final_graph,
-        final_packed,
-        stage=0,
-        method="base",
-        candidate_nll=base_scores,
-    ).results
+    base_rows = _emit_results(
+        evaluate_semantic_method(
+            queries,
+            final_hard_scores,
+            final_graph,
+            final_packed,
+            stage=0,
+            method="base",
+            candidate_nll=base_scores,
+        ).results,
+        result_sink,
+    )
     scheduled = evaluation_schedule(preset)
     stage_rows = tuple(
         row
@@ -290,6 +303,7 @@ def evaluate_staged_semantic_queries(
             pad_token_id,
             stage_index,
             progress=progress,
+            result_sink=result_sink,
         )
     )
     return base_rows + stage_rows
@@ -304,6 +318,7 @@ def _evaluate_stage(
     stage: int,
     *,
     progress: EvaluationProgress | None,
+    result_sink: SemanticResultSink | None,
 ) -> tuple[SemanticQueryResult, ...]:
     graph = adaptation.vamp_graph
     packed = pack_lora_memory(
@@ -334,16 +349,22 @@ def _evaluate_stage(
                 phase=f"stage {stage} independent {adapter.task_id}",
             ),
         )
-        for row in evaluate_semantic_method(
-            queries,
-            hard_scores,
-            graph,
-            packed,
-            stage=stage,
-            method="independent",
-            candidate_nll=candidate_scores,
-            adapter_concept_id=str(adapter.task_id),
-        ).results
+        for rows in (
+            _emit_results(
+                evaluate_semantic_method(
+                    queries,
+                    hard_scores,
+                    graph,
+                    packed,
+                    stage=stage,
+                    method="independent",
+                    candidate_nll=candidate_scores,
+                    adapter_concept_id=str(adapter.task_id),
+                ).results,
+                result_sink,
+            ),
+        )
+        for row in rows
     )
     sequential_scores = _score_root_adapter(
         queries,
@@ -353,15 +374,18 @@ def _evaluate_stage(
         progress=progress,
         phase=f"stage {stage} sequential",
     )
-    sequential = evaluate_semantic_method(
-        queries,
-        hard_scores,
-        graph,
-        packed,
-        stage=stage,
-        method="sequential",
-        candidate_nll=sequential_scores,
-    ).results
+    sequential = _emit_results(
+        evaluate_semantic_method(
+            queries,
+            hard_scores,
+            graph,
+            packed,
+            stage=stage,
+            method="sequential",
+            candidate_nll=sequential_scores,
+        ).results,
+        result_sink,
+    )
     node_indexes = {
         str(node_id): index for index, node_id in enumerate(memory_node_ids(graph))
     }
@@ -372,15 +396,18 @@ def _evaluate_stage(
     rows = np.arange(len(queries))[:, None]
     candidates = np.arange(4)[None, :]
     oracle_scores = hard_scores[rows, candidates, oracle_indexes[:, None]]
-    oracle = evaluate_semantic_method(
-        queries,
-        hard_scores,
-        graph,
-        packed,
-        stage=stage,
-        method="vamp_oracle",
-        candidate_nll=oracle_scores,
-    ).results
+    oracle = _emit_results(
+        evaluate_semantic_method(
+            queries,
+            hard_scores,
+            graph,
+            packed,
+            stage=stage,
+            method="vamp_oracle",
+            candidate_nll=oracle_scores,
+        ).results,
+        result_sink,
+    )
     routed = tuple(
         row
         for start in range(0, len(queries), preset.query_chunk_size)
@@ -402,17 +429,32 @@ def _evaluate_stage(
                 evaluation_microbatch_size=preset.query_chunk_size,
             ),
         )
-        for row in evaluate_semantic_method(
-            chunk_queries,
-            chunk_hard_scores,
-            graph,
-            packed,
-            stage=stage,
-            method=method,
-            hard_decision=decision,
-        ).results
+        for rows in (
+            _emit_results(
+                evaluate_semantic_method(
+                    chunk_queries,
+                    chunk_hard_scores,
+                    graph,
+                    packed,
+                    stage=stage,
+                    method=method,
+                    hard_decision=decision,
+                ).results,
+                result_sink,
+            ),
+        )
+        for row in rows
     )
     return independent + sequential + oracle + routed
+
+
+def _emit_results(
+    results: tuple[SemanticQueryResult, ...],
+    result_sink: SemanticResultSink | None,
+) -> tuple[SemanticQueryResult, ...]:
+    if result_sink is not None:
+        result_sink(results)
+    return results
 
 
 def _score_reference(
@@ -424,19 +466,25 @@ def _score_reference(
     progress: EvaluationProgress | None,
     phase: str,
 ) -> tuple[np.ndarray, np.ndarray]:
+    total = (len(queries) + preset.query_chunk_size - 1) // preset.query_chunk_size
     chunks = tuple(
-        iter_semantic_score_chunks(
-            queries,
-            base.params,
-            base.config,
-            packed,
-            preset.lora_config,
-            query_chunk_size=preset.query_chunk_size,
-            evaluation_microbatch_size=preset.query_chunk_size,
+        chunk
+        for completed, chunk in enumerate(
+            iter_semantic_score_chunks(
+                queries,
+                base.params,
+                base.config,
+                packed,
+                preset.lora_config,
+                query_chunk_size=preset.query_chunk_size,
+                evaluation_microbatch_size=preset.query_chunk_size,
+            ),
+            start=1,
+        )
+        for _reported in (
+            progress(phase, completed, total) if progress is not None else None,
         )
     )
-    if progress is not None:
-        progress(phase, len(chunks), len(chunks))
     return (
         np.concatenate(tuple(chunk.base_candidate_nll for chunk in chunks), axis=0),
         np.concatenate(tuple(chunk.hard_candidate_nll for chunk in chunks), axis=0),
@@ -460,20 +508,26 @@ def _score_root_adapter(
     coefficients = np.asarray(edge_coefficients_for_node(packed, 1))[None, :]
     starts = tuple(range(0, len(queries), preset.query_chunk_size))
     scores = tuple(
-        score_edge_coefficient_candidates(
-            base.params,
-            base.config,
-            packed,
-            preset.lora_config,
-            tuple(query.knowledge_query for query in chunk),
-            np.repeat(coefficients, len(chunk), axis=0),
-            evaluation_microbatch_size=preset.query_chunk_size,
-        )
-        for start in starts
+        candidate_scores
+        for completed, start in enumerate(starts, start=1)
         for chunk in (queries[start : start + preset.query_chunk_size],)
+        for candidate_scores in (
+            score_edge_coefficient_candidates(
+                base.params,
+                base.config,
+                packed,
+                preset.lora_config,
+                tuple(query.knowledge_query for query in chunk),
+                np.repeat(coefficients, len(chunk), axis=0),
+                evaluation_microbatch_size=preset.query_chunk_size,
+            ),
+        )
+        for _reported in (
+            progress(phase, completed, len(starts))
+            if progress is not None
+            else None,
+        )
     )
-    if progress is not None:
-        progress(phase, len(scores), len(scores))
     return np.concatenate(scores, axis=0)
 
 
@@ -535,6 +589,9 @@ def _validate_evaluation_inputs(
 __all__ = [
     "EvaluationProgress",
     "PilotBudgetEvaluation",
+    "SEMANTIC_QUERY_METHODS",
+    "SEMANTIC_ROUTED_METHODS",
+    "SemanticResultSink",
     "evaluate_pilot_budget",
     "evaluate_staged_semantic_queries",
 ]

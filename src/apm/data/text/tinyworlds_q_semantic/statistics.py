@@ -480,20 +480,29 @@ def generation_prompts(
 def inspect_generation(
     catalog: SemanticQueryCatalog,
     outputs: tuple[tuple[str, str, str], ...],
+    *,
+    concept_ids: tuple[str, ...] | None = None,
 ) -> tuple[GenerationInspection, ...]:
     """Measure exact registered-trigger recall while retaining every raw output."""
+    active_concepts = catalog.concept_ids if concept_ids is None else concept_ids
+    if (
+        type(active_concepts) is not tuple
+        or not active_concepts
+        or active_concepts != catalog.concept_ids[: len(active_concepts)]
+    ):
+        raise ValueError("generation concepts must be an ordered catalog prefix")
     fact_order = {fact.fact_id: index for index, fact in enumerate(catalog.facts)}
     facts_by_concept = {
-        concept.concept_id: tuple(
-            fact for fact in catalog.facts if fact.concept_id == concept.concept_id
+        concept_id: tuple(
+            fact for fact in catalog.facts if fact.concept_id == concept_id
         )
-        for concept in catalog.concepts
+        for concept_id in active_concepts
     }
     if (
         len(outputs) != len(facts_by_concept)
-        or {concept_id for concept_id, _, _ in outputs} != set(facts_by_concept)
+        or tuple(concept_id for concept_id, _, _ in outputs) != active_concepts
     ):
-        raise ValueError("generation outputs must cover every catalog concept once")
+        raise ValueError("generation outputs must cover the ordered active concepts")
     inspections = tuple(
         GenerationInspection(
             concept_id=concept_id,

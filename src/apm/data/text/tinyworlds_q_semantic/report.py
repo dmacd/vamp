@@ -19,7 +19,18 @@ from apm.data.text.tinyworlds_q_semantic.contracts import (
     record_sha256,
     require_sha256,
 )
+from apm.data.text.tinyworlds_q_semantic.evaluation import (
+    SEMANTIC_QUERY_METHODS,
+    SEMANTIC_ROUTED_METHODS,
+)
+from apm.data.text.tinyworlds_q_semantic.final_protocol import (
+    REGISTERED_FINAL_EVALUATION_PROTOCOL,
+)
+from apm.data.text.tinyworlds_q_semantic.final_analysis import (
+    compute_registered_final_effects,
+)
 from apm.data.text.tinyworlds_q_semantic.scaling import (
+    estimate_resources,
     evaluation_schedule,
     render_schedule_report,
 )
@@ -34,17 +45,6 @@ from apm.data.text.tinyworlds_q_semantic.statistics import (
 
 
 REPORT_FORMAT = "tinyworlds-q-semantic-report-v1"
-REQUIRED_QUERY_METHODS = (
-    "base",
-    "independent",
-    "sequential",
-    "vamp_oracle",
-    "vamp_exhaustive",
-    "vamp_hopfield",
-    "vamp_ebt_uniform",
-    "vamp_ebt_hopfield",
-    "vamp_random",
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +56,10 @@ class SemanticReportArtifact:
     catalog_sha256: str
     partition_sha256: str
     config_sha256: str
+    selected_base_sha256: str
+    adapters_sha256: str
+    preflight_sha256: str
+    transaction_sha256: str
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "root", Path(self.root))
@@ -64,6 +68,10 @@ class SemanticReportArtifact:
             (self.catalog_sha256, "report catalog"),
             (self.partition_sha256, "report partition"),
             (self.config_sha256, "report config"),
+            (self.selected_base_sha256, "report selected base"),
+            (self.adapters_sha256, "report adapters"),
+            (self.preflight_sha256, "report preflight"),
+            (self.transaction_sha256, "report sealed transaction"),
         ):
             require_sha256(value, label)
         if not self.root.is_dir():
@@ -75,6 +83,10 @@ def publish_semantic_report(
     *,
     catalog_sha256: str,
     partition_sha256: str,
+    selected_base_sha256: str,
+    adapters_sha256: str,
+    preflight_sha256: str,
+    transaction_sha256: str,
     preset: QueryExperimentPreset,
     results: tuple[SemanticQueryResult, ...],
     effects: tuple[BootstrapEstimate, ...],
@@ -87,6 +99,10 @@ def publish_semantic_report(
     for value, label in (
         (catalog_sha256, "report catalog"),
         (partition_sha256, "report partition"),
+        (selected_base_sha256, "report selected base"),
+        (adapters_sha256, "report adapters"),
+        (preflight_sha256, "report preflight"),
+        (transaction_sha256, "report sealed transaction"),
     ):
         require_sha256(value, label)
     if bootstrap_replicates != CANONICAL_BOOTSTRAP_REPLICATES:
@@ -97,24 +113,14 @@ def publish_semantic_report(
     ):
         raise ValueError("every final semantic effect requires 10,000 bootstraps")
     _validate_report_coverage(preset, results)
+    if len(results) != estimate_resources(preset, queries_per_world=60).result_rows:
+        raise ValueError("semantic report exact result-row count changed")
+    registered_effects = compute_registered_final_effects(results, preset)
+    if effects != registered_effects:
+        raise ValueError("semantic report effects changed the frozen analysis")
     methods = {result.method for result in results}
-    missing_methods = tuple(
-        method for method in REQUIRED_QUERY_METHODS if method not in methods
-    )
-    if missing_methods:
-        raise ValueError(
-            f"semantic report is missing required methods: {missing_methods}"
-        )
-    required_effects = (
-        "base-to-adapter-acquisition",
-        "node-specificity",
-        "acquisition-to-final-retention",
-    )
-    if any(
-        not any(item.metric.startswith(required) for item in effects)
-        for required in required_effects
-    ):
-        raise ValueError("semantic report lacks acquisition, specificity, or retention")
+    if methods != set(SEMANTIC_QUERY_METHODS):
+        raise ValueError("semantic report methods changed the frozen method set")
     if tuple(item.concept_id for item in generation) != preset.concept_ids:
         raise ValueError("semantic generation inspection changed ordered worlds")
     if (
@@ -124,26 +130,49 @@ def publish_semantic_report(
         or any(type(value) is not int or value < 0 for value in memory_bytes.values())
     ):
         raise ValueError("semantic report runtime and memory evidence is invalid")
+    allocator_peak = memory_bytes.get("allocator_peak")
+    if (
+        type(allocator_peak) is not int
+        or allocator_peak > preset.allocator_peak_limit_bytes
+    ):
+        raise MemoryError("semantic report allocator peak exceeds the frozen limit")
     observations = average_paraphrases(results)
     summaries = _condition_summaries(observations, bootstrap_replicates)
     results_digest = sha256()
+    result_bytes = 0
     for result in results:
-        results_digest.update(canonical_json_bytes(result.as_record()))
+        payload = canonical_json_bytes(result.as_record())
+        results_digest.update(payload)
+        result_bytes += len(payload)
+    if result_bytes > preset.result_size_limit_bytes:
+        raise OSError("semantic result ledger exceeds the frozen size limit")
     results_sha256 = results_digest.hexdigest()
     report_record = {
         "bootstrap_replicates": bootstrap_replicates,
+        "adapters_sha256": adapters_sha256,
         "catalog_sha256": catalog_sha256,
         "config": preset.as_record(),
         "config_sha256": preset.config_sha256,
         "effects": [item.as_record() for item in effects],
+        "final_evaluation_protocol": (
+            REGISTERED_FINAL_EVALUATION_PROTOCOL.as_record()
+        ),
+        "final_evaluation_protocol_sha256": (
+            REGISTERED_FINAL_EVALUATION_PROTOCOL.protocol_sha256
+        ),
         "format": REPORT_FORMAT,
         "generation": [item.as_record() for item in generation],
         "memory_bytes": dict(sorted(memory_bytes.items())),
         "partition_sha256": partition_sha256,
+        "preflight_sha256": preflight_sha256,
         "result_count": len(results),
+        "result_bytes": result_bytes,
+        "result_size_limit_bytes": preset.result_size_limit_bytes,
         "results_sha256": results_sha256,
         "runtime_seconds": dict(sorted(runtime_seconds.items())),
+        "selected_base_sha256": selected_base_sha256,
         "summaries": [item.as_record() for item in summaries],
+        "transaction_sha256": transaction_sha256,
     }
     report_sha256 = record_sha256(report_record)
     root = Path(output_root) / f"{preset.config_sha256[:16]}" / report_sha256
@@ -155,6 +184,10 @@ def publish_semantic_report(
             catalog_sha256,
             partition_sha256,
             preset.config_sha256,
+            selected_base_sha256,
+            adapters_sha256,
+            preflight_sha256,
+            transaction_sha256,
         )
     root.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".semantic-report-", dir=root.parent))
@@ -188,6 +221,8 @@ def publish_semantic_report(
             os.fsync(ledger.fileno())
         if written_digest.hexdigest() != results_sha256:
             raise AssertionError("semantic result ledger changed during publication")
+        if (staging / "results.jsonl").stat().st_size != result_bytes:
+            raise AssertionError("semantic result ledger size changed during publication")
         published_files = tuple(
             sorted(path for path in staging.iterdir() if path.is_file())
         )
@@ -214,6 +249,137 @@ def publish_semantic_report(
         catalog_sha256,
         partition_sha256,
         preset.config_sha256,
+        selected_base_sha256,
+        adapters_sha256,
+        preflight_sha256,
+        transaction_sha256,
+    )
+
+
+def find_semantic_report(
+    output_root: str | Path,
+    *,
+    catalog_sha256: str,
+    partition_sha256: str,
+    selected_base_sha256: str,
+    adapters_sha256: str,
+    preflight_sha256: str,
+    transaction_sha256: str,
+    preset: QueryExperimentPreset,
+) -> SemanticReportArtifact | None:
+    """Find the sole strict final report matching one sealed transaction."""
+    root = Path(output_root) / preset.config_sha256[:16]
+    candidates = (
+        tuple(
+            path
+            for path in sorted(root.iterdir())
+            if path.is_dir()
+            and len(path.name) == 64
+            and _report_candidate_matches(
+                path,
+                catalog_sha256,
+                partition_sha256,
+                selected_base_sha256,
+                adapters_sha256,
+                preflight_sha256,
+                transaction_sha256,
+                preset.config_sha256,
+            )
+        )
+        if root.is_dir()
+        else ()
+    )
+    if len(candidates) > 1:
+        raise RuntimeError("multiple semantic reports bind one sealed transaction")
+    return (
+        load_semantic_report(
+            candidates[0],
+            catalog_sha256=catalog_sha256,
+            partition_sha256=partition_sha256,
+            selected_base_sha256=selected_base_sha256,
+            adapters_sha256=adapters_sha256,
+            preflight_sha256=preflight_sha256,
+            transaction_sha256=transaction_sha256,
+            preset=preset,
+        )
+        if candidates
+        else None
+    )
+
+
+def load_semantic_report(
+    directory: str | Path,
+    *,
+    catalog_sha256: str,
+    partition_sha256: str,
+    selected_base_sha256: str,
+    adapters_sha256: str,
+    preflight_sha256: str,
+    transaction_sha256: str,
+    preset: QueryExperimentPreset,
+) -> SemanticReportArtifact:
+    """Strictly authenticate a final report and every frozen model binding."""
+    root = Path(directory)
+    try:
+        _verify_existing(root, root.name)
+    except FileExistsError as error:
+        raise ValueError("semantic report tree authentication failed") from error
+    result = _canonical_json(root / "result.json")
+    expected = {
+        "catalog_sha256": catalog_sha256,
+        "partition_sha256": partition_sha256,
+        "selected_base_sha256": selected_base_sha256,
+        "adapters_sha256": adapters_sha256,
+        "preflight_sha256": preflight_sha256,
+        "transaction_sha256": transaction_sha256,
+        "config": preset.as_record(),
+        "config_sha256": preset.config_sha256,
+    }
+    if any(result.get(field) != value for field, value in expected.items()):
+        raise ValueError("semantic report frozen source binding changed")
+    if _canonical_jsonl_count(root / "results.jsonl") != result.get("result_count"):
+        raise ValueError("semantic report result count changed")
+    if (
+        (root / "results.jsonl").stat().st_size != result.get("result_bytes")
+        or result.get("result_size_limit_bytes") != preset.result_size_limit_bytes
+        or (root / "results.jsonl").stat().st_size > preset.result_size_limit_bytes
+    ):
+        raise ValueError("semantic report result-size accounting changed")
+    return SemanticReportArtifact(
+        root=root.resolve(),
+        report_sha256=root.name,
+        catalog_sha256=catalog_sha256,
+        partition_sha256=partition_sha256,
+        config_sha256=preset.config_sha256,
+        selected_base_sha256=selected_base_sha256,
+        adapters_sha256=adapters_sha256,
+        preflight_sha256=preflight_sha256,
+        transaction_sha256=transaction_sha256,
+    )
+
+
+def _report_candidate_matches(
+    root: Path,
+    catalog_sha256: str,
+    partition_sha256: str,
+    selected_base_sha256: str,
+    adapters_sha256: str,
+    preflight_sha256: str,
+    transaction_sha256: str,
+    config_sha256: str,
+) -> bool:
+    path = root / "result.json"
+    if not path.is_file():
+        return False
+    result = _canonical_json(path)
+    return (
+        result.get("catalog_sha256") == catalog_sha256
+        and result.get("partition_sha256") == partition_sha256
+        and result.get("selected_base_sha256") == selected_base_sha256
+        and result.get("adapters_sha256") == adapters_sha256
+        and result.get("preflight_sha256") == preflight_sha256
+        and result.get("transaction_sha256") == transaction_sha256
+        and result.get("config_sha256") == config_sha256
     )
 
 
@@ -241,7 +407,20 @@ def _condition_summaries(
                 == key
             ),
         )
-        for metric in ("accuracy", "margin")
+        for metric in (
+            "accuracy",
+            "margin",
+            *(
+                ("router_accuracy",)
+                if all(item.router_accuracy is not None for item in rows)
+                else ()
+            ),
+            *(
+                ("routed_regret",)
+                if all(item.routed_regret is not None for item in rows)
+                else ()
+            ),
+        )
         for raw_estimate in (
             bootstrap_fact_metric(
                 rows,
@@ -276,7 +455,7 @@ def _validate_report_coverage(
     expected_cells = {
         (cell.stage, cell.concept_id) for cell in evaluation_schedule(preset)
     }
-    for method in REQUIRED_QUERY_METHODS:
+    for method in SEMANTIC_QUERY_METHODS:
         method_rows = tuple(row for row in results if row.method == method)
         primary_rows = tuple(
             row
@@ -303,6 +482,49 @@ def _validate_report_coverage(
                 raise ValueError(
                     f"semantic report cell {method}/{cell} must contain 60 queries"
                 )
+        if method == "independent":
+            expected_specificity = {
+                (stage, query_concept, adapter_concept)
+                for stage in range(1, preset.active_world_count + 1)
+                for query_concept in preset.concept_ids[:stage]
+                for adapter_concept in preset.concept_ids[:stage]
+            }
+            if {
+                (row.stage, row.concept_id, row.adapter_concept_id)
+                for row in method_rows
+            } != expected_specificity or any(
+                len(cell_rows) != 60
+                or len({row.template_id for row in cell_rows}) != 60
+                for cell in expected_specificity
+                for cell_rows in (
+                    tuple(
+                        row
+                        for row in method_rows
+                        if (row.stage, row.concept_id, row.adapter_concept_id)
+                        == cell
+                    ),
+                )
+            ):
+                raise ValueError("semantic report independent specificity changed")
+        elif len(method_rows) != len(primary_rows):
+            raise ValueError(f"semantic report has unexpected adapter rows for {method}")
+        if method in SEMANTIC_ROUTED_METHODS:
+            if any(
+                row.selected_node_index is None
+                or row.oracle_node_index is None
+                or row.routed_regret is None
+                for row in method_rows
+            ):
+                raise ValueError(f"semantic report routing evidence is missing for {method}")
+        elif any(
+            row.selected_node_index is not None
+            or row.oracle_node_index is not None
+            or row.routed_regret is not None
+            for row in method_rows
+        ):
+            raise ValueError(f"semantic report has unexpected routing evidence for {method}")
+
+
 def render_semantic_report(
     report_sha256: str,
     preset: QueryExperimentPreset,
@@ -344,7 +566,16 @@ def render_semantic_report(
     lines.extend(("", "## Runtime and memory", ""))
     lines.extend(f"- {name}: {value:.6f} seconds" for name, value in sorted(runtime_seconds.items()))
     lines.extend(f"- {name}: {value} bytes" for name, value in sorted(memory_bytes.items()))
-    lines.extend(("", "## Secondary exact-trigger generation inspection", ""))
+    lines.extend(
+        (
+            "",
+            "## Secondary exact-trigger generation inspection",
+            "",
+            "Each world uses its matching final independent adapter and the "
+            "frozen greedy-generation budget.",
+            "",
+        )
+    )
     for item in generation:
         lines.extend(
             (
@@ -402,6 +633,13 @@ def _verify_existing(root: Path, report_sha256: str) -> None:
         result_record = _canonical_json(root / "result.json")
         if result_record.get("report_sha256") != report_sha256:
             raise ValueError("semantic report result identity changed")
+        if (
+            result_record.get("final_evaluation_protocol")
+            != REGISTERED_FINAL_EVALUATION_PROTOCOL.as_record()
+            or result_record.get("final_evaluation_protocol_sha256")
+            != REGISTERED_FINAL_EVALUATION_PROTOCOL.protocol_sha256
+        ):
+            raise ValueError("semantic report final protocol changed")
         core = {
             key: value
             for key, value in result_record.items()
@@ -438,6 +676,17 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _canonical_jsonl_count(path: Path) -> int:
+    count = 0
+    with path.open("rb") as source:
+        for line in source:
+            record = json.loads(line)
+            if type(record) is not dict or canonical_json_bytes(record) != line:
+                raise ValueError("semantic report result ledger is noncanonical")
+            count += 1
+    return count
+
+
 def _standalone_html(report_sha256: str, markdown: str) -> str:
     return (
         "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
@@ -463,8 +712,9 @@ def _remove_tree(root: Path) -> None:
 
 __all__ = [
     "REPORT_FORMAT",
-    "REQUIRED_QUERY_METHODS",
     "SemanticReportArtifact",
+    "find_semantic_report",
+    "load_semantic_report",
     "publish_semantic_report",
     "render_semantic_report",
 ]

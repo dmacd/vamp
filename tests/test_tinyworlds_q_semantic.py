@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from apm.data.text.tinyworlds_q_semantic import evaluation as semantic_evaluation
+from apm.data.text.tinyworlds_q_semantic import main_validation as main_validation_module
 from apm.continual.language_baseline_training import IndependentRootAdapter
 from apm.continual.language_tasks import RouterBatch
 from apm.data.text.tinyworlds_q_semantic.adaptation import (
@@ -64,6 +65,7 @@ from apm.data.text.tinyworlds_q_semantic.execution import (
     BaseQualityDecision,
     PilotBudgetResult,
     begin_sealed_test,
+    completed_sealed_result_sha256,
     complete_sealed_test,
     latest_stage_artifact,
     load_stage_artifact,
@@ -72,7 +74,14 @@ from apm.data.text.tinyworlds_q_semantic.execution import (
     pilot_budget_passes,
     select_pilot_budget,
 )
-from apm.data.text.tinyworlds_q_semantic.evaluation import PilotBudgetEvaluation
+from apm.data.text.tinyworlds_q_semantic.final_analysis import (
+    compute_registered_final_effects,
+)
+from apm.data.text.tinyworlds_q_semantic.evaluation import (
+    SEMANTIC_QUERY_METHODS,
+    SEMANTIC_ROUTED_METHODS,
+    PilotBudgetEvaluation,
+)
 from apm.data.text.tinyworlds_q_semantic.queries import project_semantic_result
 from apm.data.text.tinyworlds_q_semantic.main_freeze import (
     load_main_experiment_freeze,
@@ -116,6 +125,7 @@ from apm.data.text.tinyworlds_q_semantic.pilot_sweep import (
     load_pilot_independent_sweep,
     publish_pilot_independent_sweep_stage,
 )
+from apm.data.text.tinyworlds_q_semantic.preflight import QueryGpuPreflight
 from apm.data.text.tinyworlds_q_semantic.queries import (
     compile_semantic_queries,
     stack_semantic_router_batches,
@@ -125,9 +135,13 @@ from apm.data.text.tinyworlds_q_semantic.query_protocol import (
     REGISTERED_QUERY_PROTOCOL,
 )
 from apm.data.text.tinyworlds_q_semantic.report import (
-    REQUIRED_QUERY_METHODS,
+    find_semantic_report,
+    load_semantic_report,
     publish_semantic_report,
     render_semantic_report,
+)
+from apm.data.text.tinyworlds_q_semantic.result_stream import (
+    stream_semantic_results,
 )
 from apm.data.text.tinyworlds_q_semantic.review import (
     PredicateDefinition,
@@ -479,7 +493,9 @@ def test_review_catalog_sealing_and_query_compilation(
     assert set(map(tuple, answer_positions.values())) == {
         (0, 0, 1, 1, 2, 2, 3, 3)
     }
-    complete_sealed_test(transaction, "5" * 64)
+    completion = complete_sealed_test(transaction, "5" * 64)
+    assert complete_sealed_test(transaction, "5" * 64) == completion
+    assert completed_sealed_result_sha256(transaction) == "5" * 64
     with pytest.raises(PermissionError, match="not authorized"):
         load_sealed_catalog(catalog_root, transaction)
     with pytest.raises(RuntimeError, match="already complete"):
@@ -884,6 +900,10 @@ def test_nested_catalog_and_dynamic_one_to_one_hundred_world_schedules(
         )
         assert (preset.max_nodes, preset.max_edges) == (world_count + 1, world_count)
         assert len(evaluation_schedule(preset)) == world_count * (world_count + 1) // 2
+        assert estimate_resources(preset).result_rows == 60 * (
+            world_count
+            + sum(stage * (stage + 7) for stage in range(1, world_count + 1))
+        )
         assert len(concept_stages(preset)) == world_count
         masks = capacity_masks(preset, world_count)
         assert masks.node_mask.tolist() == [True] * (world_count + 1)
@@ -920,6 +940,17 @@ def test_nested_catalog_and_dynamic_one_to_one_hundred_world_schedules(
     )
     assert "world-099" in render_schedule_report(hundred)
     estimate = estimate_resources(hundred)
+    scheduled_by_stage = {
+        stage: sum(cell.stage == stage for cell in cells)
+        for stage in range(1, 101)
+    }
+    assert estimate.result_rows == 60 * (
+        100
+        + sum(
+            scheduled_worlds * (stage + 7)
+            for stage, scheduled_worlds in scheduled_by_stage.items()
+        )
+    )
     measurement = PreflightMeasurement(0.1, 0.01, 0.001, 10 * 1024**3, 1)
     require_preflight_capacity(hundred, estimate, measurement)
     with pytest.raises(MemoryError, match="allocator peak"):
@@ -962,6 +993,7 @@ def test_fact_statistics_generation_and_atomic_ledgers(
         margin = min(
             score for index, score in enumerate(scores) if index != template.correct_candidate_index
         ) - scores[template.correct_candidate_index]
+        routed = method in SEMANTIC_ROUTED_METHODS
         return SemanticQueryResult(
             stage=stage,
             method=method,
@@ -976,9 +1008,9 @@ def test_fact_statistics_generation_and_atomic_ledgers(
             predicted_candidate_index=predicted,
             answer_correct=correct,
             correct_answer_margin=margin,
-            selected_node_index=None,
-            oracle_node_index=None,
-            routed_regret=None,
+            selected_node_index=1 if routed else None,
+            oracle_node_index=1 if routed else None,
+            routed_regret=0.0 if routed else None,
         )
 
     base_results = tuple(result(template, "base", False) for template in test_templates)
@@ -1033,8 +1065,29 @@ def test_fact_statistics_generation_and_atomic_ledgers(
     )
     generation = inspect_generation(semantic_fixture.catalog, outputs)
     assert all(item.recall == pytest.approx(2 / 12) for item in generation)
+    prefix_generation = inspect_generation(
+        semantic_fixture.catalog,
+        outputs[:2],
+        concept_ids=("cat", "dog"),
+    )
+    assert tuple(item.concept_id for item in prefix_generation) == ("cat", "dog")
+    with pytest.raises(ValueError, match="ordered catalog prefix"):
+        inspect_generation(
+            semantic_fixture.catalog,
+            outputs[:2],
+            concept_ids=("dog", "cat"),
+        )
     ledger = write_atomic_jsonl(tmp_path / "results.jsonl", adapter_results)
     assert len(ledger.read_text().splitlines()) == len(adapter_results)
+    streamed_results, streamed = stream_semantic_results(
+        tmp_path / "stream-work",
+        "fixture-results",
+        lambda sink: (sink(adapter_results), adapter_results)[1],
+        size_limit_bytes=1024**2,
+    )
+    assert streamed_results == adapter_results
+    assert streamed.result_count == len(adapter_results)
+    assert len(streamed.path.read_text().splitlines()) == len(adapter_results)
     report = render_semantic_report(
         "a" * 64,
         QueryExperimentPreset(("cat", "dog", "pig"), adapter_updates=500),
@@ -1050,35 +1103,48 @@ def test_fact_statistics_generation_and_atomic_ledgers(
         for stage in range(1, 4)
         for concept_id in ("cat", "dog", "pig")[:stage]
     )
+    preset = QueryExperimentPreset(("cat", "dog", "pig"), adapter_updates=500)
     complete_results = tuple(
         result(template, "base", False, stage=0)
         for template in test_templates
     ) + tuple(
         result(template, method, True, stage=stage)
-        for method in REQUIRED_QUERY_METHODS
-        if method != "base"
+        for method in SEMANTIC_QUERY_METHODS
+        if method not in ("base", "independent")
         for stage, concept_id in schedule_cells
         for template in test_templates
         if fact_by_id[template.fact_id].concept_id == concept_id
+    ) + tuple(
+        result(
+            template,
+            "independent",
+            fact_by_id[template.fact_id].concept_id == adapter_concept_id,
+            adapter_concept_id,
+            stage,
+        )
+        for stage in range(1, 4)
+        for adapter_concept_id in preset.concept_ids[:stage]
+        for query_concept_id in preset.concept_ids[:stage]
+        for template in test_templates
+        if fact_by_id[template.fact_id].concept_id == query_concept_id
     )
-    report_effects = (
-        replace(acquisition, replicate_count=10_000),
-        replace(
-            acquisition,
-            metric="node-specificity:accuracy",
-            replicate_count=10_000,
-        ),
-        replace(
-            acquisition,
-            metric="acquisition-to-final-retention:accuracy",
-            replicate_count=10_000,
-        ),
-    )
+    report_effects = compute_registered_final_effects(complete_results, preset)
+    assert len(report_effects) == 34
+    assert all(item.replicate_count == 10_000 for item in report_effects)
+    assert next(
+        item.point
+        for item in report_effects
+        if item.metric == "node-specificity:accuracy:independent"
+    ) == 1.0
     published = publish_semantic_report(
         tmp_path / "reports",
         catalog_sha256=semantic_fixture.catalog.catalog_sha256,
         partition_sha256="b" * 64,
-        preset=QueryExperimentPreset(("cat", "dog", "pig"), adapter_updates=500),
+        selected_base_sha256="c" * 64,
+        adapters_sha256="d" * 64,
+        preflight_sha256="e" * 64,
+        transaction_sha256="f" * 64,
+        preset=preset,
         results=complete_results,
         effects=report_effects,
         generation=generation,
@@ -1089,13 +1155,37 @@ def test_fact_statistics_generation_and_atomic_ledgers(
         tmp_path / "reports",
         catalog_sha256=semantic_fixture.catalog.catalog_sha256,
         partition_sha256="b" * 64,
-        preset=QueryExperimentPreset(("cat", "dog", "pig"), adapter_updates=500),
+        selected_base_sha256="c" * 64,
+        adapters_sha256="d" * 64,
+        preflight_sha256="e" * 64,
+        transaction_sha256="f" * 64,
+        preset=preset,
         results=complete_results,
         effects=report_effects,
         generation=generation,
         runtime_seconds={"training": 1.0},
         memory_bytes={"allocator_peak": 1},
     ).report_sha256 == published.report_sha256
+    assert find_semantic_report(
+        tmp_path / "reports",
+        catalog_sha256=semantic_fixture.catalog.catalog_sha256,
+        partition_sha256="b" * 64,
+        selected_base_sha256="c" * 64,
+        adapters_sha256="d" * 64,
+        preflight_sha256="e" * 64,
+        transaction_sha256="f" * 64,
+        preset=preset,
+    ) == published
+    assert load_semantic_report(
+        published.root,
+        catalog_sha256=semantic_fixture.catalog.catalog_sha256,
+        partition_sha256="b" * 64,
+        selected_base_sha256="c" * 64,
+        adapters_sha256="d" * 64,
+        preflight_sha256="e" * 64,
+        transaction_sha256="f" * 64,
+        preset=preset,
+    ) == published
     with (published.root / "report.md").open("ab") as stream:
         stream.write(b"tamper")
     with pytest.raises(FileExistsError, match="does not match"):
@@ -1103,7 +1193,11 @@ def test_fact_statistics_generation_and_atomic_ledgers(
             tmp_path / "reports",
             catalog_sha256=semantic_fixture.catalog.catalog_sha256,
             partition_sha256="b" * 64,
-            preset=QueryExperimentPreset(("cat", "dog", "pig"), adapter_updates=500),
+            selected_base_sha256="c" * 64,
+            adapters_sha256="d" * 64,
+            preflight_sha256="e" * 64,
+            transaction_sha256="f" * 64,
+            preset=preset,
             results=complete_results,
             effects=report_effects,
             generation=generation,
@@ -1288,7 +1382,7 @@ def test_operational_gates_and_resumable_stage_parity(tmp_path: Path) -> None:
     )
     selected_validation = tuple(
         row
-        for method in REQUIRED_QUERY_METHODS
+        for method in SEMANTIC_QUERY_METHODS
         for stage, concepts in (
             ((0, preset.concept_ids),)
             if method == "base"
@@ -1489,6 +1583,168 @@ def test_operational_gates_and_resumable_stage_parity(tmp_path: Path) -> None:
         stream.write(b"tamper")
     with pytest.raises(ValueError, match="payload changed"):
         load_stage_artifact(first.root, preset, system="sequential")
+
+
+def test_main_validation_requires_every_method_and_template(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    preset = QueryExperimentPreset(("cat",), adapter_updates=500)
+    results = tuple(
+        SemanticQueryResult(
+            stage=0 if method == "base" else 1,
+            method=method,
+            concept_id="cat",
+            fact_id=f"cat-fact-{index // 3:02d}",
+            template_id=f"cat-validation-{index:02d}",
+            direction="forward" if index % 3 != 2 else "reverse",
+            split="validation",
+            adapter_concept_id="cat" if method == "independent" else None,
+            candidate_nll=(1.0, 2.0, 3.0, 4.0),
+            correct_candidate_index=0,
+            predicted_candidate_index=0,
+            answer_correct=True,
+            correct_answer_margin=1.0,
+            selected_node_index=1 if method in SEMANTIC_ROUTED_METHODS else None,
+            oracle_node_index=1 if method in SEMANTIC_ROUTED_METHODS else None,
+            routed_regret=0.0 if method in SEMANTIC_ROUTED_METHODS else None,
+        )
+        for method in SEMANTIC_QUERY_METHODS
+        for index in range(36)
+    )
+    main_validation_module._validate_validation_results(results, preset)
+    with pytest.raises(ValueError, match="coverage"):
+        main_validation_module._validate_validation_results(results[:-1], preset)
+    with pytest.raises(ValueError, match="unexpected routing"):
+        main_validation_module._validate_validation_results(
+            (
+                replace(results[0], oracle_node_index=1),
+                *results[1:],
+            ),
+            preset,
+        )
+
+    partition_root = tmp_path / "partition"
+    selected_root = tmp_path / "selected"
+    preflight_root = tmp_path / "preflight"
+    stage_root = tmp_path / "stage-001"
+    for root in (partition_root, selected_root, preflight_root, stage_root):
+        root.mkdir()
+    (stage_root / "manifest.json").write_bytes(b"fixture-stage")
+    partition = QueryPartitionArtifact(
+        root=partition_root,
+        partition_sha256="1" * 64,
+        manifest_sha256="2" * 64,
+        catalog_sha256="3" * 64,
+        archive_identity=CANONICAL_ARCHIVE_IDENTITY,
+        tokenizer_identity=CANONICAL_TOKENIZER_IDENTITY,
+        pad_token_id=0,
+        eos_token_id=1,
+        concept_ids=preset.concept_ids,
+        counts=(),
+        files=(),
+    )
+    selected = QuerySelectedBase(
+        directory=selected_root,
+        selection_sha256="4" * 64,
+        catalog_sha256=partition.catalog_sha256,
+        partition_sha256=partition.partition_sha256,
+        base_config_sha256="5" * 64,
+        training_sha256="6" * 64,
+        epoch_evidence=(
+            QueryBaseEpochEvidence(1, QuerySplitNll("validation", 1, 1.5)),
+            QueryBaseEpochEvidence(2, QuerySplitNll("validation", 1, 1.4)),
+        ),
+        allocator_peak_bytes=1,
+        checkpoint=BaseCheckpointRef(selected_root, "7" * 64, "8" * 64),
+    )
+    router_batch = RouterBatch(
+        input_ids=np.asarray([[1]], dtype=np.int32),
+        attention_mask=np.asarray([[True]], dtype=np.bool_),
+        target_ids=np.asarray([[1]], dtype=np.int32),
+        loss_mask=np.asarray([[True]], dtype=np.bool_),
+    )
+    prepared = PreparedQueryAdaptation(
+        catalog_sha256=partition.catalog_sha256,
+        partition_sha256=partition.partition_sha256,
+        config_sha256=preset.config_sha256,
+        concept_ids=preset.concept_ids,
+        root_query_ids=("root-query",),
+        root_validation_probes=(router_batch,),
+        task_probes=(
+            QueryTaskProbeSet(
+                concept_id="cat",
+                parent_query_ids=("parent-query",),
+                content_key_query_ids=("content-query",),
+                parent_probes=(router_batch,),
+                content_key_probes=(router_batch,),
+            ),
+        ),
+        preparation_sha256="9" * 64,
+    )
+    estimate = estimate_resources(preset)
+    preflight = QueryGpuPreflight(
+        directory=preflight_root,
+        preflight_sha256="a" * 64,
+        catalog_sha256=partition.catalog_sha256,
+        partition_sha256=partition.partition_sha256,
+        config_sha256=preset.config_sha256,
+        training_sha256="b" * 64,
+        losses=(1.0, 0.9),
+        measurement=PreflightMeasurement(0.1, 0.1, 0.1, 1, 1),
+        estimate=estimate,
+        seconds_per_evaluation_batch=0.1,
+        base_updates_per_epoch=1,
+        base_validation_batches=1,
+        runtime_seconds=(("base_training", 1.0),),
+    )
+    monkeypatch.setattr(
+        main_validation_module,
+        "load_language_adaptation_artifact",
+        lambda _directory: SimpleNamespace(
+            task_order=("cat",),
+            model_config=preset.model_config,
+            lora_config=preset.lora_config,
+            train_config=preset.adapter_train_config,
+            max_nodes=preset.max_nodes,
+            max_edges=preset.max_edges,
+            tensor_checksum="c" * 64,
+        ),
+    )
+    published = main_validation_module.publish_main_validation_artifact(
+        tmp_path / "validation",
+        artifact=partition,
+        preset=preset,
+        selected_base=selected,
+        preflight=preflight,
+        prepared=prepared,
+        stage_directories=(stage_root,),
+        results=results,
+        resume_verified=True,
+        runtime_seconds={"adaptation": 1.0, "validation": 2.0},
+        allocator_peak_bytes=1,
+    )
+    assert main_validation_module.find_main_validation_artifact(
+        tmp_path / "validation",
+        artifact=partition,
+        preset=preset,
+        selected_base=selected,
+        preflight=preflight,
+        prepared=prepared,
+        stage_directories=(stage_root,),
+    ) == published
+    with (published.root / "validation-results.jsonl").open("ab") as stream:
+        stream.write(b"tamper")
+    with pytest.raises(ValueError, match="file changed"):
+        main_validation_module.load_main_validation_artifact(
+            published.root,
+            artifact=partition,
+            preset=preset,
+            selected_base=selected,
+            preflight=preflight,
+            prepared=prepared,
+            stage_directories=(stage_root,),
+        )
 
 
 def test_pilot_independent_sweep_round_trip_and_tampering(tmp_path: Path) -> None:

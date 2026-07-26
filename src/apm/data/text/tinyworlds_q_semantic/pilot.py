@@ -27,7 +27,7 @@ from apm.data.text.tinyworlds_q_semantic.execution import (
     pilot_budget_passes,
     select_pilot_budget,
 )
-from apm.data.text.tinyworlds_q_semantic.report import REQUIRED_QUERY_METHODS
+from apm.data.text.tinyworlds_q_semantic.evaluation import SEMANTIC_QUERY_METHODS
 from apm.data.text.tinyworlds_q_semantic.scaling import evaluation_schedule
 
 
@@ -148,7 +148,7 @@ def publish_semantic_pilot_result(
         not selected_validation_results
         or any(row.split != "validation" for row in selected_validation_results)
         or set(row.method for row in selected_validation_results)
-        != set(REQUIRED_QUERY_METHODS)
+        != set(SEMANTIC_QUERY_METHODS)
     ):
         raise ValueError("selected pilot exercise lacks required validation methods")
     _validate_selected_validation(selected_validation_results, preset)
@@ -827,7 +827,7 @@ def _validate_selected_validation(
     expected_stage_cells = {
         (cell.stage, cell.concept_id) for cell in evaluation_schedule(preset)
     }
-    for method in REQUIRED_QUERY_METHODS:
+    for method in SEMANTIC_QUERY_METHODS:
         method_rows = tuple(row for row in results if row.method == method)
         primary = tuple(
             row

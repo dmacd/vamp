@@ -17,6 +17,12 @@ from apm.data.text.tinyworlds_q_semantic.manifests import (
     PILOT_CONCEPTS,
 )
 from apm.data.text.tinyworlds_q_semantic.main_freeze import MainExperimentFreeze
+from apm.data.text.tinyworlds_q_semantic.main_validation import (
+    MainValidationArtifact,
+    find_main_validation_artifact,
+    load_main_validation_artifact,
+    publish_main_validation_artifact,
+)
 from apm.data.text.tinyworlds_q_semantic.main_catalog import (
     build_approved_main_catalog,
 )
@@ -39,7 +45,15 @@ from apm.data.text.tinyworlds_q_semantic.main_shortlist import (
     MAIN_SHORTLIST_SPECS,
     build_main_review_shortlist,
 )
-from apm.data.text.tinyworlds_q_semantic.evaluation import PilotBudgetEvaluation
+from apm.data.text.tinyworlds_q_semantic.evaluation import (
+    SEMANTIC_QUERY_METHODS,
+    SEMANTIC_ROUTED_METHODS,
+    PilotBudgetEvaluation,
+)
+from apm.data.text.tinyworlds_q_semantic.final_protocol import (
+    REGISTERED_FINAL_EVALUATION_PROTOCOL,
+    SemanticFinalEvaluationProtocol,
+)
 from apm.data.text.tinyworlds_q_semantic.execution import (
     AMENDED_PILOT_LEARNABILITY_POLICY,
     ORIGINAL_PILOT_LEARNABILITY_POLICY,
@@ -91,6 +105,7 @@ __all__ = [
     "MAIN_PARTITION_TREE_SHA256",
     "MAIN_VALIDATION_SAMPLE_REPORT_SHA256",
     "MainExperimentFreeze",
+    "MainValidationArtifact",
     "MAIN_SHORTLIST_SPECS",
     "MAIN_REVERSE_CHOICE_SPECS",
     "PILOT_CONCEPTS",
@@ -107,6 +122,7 @@ __all__ = [
     "QueryValidationSampleReport",
     "ReverseReviewApproval",
     "SemanticFact",
+    "SemanticFinalEvaluationProtocol",
     "SemanticPilotFailure",
     "SemanticPilotProtocolAmendment",
     "SemanticPilotResult",
@@ -116,11 +132,17 @@ __all__ = [
     "SemanticQueryTemplate",
     "SemanticReviewShortlist",
     "SemanticReverseReview",
+    "SEMANTIC_QUERY_METHODS",
+    "SEMANTIC_ROUTED_METHODS",
+    "REGISTERED_FINAL_EVALUATION_PROTOCOL",
     "REGISTERED_QUERY_PROTOCOL",
     "build_approved_pilot_catalog",
     "build_approved_main_catalog",
     "build_main_review_shortlist",
     "build_main_reverse_review",
+    "find_main_validation_artifact",
+    "load_main_validation_artifact",
     "load_query_validation_sample_report",
+    "publish_main_validation_artifact",
     "publish_query_validation_sample_report",
 ]

@@ -36,17 +36,11 @@ also covers the compact 24-primary/8-backup review queue, evidence support,
 token balance, and publication. Synthetic manifests at 1,
 5, 10, 20, and 100 worlds cover derived capacities, tensor masks, full and
 milestone schedules, chunking, dynamic reports, and explicit preflight limits.
-The focused query/language suite now passes 13 tests, including the dynamic
-five-world shortlist and exact preservation of the published pilot shortlist.
-A broader 56-test query, knowledge, scoring, training, statistics, and
-semantic-v6 compatibility run also passes in the pinned semantic environment.
-
-The repository-wide default suite finishes with 618 passed, 274 skipped, 11
-deselected, and one pre-existing failure in
-`test_every_router_returns_valid_task_free_decisions_and_suffix_metrics`: a
-float32 router probability sum is `1.0000001`, one ULP outside that test's
-zero-atol assertion. The failing path does not import query-v1. Shared routing
-code is intentionally unchanged so semantic-v6 remains immutable.
+The focused TinyWorlds-Q suite passes all 11 tests. A broader 80-test query,
+knowledge, scoring, training, statistics, routing, artifact, and semantic-v6
+compatibility run also passes in the pinned semantic environment. The complete
+default non-opt-in collection passes with 626 passed, 274 registered resource
+skips, and 11 marker-deselected tests.
 
 The real pilot proposal packet is now published at
 `data/tinyworlds-q-semantic/review/5b01c86812593681133b46effd786d5647dcb3e8cf0308e8482bb54f01b7775b`.
@@ -176,9 +170,10 @@ the two trees are byte-identical at
 `566700c59c9c05e87525806a2fd54ff48d283b57b4212884153a6808b12a9828`.
 Validation-only sample report
 `a677d66b572610229a52d4d46b20b30d206f665afeb1c8fc3a82fd5e6c170143`
-strict-loads with six exact stories and all 180 validation queries. The 10-test
-query suite and complete 899-item non-opt-in collection pass (resource-gated
-tests skip as registered). These sources form the main-partition checkpoint;
+strict-loads with six exact stories and all 180 validation queries. The 11-test
+query suite, broader 80-test compatibility selection, and complete default
+collection pass; the latter reports 626 passed, 274 resource-gated skips, and
+11 marker deselections. These sources form the main-partition checkpoint;
 GPU preflight
 `28380737a808e4288c9b8b51cd6a97e9c64c60e23a59b51e10fd2ea565e14641`
 also passes. It measured an 8.412 GiB allocator peak and projects 9.040 GiB,
@@ -187,7 +182,25 @@ base at 3:21:12. The first attempt correctly stopped before an update because
 `ve-semantic` has CPU-only JAX; the accepted run used the existing CUDA JAX
 0.6.2 `ve` environment on the RTX 4090. Shared pilot/main base orchestration
 and the registered main launcher are implemented and focused tests pass. The
-fresh resumable base is next. The sealed test remains closed. See
+fresh resumable base is actively training under identity
+`001e16d8908ae593ffc23b423a1a672e005c3cf7b35dacbb09636d1807a96d93`;
+complete 1,000-update checkpoints are being persisted and the run remains
+finite with no memory stop. The exact main adapter/validation runner and a
+separately guarded sealed runner are implemented. Final-analysis protocol
+`7f88e460341f4698fadbf20e9665ad9ec4a8b7b011bc067ca8a2ccd4594c5760`
+fixes all nine methods, acquisition and retention for every non-base method,
+independent cross-world specificity, accuracy and margin effects, router node
+accuracy/regret, 10,000 fact bootstraps, and 96-token greedy generation from
+the matching final independent adapter. It enters the validation freeze before
+test access.
+
+Resource accounting now explicitly includes every forced independent-adapter
+specificity cell. The five-world sealed ledger is 9,900 rows and a conservative
+10,137,600 bytes, not the accepted v1 preflight's 8,100-primary-row / 8,294,400-
+byte approximation. The immutable preflight still authenticates; its measured
+training/memory evidence is unchanged, and the corrected projection is far
+below the frozen 4 GiB limit. New preflights use the complete count. The sealed
+test remains closed. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration

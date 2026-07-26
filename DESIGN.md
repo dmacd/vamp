@@ -253,12 +253,30 @@ parent search, routing, result storage, and peak memory. The 100-world path is
 the same implementation and fails explicitly when measured allocator or
 projected result bytes exceed frozen limits.
 
+Result-size accounting includes the base rows once per world, every scheduled
+row for each non-base non-independent method, and the complete forced
+independent-adapter by query-world matrix at each evaluated stage. The earliest
+v1 preflight artifacts counted only matching independent rows; strict loading
+preserves those immutable measurements but also applies the corrected
+projection before reuse. Newly constructed projections use the complete
+matrix, and final publication binds and checks the actual JSONL byte count
+against the experiment limit.
+
 Final publication requires the exact scheduled sealed-test cells for all nine
 registered methods, sixty unique queries per world/cell, 10,000 bootstrap
 replicates, acquisition/specificity/retention effects, ordered generation
 inspection, runtime, and memory evidence. The content identity binds the
 streamed result-ledger SHA-256; strict reload rejects changed renderings or any
 altered result byte.
+
+Before a sealed transaction can open, a content-addressed validation freeze
+must bind the selected base, preflight, validation-only probe preparation,
+every immutable stage tensor/manifest, exact validation ledger, no-op resume
+parity, corrected result-size projection, and complete final-analysis protocol.
+The sealed runner authenticates that chain before writing the durable open
+marker. A retry may resume the same opened transaction or idempotently close an
+already published matching report, but a completed transaction cannot evaluate
+or deserialize test prompts again.
 
 The retained seed-zero GPT-Neo architecture, two-epoch base optimizer schedule,
 rank-eight all-projection LoRA, and 12 GiB allocator ceiling are fixed in the

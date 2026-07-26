@@ -16,9 +16,11 @@ validation accuracy and makes acquisition descriptive. Under that policy,
 2,000 updates passed for both worlds. The selected independent, sequential,
 and VAMP validation exercise and exact resume check completed, and the
 five-world main configuration is frozen. Main construction evidence is
-published, all 60 primary facts are approved, and the separate fact-specific
-reverse sheet awaits human approval. No sealed test was opened. Neither the
-original stop nor the operational pilot is a scientific VAMP result.
+published, and all 60 primary facts and all 60 fact-specific reverse rows are
+approved. The official main catalog and partition reproduce byte-for-byte,
+GPU preflight passed, and the fresh main base is actively training. No sealed
+test was opened. Neither the original stop nor the operational pilot is a
+scientific VAMP result.
 
 `tinyworlds-q-semantic-v1` is isolated under its own Python package and the
 registered roots `data/tinyworlds-q-semantic/`,
@@ -325,12 +327,13 @@ Validation-only sample report
 `a677d66b572610229a52d4d46b20b30d206f665afeb1c8fc3a82fd5e6c170143`
 strict-loads with one exact base-validation story, one exact validation story
 per node, and all 180 validation query records. No sealed query record was
-deserialized. All 10 TinyWorlds-Q CPU tests pass, as does the complete 899-item
-non-opt-in collection with its registered resource skips. One router assertion
-now uses the existing `1e-6` probability tolerance because Hopfield softmax
-sums can differ from one by one `float32` ULP. This source state is the
-main-partition checkpoint; GPU preflight remains before the fresh base and
-adapters.
+deserialized. All 11 TinyWorlds-Q CPU tests and the broader 80-test query/
+routing compatibility selection pass. The complete default non-opt-in
+collection reports 626 passed, 274 registered resource skips, and 11 marker
+deselections. One router assertion uses the existing `1e-6` probability
+tolerance because Hopfield softmax sums can differ from one by one `float32`
+ULP. This source state is the main-partition checkpoint; GPU preflight remains
+before the fresh base and adapters.
 
 GPU preflight
 `28380737a808e4288c9b8b51cd6a97e9c64c60e23a59b51e10fd2ea565e14641`
@@ -341,6 +344,13 @@ seconds. Measured allocator peak was 9,032,018,176 bytes (8.412 GiB), and the
 five-world projection was 9,706,405,888 bytes (9.040 GiB), both below the 12
 GiB limit. The projected two-epoch base runtime is 3:21:12, and projected
 result storage is 8,294,400 bytes.
+
+That v1 storage number used 1,024 bytes over 8,100 primary schedule rows, but
+it omitted the forced cross-world independent rows used for specificity. The
+corrected generic accounting projects 9,900 rows and 10,137,600 bytes for the
+five-world sealed ledger. Strict loading preserves the accepted preflight bytes
+while applying the corrected storage gate; the new projection remains far
+below the frozen 4 GiB limit. New preflights use the complete matrix directly.
 
 An initial invocation under `ve-semantic` authenticated the partition and
 sample report, then correctly stopped before any optimizer update because that
@@ -353,5 +363,15 @@ Base orchestration is now common to pilot and main manifests. It discovers the
 exact latest optimizer/RNG/data cursor, resumes the registered training
 identity, atomically records held-in NLL after each epoch, carries the accepted
 preflight memory peak across resume boundaries, and publishes only after both
-NLL gates and the memory gate pass. The registered main launcher is ready for
-the fresh seed-zero base. The sealed test remains closed.
+NLL gates and the memory gate pass. The real run is active under training
+identity
+`001e16d8908ae593ffc23b423a1a672e005c3cf7b35dacbb09636d1807a96d93`
+and is persisting complete 1,000-update checkpoints while remaining finite.
+
+The adapter/validation launcher and separately guarded sealed launcher are now
+implemented. Final protocol
+`7f88e460341f4698fadbf20e9665ad9ec4a8b7b011bc067ca8a2ccd4594c5760`
+fixes the full method/effect matrix, routing metrics, 10,000 fact bootstraps,
+and 96-token greedy generation from each world's matching final independent
+adapter. It enters the validation freeze before any test prompt can be
+deserialized. The sealed test remains closed.

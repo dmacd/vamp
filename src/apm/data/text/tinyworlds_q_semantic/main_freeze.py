@@ -42,7 +42,7 @@ from apm.data.text.tinyworlds_q_semantic.pilot_authorization import (
 from apm.data.text.tinyworlds_q_semantic.query_protocol import (
     REGISTERED_QUERY_PROTOCOL,
 )
-from apm.data.text.tinyworlds_q_semantic.report import REQUIRED_QUERY_METHODS
+from apm.data.text.tinyworlds_q_semantic.evaluation import SEMANTIC_QUERY_METHODS
 from apm.data.text.tinyworlds_q_semantic.statistics import (
     CANONICAL_BOOTSTRAP_REPLICATES,
 )
@@ -105,7 +105,7 @@ def publish_main_experiment_freeze(
     evaluation_protocol = {
         "bootstrap_replicates": CANONICAL_BOOTSTRAP_REPLICATES,
         "generation_role": "secondary-exact-trigger-inspection",
-        "methods": list(REQUIRED_QUERY_METHODS),
+        "methods": list(SEMANTIC_QUERY_METHODS),
         "parent_and_router_inputs": "validation-question-prefixes-only",
         "sealed_test_openings": 1,
     }
@@ -236,7 +236,7 @@ def load_main_experiment_freeze(
         "evaluation_protocol": {
             "bootstrap_replicates": CANONICAL_BOOTSTRAP_REPLICATES,
             "generation_role": "secondary-exact-trigger-inspection",
-            "methods": list(REQUIRED_QUERY_METHODS),
+            "methods": list(SEMANTIC_QUERY_METHODS),
             "parent_and_router_inputs": "validation-question-prefixes-only",
             "sealed_test_openings": 1,
         },
