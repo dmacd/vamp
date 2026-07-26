@@ -17,6 +17,17 @@ from apm.data.text.tinyworlds_q_semantic.manifests import (
     PILOT_CONCEPTS,
 )
 from apm.data.text.tinyworlds_q_semantic.main_freeze import MainExperimentFreeze
+from apm.data.text.tinyworlds_q_semantic.main_catalog import (
+    build_approved_main_catalog,
+)
+from apm.data.text.tinyworlds_q_semantic.registered_main_catalog import (
+    MAIN_CATALOG_SHA256,
+)
+from apm.data.text.tinyworlds_q_semantic.registered_main_partition import (
+    MAIN_PARTITION_SHA256,
+    MAIN_PARTITION_TREE_SHA256,
+    MAIN_VALIDATION_SAMPLE_REPORT_SHA256,
+)
 from apm.data.text.tinyworlds_q_semantic.main_reverse_review import (
     MAIN_REVERSE_CHOICE_SPECS,
     build_main_reverse_review,
@@ -58,6 +69,11 @@ from apm.data.text.tinyworlds_q_semantic.reverse_review import (
     ReverseReviewApproval,
     SemanticReverseReview,
 )
+from apm.data.text.tinyworlds_q_semantic.sample_report import (
+    QueryValidationSampleReport,
+    load_query_validation_sample_report,
+    publish_query_validation_sample_report,
+)
 
 
 __all__ = [
@@ -66,6 +82,10 @@ __all__ = [
     "ConceptDefinition",
     "FactReviewDecision",
     "MAIN_CONCEPTS",
+    "MAIN_CATALOG_SHA256",
+    "MAIN_PARTITION_SHA256",
+    "MAIN_PARTITION_TREE_SHA256",
+    "MAIN_VALIDATION_SAMPLE_REPORT_SHA256",
     "MainExperimentFreeze",
     "MAIN_SHORTLIST_SPECS",
     "MAIN_REVERSE_CHOICE_SPECS",
@@ -80,6 +100,7 @@ __all__ = [
     "QueryExperimentPreset",
     "QueryGpuPreflight",
     "QueryPartitionArtifact",
+    "QueryValidationSampleReport",
     "ReverseReviewApproval",
     "SemanticFact",
     "SemanticPilotFailure",
@@ -93,6 +114,9 @@ __all__ = [
     "SemanticReverseReview",
     "REGISTERED_QUERY_PROTOCOL",
     "build_approved_pilot_catalog",
+    "build_approved_main_catalog",
     "build_main_review_shortlist",
     "build_main_reverse_review",
+    "load_query_validation_sample_report",
+    "publish_query_validation_sample_report",
 ]

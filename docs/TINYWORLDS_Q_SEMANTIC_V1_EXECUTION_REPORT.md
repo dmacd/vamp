@@ -289,6 +289,45 @@ contains 60 clues with one correct and three proposed false concepts. Every
 candidate suffix is exactly one GPT-2 token. The intended human surface is the
 [`main reverse approval sheet`](../data/tinyworlds-q-semantic/reverse-reviews/c805da6c075920f85a58b0c4ed25ee4aa6dac2e5763e2578648efd0c0800e1f0/review.md).
 
-Reverse choices are not approved yet. Consequently, no main catalog,
-partition, validation sample report, GPU preflight, base/adapters, or sealed
-transaction exists. Reverse-choice approval is the next boundary.
+The user's instruction `Approve all reverse choices` was recorded at
+`2026-07-25T22:54:49Z` as approval
+`c643731930ae9721ea4c4420f14a830c04ca8179bee8caccb8a73756ec0c1067`.
+It binds all 60 fact-specific rows and records the false-distractor,
+grammatical-type, and equal-token-length gates as affirmative. The complete
+primary/reverse authority chain strict-reloads before compilation.
+
+Official five-world catalog
+`0ffd78e81d1da4a4fbd20b49bc02f3dec94560085f4490a357c7f73239f9e8ba`
+contains 60 accepted facts, 20 rejected backups, 180 validation queries, and
+300 physically separated sealed queries. The normal loader authenticated the
+sealed file without deserializing it. Separate primary and rebuild catalog
+trees are byte-identical at tree SHA-256
+`d6c13a83bf1c614115b2a246bf93b33cd12d9e6ab1b9730a4a43f0ba19cef75f`.
+The earlier pilot catalog remains exactly
+`5c9c892e5d010370f9533e73c8b0ad9c9a79c244db9e2a5d7f2b4e12d4a8aa4f`.
+
+Primary main partition
+`d8536d0295af4fa56174369430b2e615008e28fb239d7d66a428b36988fa7d6b`
+passed a strict full-tree reload after all 4,967,647 nonempty duplicate groups
+were assigned. It retains 3,509,177 base groups and 669,256,202 base tokens,
+or 70.64% and 70.76% of the respective archive totals. The weakest fact is
+`robot-fact-02` with 248 authoritative non-construction training groups,
+well above 32. Ordinary lexical base exposure is cat 57,232; dog 119,086;
+bird 34,586; robot 372; and dragon 2,910, so every concept exceeds 256.
+Construction excludes 248,051 groups, and the conservative multi-concept rule
+excludes another 263,147 fact-bearing groups.
+
+A fresh 24-worker replay from the original archive rebuilt the same partition
+with 37,000-record sort runs. Both strict loaders passed, and the complete
+primary and replay trees are byte-identical at
+`566700c59c9c05e87525806a2fd54ff48d283b57b4212884153a6808b12a9828`.
+Validation-only sample report
+`a677d66b572610229a52d4d46b20b30d206f665afeb1c8fc3a82fd5e6c170143`
+strict-loads with one exact base-validation story, one exact validation story
+per node, and all 180 validation query records. No sealed query record was
+deserialized. All 10 TinyWorlds-Q CPU tests pass, as does the complete 899-item
+non-opt-in collection with its registered resource skips. One router assertion
+now uses the existing `1e-6` probability tolerance because Hopfield softmax
+sums can differ from one by one `float32` ULP. This source state is the
+main-partition checkpoint; GPU preflight remains before the fresh base and
+adapters.

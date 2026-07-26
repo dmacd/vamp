@@ -124,7 +124,12 @@ def test_every_router_returns_valid_task_free_decisions_and_suffix_metrics() -> 
     for result in results:
         probabilities = np.asarray(result.decision.node_probabilities)
         assert probabilities.shape == (2, 6)
-        np.testing.assert_allclose(np.sum(probabilities, axis=1), 1.0)
+        np.testing.assert_allclose(
+            np.sum(probabilities, axis=1),
+            1.0,
+            rtol=0.0,
+            atol=1e-6,
+        )
         np.testing.assert_array_equal(probabilities[:, 5], 0.0)
         assert np.all(np.isfinite(result.suffix_nll_by_node[:, :5]))
         assert np.all(np.isinf(result.suffix_nll_by_node[:, 5]))

@@ -68,6 +68,13 @@ pool: another concept that also satisfies the exposed fact is not a false
 distractor. Primary fact approval and reverse-choice approval are distinct,
 content-addressed human decisions, so approving facts cannot implicitly approve
 unseen or semantically invalid reverse choices.
+
+Approved catalog compilation is manifest-driven rather than pilot- or
+five-world-specific. The compiler requires the complete ordered shortlist,
+the exact ordered primary IDs, the exact per-fact reverse IDs and concepts,
+and one reviewer identity across both approval layers. This keeps the
+rabbit/horse and five-world catalogs on the same codepath while making a
+missing, reordered, or cross-manifest approval a hard error.
 Catalog publication physically separates metadata, validation templates, and
 sealed test templates. A normal loader authenticates but never deserializes
 the sealed payload. Test deserialization requires one durable transaction that
@@ -100,6 +107,13 @@ mention each concept. Exact story bytes and little-endian token sequences are
 persisted with archive provenance and offsets. A strict loader rehashes every
 file, reconstructs assignment counts, checks source bindings and directory
 identity, and proves that no construction group entered a model role.
+
+Before GPU work, a separate validation-only sample artifact selects the
+lexicographically first exact story from base validation and from each node's
+validation index. It records archive provenance, exact story bytes, token IDs,
+and every validation query record. Its API accepts only a
+`ValidationCatalogView`, binds the complete partition and catalog identities,
+and rejects changed files or any attempt to substitute sealed templates.
 
 ### Training and adaptation persistence
 

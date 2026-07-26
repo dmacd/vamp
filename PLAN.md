@@ -141,7 +141,7 @@ adapter updates, the exact query/scoring protocol, all nine methods, 10,000
 fact-resampled bootstrap replicates, validation-only routing, and a single
 sealed opening after all artifacts are frozen.
 
-Main construction review is ready. Raw discovery packet
+Main construction review is complete. Raw discovery packet
 `7164cd2cc18be5ba29d7106a44f23dbec5bf39a9a962b9c441ccf07501a8132f`
 and targeted evidence packet
 `ce1b06c7f7a325cedded9970ac008329c93d97d29c84344b93d22b450db14374`
@@ -155,9 +155,31 @@ support is 17 groups. The interactive user approved all 60 primaries at
 records all five affirmative gates and promotes no backup. Fact-specific
 reverse review
 `c805da6c075920f85a58b0c4ed25ee4aa6dac2e5763e2578648efd0c0800e1f0`
-contains 60 one-token four-choice rows and is the next human gate. No main
-catalog, partition, model input, GPU update, or sealed-test access has
-occurred. See
+contains 60 one-token four-choice rows. The interactive user approved every
+row at `2026-07-25T22:54:49Z`; reverse approval
+`c643731930ae9721ea4c4420f14a830c04ca8179bee8caccb8a73756ec0c1067`
+strict-loads with the complete primary authority.
+
+Official catalog
+`0ffd78e81d1da4a4fbd20b49bc02f3dec94560085f4490a357c7f73239f9e8ba`
+contains 60 facts, 180 validation queries, and 300 physically separated sealed
+queries. Its independent catalog trees are byte-identical at
+`d6c13a83bf1c614115b2a246bf93b33cd12d9e6ab1b9730a4a43f0ba19cef75f`;
+the pilot catalog hash is unchanged. Main partition
+`d8536d0295af4fa56174369430b2e615008e28fb239d7d66a428b36988fa7d6b`
+passed every primary construction, leakage, support, and lexical gate plus a
+strict full-tree reload. It retains 3,509,177 base groups and 669,256,202 base
+tokens. Its weakest fact has 248 training groups; robot is the tightest
+ordinary lexical exposure at 372 base groups. A fresh 24-worker archive replay
+with 37,000-record sort runs independently reproduced the complete partition;
+the two trees are byte-identical at
+`566700c59c9c05e87525806a2fd54ff48d283b57b4212884153a6808b12a9828`.
+Validation-only sample report
+`a677d66b572610229a52d4d46b20b30d206f665afeb1c8fc3a82fd5e6c170143`
+strict-loads with six exact stories and all 180 validation queries. The 10-test
+query suite and complete 899-item non-opt-in collection pass (resource-gated
+tests skip as registered). These sources form the main-partition checkpoint;
+GPU preflight is next. The sealed test remains closed. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration

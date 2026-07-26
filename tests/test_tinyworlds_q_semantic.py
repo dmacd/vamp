@@ -78,6 +78,9 @@ from apm.data.text.tinyworlds_q_semantic.main_freeze import (
     load_main_experiment_freeze,
     publish_main_experiment_freeze,
 )
+from apm.data.text.tinyworlds_q_semantic.main_catalog import (
+    build_approved_main_catalog,
+)
 from apm.data.text.tinyworlds_q_semantic.main_reverse_review import (
     MAIN_REVERSE_CHOICE_SPECS,
     build_main_reverse_review,
@@ -151,6 +154,10 @@ from apm.data.text.tinyworlds_q_semantic.scaling import (
     require_preflight_capacity,
     score_in_chunks,
     write_atomic_jsonl,
+)
+from apm.data.text.tinyworlds_q_semantic.sample_report import (
+    load_query_validation_sample_report,
+    publish_query_validation_sample_report,
 )
 from apm.data.text.tinyworlds_q_semantic.shortlist import (
     PILOT_SHORTLIST_SPECS,
@@ -623,6 +630,25 @@ def test_main_review_shortlist_uses_the_dynamic_five_world_manifest() -> None:
         MAIN_REVERSE_CHOICE_SPECS
     )
     assert len(reverse_review.proposals) == 5 * 12
+    reverse_approval = approve_all_reverse_choices(
+        reverse_review,
+        reviewer="fixture-reviewer",
+        reviewed_at="2026-07-25T00:01:00Z",
+    )
+    catalog = build_approved_main_catalog(
+        review_packet=packet,
+        shortlist=shortlist,
+        primary_approval=approval,
+        reverse_review=reverse_review,
+        reverse_approval=reverse_approval,
+        tokenizer=_OneTokenPerWordTokenizer(),  # type: ignore[arg-type]
+    )
+    assert catalog.concept_ids == tuple(
+        concept.concept_id for concept in MAIN_CONCEPTS
+    )
+    assert len(catalog.facts) == 5 * 12
+    assert len(catalog.templates) == 5 * 12 * 8
+    assert len(catalog.rejected_candidates) == 5 * 4
 
 
 def test_partition_fact_withholding_rebuild_and_tampering(
@@ -667,6 +693,34 @@ def test_partition_fact_withholding_rebuild_and_tampering(
     assert first_batch.input_ids.shape == (32, 256)
     catalog_root = publish_catalog(semantic_fixture.catalog, tmp_path / "training")
     validation = load_validation_catalog(catalog_root)
+    sample_report = publish_query_validation_sample_report(
+        first,
+        validation,
+        tmp_path / "validation-samples",
+    )
+    assert sample_report.sample_count == 4
+    assert sample_report.validation_query_count == 3 * 12 * 3
+    assert (
+        load_query_validation_sample_report(
+            sample_report.root,
+            first,
+            validation,
+        )
+        == sample_report
+    )
+    report_record = (sample_report.root / "sample-report.json").read_text()
+    assert '"sealed_test_opened":false' in report_record
+    assert '"split":"test"' not in report_record
+    tampered_report = tmp_path / "tampered-samples" / sample_report.report_sha256
+    shutil.copytree(sample_report.root, tampered_report)
+    with (tampered_report / "sample-report.md").open("ab") as stream:
+        stream.write(b"tamper")
+    with pytest.raises(ValueError, match="report file changed"):
+        load_query_validation_sample_report(
+            tampered_report,
+            first,
+            validation,
+        )
     prepared = prepare_query_adaptation(
         validation,
         first,
@@ -1064,7 +1118,10 @@ def test_semantic_projection_normalizes_float32_margin() -> None:
         dtype=np.float32,
     )
     scorer_margin = float(
-        np.min(np.delete(candidate_nll, 0)) - float(candidate_nll[0])
+        np.float32(
+            float(np.min(np.delete(candidate_nll, 0)))
+            - float(candidate_nll[0])
+        )
     )
     query = SimpleNamespace(
         template_id="rabbit-color-validation-0",

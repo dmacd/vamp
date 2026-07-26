@@ -26,8 +26,12 @@ from apm.data.text.tinyworlds_q_semantic.review import (
     load_review_packet,
 )
 from apm.data.text.tinyworlds_q_semantic.reverse_review import (
+    ReverseReviewApproval,
     SemanticReverseReview,
+    approve_all_reverse_choices,
+    load_reverse_review_approval,
     publish_reverse_review,
+    publish_reverse_review_approval,
 )
 from apm.data.text.tinyworlds_q_semantic.shortlist import SemanticReviewShortlist
 from apm.lm.text import TokenizersTextTokenizer
@@ -47,6 +51,11 @@ MAIN_REVERSE_REVIEW_SHA256 = (
 )
 MAIN_PRIMARY_REVIEWED_AT = "2026-07-25T22:38:51Z"
 MAIN_PRIMARY_AUTHORIZATION = "Approve all primaries"
+MAIN_REVERSE_APPROVAL_SHA256 = (
+    "c643731930ae9721ea4c4420f14a830c04ca8179bee8caccb8a73756ec0c1067"
+)
+MAIN_REVERSE_REVIEWED_AT = "2026-07-25T22:54:49Z"
+MAIN_REVERSE_AUTHORIZATION = "Approve all reverse choices"
 TOKENIZER_PATH = Path("checkpoints/tinystories-8m/tokenizer/tokenizer.json")
 
 
@@ -85,12 +94,41 @@ def load_registered_main_primary_authority() -> tuple[
     return frozen, packet, shortlist, approval, reverse_review
 
 
+def load_registered_main_complete_review_authority() -> tuple[
+    MainExperimentFreeze,
+    SemanticReviewPacket,
+    SemanticReviewShortlist,
+    PrimaryReviewApproval,
+    SemanticReverseReview,
+    ReverseReviewApproval,
+]:
+    """Rebuild and authenticate both explicit main review approvals."""
+    frozen, packet, shortlist, primary, reverse_review = (
+        load_registered_main_primary_authority()
+    )
+    reverse = approve_all_reverse_choices(
+        reverse_review,
+        reviewer="interactive-user",
+        reviewed_at=MAIN_REVERSE_REVIEWED_AT,
+    )
+    if reverse.approval_sha256 != MAIN_REVERSE_APPROVAL_SHA256:
+        raise RuntimeError("registered main reverse approval identity changed")
+    reverse_root = publish_reverse_review_approval(reverse, CATALOG_ROOT)
+    if load_reverse_review_approval(reverse_root) != reverse:
+        raise RuntimeError("registered main reverse approval strict reload changed")
+    return frozen, packet, shortlist, primary, reverse_review, reverse
+
+
 __all__ = [
     "MAIN_PRIMARY_APPROVAL_SHA256",
     "MAIN_PRIMARY_AUTHORIZATION",
     "MAIN_PRIMARY_REVIEWED_AT",
     "MAIN_REVIEW_PACKET_SHA256",
+    "MAIN_REVERSE_APPROVAL_SHA256",
+    "MAIN_REVERSE_AUTHORIZATION",
     "MAIN_REVERSE_REVIEW_SHA256",
+    "MAIN_REVERSE_REVIEWED_AT",
     "MAIN_SHORTLIST_SHA256",
+    "load_registered_main_complete_review_authority",
     "load_registered_main_primary_authority",
 ]
