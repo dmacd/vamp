@@ -28,6 +28,9 @@ from apm.data.text.tinyworlds_q_semantic.registered_main_partition import (
     MAIN_PARTITION_TREE_SHA256,
     MAIN_VALIDATION_SAMPLE_REPORT_SHA256,
 )
+from apm.data.text.tinyworlds_q_semantic.registered_main_preflight import (
+    MAIN_GPU_PREFLIGHT_SHA256,
+)
 from apm.data.text.tinyworlds_q_semantic.main_reverse_review import (
     MAIN_REVERSE_CHOICE_SPECS,
     build_main_reverse_review,
@@ -83,6 +86,7 @@ __all__ = [
     "FactReviewDecision",
     "MAIN_CONCEPTS",
     "MAIN_CATALOG_SHA256",
+    "MAIN_GPU_PREFLIGHT_SHA256",
     "MAIN_PARTITION_SHA256",
     "MAIN_PARTITION_TREE_SHA256",
     "MAIN_VALIDATION_SAMPLE_REPORT_SHA256",

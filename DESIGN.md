@@ -128,6 +128,15 @@ appended to the printed working directory as they are produced. Resuming trims
 only a post-checkpoint trace tail and must reproduce uninterrupted parameters
 and trace bytes.
 
+GPU entrypoints disable JAX pool preallocation before importing accelerator
+code. The operational memory gate uses the device allocator's measured peak
+bytes in use, merged with the registered preflight peak across resume
+boundaries, rather than treating an implementation's reserved pool as model
+memory. Base orchestration is shared across pilot and main manifests: it
+strict-loads the matching preflight, resumes the exact training identity,
+persists validation evidence after each epoch, and publishes only a complete
+passing two-epoch base.
+
 A base can cross into adapter work only through the query-v1 selected-base
 publisher. That boundary accepts a complete two-epoch query-native run only
 after both held-in NLL measurements and the measured allocator peak pass the

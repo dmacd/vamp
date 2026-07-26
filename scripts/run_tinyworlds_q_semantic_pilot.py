@@ -5,10 +5,8 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
-import gc
 from hashlib import sha256
 import json
-import os
 from pathlib import Path
 import tempfile
 import time
@@ -20,15 +18,16 @@ from apm.data.text.tinyworlds_q_semantic.adaptation import (
     prepare_query_adaptation,
     train_or_resume_query_adaptations,
 )
+from apm.data.text.tinyworlds_q_semantic.base_execution import (
+    run_or_resume_query_selected_base,
+)
 from apm.data.text.tinyworlds_q_semantic.catalog import load_validation_catalog
 from apm.data.text.tinyworlds_q_semantic.contracts import (
     QueryExperimentPreset,
     canonical_json_bytes,
-    record_sha256,
 )
 from apm.data.text.tinyworlds_q_semantic.execution import (
     ORIGINAL_PILOT_LEARNABILITY_POLICY,
-    BaseQualityDecision,
     pilot_budget_passes,
     select_pilot_budget,
 )
@@ -56,20 +55,8 @@ from apm.data.text.tinyworlds_q_semantic.pilot_sweep import (
     train_or_resume_pilot_independent_sweep,
 )
 from apm.data.text.tinyworlds_q_semantic.queries import compile_semantic_queries
-from apm.data.text.tinyworlds_q_semantic.selected_base import (
-    QueryBaseEpochEvidence,
-    load_query_selected_base,
-    publish_query_selected_base,
-)
 from apm.data.text.tinyworlds_q_semantic.training import (
-    QueryBaseTrainingConfig,
-    QuerySplitNll,
     allocator_peak_bytes,
-    evaluate_query_base_nll,
-    init_query_base_train_state,
-    load_query_training_checkpoint,
-    query_base_training_identity,
-    run_query_base_training,
 )
 from apm.lm.checkpoint import load_gpt_neo_checkpoint
 from apm.lm.text import TokenizersTextTokenizer
@@ -179,335 +166,15 @@ def _run_preflight(sources=None):
     return preflight
 
 
-def _matching_selected_base(partition, preset):
-    root = CHECKPOINT_ROOT / "base"
-    if not root.is_dir():
-        return None
-    matches = []
-    for path in sorted(root.iterdir()):
-        manifest_path = path / "manifest.json"
-        if not path.is_dir() or len(path.name) != 64 or not manifest_path.is_file():
-            continue
-        payload = manifest_path.read_bytes()
-        record = json.loads(payload)
-        if type(record) is not dict or canonical_json_bytes(record) != payload:
-            raise ValueError(f"noncanonical selected-base candidate: {path}")
-        if (
-            record.get("catalog_sha256") != partition.catalog_sha256
-            or record.get("partition_sha256") != partition.partition_sha256
-        ):
-            continue
-        matches.append(load_query_selected_base(path, partition, preset))
-    if len(matches) > 1:
-        raise RuntimeError("multiple selected bases bind the pilot partition")
-    return matches[0] if matches else None
-
-
-def _latest_base_checkpoint(working: Path, training_sha256: str) -> Path | None:
-    states = working / "states"
-    if not states.is_dir():
-        return None
-    candidates = []
-    for path in sorted(states.iterdir()):
-        resume_path = path / "resume.json"
-        if not path.is_dir() or not resume_path.is_file():
-            continue
-        payload = resume_path.read_bytes()
-        record = json.loads(payload)
-        if type(record) is not dict or canonical_json_bytes(record) != payload:
-            raise ValueError(f"noncanonical base checkpoint candidate: {path}")
-        cursor = record.get("cursor")
-        if (
-            record.get("training_sha256") != training_sha256
-            or type(cursor) is not dict
-        ):
-            raise ValueError(f"base checkpoint binding changed: {path}")
-        values = tuple(
-            cursor.get(field)
-            for field in (
-                "optimizer_update",
-                "epoch",
-                "block",
-                "microbatch",
-                "schedule_position",
-            )
-        )
-        if any(type(value) is not int or value < 0 for value in values):
-            raise ValueError(f"base checkpoint cursor changed: {path}")
-        candidates.append((values, path))
-    return max(candidates, default=((), None))[1]
-
-
-def _epoch_checkpoint(working: Path, epoch: int) -> Path:
-    matches = tuple(
-        sorted((working / "states").glob(f"epoch-{epoch:02d}-update-*"))
-    )
-    if len(matches) != 1:
-        raise RuntimeError(f"expected one complete checkpoint for epoch {epoch}")
-    return matches[0]
-
-
-def _load_epoch_evidence(
-    working: Path,
-    epoch: int,
-    training_sha256: str,
-    partition_sha256: str,
-    config_sha256: str,
-) -> QueryBaseEpochEvidence | None:
-    path = working / f"epoch-{epoch:02d}-validation.json"
-    if not path.is_file():
-        return None
-    payload = path.read_bytes()
-    record = json.loads(payload)
-    required = {
-        "active_tokens",
-        "base_config_sha256",
-        "epoch",
-        "format",
-        "nll",
-        "partition_sha256",
-        "split",
-        "training_sha256",
-    }
-    if (
-        type(record) is not dict
-        or canonical_json_bytes(record) != payload
-        or set(record) != required
-        or record.get("format") != "tinyworlds-q-semantic-base-epoch-evidence-v1"
-        or record.get("epoch") != epoch
-        or record.get("split") != "validation"
-        or record.get("training_sha256") != training_sha256
-        or record.get("partition_sha256") != partition_sha256
-        or record.get("base_config_sha256") != config_sha256
-        or type(record.get("active_tokens")) is not int
-        or type(record.get("nll")) not in (int, float)
-    ):
-        raise ValueError(f"base epoch-{epoch} evidence changed")
-    return QueryBaseEpochEvidence(
-        epoch,
-        QuerySplitNll(
-            "validation",
-            int(record["active_tokens"]),
-            float(record["nll"]),
-        ),
-    )
-
-
-def _publish_epoch_evidence(
-    working: Path,
-    evidence: QueryBaseEpochEvidence,
-    training_sha256: str,
-    partition_sha256: str,
-    config_sha256: str,
-) -> Path:
-    path = working / f"epoch-{evidence.epoch:02d}-validation.json"
-    payload = canonical_json_bytes(
-        {
-            "active_tokens": evidence.validation.active_tokens,
-            "base_config_sha256": config_sha256,
-            "epoch": evidence.epoch,
-            "format": "tinyworlds-q-semantic-base-epoch-evidence-v1",
-            "nll": evidence.validation.nll,
-            "partition_sha256": partition_sha256,
-            "split": evidence.validation.split,
-            "training_sha256": training_sha256,
-        }
-    )
-    if path.exists():
-        if path.read_bytes() != payload:
-            raise FileExistsError(f"different epoch evidence already exists: {path}")
-        return path
-    temporary = path.with_suffix(".json.tmp")
-    temporary.write_bytes(payload)
-    with temporary.open("rb") as source:
-        os.fsync(source.fileno())
-    os.replace(temporary, path)
-    return path
-
-
-def _evaluate_epoch(
-    epoch: int,
-    params,
-    partition,
-    preset,
-    config,
-    working,
-    training_sha256,
-    config_sha256,
-) -> QueryBaseEpochEvidence:
-    def progress(_split: str, completed: int, total: int) -> None:
-        if completed == 1 or completed % 100 == 0 or completed == total:
-            print(
-                f"TinyWorlds-Q epoch {epoch} validation "
-                f"{completed:,}/{total:,}",
-                flush=True,
-            )
-
-    validation = evaluate_query_base_nll(
-        params,
-        partition,
-        preset,
-        "validation",
-        config,
-        progress=progress,
-    )
-    evidence = QueryBaseEpochEvidence(epoch, validation)
-    _publish_epoch_evidence(
-        working,
-        evidence,
-        training_sha256,
-        partition.partition_sha256,
-        config_sha256,
-    )
-    print(
-        f"TinyWorlds-Q epoch {epoch} held-in NLL: {validation.nll:.9f}",
-        flush=True,
-    )
-    return evidence
-
-
 def _run_base(sources, preflight):
-    catalog, partition, _tokenizer, preset = sources
-    if preflight is None:
-        raise RuntimeError("the real base requires a passing GPU preflight")
-    selected = _matching_selected_base(partition, preset)
-    if selected is not None:
-        print(f"Using strict selected base {selected.directory}.", flush=True)
-        return selected
-    config = QueryBaseTrainingConfig.from_preset(preset)
-    config_sha256 = record_sha256(config.as_record())
-    training_sha256, planned_updates = query_base_training_identity(
+    _catalog, partition, _tokenizer, preset = sources
+    return run_or_resume_query_selected_base(
         partition,
         preset,
-        config,
-    )
-    working = WORK_ROOT / f"pilot-base-{training_sha256}"
-    working.mkdir(parents=True, exist_ok=True)
-    phase_started = time.monotonic()
-    print(
-        f"Phase: seed-zero base training ({planned_updates:,} optimizer updates).",
-        flush=True,
-    )
-
-    def training_progress(cursor, nll: float, planned: int) -> None:
-        update = cursor.optimizer_update
-        if update == 1 or update % 100 == 0 or update == planned:
-            elapsed = time.monotonic() - phase_started
-            remaining = elapsed * (planned - update) / max(1, update)
-            print(
-                f"TinyWorlds-Q base update {update:,}/{planned:,}; "
-                f"NLL {nll:.6f}; phase ETA {_eta(remaining)}",
-                flush=True,
-            )
-
-    evidence = []
-    result = None
-    for epoch in (1, 2):
-        existing_evidence = _load_epoch_evidence(
-            working,
-            epoch,
-            training_sha256,
-            partition.partition_sha256,
-            config_sha256,
-        )
-        latest = _latest_base_checkpoint(working, training_sha256)
-        completed_epoch = 0
-        if latest is not None:
-            latest_record = json.loads((latest / "resume.json").read_bytes())
-            latest_cursor = latest_record["cursor"]
-            assert isinstance(latest_cursor, dict)
-            completed_epoch = int(latest_cursor["epoch"])
-        if completed_epoch < epoch:
-            result = run_query_base_training(
-                partition,
-                preset,
-                working,
-                config,
-                resume_from=latest,
-                stop_after_epoch=epoch,
-                progress=training_progress,
-            )
-        if existing_evidence is None:
-            if result is not None and result.cursor.epoch == epoch:
-                params = result.state.trainable
-            else:
-                template = init_query_base_train_state(config, planned_updates)
-                state, cursor = load_query_training_checkpoint(
-                    _epoch_checkpoint(working, epoch),
-                    training_sha256,
-                    template,
-                )
-                if cursor.epoch != epoch:
-                    raise ValueError("epoch checkpoint cursor changed")
-                params = state.trainable
-            existing_evidence = _evaluate_epoch(
-                epoch,
-                params,
-                partition,
-                preset,
-                config,
-                working,
-                training_sha256,
-                config_sha256,
-            )
-        evidence.append(existing_evidence)
-        if result is not None and epoch == 1:
-            del result
-            result = None
-            gc.collect()
-
-    latest = _latest_base_checkpoint(working, training_sha256)
-    if latest is None:
-        raise RuntimeError("complete base training has no resumable state")
-    if result is None or result.cursor.epoch != 2:
-        result = run_query_base_training(
-            partition,
-            preset,
-            working,
-            config,
-            resume_from=latest,
-            progress=training_progress,
-        )
-    peak = allocator_peak_bytes()
-    decision = BaseQualityDecision(
-        tuple(item.validation.nll for item in evidence),  # type: ignore[arg-type]
-        peak,
-        preset.allocator_peak_limit_bytes,
-    )
-    decision_path = working / "base-decision.json"
-    decision_payload = canonical_json_bytes(
-        {
-            "allocator_peak_bytes": peak,
-            "epoch_nll": [item.validation.nll for item in evidence],
-            "format": "tinyworlds-q-semantic-base-decision-v1",
-            "partition_sha256": partition.partition_sha256,
-            "passed": decision.passed,
-            "reason": decision.reason,
-            "training_sha256": training_sha256,
-        }
-    )
-    if decision_path.exists() and decision_path.read_bytes() != decision_payload:
-        raise FileExistsError("base quality decision changed")
-    if not decision_path.exists():
-        temporary = decision_path.with_suffix(".json.tmp")
-        temporary.write_bytes(decision_payload)
-        with temporary.open("rb") as source:
-            os.fsync(source.fileno())
-        os.replace(temporary, decision_path)
-    if not decision.passed:
-        raise RuntimeError(f"pilot base gate failed: {decision.reason}")
-    selected = publish_query_selected_base(
-        result,
-        tuple(evidence),  # type: ignore[arg-type]
-        peak,
-        partition,
-        preset,
+        preflight,
+        WORK_ROOT,
         CHECKPOINT_ROOT,
     )
-    print(f"Selected base: {selected.selection_sha256}", flush=True)
-    print(f"Selected-base report: {selected.directory / 'training-report.md'}", flush=True)
-    print("The sealed test was not opened.", flush=True)
-    return selected
 
 
 def _matching_pilot_result(catalog, partition, selected_base, preflight):

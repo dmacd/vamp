@@ -331,3 +331,27 @@ now uses the existing `1e-6` probability tolerance because Hopfield softmax
 sums can differ from one by one `float32` ULP. This source state is the
 main-partition checkpoint; GPU preflight remains before the fresh base and
 adapters.
+
+GPU preflight
+`28380737a808e4288c9b8b51cd6a97e9c64c60e23a59b51e10fd2ea565e14641`
+passed every frozen resource limit on an NVIDIA GeForce RTX 4090 under CUDA
+JAX 0.6.2. Its two disposable losses were 10.861189270 and 10.851655163. The
+warm update took 0.417533 seconds; a warm evaluation batch took 0.015839
+seconds. Measured allocator peak was 9,032,018,176 bytes (8.412 GiB), and the
+five-world projection was 9,706,405,888 bytes (9.040 GiB), both below the 12
+GiB limit. The projected two-epoch base runtime is 3:21:12, and projected
+result storage is 8,294,400 bytes.
+
+An initial invocation under `ve-semantic` authenticated the partition and
+sample report, then correctly stopped before any optimizer update because that
+environment contains CPU-only JAX. The accepted invocation used the existing
+CUDA-enabled `ve`; no dependency or frozen setting changed. JAX pool
+preallocation is disabled in subsequent launchers so reserved pool size cannot
+be confused with measured model peak.
+
+Base orchestration is now common to pilot and main manifests. It discovers the
+exact latest optimizer/RNG/data cursor, resumes the registered training
+identity, atomically records held-in NLL after each epoch, carries the accepted
+preflight memory peak across resume boundaries, and publishes only after both
+NLL gates and the memory gate pass. The registered main launcher is ready for
+the fresh seed-zero base. The sealed test remains closed.

@@ -179,7 +179,15 @@ Validation-only sample report
 strict-loads with six exact stories and all 180 validation queries. The 10-test
 query suite and complete 899-item non-opt-in collection pass (resource-gated
 tests skip as registered). These sources form the main-partition checkpoint;
-GPU preflight is next. The sealed test remains closed. See
+GPU preflight
+`28380737a808e4288c9b8b51cd6a97e9c64c60e23a59b51e10fd2ea565e14641`
+also passes. It measured an 8.412 GiB allocator peak and projects 9.040 GiB,
+both below 12 GiB; a warm update took 0.418 seconds and projects the two-epoch
+base at 3:21:12. The first attempt correctly stopped before an update because
+`ve-semantic` has CPU-only JAX; the accepted run used the existing CUDA JAX
+0.6.2 `ve` environment on the RTX 4090. Shared pilot/main base orchestration
+and the registered main launcher are implemented and focused tests pass. The
+fresh resumable base is next. The sealed test remains closed. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration

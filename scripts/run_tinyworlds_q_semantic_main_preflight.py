@@ -4,8 +4,12 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import tempfile
+
+
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
 from apm.data.text.tinyworlds_q_semantic.catalog import ValidationCatalogView
 from apm.data.text.tinyworlds_q_semantic.contracts import (
