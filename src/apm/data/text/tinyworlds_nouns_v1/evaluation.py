@@ -49,6 +49,8 @@ from apm.memory.address_refinement import EbtConfig
 WHOLE_STORY_FORMAT = "tinyworlds-nouns-whole-story-nll-v1"
 HALF_STORY_FORMAT = "tinyworlds-nouns-half-story-generation-v1"
 _MAX_EBT_ROWS = 8
+_MAX_GENERATION_ROWS = 72
+_GENERATION_WINDOW_CHUNK_MULTIPLIER = 4
 EvaluationProgress = Callable[[str, int, int], None]
 
 
@@ -160,6 +162,16 @@ class _HalfStoryCase:
     midpoint: int
     query: PrefixOnlyQuery
     suffix_windows: TokenBatch
+    budget: int
+
+
+@dataclass(frozen=True, slots=True)
+class _GenerationBin:
+    """One deterministic group bounded by distinct rows and context width."""
+
+    indices: tuple[int, ...]
+    row_count: int
+    prompt_width: int
     budget: int
 
 
@@ -472,6 +484,9 @@ def _half_story_chunks(
     """Yield pending generation cases with bounded suffix-window storage."""
     chunk: list[_HalfStoryCase] = []
     window_count = 0
+    window_limit = (
+        preset.evaluation_chunk_size * _GENERATION_WINDOW_CHUNK_MULTIPLIER
+    )
     for task_id, entries in entries_by_task.items():
         oracle_index = partition.task_ids.index(task_id) + 1
         for entry in entries:
@@ -506,13 +521,13 @@ def _half_story_chunks(
                 budget,
             )
             case_windows = suffix_windows.input_ids.shape[0]
-            if chunk and window_count + case_windows > preset.evaluation_chunk_size:
+            if chunk and window_count + case_windows > window_limit:
                 yield tuple(chunk)
                 chunk = []
                 window_count = 0
             chunk.append(case)
             window_count += case_windows
-            if window_count >= preset.evaluation_chunk_size:
+            if window_count >= window_limit:
                 yield tuple(chunk)
                 chunk = []
                 window_count = 0
@@ -609,45 +624,95 @@ def _completion_results_for_cases(
         len(cases) == len(selections) == len(node_totals) == len(token_counts)
     ):
         raise ValueError("generation case metadata must have identical lengths")
-    maximum_cases = max(1, evaluation_chunk_size // len(CONDITIONS))
-    results: list[tuple[CompletionResult, ...]] = []
-    start = 0
-    while start < len(cases):
-        stop = start
-        maximum_prompt = 0
-        maximum_budget = 0
-        while stop < len(cases) and stop - start < maximum_cases:
-            candidate_prompt = max(
-                maximum_prompt,
-                len(cases[stop].query.prompt_token_ids),
-            )
-            candidate_budget = max(maximum_budget, cases[stop].budget)
-            if (
-                stop > start
-                and candidate_prompt + candidate_budget
-                > adaptation.model_config.max_position_embeddings
-            ):
-                break
-            maximum_prompt = candidate_prompt
-            maximum_budget = candidate_budget
-            stop += 1
-        if stop == start:
-            raise ValueError("one generation case exceeds the model context window")
-        results.extend(
-            _generate_completion_chunk(
-                cases[start:stop],
-                selections[start:stop],
-                node_totals[start:stop],
-                token_counts[start:stop],
-                base_params,
-                adaptation,
-                packed,
-                tokenizer,
-                partition,
-            )
+    if evaluation_chunk_size <= 0:
+        raise ValueError("evaluation chunk size must be positive")
+    packed_indices = _generation_case_bins(
+        cases,
+        selections,
+        adaptation.model_config.max_position_embeddings,
+    )
+    results: list[tuple[CompletionResult, ...] | None] = [None] * len(cases)
+    for indices in packed_indices:
+        generated = _generate_completion_chunk(
+            tuple(cases[index] for index in indices),
+            tuple(selections[index] for index in indices),
+            tuple(node_totals[index] for index in indices),
+            tuple(token_counts[index] for index in indices),
+            base_params,
+            adaptation,
+            packed,
+            tokenizer,
+            partition,
+            row_capacity=_MAX_GENERATION_ROWS,
         )
-        start = stop
-    return tuple(results)
+        for index, value in zip(indices, generated):
+            results[index] = value
+    if any(value is None for value in results):
+        raise RuntimeError("generation packing did not cover every case")
+    return tuple(value for value in results if value is not None)
+
+
+def _generation_case_bins(
+    cases: tuple[_HalfStoryCase, ...],
+    selections: tuple[dict[Condition, int], ...],
+    maximum_position_embeddings: int,
+    *,
+    row_capacity: int = _MAX_GENERATION_ROWS,
+) -> tuple[tuple[int, ...], ...]:
+    """First-fit decreasing bins minimize padded generation without reordering output."""
+    if len(cases) != len(selections) or not cases:
+        raise ValueError("generation binning requires matching nonempty inputs")
+    if row_capacity <= 0 or maximum_position_embeddings <= 0:
+        raise ValueError("generation bin capacities must be positive")
+    bins: tuple[_GenerationBin, ...] = ()
+    ordered_indices = sorted(
+        range(len(cases)),
+        key=lambda index: (
+            -cases[index].budget,
+            -len(cases[index].query.prompt_token_ids),
+            index,
+        ),
+    )
+    for index in ordered_indices:
+        row_count = len(set(selections[index].values()))
+        prompt_width = len(cases[index].query.prompt_token_ids)
+        budget = cases[index].budget
+        for bin_index, candidate in enumerate(bins):
+            candidate_rows = candidate.row_count + row_count
+            candidate_prompt = max(candidate.prompt_width, prompt_width)
+            candidate_budget = max(candidate.budget, budget)
+            if (
+                candidate_rows <= row_capacity
+                and candidate_prompt + candidate_budget
+                <= maximum_position_embeddings
+            ):
+                bins = (
+                    bins[:bin_index]
+                    + (
+                        _GenerationBin(
+                            indices=candidate.indices + (index,),
+                            row_count=candidate_rows,
+                            prompt_width=candidate_prompt,
+                            budget=candidate_budget,
+                        ),
+                    )
+                    + bins[bin_index + 1 :]
+                )
+                break
+        else:
+            if row_count > row_capacity:
+                raise ValueError("one generation case exceeds the row capacity")
+            if prompt_width + budget > maximum_position_embeddings:
+                raise ValueError("one generation case exceeds the model context window")
+            bins += (
+                _GenerationBin(
+                    indices=(index,),
+                    row_count=row_count,
+                    prompt_width=prompt_width,
+                    budget=budget,
+                ),
+            )
+    return tuple(tuple(candidate.indices) for candidate in bins)
 
 
 def _generate_completion_chunk(
@@ -660,33 +725,48 @@ def _generate_completion_chunk(
     packed,
     tokenizer: TextTokenizer,
     partition: NounPartitionArtifact,
+    *,
+    row_capacity: int | None = None,
 ) -> tuple[tuple[CompletionResult, ...], ...]:
+    if not cases:
+        raise ValueError("generation requires at least one case")
+    generation_pairs: list[tuple[int, int]] = []
+    generated_row_by_case_node: dict[tuple[int, int], int] = {}
+    for case_index, selection in enumerate(selections):
+        for condition in CONDITIONS:
+            key = (case_index, selection[condition])
+            if key not in generated_row_by_case_node:
+                generated_row_by_case_node[key] = len(generation_pairs)
+                generation_pairs.append(key)
+    capacity = len(generation_pairs) if row_capacity is None else row_capacity
+    if capacity < len(generation_pairs):
+        raise ValueError("generation row capacity cannot hold distinct story/node pairs")
     prompt_width = max(len(case.query.prompt_token_ids) for case in cases)
     maximum_budget = max(case.budget for case in cases)
     prompt = np.full(
-        (len(cases), prompt_width),
+        (capacity, prompt_width),
         partition.pad_token_id,
         dtype=np.int32,
     )
     attention = np.zeros_like(prompt, dtype=np.bool_)
-    for row, case in enumerate(cases):
+    padded_pairs = tuple(generation_pairs) + (generation_pairs[0],) * (
+        capacity - len(generation_pairs)
+    )
+    for row, (case_index, _) in enumerate(padded_pairs):
+        case = cases[case_index]
         width = len(case.query.prompt_token_ids)
         prompt[row, :width] = case.query.prompt_token_ids
         attention[row, :width] = True
     node_indices = np.asarray(
-        tuple(
-            selection[condition]
-            for selection in selections
-            for condition in CONDITIONS
-        ),
+        tuple(node_index for _, node_index in padded_pairs),
         dtype=np.int32,
     )
     generated = np.asarray(
         greedy_generate(
             base_params,
             adaptation.model_config,
-            np.repeat(prompt, len(CONDITIONS), axis=0),
-            np.repeat(attention, len(CONDITIONS), axis=0),
+            prompt,
+            attention,
             maximum_budget,
             eos_token_id=partition.eos_token_id,
             pad_token_id=partition.pad_token_id,
@@ -697,12 +777,16 @@ def _generate_completion_chunk(
     )
     results = []
     for case_index, case in enumerate(cases):
-        first_row = case_index * len(CONDITIONS)
         prompt_length = len(case.query.prompt_token_ids)
-        generated_rows = generated[
-            first_row : first_row + len(CONDITIONS),
-            prompt_length : prompt_length + case.budget,
-        ]
+        generated_rows = tuple(
+            generated[
+                generated_row_by_case_node[
+                    (case_index, selections[case_index][condition])
+                ],
+                prompt_length : prompt_length + case.budget,
+            ]
+            for condition in CONDITIONS
+        )
         case_results = []
         for condition, node_index, generated_row in zip(
             CONDITIONS,

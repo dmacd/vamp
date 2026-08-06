@@ -34,16 +34,26 @@ at 7.99 GiB. The fresh base improved held-in NLL from `1.41908` to
 All 42 VAMP stages and 84,000 adapter updates are complete; the last immutable
 stage is `c56516ed22a9e5ee89868330fc61031c90edf6ea1d2d5d2dcf75e191e9fd0156`.
 
-Whole-story evaluation is underway in an immediately persisted resumable
-ledger. Its initial one-story implementation projected roughly 25 hours, so
-the evaluator now shares 32 story windows across node scoring and caps only
-differentiable EBT sub-batches at eight rows. The safe run matches every byte
-of the completed 32-row EBT attempt and reduces the projection to roughly two
-hours. The upcoming generation path likewise batches routing/suffix scoring
-and packs at most five stories while preserving all six conditions and each
-story's exact token budget. Focused noun/VAMP tests pass with 18 tests. The
-next milestone is completing both local ledgers, external judging, and final
-Markdown/interactive-HTML publication.
+Whole-story evaluation is complete: all 27,866 task/story memberships produced
+167,196 canonical condition rows in the atomically published 68 MiB ledger.
+The initial one-story implementation projected roughly 25 hours, so the final
+evaluator shares 32 story windows across node scoring and caps differentiable
+EBT sub-batches at eight rows. Its safe run matches every byte of the completed
+32-row EBT attempt.
+
+Midpoint generation is now running in its immediately persisted resumable
+ledger. The generic greedy decoder pre-fills once, uses per-layer KV caches,
+and advances tokens in one compiled device loop. The noun evaluator shares one
+generation whenever conditions select the same story/node pair and first-fit
+packs similar frozen budgets across bounded 128-window host chunks. Device
+calls contain at most 72 distinct addressed rows; the measured live footprint
+is approximately 9.7 GiB, below the frozen 12 GiB limit. A 192-row attempt was
+rejected after reaching 17.9 GiB, and its rows remain diagnostic-only. The
+final safe path projects roughly five to six hours and passes the focused
+generation/noun/VAMP selection with 25 tests. `OPENROUTER_API_KEY` is absent,
+so this run will publish the complete local Markdown/interactive-HTML report,
+notify the desktop, and stop at `awaiting_judge_credentials`; a later canonical
+rerun can begin directly with external judging.
 
 ## Completed TinyWorlds-Q Outcome
 

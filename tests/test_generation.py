@@ -32,6 +32,44 @@ def _constant_edge(value: float, model_config: GptNeoConfig, lora_config: LoraCo
     return jax.tree_util.tree_map(lambda leaf: jnp.full_like(leaf, value), edge)
 
 
+def _uncached_reference(
+    params,
+    config: GptNeoConfig,
+    prompt_ids: jax.Array,
+    attention_mask: jax.Array,
+    max_new_tokens: int,
+    *,
+    lora_memory=None,
+    edge_coefficients=None,
+    lora_config=None,
+) -> jax.Array:
+    """Small direct-forward oracle for cached-decoder parity tests."""
+    batch_size, prompt_width = prompt_ids.shape
+    output_width = prompt_width + max_new_tokens
+    generated = jnp.zeros((batch_size, output_width), dtype=jnp.int32)
+    generated = generated.at[:, :prompt_width].set(prompt_ids)
+    generated_mask = jnp.zeros((batch_size, output_width), dtype=jnp.bool_)
+    generated_mask = generated_mask.at[:, :prompt_width].set(attention_mask)
+    lengths = jnp.sum(attention_mask, axis=1, dtype=jnp.int32)
+    rows = jnp.arange(batch_size, dtype=jnp.int32)
+    for step in range(max_new_tokens):
+        visible_width = prompt_width + step
+        logits = apply_gpt_neo(
+            params,
+            config,
+            generated[:, :visible_width],
+            generated_mask[:, :visible_width],
+            lora_memory=lora_memory,
+            edge_coefficients=edge_coefficients,
+            lora_config=lora_config,
+        ).logits
+        next_tokens = jnp.argmax(logits[rows, lengths - 1], axis=-1)
+        generated = generated.at[rows, lengths].set(next_tokens)
+        generated_mask = generated_mask.at[rows, lengths].set(True)
+        lengths += 1
+    return generated
+
+
 def test_greedy_generation_is_deterministic_and_preserves_prompts() -> None:
     config = _model_config()
     params = init_gpt_neo_params(jax.random.PRNGKey(0), config)
@@ -126,6 +164,61 @@ def test_generation_uses_per_row_hard_lora_nodes() -> None:
     )
 
     np.testing.assert_array_equal(np.asarray(generated[:, 2]), np.asarray(expected_next))
+
+
+def test_cached_generation_matches_uncached_global_local_lora_reference() -> None:
+    config = GptNeoConfig(
+        vocab_size=11,
+        max_position_embeddings=10,
+        hidden_size=8,
+        intermediate_size=16,
+        num_layers=2,
+        num_heads=2,
+        attention_types=("global", "local"),
+        local_window_size=3,
+    )
+    lora_config = LoraConfig(rank=2, alpha=2.0)
+    params = init_gpt_neo_params(jax.random.PRNGKey(22), config)
+    graph = add_memory_node(
+        init_memory_graph(NodeId("root")),
+        NodeId("adapted"),
+        NodeId("root"),
+        TaskId("task"),
+        1,
+        _constant_edge(0.05, config, lora_config),
+    )
+    packed = pack_lora_memory(graph, config, lora_config, max_nodes=2, max_edges=1)
+    prompt_ids = jnp.asarray(((1, 2, 3, 4), (5, 6, 0, 0)), dtype=jnp.int32)
+    attention_mask = jnp.asarray(
+        ((True, True, True, True), (True, True, False, False))
+    )
+    node_indices = jnp.asarray((0, 1), dtype=jnp.int32)
+    coefficients = jax.vmap(
+        lambda index: edge_coefficients_for_node(packed, index)
+    )(node_indices)
+
+    expected = _uncached_reference(
+        params,
+        config,
+        prompt_ids,
+        attention_mask,
+        4,
+        lora_memory=packed,
+        edge_coefficients=coefficients,
+        lora_config=lora_config,
+    )
+    actual = greedy_generate(
+        params,
+        config,
+        prompt_ids,
+        attention_mask,
+        4,
+        lora_memory=packed,
+        lora_config=lora_config,
+        node_index=node_indices,
+    )
+
+    np.testing.assert_array_equal(np.asarray(actual), np.asarray(expected))
 
 
 def test_generation_rejects_context_overflow_and_non_right_padding() -> None:

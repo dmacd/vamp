@@ -476,23 +476,52 @@ def test_generation_batches_multiple_stories_without_mixing_budgets(monkeypatch)
         object(),
         SimpleNamespace(decode=lambda values: " ".join(map(str, values))),
         SimpleNamespace(eos_token_id=99, pad_token_id=0),
+        row_capacity=8,
     )
     assert calls == [
         (
-            (2 * len(CONDITIONS), 3),
-            (2,) * len(CONDITIONS) + (3,) * len(CONDITIONS),
+            (8, 3),
+            (2,) * 3 + (3,) * 3 + (2,) * 2,
             4,
-            tuple(
-                selections[story][condition]
-                for story in range(2)
-                for condition in CONDITIONS
-            ),
+            (0, 1, 2, 1, 2, 0, 0, 0),
         )
     ]
     assert {result.generated_token_count for result in results[0]} == {2}
     assert {result.generated_token_count for result in results[1]} == {4}
     assert results[0][0].generated_continuation == "100 100"
-    assert results[1][0].generated_continuation == "106 106 106 106"
+    assert results[1][0].generated_continuation == "103 103 103 103"
+
+
+def test_generation_bins_sort_by_budget_and_restore_bounded_groups() -> None:
+    budgets = (2, 8, 7)
+    cases = tuple(
+        SimpleNamespace(
+            budget=budget,
+            query=build_prefix_only_query(
+                _story_id(f"generation-bin-{index}"),
+                (1, 2, 3, 4),
+                0,
+                16,
+            ),
+        )
+        for index, budget in enumerate(budgets)
+    )
+    selections = tuple(
+        {
+            condition: condition_index % 2
+            for condition_index, condition in enumerate(CONDITIONS)
+        }
+        for _ in cases
+    )
+
+    bins = noun_evaluation._generation_case_bins(
+        cases,
+        selections,
+        16,
+        row_capacity=4,
+    )
+
+    assert bins == ((1, 2), (0,))
 
 
 def test_prefix_routing_uses_shape_stable_eight_story_subbatches(monkeypatch) -> None:

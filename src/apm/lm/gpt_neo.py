@@ -8,7 +8,13 @@ from typing import Literal, NamedTuple
 import jax
 import jax.numpy as jnp
 
-from apm.lm.attention import apply_attention, apply_linear, dropout
+from apm.lm.attention import (
+    apply_attention,
+    apply_attention_with_key_values,
+    apply_cached_attention,
+    apply_linear,
+    dropout,
+)
 from apm.lm.config import GptNeoConfig
 from apm.lm.lora import LoraBlockBank, LoraConfig, apply_lora_linear
 from apm.lm.lora_memory import PackedLoraMemory
@@ -44,6 +50,21 @@ class ForwardResult(NamedTuple):
     logits: jax.Array
     final_hidden: jax.Array
     captured_hidden: tuple[jax.Array, ...]
+
+
+class GptNeoKvCache(NamedTuple):
+    """Fixed-width per-layer attention keys, values, and valid positions."""
+
+    keys: tuple[jax.Array, ...]
+    values: tuple[jax.Array, ...]
+    attention_mask: jax.Array
+
+
+class CachedForwardResult(NamedTuple):
+    """Next-token logits paired with an updated autoregressive KV cache."""
+
+    logits: jax.Array
+    cache: GptNeoKvCache
 
 
 def embed_tokens(
@@ -216,6 +237,216 @@ def apply_gpt_neo(
         capture=capture,
         training=training,
         rng_key=rng_key,
+    )
+
+
+def prefill_gpt_neo_cache(
+    params: GptNeoParams,
+    config: GptNeoConfig,
+    token_ids: jax.Array,
+    attention_mask: jax.Array,
+    cache_width: int,
+    *,
+    lora_memory: PackedLoraMemory | None = None,
+    edge_coefficients: jax.Array | None = None,
+    lora_config: LoraConfig | None = None,
+) -> CachedForwardResult:
+    """Encode a right-padded prompt once and initialize a fixed-width KV cache."""
+    if token_ids.ndim != 2 or attention_mask.shape != token_ids.shape:
+        raise ValueError("prefill token IDs and attention mask must share [batch, sequence]")
+    batch_size, sequence_length = token_ids.shape
+    if sequence_length > cache_width or cache_width > config.max_position_embeddings:
+        raise ValueError("prefill sequence and cache widths exceed model capacity")
+    if len(params.blocks) != config.num_layers:
+        raise ValueError("parameter block count does not match num_layers")
+    effective_edge_coefficients = _resolve_lora_coefficients(
+        lora_memory,
+        edge_coefficients,
+        lora_config,
+        config,
+        batch_size,
+    )
+    position_ids = jnp.arange(sequence_length, dtype=jnp.int32)[None, :]
+    hidden_states = embed_tokens(params, token_ids, position_ids)
+    cached_keys: list[jax.Array] = []
+    cached_values: list[jax.Array] = []
+    cache_padding = ((0, 0), (0, 0), (0, cache_width - sequence_length), (0, 0))
+    for layer_index, (block, attention_type) in enumerate(
+        zip(params.blocks, config.attention_types)
+    ):
+        lora_block = (
+            None
+            if lora_memory is None
+            else lora_memory.edge_bank.blocks[layer_index]
+        )
+        attention_input = apply_layer_norm(
+            block.attention_norm,
+            hidden_states,
+            config.layer_norm_epsilon,
+        )
+        attention_output, keys, values = apply_attention_with_key_values(
+            block.attention,
+            config,
+            attention_input,
+            attention_mask,
+            attention_type,
+            lora_block=lora_block,
+            edge_coefficients=effective_edge_coefficients,
+            lora_config=lora_config,
+            training=False,
+            probability_dropout_key=None,
+            output_dropout_key=None,
+        )
+        cached_keys.append(jnp.pad(keys, cache_padding))
+        cached_values.append(jnp.pad(values, cache_padding))
+        post_attention = hidden_states + attention_output
+        mlp_input = apply_layer_norm(
+            block.mlp_norm,
+            post_attention,
+            config.layer_norm_epsilon,
+        )
+        mlp_hidden = gelu_new(
+            _apply_mlp_projection(
+                block.mlp.input_projection,
+                mlp_input,
+                lora_block,
+                effective_edge_coefficients,
+                lora_config,
+                input_projection=True,
+            )
+        )
+        hidden_states = post_attention + _apply_mlp_projection(
+            block.mlp.output_projection,
+            mlp_hidden,
+            lora_block,
+            effective_edge_coefficients,
+            lora_config,
+            input_projection=False,
+        )
+    final_hidden = apply_layer_norm(
+        params.final_norm,
+        hidden_states,
+        config.layer_norm_epsilon,
+    )
+    lengths = jnp.sum(attention_mask, axis=1, dtype=jnp.int32)
+    rows = jnp.arange(batch_size, dtype=jnp.int32)
+    last_hidden = final_hidden[rows, lengths - 1]
+    logits = jnp.einsum("bh,vh->bv", last_hidden, params.token_embedding)
+    padded_mask = jnp.pad(
+        attention_mask,
+        ((0, 0), (0, cache_width - sequence_length)),
+    )
+    return CachedForwardResult(
+        logits,
+        GptNeoKvCache(tuple(cached_keys), tuple(cached_values), padded_mask),
+    )
+
+
+def apply_gpt_neo_cached_token(
+    params: GptNeoParams,
+    config: GptNeoConfig,
+    token_ids: jax.Array,
+    position_ids: jax.Array,
+    active_mask: jax.Array,
+    cache: GptNeoKvCache,
+    *,
+    lora_memory: PackedLoraMemory | None = None,
+    edge_coefficients: jax.Array | None = None,
+    lora_config: LoraConfig | None = None,
+) -> CachedForwardResult:
+    """Advance an autoregressive batch by one token using cached attention state."""
+    if token_ids.ndim != 1:
+        raise ValueError("cached token IDs require shape [batch]")
+    batch_size = token_ids.shape[0]
+    if position_ids.shape != (batch_size,) or active_mask.shape != (batch_size,):
+        raise ValueError("cached positions and active mask require one value per row")
+    if len(cache.keys) != config.num_layers or len(cache.values) != config.num_layers:
+        raise ValueError("KV cache layer count does not match the model")
+    if cache.attention_mask.shape[0] != batch_size:
+        raise ValueError("KV cache batch size does not match token IDs")
+    effective_edge_coefficients = _resolve_lora_coefficients(
+        lora_memory,
+        edge_coefficients,
+        lora_config,
+        config,
+        batch_size,
+    )
+    rows = jnp.arange(batch_size, dtype=jnp.int32)
+    existing_mask = cache.attention_mask[rows, position_ids]
+    updated_attention_mask = cache.attention_mask.at[rows, position_ids].set(
+        jnp.where(active_mask, True, existing_mask)
+    )
+    hidden_states = (
+        params.token_embedding[token_ids] + params.position_embedding[position_ids]
+    )[:, None, :]
+    updated_keys: list[jax.Array] = []
+    updated_values: list[jax.Array] = []
+    for layer_index, (block, attention_type) in enumerate(
+        zip(params.blocks, config.attention_types)
+    ):
+        lora_block = (
+            None
+            if lora_memory is None
+            else lora_memory.edge_bank.blocks[layer_index]
+        )
+        attention_input = apply_layer_norm(
+            block.attention_norm,
+            hidden_states,
+            config.layer_norm_epsilon,
+        )
+        attention_output, layer_keys, layer_values = apply_cached_attention(
+            block.attention,
+            config,
+            attention_input,
+            cache.keys[layer_index],
+            cache.values[layer_index],
+            updated_attention_mask,
+            position_ids,
+            active_mask,
+            attention_type,
+            lora_block=lora_block,
+            edge_coefficients=effective_edge_coefficients,
+            lora_config=lora_config,
+        )
+        updated_keys.append(layer_keys)
+        updated_values.append(layer_values)
+        post_attention = hidden_states + attention_output
+        mlp_input = apply_layer_norm(
+            block.mlp_norm,
+            post_attention,
+            config.layer_norm_epsilon,
+        )
+        mlp_hidden = gelu_new(
+            _apply_mlp_projection(
+                block.mlp.input_projection,
+                mlp_input,
+                lora_block,
+                effective_edge_coefficients,
+                lora_config,
+                input_projection=True,
+            )
+        )
+        hidden_states = post_attention + _apply_mlp_projection(
+            block.mlp.output_projection,
+            mlp_hidden,
+            lora_block,
+            effective_edge_coefficients,
+            lora_config,
+            input_projection=False,
+        )
+    final_hidden = apply_layer_norm(
+        params.final_norm,
+        hidden_states,
+        config.layer_norm_epsilon,
+    )[:, 0, :]
+    logits = jnp.einsum("bh,vh->bv", final_hidden, params.token_embedding)
+    return CachedForwardResult(
+        logits,
+        GptNeoKvCache(
+            tuple(updated_keys),
+            tuple(updated_values),
+            updated_attention_mask,
+        ),
     )
 
 

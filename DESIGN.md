@@ -99,12 +99,25 @@ router-facing value contains only the first half. All six conditions receive
 that same prompt, true-suffix scoring mask, and greedy output budget; the saved
 second half is evaluator/reference data only. OpenRouter judging presents the
 prefix once and deterministically anonymizes the six completions plus the
-reference. Prefix routing and suffix loss use the same bounded multi-story
-evaluation path. Greedy calls retain the six-condition unit and may pack up to
-five stories, or 30 addressed rows, with right-padded prompts; extraction uses
-each story's true prefix length and its own frozen budget. Strict 1--5 scores
-and a complete seven-way ranking are persisted request by request and can
-resume without repeating completed calls.
+reference. Prefix routing and suffix loss use a bounded multi-story path;
+differentiable EBT remains capped at eight rows even when the host groups up to
+128 suffix windows for length-aware generation packing.
+
+Greedy decoding pre-fills each right-padded prompt once, retains fixed-width
+per-layer key/value caches, and advances all active rows in one compiled device
+loop. Cached global and local attention use each row's absolute insertion
+position and valid-key mask, so unequal prompt lengths, EOS stopping, and LoRA
+paths retain direct autoregressive semantics. A focused oracle test compares
+multiple cached steps with full-prefix recomputation under mixed global/local
+layers and per-row LoRA nodes. Conditions selecting the same node for the same
+story share one generated row because their model, prompt, and deterministic
+decoder are identical; all six labeled condition records are reconstructed
+afterward. Cases are sorted by frozen output budget and first-fit packed by
+distinct story/node rows and context compatibility. Each call has at most 72
+addressed rows, and the observed process footprint is about 9.7 GiB, below the
+12 GiB gate. Extraction still uses each story's true prefix length and frozen
+budget. Strict 1--5 scores and a complete seven-way ranking are persisted
+request by request and can resume without repeating completed calls.
 
 The final Markdown and standalone interactive HTML are projections of strict
 partition, adaptation, NLL, generation, and optional judge ledgers. They report

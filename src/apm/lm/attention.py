@@ -47,6 +47,37 @@ def apply_attention(
     output_dropout_key: jax.Array | None,
 ) -> jax.Array:
     """Apply one GPT-Neo self-attention operation and output projection."""
+    output, _, _ = apply_attention_with_key_values(
+        params,
+        config,
+        hidden_states,
+        attention_mask,
+        attention_type,
+        lora_block=lora_block,
+        edge_coefficients=edge_coefficients,
+        lora_config=lora_config,
+        training=training,
+        probability_dropout_key=probability_dropout_key,
+        output_dropout_key=output_dropout_key,
+    )
+    return output
+
+
+def apply_attention_with_key_values(
+    params: AttentionParams,
+    config: GptNeoConfig,
+    hidden_states: jax.Array,
+    attention_mask: jax.Array,
+    attention_type: AttentionType,
+    *,
+    lora_block: LoraBlockBank | None = None,
+    edge_coefficients: jax.Array | None = None,
+    lora_config: LoraConfig | None = None,
+    training: bool,
+    probability_dropout_key: jax.Array | None,
+    output_dropout_key: jax.Array | None,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Apply attention and return the projected keys and values for caching."""
     batch_size, sequence_length, _ = hidden_states.shape
     query = _split_heads(
         _apply_projection(
@@ -124,12 +155,125 @@ def apply_attention(
         lora_config,
         None if lora_config is None else lora_config.target_mask.attention_output,
     )
-    return dropout(
-        projected,
-        config.residual_dropout,
-        training=training,
-        rng_key=output_dropout_key,
+    return (
+        dropout(
+            projected,
+            config.residual_dropout,
+            training=training,
+            rng_key=output_dropout_key,
+        ),
+        key,
+        value,
     )
+
+
+def apply_cached_attention(
+    params: AttentionParams,
+    config: GptNeoConfig,
+    hidden_states: jax.Array,
+    key_cache: jax.Array,
+    value_cache: jax.Array,
+    attention_mask: jax.Array,
+    position_ids: jax.Array,
+    active_mask: jax.Array,
+    attention_type: AttentionType,
+    *,
+    lora_block: LoraBlockBank | None = None,
+    edge_coefficients: jax.Array | None = None,
+    lora_config: LoraConfig | None = None,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Apply one-token attention while updating a fixed-width KV cache."""
+    batch_size, sequence_length, _ = hidden_states.shape
+    if sequence_length != 1:
+        raise ValueError("cached attention requires exactly one query token")
+    expected_cache_shape = (
+        batch_size,
+        config.num_heads,
+        attention_mask.shape[1],
+        config.head_size,
+    )
+    if key_cache.shape != expected_cache_shape:
+        raise ValueError("key cache shape does not match cached attention inputs")
+    if value_cache.shape != expected_cache_shape:
+        raise ValueError("value cache shape does not match cached attention inputs")
+    if position_ids.shape != (batch_size,) or active_mask.shape != (batch_size,):
+        raise ValueError("cached positions and active mask require one value per row")
+    query = _split_heads(
+        _apply_projection(
+            params.query,
+            hidden_states,
+            None if lora_block is None else lora_block.query,
+            edge_coefficients,
+            lora_config,
+            None if lora_config is None else lora_config.target_mask.query,
+        ),
+        config,
+    )
+    next_key = _split_heads(
+        _apply_projection(
+            params.key,
+            hidden_states,
+            None if lora_block is None else lora_block.key,
+            edge_coefficients,
+            lora_config,
+            None if lora_config is None else lora_config.target_mask.key,
+        ),
+        config,
+    )[:, :, 0, :]
+    next_value = _split_heads(
+        _apply_projection(
+            params.value,
+            hidden_states,
+            None if lora_block is None else lora_block.value,
+            edge_coefficients,
+            lora_config,
+            None if lora_config is None else lora_config.target_mask.value,
+        ),
+        config,
+    )[:, :, 0, :]
+    rows = jnp.arange(batch_size, dtype=jnp.int32)
+    existing_keys = key_cache[rows, :, position_ids, :]
+    existing_values = value_cache[rows, :, position_ids, :]
+    updated_keys = key_cache.at[rows, :, position_ids, :].set(
+        jnp.where(active_mask[:, None, None], next_key, existing_keys)
+    )
+    updated_values = value_cache.at[rows, :, position_ids, :].set(
+        jnp.where(active_mask[:, None, None], next_value, existing_values)
+    )
+    scores = jnp.einsum(
+        "bnqd,bnkd->bnqk",
+        query.astype(jnp.float32),
+        updated_keys.astype(jnp.float32),
+    )
+    key_positions = jnp.arange(attention_mask.shape[1], dtype=jnp.int32)[None, :]
+    allowed = attention_mask & (key_positions <= position_ids[:, None])
+    if attention_type == "local":
+        allowed = allowed & (
+            key_positions > position_ids[:, None] - config.local_window_size
+        )
+    elif attention_type != "global":
+        raise ValueError(f"unknown attention type: {attention_type}")
+    masked_scores = jnp.where(
+        allowed[:, None, None, :],
+        scores,
+        jnp.asarray(jnp.finfo(jnp.float32).min, dtype=jnp.float32),
+    )
+    probabilities = jax.nn.softmax(masked_scores, axis=-1).astype(updated_values.dtype)
+    attended = jnp.einsum("bnqk,bnkd->bnqd", probabilities, updated_values)
+    merged = attended.transpose(0, 2, 1, 3).reshape(
+        batch_size,
+        1,
+        config.hidden_size,
+    )
+    projected = _apply_projection(
+        params.output,
+        merged,
+        None if lora_block is None else lora_block.attention_output,
+        edge_coefficients,
+        lora_config,
+        None if lora_config is None else lora_config.target_mask.attention_output,
+    )
+    return projected, updated_keys, updated_values
 
 
 def dropout(

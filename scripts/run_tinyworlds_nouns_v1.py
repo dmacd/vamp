@@ -344,11 +344,14 @@ def _scan_progress(started: float):
 
 def _training_progress(started: float):
     phase_started: dict[str, float] = {}
+    initial_completed: dict[str, int] = {}
 
     def progress(phase: str, completed: int, total: int, value: float) -> None:
         phase_started.setdefault(phase, time.monotonic())
+        initial_completed.setdefault(phase, completed - 1)
         elapsed = time.monotonic() - phase_started[phase]
-        remaining = elapsed * (total - completed) / max(1, completed)
+        observed = completed - initial_completed[phase]
+        remaining = elapsed * (total - completed) / max(1, observed)
         if completed == 1 or completed % 100 == 0 or completed == total:
             print(
                 f"  [{phase}] {completed:,}/{total:,}; NLL {value:.5f}; "
@@ -361,11 +364,14 @@ def _training_progress(started: float):
 
 def _evaluation_progress(started: float):
     phase_started: dict[str, float] = {}
+    initial_completed: dict[str, int] = {}
 
     def progress(phase: str, completed: int, total: int) -> None:
         phase_started.setdefault(phase, time.monotonic())
+        initial_completed.setdefault(phase, completed - 1)
         elapsed = time.monotonic() - phase_started[phase]
-        remaining = elapsed * (total - completed) / max(1, completed)
+        observed = completed - initial_completed[phase]
+        remaining = elapsed * (total - completed) / max(1, observed)
         if completed == 1 or completed % 100 == 0 or completed == total:
             print(
                 f"  [{phase}] {completed:,}/{total:,}; phase ETA {_duration(remaining)}; "

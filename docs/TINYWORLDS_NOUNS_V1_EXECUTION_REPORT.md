@@ -1,6 +1,6 @@
 # TinyWorlds Noun-Overlap v1 — Implementation and Review-Gate Report
 
-Date: 2026-08-05
+Date: 2026-08-05 to 2026-08-06
 
 ## Outcome
 
@@ -67,16 +67,16 @@ and byte verification passed.
   descriptive overlap trends, judge summaries, and folded representative story
   successes and failures.
 
-## Verification
+## Review-gate verification
 
-- Focused noun and generic VAMP suite: 16 passed.
+- Focused noun and generic VAMP suite at the approval boundary: 16 passed.
 - Complete default non-GPU collection: 640 passed, 274 skipped, 11 deselected in
   254.92 seconds.
 - Python compilation and scoped whitespace checks: passed.
 - Strict packet reload: passed, including all 57 HTML folds and the manual-gate
   notice.
-- Gate-state audit: no noun partition, checkpoint directory, or result directory
-  exists.
+- Gate-state audit at that checkpoint: no noun partition, checkpoint directory,
+  or result directory existed.
 
 ## Manual approval
 
@@ -90,8 +90,8 @@ The artifact also binds decision hash
 `96f5c41cf6acf7ba4e5acd8bdedcc0b7bf5cbb254786cc9b1481ac3554efb325`
 and source hash
 `fa12754af0edc204065af692ec9da0ea83cd059425c48a70763fc83660e8fbfc`.
-The required next action is the canonical no-argument run, beginning with exact
-partition construction and then GPU preflight. Any future decision edit
+The approval authorized the canonical no-argument run, beginning with exact
+partition construction and then GPU preflight. Any future decision edit still
 invalidates this approval and requires a rebuilt packet and new manual approval.
 
 ## Approved execution progress
@@ -109,14 +109,42 @@ All 42 VAMP nodes completed their fixed 2,000 updates. Final stage
 `c56516ed22a9e5ee89868330fc61031c90edf6ea1d2d5d2dcf75e191e9fd0156`
 binds adaptation manifest
 `3384c80f51f23ffad72d8b1261bd447ffaa7423ee619b6690b3d38e1a679c8bf`.
-Whole-story evaluation is in progress and resumable by exact ledger key.
+Whole-story evaluation completed every one of the 27,866 task/story
+memberships. The atomically published `whole-story-nll.jsonl` contains exactly
+167,196 canonical rows: all six conditions for every membership.
 
 The first one-story-at-a-time evaluation measurement projected approximately
 25 hours. A bounded batching correction now scores up to 32 story windows
 together while limiting differentiable EBT to eight rows after a 32-row EBT
 attempt exceeded memory. The safe and 32-row attempts are byte-identical on
 all 186 common completed rows, and the safe path projects roughly two hours.
-Generation now shares routing and suffix scoring across stories and packs no
-more than five stories (30 condition rows) into a greedy call without changing
-any story's prompt or output budget. The focused noun/VAMP suite passes all 18
-tests after these corrections.
+Generation required a second bounded performance correction. The original
+decoder recomputed and recompiled the complete prefix after each token; even a
+five-story batch projected close to a day. The generic decoder now performs
+one prompt prefill, retains per-layer global/local attention KV caches, and
+advances the continuation in one compiled device loop. A direct CPU oracle test
+matches cached multi-step output to full-prefix recomputation with unequal
+prompt lengths, mixed attention layers, and different LoRA nodes per row.
+
+The noun evaluator generates a story/node continuation only once when several
+conditions choose that same node, then reconstructs all six labeled results.
+It sorts cases by their frozen reference-length budget and uses deterministic
+first-fit packing over host chunks of at most 128 suffix windows. Device calls
+contain at most 72 distinct story/node rows. This path preserves every prompt,
+condition, selected path, suffix loss, and per-story output budget. Its live
+process footprint is approximately 9.7 GiB. A measured 192-row experiment rose
+to 17.9 GiB and was rejected rather than weakening the frozen 12 GiB gate; all
+rows from performance experiments are named diagnostic files and are excluded
+from canonical loading and reports.
+
+The final generation ledger is currently running from row zero and persists
+each completed bounded chunk immediately. Its observed projection is roughly
+five to six hours. The current focused generation/noun/VAMP selection passes
+25 tests; the broader generation, GPT-Neo, LoRA, noun, and language-run
+selection passes 81 tests. Python compilation and scoped whitespace checks
+pass.
+`OPENROUTER_API_KEY` is not configured. After local generation finishes, the
+runner will still reconstruct and publish Markdown and standalone interactive
+HTML, set the manifest phase to `awaiting_judge_credentials`, and send the
+requested desktop notification. A later identical invocation will skip every
+local artifact and resume at external judging.
