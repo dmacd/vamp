@@ -14,6 +14,7 @@ from apm.data.text.tinyworlds_p.normalization import normalize_story_identity
 from apm.data.text.tinyworlds_q_semantic.contracts import (
     BENCHMARK_ID,
     ConceptDefinition,
+    QueryDirection,
     SemanticFact,
     SemanticQueryCatalog,
     SemanticQueryResult,
@@ -123,6 +124,34 @@ def average_paraphrases(
     results: tuple[SemanticQueryResult, ...],
 ) -> tuple[FactObservation, ...]:
     """Collapse templates into facts before any statistical aggregation."""
+    return _average_paraphrases(
+        results,
+        validation_template_count=3,
+        test_template_count=5,
+    )
+
+
+def average_direction_paraphrases(
+    results: tuple[SemanticQueryResult, ...],
+    direction: QueryDirection,
+) -> tuple[FactObservation, ...]:
+    """Collapse only one direction while retaining fact-level statistical units."""
+    if direction not in ("forward", "reverse"):
+        raise ValueError("directional fact aggregation requires forward or reverse")
+    selected = tuple(row for row in results if row.direction == direction)
+    return _average_paraphrases(
+        selected,
+        validation_template_count=2 if direction == "forward" else 1,
+        test_template_count=3 if direction == "forward" else 2,
+    )
+
+
+def _average_paraphrases(
+    results: tuple[SemanticQueryResult, ...],
+    *,
+    validation_template_count: int,
+    test_template_count: int,
+) -> tuple[FactObservation, ...]:
     if not results:
         raise ValueError("fact aggregation requires semantic query results")
     keys = tuple(
@@ -157,16 +186,24 @@ def average_paraphrases(
                     row.fact_id,
                 )
                 == key
-            )
+            ),
+            expected_count=(
+                validation_template_count
+                if key[2] == "validation"
+                else test_template_count
+            ),
         )
         for key in keys
     )
     return observations
 
 
-def _fact_observation(rows: tuple[SemanticQueryResult, ...]) -> FactObservation:
+def _fact_observation(
+    rows: tuple[SemanticQueryResult, ...],
+    *,
+    expected_count: int,
+) -> FactObservation:
     first = rows[0]
-    expected_count = 3 if first.split == "validation" else 5
     if (
         len(rows) != expected_count
         or len({row.template_id for row in rows}) != len(rows)
@@ -306,6 +343,7 @@ def specificity_effect(
     metric: FactMetricName,
     *,
     replicates: int = CANONICAL_BOOTSTRAP_REPLICATES,
+    identity: str = "node-specificity",
 ) -> BootstrapEstimate:
     """Bootstrap each forced adapter's own-world minus equal-weight other worlds."""
     if not observations or any(
@@ -350,7 +388,7 @@ def specificity_effect(
     )
     seed = int.from_bytes(
         sha256(
-            f"{BENCHMARK_ID}\0node-specificity\0{metric}\0{replicates}".encode(
+            f"{BENCHMARK_ID}\0{identity}\0{metric}\0{replicates}".encode(
                 "utf-8"
             )
         ).digest()[:16],
@@ -390,7 +428,7 @@ def specificity_effect(
         method="linear",
     )
     return BootstrapEstimate(
-        metric=f"node-specificity:{metric}",
+        metric=f"{identity}:{metric}",
         point=point,
         lower=float(lower),
         upper=float(upper),
@@ -540,6 +578,7 @@ __all__ = [
     "FactObservation",
     "GenerationInspection",
     "acquisition_effect",
+    "average_direction_paraphrases",
     "average_paraphrases",
     "bootstrap_fact_metric",
     "generation_prompts",

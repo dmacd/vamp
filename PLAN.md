@@ -270,6 +270,41 @@ report identity, and the final 11-test focused plus 80-test compatibility gates
 pass. See
 [`docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md`](docs/TINYWORLDS_Q_SEMANTIC_V1_EXECUTION_REPORT.md).
 
+A post-result presentation view is now published at
+[`docs/TINYWORLDS_Q_SEMANTIC_V1_INTERACTIVE_REPORT.html`](docs/TINYWORLDS_Q_SEMANTIC_V1_INTERACTIVE_REPORT.html).
+It is a dependency-free interactive HTML page derived from the authenticated
+completed report and transaction-published opened audit; it does not rerun a
+model or invoke the sealed catalog loader. It now applies a uniform
+forward-only scope: all displayed comparisons are recomputed from the 180
+sealed prompts that explicitly name cat, dog, bird, robot, or dragon, while all
+120 reverse prompts are excluded and disclosed. Fact paraphrases are averaged
+before deterministic 10,000-replicate equal-world bootstrapping. Forward
+accuracy is `0.427778` for base, `0.533333` for independent adapters,
+`0.455556` for the overwritten sequential adapter, `0.527778` for VAMP with
+the right node, and `0.516667` for content-start EBT routing. Independent
+acquisition is `+0.105556` (95% interval `[0.033333, 0.177778]`). The EBT
+routers select the named world with `0.772222` accuracy (95% interval
+`[0.700000, 0.838889]`), separating routing quality from their `0.516667`
+answer accuracy.
+
+The non-cherry-picked explorer fixes forward test paraphrase 00 for every
+fact, giving 60 cases balanced across all 60 facts and five worlds. Folded case
+cards expose the four choices, within-question preference, all nine method
+answers, routing choice, and reviewed construction evidence. Presentation
+presets cover 7 base misses repaired by the matching adapter, 27 misses that
+remain, 7 cases lost by sequential overwriting, and 2 cases where stored VAMP
+knowledge is correct but the content-start router selects a wrong node. The
+page also contains a plain-language guided tour, a routing-versus-answer table,
+forward-only per-world results, a percentage-point explanation, all 60
+reviewed facts, a method glossary, post-result disclosure, and exact source
+identities. Its deterministic HTML SHA-256 is
+`5db2ba80d592aabce69b5b18f14e54fc4a4a0f7fd59572269a7fd419030abe2d`.
+Focused statistics/parser/rendering/tamper tests pass, and a headless-browser
+interaction check verified five headline cards, five router rows, the absence
+of a direction filter, 60 total and 12 per-world cases, the two routing-miss
+examples, four choices per case, and explicit 300-source/180-included/
+120-excluded provenance.
+
 Semantic-v6 remains immutable negative evidence. Its seed-zero calibration
 stopped at `semantic_grid_failure`; its sealed test was never opened, and it
 must not be rerun or reinterpreted as query-v1 evidence.

@@ -187,6 +187,7 @@ from apm.data.text.tinyworlds_q_semantic.source import (
 )
 from apm.data.text.tinyworlds_q_semantic.statistics import (
     acquisition_effect,
+    average_direction_paraphrases,
     average_paraphrases,
     bootstrap_fact_metric,
     generation_prompts,
@@ -1018,6 +1019,14 @@ def test_fact_statistics_generation_and_atomic_ledgers(
     adapter_results = tuple(result(template, "independent", True) for template in test_templates)
     base_facts = average_paraphrases(base_results)
     adapter_facts = average_paraphrases(adapter_results)
+    forward_facts = average_direction_paraphrases(adapter_results, "forward")
+    reverse_facts = average_direction_paraphrases(adapter_results, "reverse")
+    assert len(forward_facts) == len(adapter_facts)
+    assert len(reverse_facts) == len(adapter_facts)
+    assert {item.template_count for item in forward_facts} == {3}
+    assert {item.template_count for item in reverse_facts} == {2}
+    with pytest.raises(ValueError, match="requires forward or reverse"):
+        average_direction_paraphrases(adapter_results, "sideways")  # type: ignore[arg-type]
     accuracy = bootstrap_fact_metric(
         adapter_facts,
         "accuracy",

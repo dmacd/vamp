@@ -309,6 +309,40 @@ from their frozen bindings. This completion is terminal for that transaction:
 future invocations may authenticate and return the report but cannot obtain a
 second test view.
 
+### Post-result presentation views
+
+An explanatory presentation may be derived after a sealed transaction is
+complete, but it is not a new evaluation. Its only test-bearing inputs are the
+transaction-published opened audit and the strictly authenticated final result
+ledger. Building it must not call the sealed catalog loader, score a model,
+choose a checkpoint, alter a router, or create another opening. The page binds
+and displays the final report, catalog, transaction, ledger, and opened-audit
+identities.
+
+The active five-world presentation is a forward-only post-result diagnostic.
+It recomputes every displayed accuracy, effect, interval, world breakdown, and
+router comparison from the 180 test prompts whose direction is `forward` and
+which explicitly name their concept. The 120 reverse prompts are excluded by
+one direction-level rule because some do not uniquely identify a routable
+world. This derived scope must be stated prominently and cannot replace or
+mutate the registered all-direction report. Directional paraphrases are still
+averaged within each fact before 10,000-replicate equal-world bootstrapping.
+
+Example selection is fixed structurally rather than chosen by outcome. The
+forward-only presentation uses test paraphrase 00 for every reviewed fact, so
+its 60 cases preserve all 60 facts and equal world weight while ensuring that
+every displayed prompt names its world. Success, persistent-miss,
+sequential-loss, and routing-miss views are filters over that fixed set; they
+do not change membership. Each case may expose the published choices, all
+final method outcomes, selected node, and reviewed construction evidence.
+
+Because the page reveals completed test prompts and outcomes, it must visibly
+identify itself as post-result material and must not become training, tuning,
+parent-selection, router-key, or checkpoint-selection input for a later run.
+A later experiment needs new sealed questions. Presentation HTML is standalone
+and dependency-free so its explanation, folding, filters, examples, and exact
+source bindings remain available as one portable file.
+
 Runtime evidence distinguishes the current `adaptation_or_resume` invocation
 from `adaptation_stage_wall_interval`. The latter is the elapsed filesystem
 interval from creation of the dedicated adaptation workspace to publication of
