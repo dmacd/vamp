@@ -88,15 +88,23 @@ four existing exhaustive/Hopfield/EBT task-free routes. Long stories are split
 into non-overlapping causal windows so every target, including EOS, contributes
 exactly once. The complete story supplies routing evidence; result rows stream
 atomically with selected paths, story- and token-normalized loss, perplexity,
-oracle match, and regret.
+oracle match, and regret. Node loss and frozen-content encoding share bounded
+chunks of at most 32 story windows. Differentiable EBT routing uses shape-stable
+sub-batches of at most eight rows; this is a resource bound only, and its
+per-row logits remain independent. A measured 32-row EBT attempt exhausted GPU
+memory, while eight-row results matched its completed rows exactly.
 
 Completion evaluation splits EOS-terminated tokens at the exact midpoint. A
 router-facing value contains only the first half. All six conditions receive
 that same prompt, true-suffix scoring mask, and greedy output budget; the saved
 second half is evaluator/reference data only. OpenRouter judging presents the
 prefix once and deterministically anonymizes the six completions plus the
-reference. Strict 1--5 scores and a complete seven-way ranking are persisted
-request by request and can resume without repeating completed calls.
+reference. Prefix routing and suffix loss use the same bounded multi-story
+evaluation path. Greedy calls retain the six-condition unit and may pack up to
+five stories, or 30 addressed rows, with right-padded prompts; extraction uses
+each story's true prefix length and its own frozen budget. Strict 1--5 scores
+and a complete seven-way ranking are persisted request by request and can
+resume without repeating completed calls.
 
 The final Markdown and standalone interactive HTML are projections of strict
 partition, adaptation, NLL, generation, and optional judge ledgers. They report

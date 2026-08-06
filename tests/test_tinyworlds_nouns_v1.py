@@ -414,6 +414,139 @@ def test_all_completion_conditions_share_one_batched_budget(monkeypatch) -> None
     assert {result.generated_token_count for result in results} == {5}
 
 
+def test_generation_batches_multiple_stories_without_mixing_budgets(monkeypatch) -> None:
+    calls: list[tuple[tuple[int, ...], tuple[int, ...], int, tuple[int, ...]]] = []
+
+    def generate(
+        _params,
+        _config,
+        prompt_ids,
+        attention_mask,
+        maximum_tokens,
+        **keywords,
+    ):
+        node_indices = tuple(int(value) for value in keywords["node_index"])
+        lengths = tuple(int(value) for value in np.sum(attention_mask, axis=1))
+        calls.append((prompt_ids.shape, lengths, maximum_tokens, node_indices))
+        output = np.pad(prompt_ids, ((0, 0), (0, maximum_tokens)))
+        for row, length in enumerate(lengths):
+            output[row, length : length + maximum_tokens] = 100 + row
+        return output
+
+    monkeypatch.setattr(noun_evaluation, "greedy_generate", generate)
+    monkeypatch.setattr(
+        noun_evaluation,
+        "_node_path",
+        lambda _adaptation, node_index: ("root", f"node-{node_index}"),
+    )
+    first_query = build_prefix_only_query(
+        _story_id("first-batched-story"),
+        (1, 2, 3, 4),
+        0,
+        32,
+    )
+    second_query = build_prefix_only_query(
+        _story_id("second-batched-story"),
+        (5, 6, 7, 8, 9, 10),
+        0,
+        32,
+    )
+    first = SimpleNamespace(query=first_query, budget=2)
+    second = SimpleNamespace(query=second_query, budget=4)
+    nodes = tuple(SimpleNamespace(node_id=f"node-{index}") for index in range(3))
+    adaptation = SimpleNamespace(
+        lora_config=object(),
+        model_config=SimpleNamespace(max_position_embeddings=32),
+        vamp_graph=SimpleNamespace(nodes=nodes),
+    )
+    selections = tuple(
+        {
+            condition: (condition_index + story_index) % len(nodes)
+            for condition_index, condition in enumerate(CONDITIONS)
+        }
+        for story_index in range(2)
+    )
+    results = noun_evaluation._generate_completion_chunk(
+        (first, second),
+        selections,
+        ((3.0, 6.0, 9.0), (4.0, 8.0, 12.0)),
+        (3, 4),
+        object(),
+        adaptation,
+        object(),
+        SimpleNamespace(decode=lambda values: " ".join(map(str, values))),
+        SimpleNamespace(eos_token_id=99, pad_token_id=0),
+    )
+    assert calls == [
+        (
+            (2 * len(CONDITIONS), 3),
+            (2,) * len(CONDITIONS) + (3,) * len(CONDITIONS),
+            4,
+            tuple(
+                selections[story][condition]
+                for story in range(2)
+                for condition in CONDITIONS
+            ),
+        )
+    ]
+    assert {result.generated_token_count for result in results[0]} == {2}
+    assert {result.generated_token_count for result in results[1]} == {4}
+    assert results[0][0].generated_continuation == "100 100"
+    assert results[1][0].generated_continuation == "106 106 106 106"
+
+
+def test_prefix_routing_uses_shape_stable_eight_story_subbatches(monkeypatch) -> None:
+    calls: list[tuple[str, tuple[int, ...], int]] = []
+
+    def route(condition, _params, _config, _packed, _lora, _book, batch, **kwargs):
+        calls.append(
+            (
+                condition,
+                batch.input_ids.shape,
+                kwargs["evaluation_microbatch_size"],
+            )
+        )
+        return SimpleNamespace(
+            selected_indices=np.arange(batch.input_ids.shape[0], dtype=np.int32) % 3
+        )
+
+    monkeypatch.setattr(noun_evaluation, "route_language_prefix", route)
+    cases = tuple(
+        SimpleNamespace(
+            oracle_index=index + 1,
+            query=build_prefix_only_query(
+                _story_id(f"routing-{index}"),
+                tuple(range(1, 7 + index)),
+                0,
+                64,
+            ),
+        )
+        for index in range(3)
+    )
+    adaptation = SimpleNamespace(
+        model_config=SimpleNamespace(max_position_embeddings=64),
+        lora_config=object(),
+        address_book=object(),
+    )
+    selections = noun_evaluation._prefix_chunk_selections(
+        cases,
+        object(),
+        adaptation,
+        object(),
+        32,
+    )
+    assert calls == [
+        (condition, (8, 32), 8)
+        for condition in CONDITIONS[2:]
+    ]
+    assert tuple(selection["oracle"] for selection in selections) == (1, 2, 3)
+    assert tuple(selection["vamp_exhaustive"] for selection in selections) == (
+        0,
+        1,
+        2,
+    )
+
+
 def test_parent_search_mask_keeps_raw_root_score_but_selects_nonroot() -> None:
     result = ParentSearchResult(
         node_ids=(NodeId("root"), NodeId("cat"), NodeId("dog")),

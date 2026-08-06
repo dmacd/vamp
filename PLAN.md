@@ -25,13 +25,25 @@ and external judge requests.
 The user manually approved that exact noun breakdown on 2026-08-05. Approval
 artifact `2d923cb596d0c01d51a3f0848fb8332a02006d791e218a8163a74505efc92bd5`
 binds the reviewed breakdown, decision snapshot, source identity, and statement
-of approval. No partition, GPU checkpoint, or result existed at the approval
-boundary. The canonical no-argument runner is now authorized to construct the
-partition, perform GPU preflight and training, evaluate, judge, and publish the
-report. Focused noun/VAMP tests pass, and the complete default CPU collection
-passes with 640 passed, 274 expected skips, and 11 marker-deselected tests. The
-next milestone is canonical experiment execution and artifact-by-artifact
-status recording; no experiment result exists yet.
+of approval. Canonical execution published partition
+`04ca2acf85f9505f0b7568b1696fbf290a8d2cbf78387dcfd6e815258fcc28b8`
+and passed GPU preflight `e15b669aca33ca9a200244e7742589532d3b4b0d2baa3bb3eddd727d0a5cd026`
+at 7.99 GiB. The fresh base improved held-in NLL from `1.41908` to
+`1.31084`, passed every gate, and published selection
+`c900a4fc47fcb8317900c83c53e61be33e0c0c856e624a8713e7348a57e27788`.
+All 42 VAMP stages and 84,000 adapter updates are complete; the last immutable
+stage is `c56516ed22a9e5ee89868330fc61031c90edf6ea1d2d5d2dcf75e191e9fd0156`.
+
+Whole-story evaluation is underway in an immediately persisted resumable
+ledger. Its initial one-story implementation projected roughly 25 hours, so
+the evaluator now shares 32 story windows across node scoring and caps only
+differentiable EBT sub-batches at eight rows. The safe run matches every byte
+of the completed 32-row EBT attempt and reduces the projection to roughly two
+hours. The upcoming generation path likewise batches routing/suffix scoring
+and packs at most five stories while preserving all six conditions and each
+story's exact token budget. Focused noun/VAMP tests pass with 18 tests. The
+next milestone is completing both local ledgers, external judging, and final
+Markdown/interactive-HTML publication.
 
 ## Completed TinyWorlds-Q Outcome
 

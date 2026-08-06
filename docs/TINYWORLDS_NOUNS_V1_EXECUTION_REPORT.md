@@ -93,3 +93,30 @@ and source hash
 The required next action is the canonical no-argument run, beginning with exact
 partition construction and then GPU preflight. Any future decision edit
 invalidates this approval and requires a rebuilt packet and new manual approval.
+
+## Approved execution progress
+
+The canonical run published partition
+`04ca2acf85f9505f0b7568b1696fbf290a8d2cbf78387dcfd6e815258fcc28b8`
+with 42 retained noun tasks. CUDA preflight
+`e15b669aca33ca9a200244e7742589532d3b4b0d2baa3bb3eddd727d0a5cd026`
+measured 7.99 GiB. The fresh seed-zero base passed its held-in gate: validation
+NLL moved from `1.4190817762` after epoch one to `1.3108355385` after epoch two,
+an improvement of `0.1082462377`. Selected-base identity is
+`c900a4fc47fcb8317900c83c53e61be33e0c0c856e624a8713e7348a57e27788`.
+
+All 42 VAMP nodes completed their fixed 2,000 updates. Final stage
+`c56516ed22a9e5ee89868330fc61031c90edf6ea1d2d5d2dcf75e191e9fd0156`
+binds adaptation manifest
+`3384c80f51f23ffad72d8b1261bd447ffaa7423ee619b6690b3d38e1a679c8bf`.
+Whole-story evaluation is in progress and resumable by exact ledger key.
+
+The first one-story-at-a-time evaluation measurement projected approximately
+25 hours. A bounded batching correction now scores up to 32 story windows
+together while limiting differentiable EBT to eight rows after a 32-row EBT
+attempt exceeded memory. The safe and 32-row attempts are byte-identical on
+all 186 common completed rows, and the safe path projects roughly two hours.
+Generation now shares routing and suffix scoring across stories and packs no
+more than five stories (30 condition rows) into a greedy call without changing
+any story's prompt or output budget. The focused noun/VAMP suite passes all 18
+tests after these corrections.

@@ -48,6 +48,7 @@ from apm.memory.address_refinement import EbtConfig
 
 WHOLE_STORY_FORMAT = "tinyworlds-nouns-whole-story-nll-v1"
 HALF_STORY_FORMAT = "tinyworlds-nouns-half-story-generation-v1"
+_MAX_EBT_ROWS = 8
 EvaluationProgress = Callable[[str, int, int], None]
 
 
@@ -142,6 +143,26 @@ class HalfStoryGenerationRow:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class _WholeStoryCase:
+    task_id: str
+    entry: StoryIndexEntry
+    oracle_index: int
+    windows: TokenBatch
+
+
+@dataclass(frozen=True, slots=True)
+class _HalfStoryCase:
+    task_id: str
+    entry: StoryIndexEntry
+    oracle_index: int
+    tokens: tuple[int, ...]
+    midpoint: int
+    query: PrefixOnlyQuery
+    suffix_windows: TokenBatch
+    budget: int
+
+
 def build_prefix_only_query(
     story_id: str,
     token_ids: tuple[int, ...],
@@ -214,56 +235,82 @@ def evaluate_whole_story_nll(
         for task, entries in entries_by_task.items()
         for entry in entries
     )
+    chunks = _whole_story_chunks(
+        partition,
+        entries_by_task,
+        completed,
+        store,
+        preset,
+    )
     with work.open("ab") as ledger:
-        for task_id, entries in entries_by_task.items():
-            oracle_index = partition.task_ids.index(task_id) + 1
-            for entry in entries:
-                keys = tuple((task_id, entry.story_id, condition) for condition in CONDITIONS)
-                if all(key in completed for key in keys):
-                    continue
-                tokens = store.tokens(entry)
-                windows = _story_windows(
-                    tokens,
-                    preset.context_length,
-                    partition.pad_token_id,
+        for cases in chunks:
+            windows = _stack_token_batches(tuple(case.windows for case in cases))
+            per_window_totals = _nll_by_node_per_window(
+                loaded.params,
+                adaptation,
+                packed,
+                windows,
+                preset.evaluation_chunk_size,
+            )
+            boundaries = np.cumsum(
+                (0,) + tuple(case.windows.input_ids.shape[0] for case in cases)
+            )
+            node_totals_by_case = tuple(
+                tuple(
+                    float(value)
+                    for value in np.sum(
+                        per_window_totals[:, start:stop],
+                        axis=1,
+                        dtype=np.float64,
+                    )
                 )
-                node_totals, token_count = _nll_by_node(
-                    loaded.params,
-                    adaptation,
-                    packed,
-                    windows,
-                    preset.evaluation_chunk_size,
+                for start, stop in zip(boundaries[:-1], boundaries[1:])
+            )
+            token_counts = tuple(
+                int(np.sum(case.windows.loss_mask)) for case in cases
+            )
+            selections = _whole_story_chunk_selections(
+                loaded.params,
+                adaptation,
+                packed,
+                windows,
+                boundaries,
+                node_totals_by_case,
+                preset.evaluation_chunk_size,
+            )
+            for case, node_totals, token_count, selected in zip(
+                cases,
+                node_totals_by_case,
+                token_counts,
+                selections,
+            ):
+                keys = tuple(
+                    (case.task_id, case.entry.story_id, condition)
+                    for condition in CONDITIONS
                 )
-                selected = _whole_story_selections(
-                    loaded.params,
-                    adaptation,
-                    packed,
-                    windows,
-                    node_totals,
-                    token_count,
-                    preset.evaluation_chunk_size,
-                )
-                oracle_mean = node_totals[oracle_index] / token_count
+                oracle_mean = node_totals[case.oracle_index] / token_count
                 for condition in CONDITIONS:
-                    key = (task_id, entry.story_id, condition)
+                    key = (case.task_id, case.entry.story_id, condition)
                     if key in completed:
                         continue
                     node_index = (
                         0
                         if condition == "base"
-                        else oracle_index
+                        else case.oracle_index
                         if condition == "oracle"
                         else selected[condition]
                     )
                     mean_nll = node_totals[node_index] / token_count
                     row = WholeStoryNllRow(
-                        task_noun=task_id,
-                        story_id=entry.story_id,
+                        task_noun=case.task_id,
+                        story_id=case.entry.story_id,
                         condition=condition,
                         selected_node=str(adaptation.vamp_graph.nodes[node_index].node_id),
                         selected_path=_node_path(adaptation, node_index),
-                        oracle_node=str(adaptation.vamp_graph.nodes[oracle_index].node_id),
-                        oracle_match=node_index == oracle_index,
+                        oracle_node=str(
+                            adaptation.vamp_graph.nodes[case.oracle_index].node_id
+                        ),
+                        oracle_match=node_index == case.oracle_index,
                         total_nll=node_totals[node_index],
                         token_count=token_count,
                         mean_nll=mean_nll,
@@ -332,70 +379,79 @@ def evaluate_half_story_generations(
     store = IndexedStoryStore(partition)
     total = sum(len(entries) for entries in entries_by_task.values())
     finished = len(completed)
+    chunks = _half_story_chunks(
+        partition,
+        entries_by_task,
+        completed,
+        store,
+        preset,
+        adaptation.model_config.max_position_embeddings,
+    )
     with work.open("ab") as ledger:
-        for task_id, entries in entries_by_task.items():
-            oracle_index = partition.task_ids.index(task_id) + 1
-            for entry in entries:
-                key = (task_id, entry.story_id)
-                if key in completed:
-                    continue
-                tokens = store.tokens(entry)
-                midpoint = len(tokens) // 2
-                query = build_prefix_only_query(
-                    entry.story_id,
-                    tokens,
-                    partition.pad_token_id,
-                    adaptation.model_config.max_position_embeddings,
+        for cases in chunks:
+            suffix_windows = _stack_token_batches(
+                tuple(case.suffix_windows for case in cases)
+            )
+            per_window_totals = _nll_by_node_per_window(
+                loaded.params,
+                adaptation,
+                packed,
+                suffix_windows,
+                preset.evaluation_chunk_size,
+            )
+            boundaries = np.cumsum(
+                (0,) + tuple(
+                    case.suffix_windows.input_ids.shape[0] for case in cases
                 )
-                selections = _prefix_selections(
-                    query,
-                    oracle_index,
-                    loaded.params,
-                    adaptation,
-                    packed,
-                    preset.evaluation_chunk_size,
+            )
+            node_totals_by_case = tuple(
+                tuple(
+                    float(value)
+                    for value in np.sum(
+                        per_window_totals[:, start:stop],
+                        axis=1,
+                        dtype=np.float64,
+                    )
                 )
-                suffix_windows = _story_windows(
-                    tokens,
-                    preset.context_length,
-                    partition.pad_token_id,
-                    first_target_index=midpoint,
-                )
-                node_totals, suffix_tokens = _nll_by_node(
-                    loaded.params,
-                    adaptation,
-                    packed,
-                    suffix_windows,
-                    preset.evaluation_chunk_size,
-                )
-                budget = min(
-                    len(tokens) - midpoint,
-                    adaptation.model_config.max_position_embeddings - midpoint,
-                )
-                results = _completion_results(
-                    selections,
-                    query,
-                    node_totals,
-                    suffix_tokens,
-                    budget,
-                    loaded.params,
-                    adaptation,
-                    packed,
-                    tokenizer,
-                    partition,
-                )
+                for start, stop in zip(boundaries[:-1], boundaries[1:])
+            )
+            suffix_token_counts = tuple(
+                int(np.sum(case.suffix_windows.loss_mask)) for case in cases
+            )
+            selections = _prefix_chunk_selections(
+                cases,
+                loaded.params,
+                adaptation,
+                packed,
+                preset.evaluation_chunk_size,
+            )
+            results_by_case = _completion_results_for_cases(
+                cases,
+                selections,
+                node_totals_by_case,
+                suffix_token_counts,
+                loaded.params,
+                adaptation,
+                packed,
+                tokenizer,
+                partition,
+                preset.evaluation_chunk_size,
+            )
+            for case, results in zip(cases, results_by_case):
                 row = HalfStoryGenerationRow(
-                    task_noun=task_id,
-                    story_id=entry.story_id,
-                    prefix=tokenizer.decode(query.prompt_token_ids),
-                    reference_continuation=tokenizer.decode(tokens[midpoint:]),
-                    full_original_story=store.text(entry),
+                    task_noun=case.task_id,
+                    story_id=case.entry.story_id,
+                    prefix=tokenizer.decode(case.query.prompt_token_ids),
+                    reference_continuation=tokenizer.decode(
+                        case.tokens[case.midpoint :]
+                    ),
+                    full_original_story=store.text(case.entry),
                     results=results,
                 )
                 ledger.write(canonical_json_bytes(row.as_record()))
                 ledger.flush()
                 os.fsync(ledger.fileno())
-                completed.add(key)
+                completed.add((case.task_id, case.entry.story_id))
                 finished += 1
                 if progress is not None:
                     progress("half-story-generation", finished, total)
@@ -403,6 +459,283 @@ def evaluate_half_story_generations(
         raise RuntimeError(f"generation ledger has {len(completed)} of {total} rows")
     os.replace(work, output)
     return output
+
+
+def _half_story_chunks(
+    partition: NounPartitionArtifact,
+    entries_by_task: dict[str, tuple[StoryIndexEntry, ...]],
+    completed: set[tuple[str, ...]],
+    store: IndexedStoryStore,
+    preset: NounsExperimentPreset,
+    maximum_position_embeddings: int,
+):
+    """Yield pending generation cases with bounded suffix-window storage."""
+    chunk: list[_HalfStoryCase] = []
+    window_count = 0
+    for task_id, entries in entries_by_task.items():
+        oracle_index = partition.task_ids.index(task_id) + 1
+        for entry in entries:
+            if (task_id, entry.story_id) in completed:
+                continue
+            tokens = store.tokens(entry)
+            midpoint = len(tokens) // 2
+            query = build_prefix_only_query(
+                entry.story_id,
+                tokens,
+                partition.pad_token_id,
+                maximum_position_embeddings,
+            )
+            suffix_windows = _story_windows(
+                tokens,
+                preset.context_length,
+                partition.pad_token_id,
+                first_target_index=midpoint,
+            )
+            budget = min(
+                len(tokens) - midpoint,
+                maximum_position_embeddings - midpoint,
+            )
+            case = _HalfStoryCase(
+                task_id,
+                entry,
+                oracle_index,
+                tokens,
+                midpoint,
+                query,
+                suffix_windows,
+                budget,
+            )
+            case_windows = suffix_windows.input_ids.shape[0]
+            if chunk and window_count + case_windows > preset.evaluation_chunk_size:
+                yield tuple(chunk)
+                chunk = []
+                window_count = 0
+            chunk.append(case)
+            window_count += case_windows
+            if window_count >= preset.evaluation_chunk_size:
+                yield tuple(chunk)
+                chunk = []
+                window_count = 0
+    if chunk:
+        yield tuple(chunk)
+
+
+def _prefix_chunk_selections(
+    cases: tuple[_HalfStoryCase, ...],
+    base_params,
+    adaptation: LanguageAdaptationArtifact,
+    packed,
+    evaluation_chunk_size: int,
+) -> tuple[dict[Condition, int], ...]:
+    """Route one bounded set of midpoint-only prefixes in shared GPU calls."""
+    batch = _stack_prefix_queries(cases, adaptation.model_config.max_position_embeddings)
+    original_count = len(cases)
+    router_chunk_size = min(evaluation_chunk_size, _MAX_EBT_ROWS)
+    padded_count = (
+        (original_count + router_chunk_size - 1) // router_chunk_size
+    ) * router_chunk_size
+    padded = _pad_router_batch(batch, padded_count)
+    selected_by_condition: dict[Condition, np.ndarray] = {}
+    for condition in CONDITIONS[2:]:
+        decision = route_language_prefix(
+            condition,
+            base_params,
+            adaptation.model_config,
+            packed,
+            adaptation.lora_config,
+            adaptation.address_book,
+            padded,
+            hopfield_config=HopfieldConfig(),
+            ebt_config=EbtConfig(),
+            evaluation_microbatch_size=router_chunk_size,
+        )
+        selected_by_condition[condition] = np.asarray(
+            decision.selected_indices,
+            dtype=np.int32,
+        )[:original_count]
+    return tuple(
+        {
+            "base": 0,
+            "oracle": case.oracle_index,
+            **{
+                condition: int(selected_by_condition[condition][index])
+                for condition in CONDITIONS[2:]
+            },
+        }
+        for index, case in enumerate(cases)
+    )
+
+
+def _stack_prefix_queries(
+    cases: tuple[_HalfStoryCase, ...],
+    maximum_position_embeddings: int,
+) -> RouterBatch:
+    if not cases:
+        raise ValueError("prefix stacking requires at least one generation case")
+    maximum_width = max(case.query.router_batch.input_ids.shape[1] for case in cases)
+    bucket_width = min(
+        maximum_position_embeddings,
+        ((maximum_width + 31) // 32) * 32,
+    )
+    shape = (len(cases), bucket_width)
+    inputs = np.zeros(shape, dtype=np.int32)
+    targets = np.zeros(shape, dtype=np.int32)
+    attention = np.zeros(shape, dtype=np.bool_)
+    losses = np.zeros(shape, dtype=np.bool_)
+    for row, case in enumerate(cases):
+        source = case.query.router_batch
+        width = source.input_ids.shape[1]
+        inputs[row, :width] = source.input_ids[0]
+        targets[row, :width] = source.target_ids[0]
+        attention[row, :width] = source.attention_mask[0]
+        losses[row, :width] = source.loss_mask[0]
+    return RouterBatch(inputs, attention, targets, losses)
+
+
+def _completion_results_for_cases(
+    cases: tuple[_HalfStoryCase, ...],
+    selections: tuple[dict[Condition, int], ...],
+    node_totals: tuple[tuple[float, ...], ...],
+    token_counts: tuple[int, ...],
+    base_params,
+    adaptation: LanguageAdaptationArtifact,
+    packed,
+    tokenizer: TextTokenizer,
+    partition: NounPartitionArtifact,
+    evaluation_chunk_size: int,
+) -> tuple[tuple[CompletionResult, ...], ...]:
+    """Generate several stories while keeping every story's six rows together."""
+    if not (
+        len(cases) == len(selections) == len(node_totals) == len(token_counts)
+    ):
+        raise ValueError("generation case metadata must have identical lengths")
+    maximum_cases = max(1, evaluation_chunk_size // len(CONDITIONS))
+    results: list[tuple[CompletionResult, ...]] = []
+    start = 0
+    while start < len(cases):
+        stop = start
+        maximum_prompt = 0
+        maximum_budget = 0
+        while stop < len(cases) and stop - start < maximum_cases:
+            candidate_prompt = max(
+                maximum_prompt,
+                len(cases[stop].query.prompt_token_ids),
+            )
+            candidate_budget = max(maximum_budget, cases[stop].budget)
+            if (
+                stop > start
+                and candidate_prompt + candidate_budget
+                > adaptation.model_config.max_position_embeddings
+            ):
+                break
+            maximum_prompt = candidate_prompt
+            maximum_budget = candidate_budget
+            stop += 1
+        if stop == start:
+            raise ValueError("one generation case exceeds the model context window")
+        results.extend(
+            _generate_completion_chunk(
+                cases[start:stop],
+                selections[start:stop],
+                node_totals[start:stop],
+                token_counts[start:stop],
+                base_params,
+                adaptation,
+                packed,
+                tokenizer,
+                partition,
+            )
+        )
+        start = stop
+    return tuple(results)
+
+
+def _generate_completion_chunk(
+    cases: tuple[_HalfStoryCase, ...],
+    selections: tuple[dict[Condition, int], ...],
+    node_totals: tuple[tuple[float, ...], ...],
+    token_counts: tuple[int, ...],
+    base_params,
+    adaptation: LanguageAdaptationArtifact,
+    packed,
+    tokenizer: TextTokenizer,
+    partition: NounPartitionArtifact,
+) -> tuple[tuple[CompletionResult, ...], ...]:
+    prompt_width = max(len(case.query.prompt_token_ids) for case in cases)
+    maximum_budget = max(case.budget for case in cases)
+    prompt = np.full(
+        (len(cases), prompt_width),
+        partition.pad_token_id,
+        dtype=np.int32,
+    )
+    attention = np.zeros_like(prompt, dtype=np.bool_)
+    for row, case in enumerate(cases):
+        width = len(case.query.prompt_token_ids)
+        prompt[row, :width] = case.query.prompt_token_ids
+        attention[row, :width] = True
+    node_indices = np.asarray(
+        tuple(
+            selection[condition]
+            for selection in selections
+            for condition in CONDITIONS
+        ),
+        dtype=np.int32,
+    )
+    generated = np.asarray(
+        greedy_generate(
+            base_params,
+            adaptation.model_config,
+            np.repeat(prompt, len(CONDITIONS), axis=0),
+            np.repeat(attention, len(CONDITIONS), axis=0),
+            maximum_budget,
+            eos_token_id=partition.eos_token_id,
+            pad_token_id=partition.pad_token_id,
+            lora_memory=packed,
+            lora_config=adaptation.lora_config,
+            node_index=node_indices,
+        )
+    )
+    results = []
+    for case_index, case in enumerate(cases):
+        first_row = case_index * len(CONDITIONS)
+        prompt_length = len(case.query.prompt_token_ids)
+        generated_rows = generated[
+            first_row : first_row + len(CONDITIONS),
+            prompt_length : prompt_length + case.budget,
+        ]
+        case_results = []
+        for condition, node_index, generated_row in zip(
+            CONDITIONS,
+            tuple(selections[case_index][condition] for condition in CONDITIONS),
+            generated_rows,
+        ):
+            eos_positions = np.flatnonzero(generated_row == partition.eos_token_id)
+            retained_count = (
+                int(eos_positions[0] + 1)
+                if len(eos_positions)
+                else len(generated_row)
+            )
+            retained = tuple(
+                int(value) for value in generated_row[:retained_count]
+            )
+            total_nll = node_totals[case_index][node_index]
+            case_results.append(
+                CompletionResult(
+                    condition=condition,
+                    selected_node=str(
+                        adaptation.vamp_graph.nodes[node_index].node_id
+                    ),
+                    selected_path=_node_path(adaptation, node_index),
+                    total_nll=total_nll,
+                    token_count=token_counts[case_index],
+                    mean_nll=total_nll / token_counts[case_index],
+                    generated_continuation=tokenizer.decode(retained),
+                    generated_token_count=retained_count,
+                    eos_reached=bool(len(eos_positions)),
+                )
+            )
+        results.append(tuple(case_results))
+    return tuple(results)
 
 
 def _completion_results(
@@ -470,15 +803,55 @@ def _completion_results(
     )
 
 
-def _whole_story_selections(
+def _whole_story_chunks(
+    partition: NounPartitionArtifact,
+    entries_by_task: dict[str, tuple[StoryIndexEntry, ...]],
+    completed: set[tuple[str, ...]],
+    store: IndexedStoryStore,
+    preset: NounsExperimentPreset,
+):
+    """Yield consecutive pending cases with a bounded total window count."""
+    chunk: list[_WholeStoryCase] = []
+    window_count = 0
+    for task_id, entries in entries_by_task.items():
+        oracle_index = partition.task_ids.index(task_id) + 1
+        for entry in entries:
+            if all(
+                (task_id, entry.story_id, condition) in completed
+                for condition in CONDITIONS
+            ):
+                continue
+            windows = _story_windows(
+                store.tokens(entry),
+                preset.context_length,
+                partition.pad_token_id,
+            )
+            case = _WholeStoryCase(task_id, entry, oracle_index, windows)
+            case_windows = windows.input_ids.shape[0]
+            if chunk and window_count + case_windows > preset.evaluation_chunk_size:
+                yield tuple(chunk)
+                chunk = []
+                window_count = 0
+            chunk.append(case)
+            window_count += case_windows
+            if window_count >= preset.evaluation_chunk_size:
+                yield tuple(chunk)
+                chunk = []
+                window_count = 0
+    if chunk:
+        yield tuple(chunk)
+
+
+def _whole_story_chunk_selections(
     base_params,
     adaptation: LanguageAdaptationArtifact,
     packed,
     windows: TokenBatch,
-    node_totals: tuple[float, ...],
-    token_count: int,
+    boundaries: np.ndarray,
+    node_totals_by_case: tuple[tuple[float, ...], ...],
     microbatch_size: int,
-) -> dict[Condition, int]:
+) -> tuple[dict[Condition, int], ...]:
+    """Select all four task-free routers for one bounded story chunk."""
     valid_count = len(adaptation.vamp_graph.nodes)
     router_batch = RouterBatch(
         windows.input_ids,
@@ -487,27 +860,109 @@ def _whole_story_selections(
         windows.loss_mask,
     )
     weights = np.sum(windows.loss_mask, axis=1, dtype=np.float64)
-    exhaustive = int(np.argmin(np.asarray(node_totals[:valid_count]) / token_count))
-    embeddings = np.asarray(
-        encode_frozen_base_content(
-            base_params,
-            adaptation.model_config,
-            jnp.asarray(windows.input_ids),
-            jnp.asarray(windows.attention_mask),
-            evaluation_microbatch_size=microbatch_size,
+    exhaustive = tuple(
+        int(np.argmin(np.asarray(node_totals[:valid_count])))
+        for node_totals in node_totals_by_case
+    )
+    embeddings = _frozen_embeddings_in_chunks(
+        base_params,
+        adaptation,
+        router_batch,
+        microbatch_size,
+    )
+    centroids = np.stack(
+        tuple(
+            np.average(
+                embeddings[start:stop],
+                axis=0,
+                weights=weights[start:stop],
+            )
+            for start, stop in zip(boundaries[:-1], boundaries[1:])
         )
     )
-    centroid = np.average(embeddings, axis=0, weights=weights)
-    centroid /= np.linalg.norm(centroid)
-    hopfield = int(
-        np.asarray(
+    norms = np.linalg.norm(centroids, axis=1, keepdims=True)
+    if np.any(~np.isfinite(norms)) or np.any(norms <= 0.0):
+        raise ValueError("whole-story content centroid is not finite and nonzero")
+    centroids /= norms
+    hopfield = tuple(
+        int(value)
+        for value in np.asarray(
             hopfield_address(
-                centroid[None, :], adaptation.address_book, HopfieldConfig()
+                centroids,
+                adaptation.address_book,
+                HopfieldConfig(),
             ).selected_indices
-        )[0]
+        )
     )
-    ebt = {}
+    ebt_by_condition: dict[str, tuple[int, ...]] = {}
+    ebt_chunk_size = min(microbatch_size, _MAX_EBT_ROWS)
     for condition in ("vamp_ebt_uniform", "vamp_ebt_hopfield"):
+        logits = _ebt_logits_in_chunks(
+            condition,
+            base_params,
+            adaptation,
+            packed,
+            router_batch,
+            ebt_chunk_size,
+        )
+        ebt_by_condition[condition] = tuple(
+            int(
+                np.argmax(
+                    np.average(
+                        logits[start:stop, :valid_count],
+                        axis=0,
+                        weights=weights[start:stop],
+                    )
+                )
+            )
+            for start, stop in zip(boundaries[:-1], boundaries[1:])
+        )
+    return tuple(
+        {
+            "base": 0,
+            "oracle": 0,
+            "vamp_exhaustive": exhaustive[index],
+            "vamp_hopfield": hopfield[index],
+            "vamp_ebt_uniform": ebt_by_condition["vamp_ebt_uniform"][index],
+            "vamp_ebt_hopfield": ebt_by_condition["vamp_ebt_hopfield"][index],
+        }
+        for index in range(len(node_totals_by_case))
+    )
+
+
+def _frozen_embeddings_in_chunks(
+    base_params,
+    adaptation: LanguageAdaptationArtifact,
+    batch: RouterBatch,
+    chunk_size: int,
+) -> np.ndarray:
+    outputs = []
+    for start in range(0, batch.input_ids.shape[0], chunk_size):
+        stop = min(start + chunk_size, batch.input_ids.shape[0])
+        chunk = _pad_router_batch(_slice_router_batch(batch, start, stop), chunk_size)
+        encoded = encode_frozen_base_content(
+            base_params,
+            adaptation.model_config,
+            jnp.asarray(chunk.input_ids),
+            jnp.asarray(chunk.attention_mask),
+            evaluation_microbatch_size=chunk_size,
+        )
+        outputs.append(np.asarray(encoded)[: stop - start])
+    return np.concatenate(outputs, axis=0)
+
+
+def _ebt_logits_in_chunks(
+    condition: str,
+    base_params,
+    adaptation: LanguageAdaptationArtifact,
+    packed,
+    batch: RouterBatch,
+    chunk_size: int,
+) -> np.ndarray:
+    outputs = []
+    for start in range(0, batch.input_ids.shape[0], chunk_size):
+        stop = min(start + chunk_size, batch.input_ids.shape[0])
+        chunk = _pad_router_batch(_slice_router_batch(batch, start, stop), chunk_size)
         result = trace_ebt_language_prefix(
             condition,
             base_params,
@@ -515,46 +970,12 @@ def _whole_story_selections(
             packed,
             adaptation.lora_config,
             adaptation.address_book,
-            router_batch,
+            chunk,
             hopfield_config=HopfieldConfig(),
             ebt_config=EbtConfig(),
         )
-        logits = np.asarray(result.final_node_logits)[:, :valid_count]
-        ebt[condition] = int(np.argmax(np.average(logits, axis=0, weights=weights)))
-    return {
-        "base": 0,
-        "oracle": 0,
-        "vamp_exhaustive": exhaustive,
-        "vamp_hopfield": hopfield,
-        "vamp_ebt_uniform": ebt["vamp_ebt_uniform"],
-        "vamp_ebt_hopfield": ebt["vamp_ebt_hopfield"],
-    }
-
-
-def _prefix_selections(
-    query: PrefixOnlyQuery,
-    oracle_index: int,
-    base_params,
-    adaptation: LanguageAdaptationArtifact,
-    packed,
-    microbatch_size: int,
-) -> dict[Condition, int]:
-    selected: dict[Condition, int] = {"base": 0, "oracle": oracle_index}
-    for condition in CONDITIONS[2:]:
-        decision = route_language_prefix(
-            condition,
-            base_params,
-            adaptation.model_config,
-            packed,
-            adaptation.lora_config,
-            adaptation.address_book,
-            query.router_batch,
-            hopfield_config=HopfieldConfig(),
-            ebt_config=EbtConfig(),
-            evaluation_microbatch_size=microbatch_size,
-        )
-        selected[condition] = int(np.asarray(decision.selected_indices)[0])
-    return selected
+        outputs.append(np.asarray(result.final_node_logits)[: stop - start])
+    return np.concatenate(outputs, axis=0)
 
 
 def _story_windows(
@@ -583,6 +1004,113 @@ def _story_windows(
     return TokenBatch(inputs, attention, targets, losses)
 
 
+def _stack_token_batches(batches: tuple[TokenBatch, ...]) -> TokenBatch:
+    if not batches:
+        raise ValueError("token-batch stacking requires at least one batch")
+    return TokenBatch(
+        np.concatenate(tuple(batch.input_ids for batch in batches), axis=0),
+        np.concatenate(tuple(batch.attention_mask for batch in batches), axis=0),
+        np.concatenate(tuple(batch.target_ids for batch in batches), axis=0),
+        np.concatenate(tuple(batch.loss_mask for batch in batches), axis=0),
+    )
+
+
+def _slice_router_batch(batch: RouterBatch, start: int, stop: int) -> RouterBatch:
+    return RouterBatch(
+        batch.input_ids[start:stop],
+        batch.attention_mask[start:stop],
+        batch.target_ids[start:stop],
+        batch.loss_mask[start:stop],
+    )
+
+
+def _pad_router_batch(batch: RouterBatch, row_count: int) -> RouterBatch:
+    current = batch.input_ids.shape[0]
+    if current <= 0 or current > row_count:
+        raise ValueError("router padding requires one to row_count source rows")
+    if current == row_count:
+        return batch
+    repeats = row_count - current
+
+    def padded(values: np.ndarray) -> np.ndarray:
+        return np.concatenate((values, np.repeat(values[:1], repeats, axis=0)), axis=0)
+
+    return RouterBatch(
+        padded(batch.input_ids),
+        padded(batch.attention_mask),
+        padded(batch.target_ids),
+        padded(batch.loss_mask),
+    )
+
+
+def _pad_token_batch(batch: TokenBatch, row_count: int) -> TokenBatch:
+    current = batch.input_ids.shape[0]
+    if current <= 0 or current > row_count:
+        raise ValueError("token padding requires one to row_count source rows")
+    if current == row_count:
+        return batch
+    repeats = row_count - current
+
+    def padded(values: np.ndarray) -> np.ndarray:
+        return np.concatenate((values, np.repeat(values[:1], repeats, axis=0)), axis=0)
+
+    return TokenBatch(
+        padded(batch.input_ids),
+        padded(batch.attention_mask),
+        padded(batch.target_ids),
+        padded(batch.loss_mask),
+    )
+
+
+def _nll_by_node_per_window(
+    base_params,
+    adaptation: LanguageAdaptationArtifact,
+    packed,
+    windows: TokenBatch,
+    microbatch_size: int,
+) -> np.ndarray:
+    """Return bounded, shape-stable node totals for every input window."""
+    window_count = windows.input_ids.shape[0]
+    node_count = len(adaptation.vamp_graph.nodes)
+    totals = np.empty((node_count, window_count), dtype=np.float64)
+    for node_index in range(node_count):
+        coefficients = edge_coefficients_for_node(packed, node_index)
+        for start in range(0, window_count, microbatch_size):
+            stop = min(start + microbatch_size, window_count)
+            chunk = _pad_token_batch(
+                TokenBatch(
+                    windows.input_ids[start:stop],
+                    windows.attention_mask[start:stop],
+                    windows.target_ids[start:stop],
+                    windows.loss_mask[start:stop],
+                ),
+                microbatch_size,
+            )
+            result = apply_gpt_neo(
+                base_params,
+                adaptation.model_config,
+                jnp.asarray(chunk.input_ids),
+                jnp.asarray(chunk.attention_mask),
+                lora_memory=packed,
+                edge_coefficients=coefficients,
+                lora_config=adaptation.lora_config,
+                training=False,
+            )
+            losses = per_token_nll(
+                result.logits,
+                jnp.asarray(chunk.target_ids),
+            )
+            row_totals = np.asarray(
+                jnp.sum(
+                    losses * jnp.asarray(chunk.loss_mask, dtype=jnp.float32),
+                    axis=-1,
+                ),
+                dtype=np.float64,
+            )
+            totals[node_index, start:stop] = row_totals[: stop - start]
+    return totals
+
+
 def _nll_by_node(
     base_params,
     adaptation: LanguageAdaptationArtifact,
@@ -591,36 +1119,15 @@ def _nll_by_node(
     microbatch_size: int,
 ) -> tuple[tuple[float, ...], int]:
     token_count = int(np.sum(windows.loss_mask))
-    totals = []
-    for node_index in range(len(adaptation.vamp_graph.nodes)):
-        node_total = 0.0
-        coefficients = edge_coefficients_for_node(packed, node_index)
-        for start in range(0, windows.input_ids.shape[0], microbatch_size):
-            stop = min(start + microbatch_size, windows.input_ids.shape[0])
-            result = apply_gpt_neo(
-                base_params,
-                adaptation.model_config,
-                jnp.asarray(windows.input_ids[start:stop]),
-                jnp.asarray(windows.attention_mask[start:stop]),
-                lora_memory=packed,
-                edge_coefficients=coefficients,
-                lora_config=adaptation.lora_config,
-                training=False,
-            )
-            losses = per_token_nll(
-                result.logits,
-                jnp.asarray(windows.target_ids[start:stop]),
-            )
-            node_total += float(
-                jnp.sum(
-                    losses
-                    * jnp.asarray(
-                        windows.loss_mask[start:stop], dtype=jnp.float32
-                    )
-                )
-            )
-        totals.append(node_total)
-    return tuple(totals), token_count
+    per_window = _nll_by_node_per_window(
+        base_params,
+        adaptation,
+        packed,
+        windows,
+        microbatch_size,
+    )
+    totals = np.sum(per_window, axis=1, dtype=np.float64)
+    return tuple(float(value) for value in totals), token_count
 
 
 def _node_path(
