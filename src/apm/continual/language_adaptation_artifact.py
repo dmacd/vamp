@@ -18,6 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from apm.continual.language_baseline_training import LanguageAdaptationBaselines
+from apm.continual.language_run import LanguageVampRun
 from apm.continual.language_tasks import AddressBook
 from apm.lm.checkpoint import BaseCheckpointRef
 from apm.lm.config import GptNeoConfig
@@ -291,6 +292,63 @@ def extract_language_adaptation_artifact(
         ),
         max_nodes=adaptations.vamp.max_nodes,
         max_edges=adaptations.vamp.max_edges,
+    )
+
+
+def extract_language_vamp_artifact(
+    run: LanguageVampRun,
+    model_config: GptNeoConfig,
+    lora_config: LoraConfig,
+    train_config: LmTrainConfig,
+    *,
+    config_hashes: Mapping[str, str] | None = None,
+) -> LanguageAdaptationArtifact:
+    """Extract a strict VAMP-only artifact without fabricating baseline adapters."""
+    if not isinstance(run, LanguageVampRun):
+        raise TypeError("run must be a LanguageVampRun")
+    required_hashes = _required_config_hashes(
+        model_config,
+        lora_config,
+        train_config,
+    )
+    merged_hashes = dict(config_hashes or {})
+    for name, digest in required_hashes:
+        if name in merged_hashes and merged_hashes[name] != digest:
+            raise ValueError(f"supplied {name} config hash does not match its config")
+        merged_hashes[name] = digest
+    vamp_only_hash = _payload_sha256({"mode": "vamp_only"})
+    if (
+        "adaptation_mode" in merged_hashes
+        and merged_hashes["adaptation_mode"] != vamp_only_hash
+    ):
+        raise ValueError("supplied adaptation mode hash is not VAMP-only")
+    merged_hashes["adaptation_mode"] = vamp_only_hash
+    unused_rng = np.asarray(jax.random.PRNGKey(0), dtype=np.uint32)
+    return LanguageAdaptationArtifact(
+        base_checkpoint=run.base_checkpoint,
+        model_config=model_config,
+        lora_config=lora_config,
+        train_config=train_config,
+        config_hashes=tuple(merged_hashes.items()),
+        task_order=tuple(task.task_id for task in run.completed_tasks),
+        sequential_stages=(),
+        independent_adapters=(),
+        vamp_graph=run.graph,
+        address_book=run.address_book,
+        rng_state=LanguageAdaptationRngState(unused_rng, unused_rng, run.rng_key),
+        vamp_stages=tuple(
+            VampTrainingRecord(
+                stage.stage_index,
+                stage.task_id,
+                stage.parent_node_index,
+                stage.parent_node_id,
+                stage.parent_mean_node_nll,
+                stage.candidate_step_losses,
+            )
+            for stage in run.stage_metrics
+        ),
+        max_nodes=run.max_nodes,
+        max_edges=run.max_edges,
     )
 
 
@@ -928,15 +986,34 @@ def _validate_language_adaptation_artifact(
     ):
         raise ValueError("task_order must contain unique nonempty task IDs")
     expected_indices = tuple(range(1, len(artifact.task_order) + 1))
+    baseline_presence = tuple(
+        bool(getattr(artifact, field_name))
+        for field_name in ("sequential_stages", "independent_adapters")
+    )
+    if baseline_presence[0] != baseline_presence[1]:
+        raise ValueError("adaptation baseline families must both be present or absent")
+    if (
+        not baseline_presence[0]
+        and actual_hashes.get("adaptation_mode")
+        != _payload_sha256({"mode": "vamp_only"})
+    ):
+        raise ValueError("baseline-free artifacts must declare VAMP-only mode")
     for field_name in ("sequential_stages", "independent_adapters"):
         records = getattr(artifact, field_name)
         if (
             not isinstance(records, tuple)
             or any(not isinstance(record, AdapterTrainingRecord) for record in records)
-            or tuple(record.stage_index for record in records) != expected_indices
-            or tuple(record.task_id for record in records) != artifact.task_order
+            or (
+                records
+                and (
+                    tuple(record.stage_index for record in records) != expected_indices
+                    or tuple(record.task_id for record in records) != artifact.task_order
+                )
+            )
         ):
-            raise ValueError(f"{field_name} must align with task_order")
+            raise ValueError(
+                f"{field_name} must be empty or align completely with task_order"
+            )
         if any(len(record.training_trace) != artifact.train_config.steps for record in records):
             raise ValueError(f"{field_name} traces must match the training budget")
         for record in records:
@@ -1706,6 +1783,7 @@ __all__ = [
     "LanguageAdaptationRngState",
     "VampTrainingRecord",
     "extract_language_adaptation_artifact",
+    "extract_language_vamp_artifact",
     "flatten_lora_edge",
     "load_language_adaptation_artifact",
     "save_language_adaptation_artifact",

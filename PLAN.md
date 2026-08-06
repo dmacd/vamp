@@ -1,6 +1,39 @@
 # Development Plan
 
-## Current Outcome
+## Active Outcome — TinyWorlds Noun-Overlap v1
+
+The isolated `tinyworlds-nouns-v1` engine is implemented through partitioning,
+fresh-base training, VAMP-only adaptation, both evaluations, OpenRouter
+judging, and artifact-derived Markdown/interactive-HTML reporting. The generic
+language parent scorer now accepts an immutable eligibility mask while retaining
+every raw score, language tasks can consume lazy indexed batch sequences, and
+adaptation artifacts can explicitly represent a VAMP-only run without
+fabricating independent or sequential baselines.
+
+The pinned TinyStories scan completed on 2026-08-05 and published strict review
+packet
+`df60e7d00e5887f97c3e867c68a214333190595c15d1e0d39999b653d0eeed35`.
+It authenticated 2,717,495 training records and 27,630 validation records,
+yielding 2,717,494 unique training stories. The proposed greedy base order is
+`mother, home, bird`, covering 51.970% of unique training stories and 54.470%
+of their tokens. The current decisions project 42 adapter tasks, ten included
+families below the 256/64 task threshold, and two explicit exclusions (`saw`
+and `friend`). The 42 task validation sets contain 27,866 nonexclusive
+task/story memberships; this is also the projected number of generation cases
+and external judge requests.
+
+The user manually approved that exact noun breakdown on 2026-08-05. Approval
+artifact `2d923cb596d0c01d51a3f0848fb8332a02006d791e218a8163a74505efc92bd5`
+binds the reviewed breakdown, decision snapshot, source identity, and statement
+of approval. No partition, GPU checkpoint, or result existed at the approval
+boundary. The canonical no-argument runner is now authorized to construct the
+partition, perform GPU preflight and training, evaluate, judge, and publish the
+report. Focused noun/VAMP tests pass, and the complete default CPU collection
+passes with 640 passed, 274 expected skips, and 11 marker-deselected tests. The
+next milestone is canonical experiment execution and artifact-by-artifact
+status recording; no experiment result exists yet.
+
+## Completed TinyWorlds-Q Outcome
 
 The generic `tinyworlds-q-semantic-v1` query benchmark is implemented and its
 CPU gates pass. It is a separate package and artifact family; no semantic-v6

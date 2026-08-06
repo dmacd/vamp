@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import NamedTuple, Sequence
+from collections.abc import Sequence
+from typing import NamedTuple
 
 import jax
 import numpy as np
@@ -129,7 +130,7 @@ class LanguageTask:
     """One immutable training task with fixed parent and content-key probes."""
 
     task_id: TaskId
-    train_batches: tuple[TokenBatch, ...]
+    train_batches: Sequence[TokenBatch]
     validation_examples: tuple[LanguageEvaluationExample, ...]
     test_examples: tuple[LanguageEvaluationExample, ...]
     parent_probes: tuple[RouterBatch, ...] = ()
@@ -138,10 +139,15 @@ class LanguageTask:
     def __post_init__(self) -> None:
         if not self.task_id:
             raise ValueError("language task ID must not be empty")
-        if not self.train_batches:
+        if not isinstance(self.train_batches, Sequence) or not self.train_batches:
             raise ValueError("language tasks must contain training batches")
-        if any(not isinstance(batch, TokenBatch) for batch in self.train_batches):
-            raise TypeError("train_batches must contain TokenBatch values")
+        batches_to_validate = (
+            self.train_batches
+            if type(self.train_batches) is tuple
+            else (self.train_batches[0], self.train_batches[-1])
+        )
+        if any(not isinstance(batch, TokenBatch) for batch in batches_to_validate):
+            raise TypeError("train_batches must expose TokenBatch values")
         examples = self.validation_examples + self.test_examples
         if any(example.task_id != self.task_id for example in examples):
             raise ValueError("evaluation example task IDs must match their LanguageTask")

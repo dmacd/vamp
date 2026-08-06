@@ -1,5 +1,111 @@
 # VAMP Technical Design
 
+## TinyWorlds Noun-Overlap v1
+
+`tinyworlds-nouns-v1` is an isolated, descriptive continual-learning
+experiment over the pinned TinyStories V2/GPT-4 archive. It does not reuse or
+modify TinyWorlds-Q, semantic-v6, or their checkpoints. Its artifacts live only
+under `data/tinyworlds-nouns-v1/`, `checkpoints/tinyworlds-nouns-v1/`, and
+`results/language_cl/tinyworlds-nouns-v1/`.
+
+### Noun authority and manual boundary
+
+The noun manifest preserves the complete ordered `TINYSTORIES_TOPICS` catalog.
+Each family owns explicit case-folded whole-word forms; there is no parser,
+embedding classifier, WordNet expansion, or model-authored label. An editable
+decision document records inclusion, exact forms, category, and a review
+reason for every family. The default proposal calls out known ambiguous
+families instead of silently treating their surface counts as semantic truth.
+
+The pinned train and official-validation files are verified while being
+streamed. Unicode-normalized stories are globally deduplicated by SHA-256, with
+official-validation provenance taking precedence over an identical training
+story. The disk-backed scan records the normalized bytes, EOS-terminated GPT-2
+tokens, all matched families, per-form counts, and deterministic complete-story
+examples. Its review packet contains the full noun list, projected role,
+threshold evidence, greedy base-selection trace, exact forms, prevalence, and
+story provenance in canonical JSON, Markdown, and standalone folding HTML.
+
+Partition construction, JAX device discovery, preflight, training, evaluation,
+and judging are unavailable until a manual approval artifact names the exact
+breakdown hash. The approval also binds the decision document and pinned source
+identity. Editing a form or decision invalidates the scan binding and approval;
+changing any review-packet byte is detected before the packet can be reused.
+
+### Overlapping partition semantics
+
+Included noun families are ordered by descending unique training-story count
+and noun ID. The base concept prefix stops at the first addition whose union
+covers at least 50% of all unique training stories. Base membership remains a
+union: a story is not removed because it also names a later task noun. A
+deterministic 2% hash slice of this union is held inside the training source for
+epoch-level base validation, keeping the official validation aggregate
+untouched for final task evaluation.
+
+Every remaining family with at least 256 training and 64 official-validation
+stories becomes a task, ordered by descending training mass and noun ID. Task
+membership is intentionally nonexclusive. Thirty-six context-fitting,
+namespaced lowest-hash training stories are the task's parent/content-key
+probes and are removed only from that task's update stream. Thirty-six
+deterministic non-held-out base stories form the root key. The partition ledger
+persists exact matched surface forms as well as all family memberships; task
+summaries retain base overlap and every pairwise training overlap.
+
+All official-validation task/story memberships are used for whole-story loss.
+Midpoint generation uses every validation membership whose exact first half
+contains at least one causal transition and leaves at least one position in the
+2,048-position model. This is a mechanical model-capacity eligibility rule,
+not a fixed-size sample. A story shared by two task nouns is evaluated twice
+with different oracle nodes.
+
+### Fresh base and VAMP-only graph
+
+The base is a fresh seed-zero eight-layer GPT-Neo model trained for two epochs
+with 256-token, 32-story microbatches and eight-way gradient accumulation.
+Resume artifacts bind the full model configuration, tokenizer-bearing
+partition, optimizer schedule, RNG, exact epoch/batch cursor, and preceding GPU
+preflight. Optimizer state is committed every 1,000 updates and at epoch
+boundaries. Publication requires finite training and validation loss, lower
+validation NLL after epoch two, and a measured allocator peak no greater than
+12 GiB; it imposes no semantic or absolute-NLL cutoff.
+
+Adaptation trains only rank-eight, alpha-eight VAMP LoRA edges for 2,000 updates
+per noun. The generic parent scorer always records raw mean prefix NLL for root
+and every existing task node. Stage one can select only root; later stages use
+the shared eligibility mask to select the insertion-order NLL argmin among
+non-root nodes. Candidate training applies the selected node's complete path,
+then commits a fresh edge. Every prior edge checksum is rechecked. Each stage
+strictly persists the graph, tensors, address book, VAMP RNG, raw parent scores,
+eligibility, content keys, loss trace, source-consumption counts, and exact
+partition/base/config bindings. VAMP-only adaptation artifacts explicitly
+declare their mode rather than fabricating empty independent or sequential
+baselines.
+
+### Evaluation and presentation
+
+Whole-story evaluation scores `base`, the named task's `oracle` node, and the
+four existing exhaustive/Hopfield/EBT task-free routes. Long stories are split
+into non-overlapping causal windows so every target, including EOS, contributes
+exactly once. The complete story supplies routing evidence; result rows stream
+atomically with selected paths, story- and token-normalized loss, perplexity,
+oracle match, and regret.
+
+Completion evaluation splits EOS-terminated tokens at the exact midpoint. A
+router-facing value contains only the first half. All six conditions receive
+that same prompt, true-suffix scoring mask, and greedy output budget; the saved
+second half is evaluator/reference data only. OpenRouter judging presents the
+prefix once and deterministically anonymizes the six completions plus the
+reference. Strict 1--5 scores and a complete seven-way ranking are persisted
+request by request and can resume without repeating completed calls.
+
+The final Markdown and standalone interactive HTML are projections of strict
+partition, adaptation, NLL, generation, and optional judge ledgers. They report
+story- and token-weighted loss, per-noun acquisition, all routing accuracies and
+regrets, confusion matrices, graph topology, overlap counts, descriptive
+overlap correlations, judge means/ranks/pairwise wins, and a deterministic mix
+of strong, weak, correctly routed, and misrouted story examples. No scientific
+pass/fail threshold is attached to this experiment.
+
 ## TinyWorlds-Q Semantic-v1 Query-Native Knowledge Benchmark
 
 `tinyworlds-q-semantic-v1` is a separate archive-grounded benchmark for direct

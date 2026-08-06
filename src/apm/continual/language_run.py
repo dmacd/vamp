@@ -101,6 +101,7 @@ class ParentSearchResult:
     selected_node_index: int
     selected_node_id: NodeId
     scoring_basis: str
+    eligible_node_mask: tuple[bool, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.node_ids or len(set(self.node_ids)) != len(self.node_ids):
@@ -115,13 +116,29 @@ class ParentSearchResult:
             or not 0 <= self.selected_node_index < len(self.node_ids)
         ):
             raise ValueError("selected parent index is outside the candidate nodes")
-        expected_index = int(np.argmin(np.asarray(self.mean_candidate_nll)))
+        eligible_node_mask = self.eligible_node_mask or (True,) * len(self.node_ids)
+        if (
+            type(eligible_node_mask) is not tuple
+            or len(eligible_node_mask) != len(self.node_ids)
+            or any(type(value) is not bool for value in eligible_node_mask)
+            or not any(eligible_node_mask)
+        ):
+            raise ValueError("parent search eligibility must select current nodes")
+        eligible_scores = np.where(
+            np.asarray(eligible_node_mask, dtype=np.bool_),
+            np.asarray(self.mean_candidate_nll),
+            np.inf,
+        )
+        expected_index = int(np.argmin(eligible_scores))
         if self.selected_node_index != expected_index:
-            raise ValueError("parent selection must use insertion-order argmin ties")
+            raise ValueError(
+                "parent selection must use insertion-order argmin over eligible nodes"
+            )
         if self.selected_node_id != self.node_ids[self.selected_node_index]:
             raise ValueError("selected parent node ID must match its index")
         if not self.scoring_basis:
             raise ValueError("parent search scoring_basis must not be empty")
+        object.__setattr__(self, "eligible_node_mask", eligible_node_mask)
 
 
 def score_parent_nodes(
@@ -131,9 +148,10 @@ def score_parent_nodes(
     model_config: GptNeoConfig,
     lora_config: LoraConfig,
     *,
+    eligible_node_mask: tuple[bool, ...] | None = None,
     evaluation_microbatch_size: int | None = None,
 ) -> ParentSearchResult:
-    """Score every current node by mean prefix NLL without changing run state."""
+    """Score every node and select the eligible insertion-order NLL argmin."""
     if not isinstance(run, LanguageVampRun):
         raise TypeError("run must be a LanguageVampRun")
     _validate_base_checksum(run.base_checkpoint, base_params, model_config)
@@ -162,14 +180,35 @@ def score_parent_nodes(
         run.max_nodes,
     )
     valid_means = padded_means[: len(run.graph.nodes)]
-    selected_index = int(np.argmin(np.asarray(valid_means)))
     node_ids = memory_node_ids(run.graph)
+    resolved_eligibility = (
+        (True,) * len(node_ids)
+        if eligible_node_mask is None
+        else eligible_node_mask
+    )
+    if (
+        type(resolved_eligibility) is not tuple
+        or len(resolved_eligibility) != len(node_ids)
+        or any(type(value) is not bool for value in resolved_eligibility)
+        or not any(resolved_eligibility)
+    ):
+        raise ValueError("eligible_node_mask must select at least one current node")
+    selected_index = int(
+        np.argmin(
+            np.where(
+                np.asarray(resolved_eligibility, dtype=np.bool_),
+                np.asarray(valid_means),
+                np.inf,
+            )
+        )
+    )
     return ParentSearchResult(
         node_ids=node_ids,
         mean_candidate_nll=valid_means,
         selected_node_index=selected_index,
         selected_node_id=node_ids[selected_index],
         scoring_basis="mean_prefix_nll",
+        eligible_node_mask=resolved_eligibility,
     )
 
 

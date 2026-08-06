@@ -61,6 +61,7 @@ from apm.continual.knowledge_training import (
 from apm.continual.language_adaptation_artifact import (
     LanguageAdaptationArtifact,
     extract_language_adaptation_artifact,
+    extract_language_vamp_artifact,
     load_language_adaptation_artifact,
     save_language_adaptation_artifact,
 )
@@ -114,6 +115,7 @@ __all__ = [
     "validate_parent_counterfactual_resume",
     "LanguageAdaptationArtifact",
     "extract_language_adaptation_artifact",
+    "extract_language_vamp_artifact",
     "load_language_adaptation_artifact",
     "save_language_adaptation_artifact",
 ]

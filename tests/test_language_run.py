@@ -6,6 +6,11 @@ import jax
 import numpy as np
 import pytest
 
+from apm.continual.language_adaptation_artifact import (
+    extract_language_vamp_artifact,
+    load_language_adaptation_artifact,
+    save_language_adaptation_artifact,
+)
 from apm.continual.language_run import (
     advance_language_vamp_run,
     init_language_vamp_run,
@@ -194,6 +199,7 @@ def test_two_task_transition_is_immutable_stable_and_deterministic() -> None:
             params,
             config,
             lora_config,
+            eligible_node_mask=(False, True),
         ),
         key_probe_count=1,
     )
@@ -226,6 +232,7 @@ def test_two_task_transition_is_immutable_stable_and_deterministic() -> None:
             params,
             config,
             lora_config,
+            eligible_node_mask=(False, True),
         ),
         key_probe_count=1,
     )
@@ -245,10 +252,8 @@ def test_two_task_transition_is_immutable_stable_and_deterministic() -> None:
     assert tuple(
         node.node_id
         for node in memory_node_path(second_run.graph, NodeId("task-b"))
-    ) in (
-        (NodeId("root"), NodeId("task-b")),
-        (NodeId("root"), NodeId("task-a"), NodeId("task-b")),
-    )
+    ) == (NodeId("root"), NodeId("task-a"), NodeId("task-b"))
+    assert second_run.stage_metrics[1].parent_mean_node_nll[0] >= 0.0
     assert tuple(metric.task_id for metric in second_run.stage_metrics[-1].task_metrics) == (
         TaskId("task-a"),
         TaskId("task-b"),
@@ -276,7 +281,9 @@ def test_two_task_transition_is_immutable_stable_and_deterministic() -> None:
     assert second_run.stage_metrics == repeated_second_run.stage_metrics
 
 
-def test_vamp_accepts_prefix_scored_tasks_without_story_metrics() -> None:
+def test_vamp_accepts_prefix_scored_tasks_without_story_metrics(
+    tmp_path: Path,
+) -> None:
     config = _model_config()
     params = init_gpt_neo_params(jax.random.PRNGKey(11), config)
     source_task = _task("query-task", (1, 2, 3, 4, 5))
@@ -323,6 +330,19 @@ def test_vamp_accepts_prefix_scored_tasks_without_story_metrics() -> None:
     )
     assert completed.completed_tasks == (task,)
     assert completed.stage_metrics[0].task_metrics == ()
+    vamp_only = extract_language_vamp_artifact(
+        completed,
+        config,
+        lora_config,
+        train_config,
+        config_hashes={"fixture": "1" * 64},
+    )
+    loaded = load_language_adaptation_artifact(
+        save_language_adaptation_artifact(tmp_path / "vamp-only", vamp_only)
+    )
+    assert loaded.task_order == (task.task_id,)
+    assert loaded.sequential_stages == loaded.independent_adapters == ()
+    assert len(loaded.vamp_stages) == 1
 
 
 def test_init_requires_exact_probe_count_and_advance_rejects_node_collisions() -> None:
