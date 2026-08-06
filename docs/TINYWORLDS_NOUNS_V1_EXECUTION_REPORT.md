@@ -137,12 +137,18 @@ to 17.9 GiB and was rejected rather than weakening the frozen 12 GiB gate; all
 rows from performance experiments are named diagnostic files and are excluded
 from canonical loading and reports.
 
-The final generation ledger is currently running from row zero and persists
-each completed bounded chunk immediately. Its observed projection is roughly
-five to six hours. The current focused generation/noun/VAMP selection passes
-25 tests; the broader generation, GPT-Neo, LoRA, noun, and language-run
-selection passes 81 tests. Python compilation and scoped whitespace checks
-pass.
+The final generation ledger persists each completed bounded chunk immediately.
+Its first canonical process durably completed 6,091 of 27,866 cases before XLA
+reported `RESOURCE_EXHAUSTED`: 1,356 retained CUDA command graphs had consumed
+the remaining device memory. No completed generation was lost and no final
+ledger or report was incorrectly published. Following the backend diagnostic,
+the launcher now disables XLA GPU command buffers before importing JAX. A CUDA
+smoke check passed with that setting, and the canonical process resumed at case
+6,092 without repeating completed work.
+
+The current focused generation/noun/VAMP selection passes 25 tests; the
+broader generation, GPT-Neo, LoRA, noun, and language-run selection passes 81
+tests. Python compilation and scoped whitespace checks pass.
 `OPENROUTER_API_KEY` is not configured. After local generation finishes, the
 runner will still reconstruct and publish Markdown and standalone interactive
 HTML, set the manifest phase to `awaiting_judge_credentials`, and send the

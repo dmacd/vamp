@@ -41,19 +41,25 @@ evaluator shares 32 story windows across node scoring and caps differentiable
 EBT sub-batches at eight rows. Its safe run matches every byte of the completed
 32-row EBT attempt.
 
-Midpoint generation is now running in its immediately persisted resumable
-ledger. The generic greedy decoder pre-fills once, uses per-layer KV caches,
-and advances tokens in one compiled device loop. The noun evaluator shares one
+Midpoint generation is running in its immediately persisted resumable ledger.
+The generic greedy decoder pre-fills once, uses per-layer KV caches, and
+advances tokens in one compiled device loop. The noun evaluator shares one
 generation whenever conditions select the same story/node pair and first-fit
 packs similar frozen budgets across bounded 128-window host chunks. Device
 calls contain at most 72 distinct addressed rows; the measured live footprint
 is approximately 9.7 GiB, below the frozen 12 GiB limit. A 192-row attempt was
-rejected after reaching 17.9 GiB, and its rows remain diagnostic-only. The
-final safe path projects roughly five to six hours and passes the focused
-generation/noun/VAMP selection with 25 tests. `OPENROUTER_API_KEY` is absent,
-so this run will publish the complete local Markdown/interactive-HTML report,
+rejected after reaching 17.9 GiB, and its rows remain diagnostic-only.
+
+The first canonical generation process durably completed 6,091 of 27,866 cases
+before XLA's accumulated CUDA command graphs exhausted device memory. Every
+completed case remained intact. The canonical launcher now disables XLA GPU
+command buffers before importing JAX, as recommended by the backend failure,
+and resumed at case 6,092 without repeating completed work. The final Markdown
+and HTML reports do not exist until this local pass completes.
+`OPENROUTER_API_KEY` is absent, so completion will publish both local reports,
 notify the desktop, and stop at `awaiting_judge_credentials`; a later canonical
-rerun can begin directly with external judging.
+rerun can begin directly with external judging. The focused
+generation/noun/VAMP selection passes 25 tests.
 
 ## Completed TinyWorlds-Q Outcome
 

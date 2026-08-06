@@ -13,6 +13,10 @@ import time
 
 
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+if "--xla_gpu_enable_command_buffer" not in os.environ.get("XLA_FLAGS", ""):
+    os.environ["XLA_FLAGS"] = (
+        f"{os.environ.get('XLA_FLAGS', '')} --xla_gpu_enable_command_buffer=".strip()
+    )
 
 from apm.data.text.tinyworlds_nouns_v1.contracts import (  # noqa: E402
     CHECKPOINT_ROOT,

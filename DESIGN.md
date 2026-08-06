@@ -115,9 +115,12 @@ decoder are identical; all six labeled condition records are reconstructed
 afterward. Cases are sorted by frozen output budget and first-fit packed by
 distinct story/node rows and context compatibility. Each call has at most 72
 addressed rows, and the observed process footprint is about 9.7 GiB, below the
-12 GiB gate. Extraction still uses each story's true prefix length and frozen
-budget. Strict 1--5 scores and a complete seven-way ranking are persisted
-request by request and can resume without repeating completed calls.
+12 GiB gate. The canonical launcher disables XLA GPU command buffers before
+JAX import: this long, heterogeneous pass otherwise retains a CUDA graph for
+each compiled shape and can exhaust memory despite bounded live tensors.
+Extraction still uses each story's true prefix length and frozen budget. Strict
+1--5 scores and a complete seven-way ranking are persisted request by request
+and can resume without repeating completed calls.
 
 The final Markdown and standalone interactive HTML are projections of strict
 partition, adaptation, NLL, generation, and optional judge ledgers. They report
