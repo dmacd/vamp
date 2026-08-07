@@ -71,4 +71,26 @@ Selected-base identities and measurements:
 - authenticated resume coverage: full optimizer, RNG, epoch/batch cursor, and
   byte-stable loss trace under `tinyworlds-nouns-base-training-v2`
 
-Next phase: ordered 24-stage VAMP training with 2,000 updates per task.
+## Phase 4 — Ordered VAMP graph complete
+
+VAMP completed all 24 stages and exactly 48,000 rank-eight/alpha-eight LoRA
+updates in 49.3 minutes. Every stage was atomically committed under the v2-only
+stage format after verifying that the new commit left every older edge tensor
+unchanged. The completed artifact strict-loaded from stage 24 with:
+
+- VAMP run: `c8c7eaa3560fdca19dd789b767f1b3dea829f95190b0a130983d15661965e2fa`
+- final stage: `a050bb51141bb37002de10ba29d448f83cfc2ab864c480ddf594c682b727f0d8`
+- adaptation manifest: `c762b966a5a23561e16b0bee5bb9d92b205153f9b89784ac06596d2ca0416887`
+- final tensor checksum: `97414ac3d8656ab083b2e570a4162dc69b024f90cf819b80b1cab94213553e63`
+
+The learned non-root parent graph is:
+
+`mouse→root`, `rabbit→mouse`, `boat→mouse`, `brother→mouse`,
+`parent→brother`, `duck→boat`, `sister→brother`, `pet→brother`,
+`bicycle→boat`, `grandma→parent`, `lion→rabbit`, `fairy→mouse`,
+`train→boat`, `cow→duck`, `wheel→duck`, `monkey→mouse`,
+`princess→fairy`, `plane→boat`, `elephant→rabbit`, `neighbor→brother`,
+`dragon→rabbit`, `queen→princess`, `horse→mouse`, and `bus→wheel`.
+
+Next phase: 26,640 whole-story NLL/routing rows, followed by 4,440
+midpoint-only routing, true-suffix NLL, and deterministic generation rows.
