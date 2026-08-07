@@ -1,5 +1,104 @@
 # VAMP Technical Design
 
+## TinyWorlds Nouns-v2 Disjoint Benchmark
+
+`tinyworlds-nouns-v2` is an isolated 24-task experiment derived from, but not
+assigned by, the authenticated nouns-v1 story and token store. It publishes
+only under `data/tinyworlds-nouns-v2/`,
+`checkpoints/tinyworlds-nouns-v2/`, and
+`results/language_cl/tinyworlds-nouns-v2/`. Nouns-v1 remains a strict-loadable
+parent and is never rewritten, imported as model parameters, or treated as an
+assignment authority.
+
+### Immutable parent and v2 authority
+
+The v2 manifest authenticates nouns-v1 partition
+`04ca2acf85f9505f0b7568b1696fbf290a8d2cbf78387dcfd6e815258fcc28b8`,
+review breakdown
+`df60e7d00e5887f97c3e867c68a214333190595c15d1e0d39999b653d0eeed35`,
+the approved decision document, pinned source identities, GPT-2 tokenizer
+identity, and the three parent story/ledger/token file hashes. The parent
+contains 2,745,124 globally unique normalized stories. V2 indexes point into
+those immutable byte and token stores, avoiding a second 3.1 GiB payload copy;
+their offsets have no authority until the complete parent partition and every
+v2 file hash strict-load successfully.
+
+The task surface is the reviewed exact-form prefix `mouse, rabbit, boat,
+brother, parent, duck, sister, pet, bicycle, grandma, lion, fairy, train, cow,
+wheel, monkey, princess, plane, elephant, neighbor, dragon, queen, horse,
+bus`, ordered by descending purified training count. Every v2 format name and
+content identity is independent: manifest, partition, audit, preset, GPU
+preflight, base/resume/selection, VAMP stage, NLL row, generation row, optional
+judge row, run manifest, and report all use `-v2` contracts. The frozen preset
+includes its format and schema in its configuration hash, so a scalar-identical
+nouns-v1 preset cannot collide with v2.
+
+### Disjoint assignment semantics
+
+Matching remains case-folded exact whole-word matching over the reviewed forms.
+For the selected 24-family mask, a training story with zero matches belongs to
+the base universe, a story with exactly one match belongs only to that task,
+and a story with two or more matches belongs only to the exclusion audit.
+Repeated mentions and multiple forms of the same family still count as one
+concept. Unselected nouns do not affect assignment.
+
+This produces 2,210,934 clean base-universe stories, 429,199 pure task-training
+stories, and 77,361 excluded multi-task training stories. The existing
+namespaced 2% rule holds 44,286 base stories inside the training source for
+validation, leaving 2,166,648 optimizer-visible base stories. Thus universe
+coverage is 81.36% and optimizer-visible coverage is 79.73% of the original
+2,717,494 unique training stories. Official validation contains 4,440 pure
+task/story pairs and 776 excluded multi-task stories. Every retained validation
+story is midpoint-eligible.
+
+Thirty-six context-fitting, namespaced lowest-hash stories per task are removed
+only from that task's update index. Thirty-six non-held-out clean base stories
+form the root key. Task order, holdout, probes, index bytes, per-form raw and
+retained counts, exclusion provenance, and examples are deterministic. The
+partition is published only after all exact production counts and the 256/64
+purified task thresholds pass. Before GPU work, a second complete parent-ledger
+replay must reproduce the partition's logical record and every file hash.
+
+The standalone audit JSON, Markdown, and folding HTML report raw and retained
+form/story counts, base coverage at both denominators, all probe IDs, and exact
+parent provenance. The two content-addressed exclusion ledgers permanently
+record every selected concept and matched form for all 78,137 multi-task
+stories.
+
+### Fresh training and bounded evaluation
+
+Nouns-v2 uses the nouns-v1 engine only through version-aware shared mechanics.
+The engine resolves store paths, deterministic namespace, and every persisted
+format from the v2 partition rather than copying or relabeling v1 artifacts.
+The base therefore starts from seed-zero GPT-Neo parameters and has a distinct
+training identity. It retains the two-epoch architecture, optimizer,
+32-story microbatches, eight-way accumulation, exact optimizer/RNG/cursor
+resume, epoch quality gate, authenticated selection, and 12 GiB allocator
+limit.
+
+VAMP trains one immutable rank-eight, alpha-eight LoRA edge for 2,000 updates
+per task in the frozen 24-task order. Stage one selects root. Every later stage
+scores root and all existing nodes but makes only non-root nodes eligible,
+then trains on the selected parent's complete path. Persisted raw scores,
+eligibility, source consumption, graph, RNG, tensor checksum, and prior-edge
+checksums make a completed stage the unit of exact graph resume.
+
+Whole-story evaluation emits exactly 26,640 self-hashing rows: all 4,440 pairs
+under base, oracle, exhaustive, Hopfield, EBT-uniform, and EBT-Hopfield. It
+retains every causal target once and reports story- and token-weighted NLL,
+acquisition, routing accuracy/confusion, and oracle regret. The midpoint pass
+uses a router-facing object that cannot contain the suffix, then scores the
+true suffix and generates deterministic equal-budget completions for the same
+six conditions. Both passes retain bounded chunks, eight-row EBT sub-batches,
+the stabilized KV cache, atomic work ledgers, incomplete-tail recovery, and
+immediate case persistence.
+
+The no-argument runner binds GPU 0, disables XLA GPU command buffers before any
+JAX-bearing import, and treats the complete local NLL, generation, and
+standalone Markdown/HTML report as success. OpenRouter is available only via
+`--judge`; it consumes the persisted generation ledger and regenerates the
+report without model work.
+
 ## TinyWorlds Noun-Overlap v1
 
 `tinyworlds-nouns-v1` is an isolated, descriptive continual-learning

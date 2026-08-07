@@ -25,6 +25,7 @@ from apm.data.text.tinyworlds_nouns_v1.contracts import (
     NounsExperimentPreset,
     WholeStoryNllRow,
     canonical_json_bytes,
+    record_sha256,
     require_sha256,
 )
 from apm.data.text.tinyworlds_nouns_v1.experiment import (
@@ -331,7 +332,12 @@ def evaluate_whole_story_nll(
                     )
                     ledger.write(
                         canonical_json_bytes(
-                            {"format": WHOLE_STORY_FORMAT, **row.as_record()}
+                            _versioned_result_record(
+                                partition,
+                                "whole_story_format",
+                                WHOLE_STORY_FORMAT,
+                                row.as_record(),
+                            )
                         )
                     )
                     completed.add(key)
@@ -460,7 +466,16 @@ def evaluate_half_story_generations(
                     full_original_story=store.text(case.entry),
                     results=results,
                 )
-                ledger.write(canonical_json_bytes(row.as_record()))
+                ledger.write(
+                    canonical_json_bytes(
+                        _versioned_result_record(
+                            partition,
+                            "half_story_format",
+                            HALF_STORY_FORMAT,
+                            row.as_record(),
+                        )
+                    )
+                )
                 ledger.flush()
                 os.fsync(ledger.fileno())
                 completed.add((case.task_id, case.entry.story_id))
@@ -1243,6 +1258,23 @@ def _completed_keys(path: Path, fields: tuple[str, ...]) -> set[tuple[str, ...]]
             raise ValueError("resumable evaluation ledger contains duplicate rows")
         keys.add(key)
     return keys
+
+
+def _versioned_result_record(
+    partition: object,
+    format_attribute: str,
+    default_format: str,
+    record: dict[str, object],
+) -> dict[str, object]:
+    format_name = getattr(partition, format_attribute, default_format)
+    if type(format_name) is not str or not format_name:
+        raise ValueError("noun result format must be nonempty")
+    core = {**record, "format": format_name}
+    return (
+        {**core, "result_sha256": record_sha256(core)}
+        if format_name != default_format
+        else core
+    )
 
 
 def _atomic_write(path: Path, payload: bytes) -> None:

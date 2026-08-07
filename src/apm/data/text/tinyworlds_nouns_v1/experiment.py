@@ -240,7 +240,7 @@ class IndexedTokenBatchSequence(Sequence[TokenBatch]):
                 entries,
                 key=lambda entry: (
                     sha256(
-                        f"{BENCHMARK_ID}\0{order_namespace}\0"
+                        f"{_benchmark_id(artifact)}\0{order_namespace}\0"
                         f"{artifact.partition_sha256}\0{entry.story_id}".encode("utf-8")
                     ).hexdigest(),
                     entry.story_id,
@@ -254,7 +254,7 @@ class IndexedTokenBatchSequence(Sequence[TokenBatch]):
         self._window_stops = tuple(np.cumsum(window_counts, dtype=np.int64).tolist())
         self._window_count = self._window_stops[-1]
         self._tokens = np.memmap(
-            artifact.root / "tokens.uint16",
+            _token_store_path(artifact),
             mode="r",
             dtype="<u2",
         )
@@ -317,8 +317,12 @@ class IndexedStoryStore:
 
     def __init__(self, artifact: NounPartitionArtifact) -> None:
         self._artifact = artifact
-        self._stories = np.memmap(artifact.root / "stories.bin", mode="r", dtype=np.uint8)
-        self._tokens = np.memmap(artifact.root / "tokens.uint16", mode="r", dtype="<u2")
+        self._stories = np.memmap(
+            _story_store_path(artifact), mode="r", dtype=np.uint8
+        )
+        self._tokens = np.memmap(
+            _token_store_path(artifact), mode="r", dtype="<u2"
+        )
 
     def text(self, entry: StoryIndexEntry) -> str:
         """Read and verify one exact normalized story."""
@@ -466,9 +470,12 @@ def run_or_load_noun_gpu_preflight(
     if type(vocab_size) is not int:
         raise ValueError("partition tokenizer identity has no integer vocabulary size")
     model_config = noun_model_config(vocab_size)
+    preflight_format = _engine_format(
+        artifact, "gpu_preflight_format", GPU_PREFLIGHT_FORMAT
+    )
     identity_core = {
         "estimate": estimate.as_record(),
-        "format": GPU_PREFLIGHT_FORMAT,
+        "format": preflight_format,
         "model_config": _model_config_record(model_config),
         "partition_sha256": artifact.partition_sha256,
         "preset_sha256": preset.config_sha256,
@@ -547,9 +554,12 @@ def _load_gpu_preflight(
     if payload != canonical_json_bytes(record):
         raise ValueError("noun GPU preflight JSON is not canonical")
     supplied = record.pop("preflight_sha256", None)
+    preflight_format = _engine_format(
+        artifact, "gpu_preflight_format", GPU_PREFLIGHT_FORMAT
+    )
     identity_core = {
         "estimate": estimate.as_record(),
-        "format": GPU_PREFLIGHT_FORMAT,
+        "format": preflight_format,
         "model_config": _model_config_record(
             noun_model_config(int(artifact.tokenizer_identity["vocab_size"]))
         ),
@@ -571,7 +581,7 @@ def _load_gpu_preflight(
         }
         or supplied != record_sha256(record)
         or path.stem != expected_path
-        or record.get("format") != GPU_PREFLIGHT_FORMAT
+        or record.get("format") != preflight_format
         or record.get("partition_sha256") != artifact.partition_sha256
         or record.get("preset_sha256") != preset.config_sha256
         or record.get("estimate") != estimate.as_record()
@@ -634,8 +644,11 @@ def run_or_resume_noun_base(
     if type(vocab_size) is not int:
         raise ValueError("partition tokenizer identity has no integer vocabulary size")
     model_config = noun_model_config(vocab_size)
+    base_training_format = _engine_format(
+        artifact, "base_training_format", BASE_TRAINING_FORMAT
+    )
     training_core = {
-        "format": BASE_TRAINING_FORMAT,
+        "format": base_training_format,
         "model_config": _model_config_record(model_config),
         "partition_sha256": artifact.partition_sha256,
         "preflight_sha256": preflight.preflight_sha256,
@@ -684,7 +697,9 @@ def run_or_resume_noun_base(
     state, cursor = (
         (template, NounBaseCursor(0, 0, 0))
         if latest is None
-        else _load_base_state(latest, training_sha256, template)
+        else _load_base_state(
+            latest, training_sha256, template, base_training_format
+        )
     )
     _trim_trace(trace_path, cursor.optimizer_update)
     evidence = _load_epoch_evidence(work, training_sha256)
@@ -744,9 +759,16 @@ def run_or_resume_noun_base(
                             training_sha256,
                             state,
                             cursor,
+                            base_training_format,
                         )
             cursor = NounBaseCursor(epoch + 1, 0, int(state.step))
-            _write_base_state(states_root, training_sha256, state, cursor)
+            _write_base_state(
+                states_root,
+                training_sha256,
+                state,
+                cursor,
+                base_training_format,
+            )
             if len(evidence) <= epoch:
                 epoch_nll = evaluate_token_weighted_nll(
                     state.trainable,
@@ -788,7 +810,9 @@ def run_or_resume_noun_base(
     reference = load_gpt_neo_checkpoint(checkpoint_directory).reference
     selected_core = {
         "epoch_validation_nll": list(evidence),
-        "format": BASE_SELECTION_FORMAT,
+        "format": _engine_format(
+            artifact, "base_selection_format", BASE_SELECTION_FORMAT
+        ),
         "parameter_checksum": reference.parameter_checksum,
         "partition_sha256": artifact.partition_sha256,
         "peak_allocator_bytes": peak_bytes,
@@ -958,7 +982,9 @@ def run_or_resume_noun_vamp(
                 "base_training_sha256": selected_base.training_sha256,
                 "elapsed_seconds": time.monotonic() - started,
                 "eligible_node_mask": list(parent.eligible_node_mask),
-                "format": VAMP_STAGE_FORMAT,
+                "format": _engine_format(
+                    artifact, "vamp_stage_format", VAMP_STAGE_FORMAT
+                ),
                 "parent_node_id": str(parent.selected_node_id),
                 "parent_scores": list(parent.mean_candidate_nll),
                 "partition_sha256": artifact.partition_sha256,
@@ -1225,6 +1251,7 @@ def _write_base_state(
     identity: str,
     state: LmTrainState[GptNeoParams],
     cursor: NounBaseCursor,
+    base_training_format: str,
 ) -> Path:
     target = root / f"update-{cursor.optimizer_update:09d}-epoch-{cursor.epoch:02d}"
     if target.is_dir():
@@ -1234,7 +1261,7 @@ def _write_base_state(
         write_lm_train_state_artifact(temporary / "state", identity, (state,))
         resume_core = {
             "cursor": cursor.as_record(),
-            "format": BASE_TRAINING_FORMAT,
+            "format": base_training_format,
             "identity_sha256": identity,
         }
         _atomic_write(
@@ -1255,12 +1282,13 @@ def _load_base_state(
     root: Path,
     identity: str,
     template: LmTrainState[GptNeoParams],
+    base_training_format: str,
 ) -> tuple[LmTrainState[GptNeoParams], NounBaseCursor]:
     record = json.loads((root / "resume.json").read_text(encoding="utf-8"))
     supplied = record.pop("resume_sha256", None)
     if (
         supplied != record_sha256(record)
-        or record.get("format") != BASE_TRAINING_FORMAT
+        or record.get("format") != base_training_format
         or record.get("identity_sha256") != identity
     ):
         raise ValueError("noun base resume identity changed")
@@ -1352,7 +1380,8 @@ def _load_selected_base(
     supplied = record.pop("selection_sha256", None)
     if (
         supplied != record_sha256(record)
-        or record.get("format") != BASE_SELECTION_FORMAT
+        or record.get("format")
+        != _engine_format(artifact, "base_selection_format", BASE_SELECTION_FORMAT)
         or record.get("partition_sha256") != artifact.partition_sha256
         or record.get("preset_sha256") != preset.config_sha256
         or record.get("preflight_sha256") != preflight.preflight_sha256
@@ -1455,7 +1484,8 @@ def _require_vamp_stage_record(
     elapsed = record.get("elapsed_seconds")
     if (
         set(record) != expected_fields
-        or record.get("format") != VAMP_STAGE_FORMAT
+        or record.get("format")
+        != _engine_format(partition, "vamp_stage_format", VAMP_STAGE_FORMAT)
         or record.get("partition_sha256") != partition.partition_sha256
         or record.get("preset_sha256") != preset.config_sha256
         or record.get("base_training_sha256") != selected_base.training_sha256
@@ -1488,6 +1518,28 @@ def _index_entry(record: object) -> StoryIndexEntry:
         token_offset=int(record["token_offset"]),
         token_count=int(record["token_count"]),
     )
+
+
+def _benchmark_id(artifact: object) -> str:
+    value = getattr(artifact, "benchmark_id", BENCHMARK_ID)
+    if type(value) is not str or not value:
+        raise ValueError("noun artifact benchmark namespace must be nonempty")
+    return value
+
+
+def _engine_format(artifact: object, attribute: str, default: str) -> str:
+    value = getattr(artifact, attribute, default)
+    if type(value) is not str or not value:
+        raise ValueError(f"noun artifact {attribute} must be nonempty")
+    return value
+
+
+def _story_store_path(artifact: object) -> Path:
+    return Path(getattr(artifact, "story_store_path", Path(artifact.root) / "stories.bin"))
+
+
+def _token_store_path(artifact: object) -> Path:
+    return Path(getattr(artifact, "token_store_path", Path(artifact.root) / "tokens.uint16"))
 
 
 def _atomic_write(path: Path, payload: bytes) -> None:

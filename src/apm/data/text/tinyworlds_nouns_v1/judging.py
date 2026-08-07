@@ -177,6 +177,8 @@ class HttpxOpenRouterJudgeTransport:
 def anonymize_judge_request(
     generation_record: dict[str, object],
     model: str,
+    *,
+    benchmark_id: str = BENCHMARK_ID,
 ) -> AnonymizedJudgeRequest:
     """Deterministically shuffle all six completions and the true reference."""
     task_noun = _text(generation_record.get("task_noun"), "judge task")
@@ -203,7 +205,7 @@ def anonymize_judge_request(
             JUDGE_SOURCE_NAMES,
             key=lambda source: (
                 sha256(
-                    f"{BENCHMARK_ID}\0judge-shuffle\0{model}\0"
+                    f"{benchmark_id}\0judge-shuffle\0{model}\0"
                     f"{task_noun}\0{story_id}\0{source}".encode("utf-8")
                 ).hexdigest(),
                 source,
@@ -283,11 +285,20 @@ def judge_generation_ledger(
     transport: JudgeTransport | None = None,
     maximum_attempts: int = 3,
     progress: JudgeProgress | None = None,
+    benchmark_id: str = BENCHMARK_ID,
+    request_format: str = JUDGE_REQUEST_FORMAT,
+    result_format: str = JUDGE_FORMAT,
 ) -> Path:
     """Judge every persisted generation case, saving each request and response."""
     root = Path(output_root)
     final = root / "judge-results.jsonl"
-    if not model or maximum_attempts < 1:
+    if (
+        not model
+        or maximum_attempts < 1
+        or not benchmark_id
+        or not request_format
+        or not result_format
+    ):
         raise ValueError("judge model and retry budget must be valid")
     generations = tuple(
         json.loads(line)
@@ -306,7 +317,11 @@ def judge_generation_ledger(
     expected = {
         (request.task_noun, request.story_id, request.request_sha256)
         for generation in generations
-        for request in (anonymize_judge_request(generation, model),)
+        for request in (
+            anonymize_judge_request(
+                generation, model, benchmark_id=benchmark_id
+            ),
+        )
     }
     if final.is_file():
         if _completed_judge_keys(final, truncate_incomplete=False) != expected:
@@ -330,13 +345,15 @@ def judge_generation_ledger(
         raise ValueError("judge work ledger contains unexpected cases")
     with work.open("ab") as ledger:
         for generation in generations:
-            request = anonymize_judge_request(generation, model)
+            request = anonymize_judge_request(
+                generation, model, benchmark_id=benchmark_id
+            )
             key = (request.task_noun, request.story_id, request.request_sha256)
             if key in completed:
                 continue
             request_record = {
                 "body": json.loads(request.body),
-                "format": JUDGE_REQUEST_FORMAT,
+                "format": request_format,
                 "label_sources": dict(request.label_sources),
                 "model": model,
                 "request_sha256": request.request_sha256,
@@ -358,7 +375,7 @@ def judge_generation_ledger(
             content = _openrouter_content(raw_body)
             parsed = parse_judge_content(content)
             result_core = {
-                "format": JUDGE_FORMAT,
+                "format": result_format,
                 "label_sources": dict(request.label_sources),
                 "model": model,
                 "parsed": parsed.as_record(),
