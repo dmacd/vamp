@@ -92,5 +92,58 @@ The learned non-root parent graph is:
 `princess→fairy`, `plane→boat`, `elephant→rabbit`, `neighbor→brother`,
 `dragon→rabbit`, `queen→princess`, `horse→mouse`, and `bus→wheel`.
 
-Next phase: 26,640 whole-story NLL/routing rows, followed by 4,440
-midpoint-only routing, true-suffix NLL, and deterministic generation rows.
+## Phase 5 — Whole-story NLL and routing complete
+
+The bounded evaluator published exactly 26,640 canonical rows: all 4,440
+validation pairs under all six conditions. Ledger SHA-256 is
+`0a39bc33006d67f03054824e488767153a75e4c86e8224a3d157afa6f05459d2`.
+Its story-weighted/token-weighted NLL and routing summaries are:
+
+| condition | story NLL | token NLL | route accuracy | oracle regret |
+|---|---:|---:|---:|---:|
+| base | 1.636 | 1.636 | 0.0% | +0.159 |
+| oracle | 1.477 | 1.499 | 100.0% | +0.000 |
+| VAMP exhaustive | 1.472 | 1.492 | 83.6% | -0.006 |
+| VAMP Hopfield | 1.560 | 1.575 | 38.8% | +0.083 |
+| VAMP EBT uniform | 1.480 | 1.502 | 77.4% | +0.002 |
+| VAMP EBT Hopfield | 1.487 | 1.508 | 70.7% | +0.010 |
+
+## Phase 6 — Midpoint routing and generation complete
+
+The prefix-isolated evaluator published exactly 4,440 canonical rows using the
+stabilized KV-cache decoder and immediate bounded-chunk persistence. Ledger
+SHA-256 is
+`9ca842f394222d441b705c0cdf661e97a6edbd787cba095e49ed7270dc27eacf`.
+The router saw only the first token half; the held-back suffix was consumed
+after routing for NLL and as the equal-budget generation reference.
+
+Midpoint task-free route accuracy was 73.9% exhaustive, 37.4% Hopfield, 70.4%
+EBT uniform, and 64.5% EBT Hopfield. Corresponding true-suffix story NLL was
+1.572, 1.615, 1.581, and 1.582, compared with 1.638 for base and 1.539 for the
+oracle adapter.
+
+## Phase 7 — Local reports and completion gates complete
+
+The canonical default command reached `local_complete`, exited successfully,
+and sent its desktop notification without calling OpenRouter. Published report
+identities are:
+
+- report identity: `1dbb44e821562079f946d21826278265890008b8d6979c96a9d2150aa940cea8`
+- Markdown SHA-256: `c6b01feea266db74e5da04c870c36bb7c09eb23f9f30161a55e1be0e673ae86b`
+- folding HTML SHA-256: `967acbabbc3bfe6b2936951d37358f67993aa7bf33b9b92c4644d9fb262246ac`
+- local run identity: `9f614a2d018d7df51e49650a6a52507b88ddb963c151d011af915ac3f22677b2`
+
+The standalone HTML contains strong, weak, correctly routed, and misrouted
+examples for the v2 tasks and has no external script, stylesheet, or network
+dependency. A second canonical invocation repeated parent authentication and
+partition reconstruction, strict-loaded every completed model/result artifact,
+performed no optimizer, NLL, or generation work, and reproduced all five
+published ledger/report/run-manifest file hashes byte-for-byte.
+
+Final verification:
+
+- focused/shared CPU regression suite: 46 passed
+- opt-in exact real-source/reconstruction/v1-preservation suite: 2 passed
+- nouns-v1 Markdown, HTML, and run-manifest hashes remain exactly unchanged
+- OpenRouter judgment remains optional behind `--judge` and can resume solely
+  from the completed local generation ledger
