@@ -40,6 +40,7 @@ from apm.data.text.tinyworlds_nouns_v2.report import (
     render_vamp_graph_svg,
 )
 import apm.data.text.tinyworlds_nouns_v2.stagewise as stagewise
+import apm.data.text.tinyworlds_nouns_v2.report as v2_report
 from apm.data.text.tinyworlds_nouns_v2.stagewise import summarize_stagewise_rows
 from apm.lm.text import CharTokenizer
 from apm.memory.graph import NodeId, TaskId, add_memory_node, init_memory_graph
@@ -396,6 +397,46 @@ def test_stagewise_ledger_resume_and_tamper_rejection(tmp_path: Path) -> None:
             require_complete=True,
             entries_by_task=entries,
         )
+
+
+def test_final_stage_suffix_metrics_must_equal_generation_ledger(
+    tmp_path: Path,
+) -> None:
+    story_id = sha256(b"final-parity").hexdigest()
+    results = {
+        condition: {
+            "mean_nll": 1.0,
+            "selected_node": "mouse",
+            "selected_path": ["root", "mouse"],
+            "token_count": 2,
+            "total_nll": 2.0,
+        }
+        for condition in (
+            "base",
+            "oracle",
+            "vamp_exhaustive",
+            "vamp_hopfield",
+            "vamp_ebt_uniform",
+            "vamp_ebt_hopfield",
+        )
+    }
+    stagewise_path = tmp_path / "stagewise.jsonl"
+    stagewise_path.write_bytes(
+        canonical_json_bytes(
+            {
+                "stage_index": len(TASK_IDS),
+                "story_id": story_id,
+                "task_noun": "mouse",
+                "results": results,
+            }
+        )
+    )
+    generation = ({"story_id": story_id, "task_noun": "mouse", "results": results},)
+    v2_report._validate_final_stage_suffix_parity(stagewise_path, generation)
+
+    results["vamp_hopfield"]["mean_nll"] = 1.1
+    with pytest.raises(ValueError, match="differs from generation"):
+        v2_report._validate_final_stage_suffix_parity(stagewise_path, generation)
 
 
 def _stagewise_fixture_summary() -> dict[str, object]:

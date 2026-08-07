@@ -67,6 +67,7 @@ def publish_nouns_v2_report(
         partition,
         adaptations,
     )
+    _validate_final_stage_suffix_parity(stagewise_path, generation_rows)
     data = build_report_data(
         partition,
         preset,
@@ -663,6 +664,47 @@ def _validate_coverage(
         )
     ):
         raise ValueError("nouns-v2 result ledgers do not exactly cover the partition")
+
+
+def _validate_final_stage_suffix_parity(
+    stagewise_path: str | Path,
+    generation_rows: tuple[dict[str, object], ...],
+) -> None:
+    generation = {
+        (str(row["task_noun"]), str(row["story_id"])): _object(
+            row["results"], "generation results"
+        )
+        for row in generation_rows
+    }
+    matched: set[tuple[str, str]] = set()
+    with Path(stagewise_path).open("rb") as source:
+        for line in source:
+            row = _object(json.loads(line), "stagewise parity row")
+            if row["stage_index"] != len(TASK_IDS):
+                continue
+            key = (str(row["task_noun"]), str(row["story_id"]))
+            if key in matched or key not in generation:
+                raise ValueError("final stagewise suffix keys differ from generation")
+            stage_results = _object(row["results"], "stagewise results")
+            for condition in CONDITIONS:
+                measured = _object(stage_results[condition], condition)
+                reference = _object(generation[key][condition], condition)
+                if any(
+                    measured[field] != reference[field]
+                    for field in (
+                        "mean_nll",
+                        "selected_node",
+                        "selected_path",
+                        "token_count",
+                        "total_nll",
+                    )
+                ):
+                    raise ValueError(
+                        "final stagewise suffix measurement differs from generation"
+                    )
+            matched.add(key)
+    if matched != set(generation):
+        raise ValueError("final stagewise suffix coverage differs from generation")
 
 
 def _require_hashed_row(
