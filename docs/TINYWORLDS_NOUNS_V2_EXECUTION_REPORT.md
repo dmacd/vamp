@@ -147,3 +147,76 @@ Final verification:
 - nouns-v1 Markdown, HTML, and run-manifest hashes remain exactly unchanged
 - OpenRouter judgment remains optional behind `--judge` and can resume solely
   from the completed local generation ledger
+
+## Phase 8 — Stagewise continual-learning audit complete
+
+The follow-up audit strict-loaded all 24 immutable VAMP stages and evaluated
+every learned task at its introduction stage and after every later stage. It
+published exactly 72,256 canonical task/story/stage cases under base, stored
+oracle, exhaustive routing, Hopfield routing, EBT-uniform routing, and
+EBT-Hopfield routing. Routing used only each story's midpoint prefix; NLL was
+measured on the held-back true suffix. Ledger SHA-256 is
+`e8ee50c59b04a1656fec440e8dec801b556df85577d57252eee0e51cf6d88def`.
+
+The stored oracle had exactly zero NLL drift at every later stage. This
+authenticates perfect retention of the immutable task-node functions; the
+observed continual-learning degradation is therefore task-free routing
+interference as the candidate graph grows. Final and stagewise results are:
+
+| condition | final story NLL | final route accuracy | mean forgetting | max forgetting | backward transfer | route accuracy change |
+|---|---:|---:|---:|---:|---:|---:|
+| base | 1.638 | 0.0% | +0.0000 | +0.0000 | +0.0000 | +0.0% |
+| oracle | 1.539 | 100.0% | +0.0000 | +0.0000 | +0.0000 | +0.0% |
+| VAMP exhaustive | 1.572 | 73.9% | +0.0029 | +0.0092 | -0.0026 | -2.8% |
+| VAMP Hopfield | 1.615 | 37.4% | +0.0160 | +0.0586 | -0.0157 | -9.4% |
+| VAMP EBT uniform | 1.581 | 70.4% | +0.0128 | +0.0373 | -0.0123 | -7.4% |
+| VAMP EBT Hopfield | 1.582 | 64.5% | +0.0118 | +0.0278 | -0.0113 | -10.8% |
+
+Forgetting is final task NLL minus that task's best earlier NLL; backward
+transfer is introduction NLL minus final NLL. The final-stage node selections,
+suffix NLL values, and routing decisions match the pre-existing 4,440-row
+generation ledger exactly, so the audit introduces no competing definition of
+the final measurement. The canonical completion process reported 5:55:53
+overall and persisted every chunk immediately for interruption/resume parity.
+
+## Phase 9 — Graph reports and final verification complete
+
+The refreshed Markdown and standalone folding HTML reports now include the
+stagewise retention table and routing curves. Both also expose the learned
+dependency graph; Markdown links the standalone SVG, while HTML embeds the SVG
+inline. The graph was structurally checked and visually inspected with exactly
+25 nodes (root plus 24 tasks) and 24 parent-to-child dependency edges.
+
+Published identities are:
+
+- report identity: `75fbc08e5989f41a9462813755d1396e22b6f16e378790ed1f4840c67c2d0f54`
+- stagewise summary CSV SHA-256:
+  `752d5554aa4abdd4a57688391253b8903ea278068e4e34d4b46e7d04a39eed2b`
+- task metrics CSV SHA-256:
+  `a7f5f7842811a379097b9332ac56ee5ebd8949b5c749c93c4d66be2200c20f1b`
+- dependency SVG SHA-256:
+  `8e1f047d2a66afe49fd54a572120632c9ea0e7c30c5e70ce357430a0f9e9f4d5`
+- Markdown SHA-256:
+  `0ebc1b56eae4604c6b3286d4ea04991330f661095ea800dd6e4a98df0479c1a3`
+- folding HTML SHA-256:
+  `3f821c4f14119bc9a5c04477b1fcf3884f7da945563393212094c8500097e71d`
+- run-manifest file SHA-256:
+  `df9bb4975349cc8c16e676aab09966f2bf050a49a1ff6f73ef9c97f623abc6d5`
+- unchanged local run identity:
+  `9f614a2d018d7df51e49650a6a52507b88ddb963c151d011af915ac3f22677b2`
+
+A canonical rerun with the final committed implementation independently
+rebuilt the partition, strict-loaded the selected base, all 24 VAMP stages,
+both prior ledgers, and all 72,256 audit cases, performed no model or evaluator
+work, enforced final-suffix parity, and regenerated the reports successfully.
+
+Final post-GPU verification:
+
+- complete default suite: 658 passed, 274 skipped, 14 deselected
+- opt-in production-source/reconstruction/24-stage gate: 3 passed
+- nouns-v1 Markdown SHA-256 remains
+  `74f0035c755f95ff57624f8270615f3c9171f7b792d7b5ee22bae147ac15c4ae`
+- nouns-v1 HTML SHA-256 remains
+  `9ef9cfea2c827836da8999c3d032fa63ff3a109664ee65b250066577a09d1526`
+- nouns-v1 run-manifest SHA-256 remains
+  `fffa0e0f64f1c63ae3efb16363042907169737dc6858944cbcd0f46b178cc628`
