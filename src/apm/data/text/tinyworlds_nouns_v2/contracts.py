@@ -22,9 +22,10 @@ PRESET_FORMAT = "tinyworlds-nouns-experiment-preset-v2"
 RUN_MANIFEST_FORMAT = "tinyworlds-nouns-run-v2"
 WHOLE_STORY_FORMAT = "tinyworlds-nouns-whole-story-nll-v2"
 HALF_STORY_FORMAT = "tinyworlds-nouns-half-story-generation-v2"
+STAGEWISE_FORMAT = "tinyworlds-nouns-stagewise-cl-v2"
 JUDGE_REQUEST_FORMAT = "tinyworlds-nouns-judge-request-v2"
 JUDGE_FORMAT = "tinyworlds-nouns-judge-result-v2"
-REPORT_FORMAT = "tinyworlds-nouns-report-v2"
+REPORT_FORMAT = "tinyworlds-nouns-stagewise-report-v2"
 BASE_TRAINING_FORMAT = "tinyworlds-nouns-base-training-v2"
 BASE_SELECTION_FORMAT = "tinyworlds-nouns-selected-base-v2"
 VAMP_STAGE_FORMAT = "tinyworlds-nouns-vamp-stage-v2"
@@ -56,6 +57,7 @@ VALIDATION_UNIQUE_STORY_COUNT = 27_630
 BASE_UNIVERSE_STORY_COUNT = 2_210_934
 PURE_TASK_TRAIN_STORY_COUNT = 429_199
 PURE_TASK_VALIDATION_STORY_COUNT = 4_440
+STAGEWISE_CASE_COUNT = 72_256
 EXCLUDED_TRAIN_STORY_COUNT = 77_361
 EXCLUDED_VALIDATION_STORY_COUNT = 776
 MINIMUM_TASK_TRAIN_STORIES = 256
@@ -578,6 +580,88 @@ class WholeStoryNllRow:
         return {**core, "result_sha256": record_sha256(core)}
 
 
+@dataclass(frozen=True, slots=True)
+class StagewiseConditionResult:
+    """One condition's midpoint route and held-out suffix loss at one stage."""
+
+    condition: Condition
+    selected_node: str
+    selected_path: tuple[str, ...]
+    oracle_match: bool
+    total_nll: float
+    token_count: int
+    mean_nll: float
+    regret_vs_oracle: float
+
+    def __post_init__(self) -> None:
+        if self.condition not in CONDITIONS:
+            raise ValueError("unknown nouns-v2 stagewise condition")
+        if not self.selected_node or not self.selected_path:
+            raise ValueError("stagewise routing metadata must be nonempty")
+        if type(self.oracle_match) is not bool or self.token_count <= 0:
+            raise ValueError("stagewise token count and oracle flag are invalid")
+        if any(
+            not math.isfinite(value)
+            for value in (self.total_nll, self.mean_nll, self.regret_vs_oracle)
+        ):
+            raise ValueError("stagewise NLL metrics must be finite")
+        if self.total_nll < 0.0 or self.mean_nll < 0.0:
+            raise ValueError("stagewise NLL metrics must be nonnegative")
+
+    def as_record(self) -> dict[str, object]:
+        """Return one nested stagewise condition record."""
+        return {
+            "condition": self.condition,
+            "mean_nll": self.mean_nll,
+            "oracle_match": self.oracle_match,
+            "regret_vs_oracle": self.regret_vs_oracle,
+            "selected_node": self.selected_node,
+            "selected_path": list(self.selected_path),
+            "token_count": self.token_count,
+            "total_nll": self.total_nll,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class StagewiseClRow:
+    """One task/story measurement under every condition at one VAMP stage."""
+
+    stage_index: int
+    introduced_task: str
+    stage_tensor_checksum: str
+    task_noun: str
+    story_id: str
+    results: tuple[StagewiseConditionResult, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.stage_index) is not int or not 1 <= self.stage_index <= len(TASK_IDS):
+            raise ValueError("stagewise stage index is outside the frozen task order")
+        if self.introduced_task != TASK_IDS[self.stage_index - 1]:
+            raise ValueError("stagewise introduced task does not match its stage")
+        require_sha256(self.stage_tensor_checksum, "stagewise adaptation")
+        require_identifier(self.task_noun, "stagewise task")
+        require_sha256(self.story_id, "stagewise story")
+        if self.task_noun not in TASK_IDS[: self.stage_index]:
+            raise ValueError("stagewise rows may only evaluate learned tasks")
+        if tuple(result.condition for result in self.results) != CONDITIONS:
+            raise ValueError("stagewise rows require all six conditions in order")
+
+    def as_record(self) -> dict[str, object]:
+        """Return the canonical content-addressed stagewise JSONL row."""
+        core = {
+            "format": STAGEWISE_FORMAT,
+            "introduced_task": self.introduced_task,
+            "results": {
+                result.condition: result.as_record() for result in self.results
+            },
+            "stage_index": self.stage_index,
+            "stage_tensor_checksum": self.stage_tensor_checksum,
+            "story_id": self.story_id,
+            "task_noun": self.task_noun,
+        }
+        return {**core, "result_sha256": record_sha256(core)}
+
+
 __all__ = [
     "AUDIT_FORMAT",
     "BASE_SELECTION_FORMAT",
@@ -610,6 +694,10 @@ __all__ = [
     "RESULT_ROOT",
     "RUN_MANIFEST_FORMAT",
     "SCHEMA_VERSION",
+    "STAGEWISE_FORMAT",
+    "STAGEWISE_CASE_COUNT",
+    "StagewiseClRow",
+    "StagewiseConditionResult",
     "TASK_IDS",
     "TRAIN_UNIQUE_STORY_COUNT",
     "VALIDATION_UNIQUE_STORY_COUNT",

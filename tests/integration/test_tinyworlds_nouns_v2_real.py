@@ -14,6 +14,7 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
     PARENT_PARTITION_SHA256,
     PURE_TASK_TRAIN_STORY_COUNT,
     PURE_TASK_VALIDATION_STORY_COUNT,
+    STAGEWISE_CASE_COUNT,
     TRAIN_UNIQUE_STORY_COUNT,
 )
 from apm.data.text.tinyworlds_nouns_v2.partition import (
@@ -31,6 +32,7 @@ PARENT_ROOT = (
     / PARENT_PARTITION_SHA256
 )
 V2_ROOT = REPOSITORY_ROOT / "data/tinyworlds-nouns-v2"
+V2_CHECKPOINT_ROOT = REPOSITORY_ROOT / "checkpoints/tinyworlds-nouns-v2"
 
 
 def test_real_24_task_counts_and_byte_identical_rebuild() -> None:
@@ -53,6 +55,10 @@ def test_real_24_task_counts_and_byte_identical_rebuild() -> None:
         (task.task_id, task.train_story_count, task.validation_story_count)
         for task in partition.tasks
     ) == EXPECTED_PURE_COUNTS
+    assert sum(
+        task.validation_story_count * (len(partition.tasks) - index)
+        for index, task in enumerate(partition.tasks)
+    ) == STAGEWISE_CASE_COUNT
     verify_byte_identical_rebuild(partition, manifest)
 
 
@@ -72,3 +78,42 @@ def test_completed_nouns_v1_strict_load_and_published_hashes_are_unchanged() -> 
     }
     for relative, digest in expected.items():
         assert sha256((REPOSITORY_ROOT / relative).read_bytes()).hexdigest() == digest
+
+
+def test_all_real_v2_vamp_stages_strict_load_as_one_immutable_prefix() -> None:
+    manifest = authenticate_parent_manifest(PARENT_ROOT)
+    partition = find_partition(manifest, V2_ROOT)
+    assert partition is not None
+
+    from apm.data.text.tinyworlds_nouns_v2.contracts import NounsV2ExperimentPreset
+    from apm.data.text.tinyworlds_nouns_v2.experiment import (
+        load_nouns_v2_vamp_stages,
+        run_or_load_nouns_v2_gpu_preflight,
+        run_or_resume_nouns_v2_base,
+    )
+
+    preset = NounsV2ExperimentPreset()
+    preflight = run_or_load_nouns_v2_gpu_preflight(
+        partition,
+        preset,
+        V2_CHECKPOINT_ROOT,
+    )
+    selected_base = run_or_resume_nouns_v2_base(
+        partition,
+        preset,
+        preflight,
+        V2_CHECKPOINT_ROOT,
+    )
+    stages = load_nouns_v2_vamp_stages(
+        partition,
+        preset,
+        selected_base,
+        V2_CHECKPOINT_ROOT,
+    )
+    assert len(stages) == 24
+    assert tuple(
+        tuple(str(task) for task in stage.task_order) for stage in stages
+    ) == tuple(partition.task_ids[:index] for index in range(1, 25))
+    assert stages[-1].tensor_checksum == (
+        "97414ac3d8656ab083b2e570a4162dc69b024f90cf819b80b1cab94213553e63"
+    )

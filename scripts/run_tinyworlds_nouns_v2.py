@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     arguments = parser.parse_args(argv)
     started = time.monotonic()
-    print("Phase 1/7: authenticate the immutable nouns-v1 parent.", flush=True)
+    print("Phase 1/8: authenticate the immutable nouns-v1 parent.", flush=True)
     manifest = authenticate_parent_manifest(PARENT_DIRECTORY)
     manifest_path = publish_manifest(manifest, DATA_DIRECTORY)
     print(
@@ -71,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
 
-    print("Phase 2/7: build and independently reconstruct the disjoint partition.", flush=True)
+    print("Phase 2/8: build and independently reconstruct the disjoint partition.", flush=True)
     partition = find_partition(manifest, DATA_DIRECTORY)
     if partition is None:
         partition = build_nouns_v2_partition(
@@ -106,9 +106,14 @@ def main(argv: list[str] | None = None) -> int:
         evaluate_whole_story_nll,
     )
     from apm.data.text.tinyworlds_nouns_v2.experiment import (
+        load_nouns_v2_vamp_stages,
         run_or_load_nouns_v2_gpu_preflight,
         run_or_resume_nouns_v2_base,
         run_or_resume_nouns_v2_vamp,
+    )
+    from apm.data.text.tinyworlds_nouns_v2.stagewise import (
+        evaluate_stagewise_continual_learning,
+        expected_stagewise_row_count,
     )
     from apm.data.text.tinyworlds_nouns_v2.judging import (
         DEFAULT_JUDGE_MODEL,
@@ -119,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
 
     preset = NounsV2ExperimentPreset()
     tokenizer = TokenizersTextTokenizer.from_file(TOKENIZER_PATH)
-    print("Phase 3/7: GPU preflight and fresh two-epoch seed-zero base.", flush=True)
+    print("Phase 3/8: GPU preflight and fresh two-epoch seed-zero base.", flush=True)
     preflight = run_or_load_nouns_v2_gpu_preflight(
         partition,
         preset,
@@ -146,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         None,
     )
 
-    print("Phase 4/7: ordered 24-stage VAMP adapter graph.", flush=True)
+    print("Phase 4/8: ordered 24-stage VAMP adapter graph.", flush=True)
     adaptation = run_or_resume_nouns_v2_vamp(
         partition,
         preset,
@@ -154,6 +159,14 @@ def main(argv: list[str] | None = None) -> int:
         CHECKPOINT_DIRECTORY,
         progress=_training_progress(started),
     )
+    adaptations = load_nouns_v2_vamp_stages(
+        partition,
+        preset,
+        selected_base,
+        CHECKPOINT_DIRECTORY,
+    )
+    if adaptations[-1].tensor_checksum != adaptation.tensor_checksum:
+        raise RuntimeError("strict stage audit and completed VAMP graph differ")
     _publish_run_manifest(partition.partition_sha256, manifest.manifest_sha256, "vamp_complete")
     _publish_execution_status(
         "vamp_complete",
@@ -163,7 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         adaptation.tensor_checksum,
     )
 
-    print("Phase 5/7: all 26,640 whole-story NLL and routing rows.", flush=True)
+    print("Phase 5/8: all 26,640 whole-story NLL and routing rows.", flush=True)
     whole_path = evaluate_whole_story_nll(
         partition,
         preset,
@@ -172,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
         RESULT_DIRECTORY / "whole-story-nll.jsonl",
         progress=_evaluation_progress(started),
     )
-    print("Phase 6/7: midpoint-only routing, suffix NLL, and greedy completions.", flush=True)
+    print("Phase 6/8: midpoint-only routing, suffix NLL, and greedy completions.", flush=True)
     generation_path = evaluate_half_story_generations(
         partition,
         preset,
@@ -182,19 +195,40 @@ def main(argv: list[str] | None = None) -> int:
         RESULT_DIRECTORY / "half-story-generations.jsonl",
         progress=_evaluation_progress(started),
     )
+    stagewise_count = expected_stagewise_row_count(partition)
+    print(
+        f"Phase 7/8: {stagewise_count:,} stagewise continual-learning cases.",
+        flush=True,
+    )
+    stagewise_path = evaluate_stagewise_continual_learning(
+        partition,
+        preset,
+        selected_base,
+        adaptations,
+        RESULT_DIRECTORY / "stagewise-cl.jsonl",
+        progress=_evaluation_progress(started),
+    )
     _publish_run_manifest(
         partition.partition_sha256,
         manifest.manifest_sha256,
         "local_evaluation_complete",
     )
+    _publish_execution_status(
+        "stagewise_audit_complete",
+        partition.partition_sha256,
+        manifest.manifest_sha256,
+        selected_base.training_sha256,
+        adaptation.tensor_checksum,
+    )
 
-    print("Phase 7/7: standalone local report.", flush=True)
+    print("Phase 8/8: standalone local report with dependency graph.", flush=True)
     markdown, html = publish_nouns_v2_report(
         partition,
         preset,
-        adaptation,
+        adaptations,
         whole_path,
         generation_path,
+        stagewise_path,
         RESULT_DIRECTORY,
     )
     phase = "local_complete"
@@ -216,9 +250,10 @@ def main(argv: list[str] | None = None) -> int:
         markdown, html = publish_nouns_v2_report(
             partition,
             preset,
-            adaptation,
+            adaptations,
             whole_path,
             generation_path,
+            stagewise_path,
             RESULT_DIRECTORY,
             judge_path=judge_path,
         )

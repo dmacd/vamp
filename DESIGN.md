@@ -93,11 +93,41 @@ six conditions. Both passes retain bounded chunks, eight-row EBT sub-batches,
 the stabilized KV cache, atomic work ledgers, incomplete-tail recovery, and
 immediate case persistence.
 
+The longitudinal audit is a separate, content-addressed
+`tinyworlds-nouns-stagewise-cl-v2` ledger over the already committed VAMP
+checkpoints; it never retrains an edge. For task position (i\), every one of
+that task's 4,440-partition validation members is evaluated at stages (i)
+through 24, yielding exactly 72,256 task/story/stage rows. Each row binds the
+stage tensor checksum and stores all six conditions together. Routing sees
+only the exact midpoint prefix, while reported competence is true-suffix NLL.
+The base condition always selects root, the stored oracle always selects the
+task's immutable node, and the four task-free methods address only nodes that
+exist at that stage. Strict loading authenticates every stage record and also
+checks that all earlier edge tensors and content keys remain byte-identical in
+every later checkpoint.
+
+Stagewise reports keep parameter retention distinct from addressing
+interference. For each task and condition, forgetting is final suffix NLL
+minus the best suffix NLL observed from task introduction onward; backward
+transfer is introduction suffix NLL minus final suffix NLL. Route-accuracy
+change is final minus introduction accuracy. The maximum absolute change in
+stored-oracle task NLL is reported separately as the direct immutability
+check. Exhaustive, Hopfield, EBT-uniform, and EBT-Hopfield are therefore
+reported as routing policies over one VAMP memory graph, not as four separately
+trained continual learners.
+
+The final Markdown links a deterministic `vamp-graph.svg`, and the standalone
+HTML embeds that SVG directly. Its dependency edges run from parent to child,
+node labels carry training stage, and layout follows the authenticated graph
+rather than a hand-maintained diagram. Both reports also include an inline
+stagewise route-accuracy chart plus CSV exports for stage and task metrics; the
+DOT and JSON graph artifacts remain available for machine inspection.
+
 The no-argument runner binds GPU 0, disables XLA GPU command buffers before any
 JAX-bearing import, and treats the complete local NLL, generation, and
-standalone Markdown/HTML report as success. OpenRouter is available only via
-`--judge`; it consumes the persisted generation ledger and regenerates the
-report without model work.
+stagewise audit plus standalone Markdown/HTML report as success. OpenRouter is
+available only via `--judge`; it consumes the persisted generation and
+stagewise ledgers and regenerates the report without model work.
 
 ## TinyWorlds Noun-Overlap v1
 

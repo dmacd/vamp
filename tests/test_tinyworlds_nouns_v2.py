@@ -3,21 +3,26 @@ from __future__ import annotations
 from hashlib import sha256
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import apm.data.text.tinyworlds_nouns_v1.evaluation as shared_evaluation
 from apm.data.text.tinyworlds_nouns_v1.contracts import NounsExperimentPreset
+from apm.data.text.tinyworlds_nouns_v1.experiment import StoryIndexEntry
 from apm.data.text.tinyworlds_nouns_v2.contracts import (
     BASE_SELECTION_FORMAT,
     BASE_TRAINING_FORMAT,
     GPU_PREFLIGHT_FORMAT,
     HALF_STORY_FORMAT,
+    STAGEWISE_FORMAT,
     TASK_IDS,
     VAMP_STAGE_FORMAT,
     WHOLE_STORY_FORMAT,
     NounConceptFamily,
     NounsV2ExperimentPreset,
+    StagewiseClRow,
+    StagewiseConditionResult,
     WholeStoryNllRow,
     canonical_json_bytes,
     record_sha256,
@@ -32,8 +37,12 @@ from apm.data.text.tinyworlds_nouns_v2.partition import (
 from apm.data.text.tinyworlds_nouns_v2.report import (
     render_report_html,
     render_report_markdown,
+    render_vamp_graph_svg,
 )
+import apm.data.text.tinyworlds_nouns_v2.stagewise as stagewise
+from apm.data.text.tinyworlds_nouns_v2.stagewise import summarize_stagewise_rows
 from apm.lm.text import CharTokenizer
+from apm.memory.graph import NodeId, TaskId, add_memory_node, init_memory_graph
 
 
 FAMILIES = (
@@ -156,6 +165,38 @@ def test_v2_preset_and_result_contracts_have_independent_hashes() -> None:
     assert row["format"] == WHOLE_STORY_FORMAT
     assert supplied == record_sha256(row)
 
+    stage_results = tuple(
+        StagewiseConditionResult(
+            condition=condition,
+            selected_node="mouse" if condition != "base" else "root",
+            selected_path=("root", "mouse") if condition != "base" else ("root",),
+            oracle_match=condition != "base",
+            total_nll=2.0,
+            token_count=2,
+            mean_nll=1.0,
+            regret_vs_oracle=0.0,
+        )
+        for condition in (
+            "base",
+            "oracle",
+            "vamp_exhaustive",
+            "vamp_hopfield",
+            "vamp_ebt_uniform",
+            "vamp_ebt_hopfield",
+        )
+    )
+    stage_row = StagewiseClRow(
+        stage_index=1,
+        introduced_task="mouse",
+        stage_tensor_checksum="1" * 64,
+        task_noun="mouse",
+        story_id=sha256(b"stage-story").hexdigest(),
+        results=stage_results,
+    ).as_record()
+    stage_hash = stage_row.pop("result_sha256")
+    assert stage_row["format"] == STAGEWISE_FORMAT
+    assert stage_hash == record_sha256(stage_row)
+
 
 def test_shared_base_and_vamp_resume_formats_are_v2_bound() -> None:
     assert len(TASK_IDS) == 24
@@ -221,6 +262,7 @@ def test_report_rendering_is_byte_stable_after_resume() -> None:
         "vamp_ebt_uniform",
         "vamp_ebt_hopfield",
     )}
+    continual = _stagewise_fixture_summary()
     data = {
         "base": {
             "optimizer_share": 0.79,
@@ -234,6 +276,7 @@ def test_report_rendering_is_byte_stable_after_resume() -> None:
             "pure_task_train_story_count": 2,
             "pure_validation_pair_count": 2,
         },
+        "continual_learning": continual,
         "examples": [],
         "graph": [{"depth": 0, "node": "root", "parent": None, "stage": 0}],
         "judge": {"available": False},
@@ -252,3 +295,156 @@ def test_report_rendering_is_byte_stable_after_resume() -> None:
     assert render_report_markdown(data) == render_report_markdown(data)
     assert render_report_html(data) == render_report_html(data)
     assert HALF_STORY_FORMAT.endswith("-v2")
+
+
+def test_stagewise_metrics_separate_stored_retention_from_router_decay() -> None:
+    summary = _stagewise_fixture_summary()
+    assert summary["row_count"] == 3
+    assert summary["oracle_max_absolute_drift"] == pytest.approx(0.0)
+    exhaustive = summary["condition_summaries"]["vamp_exhaustive"]
+    assert exhaustive["mean_task_forgetting"] == pytest.approx(0.15)
+    assert exhaustive["mean_backward_transfer"] == pytest.approx(-0.15)
+    assert exhaustive["mean_route_accuracy_change"] == pytest.approx(-0.5)
+
+
+def test_vamp_dependency_svg_is_deterministic_and_contains_every_edge() -> None:
+    graph = [
+        {"depth": 0, "node": "root", "parent": None, "stage": 0},
+        {"depth": 1, "node": "mouse", "parent": "root", "stage": 1},
+        {"depth": 2, "node": "boat", "parent": "mouse", "stage": 2},
+    ]
+    rendered = render_vamp_graph_svg(graph)
+    assert rendered == render_vamp_graph_svg(graph)
+    assert "Learned VAMP node dependencies" in rendered
+    assert "01 · mouse" in rendered
+    assert "parent root" in rendered
+    assert "parent mouse" in rendered
+
+
+def test_stagewise_ledger_resume_and_tamper_rejection(tmp_path: Path) -> None:
+    story_id = sha256(b"stagewise-ledger-story").hexdigest()
+    checksum = "2" * 64
+    graph = add_memory_node(
+        init_memory_graph(NodeId("root")),
+        NodeId("mouse"),
+        NodeId("root"),
+        TaskId("mouse"),
+        1,
+        1,
+    )
+    adaptation = SimpleNamespace(
+        task_order=("mouse",),
+        tensor_checksum=checksum,
+        vamp_graph=graph,
+        vamp_stages=(object(),),
+    )
+    partition = SimpleNamespace(task_ids=("mouse",))
+    entries = {
+        "mouse": (
+            StoryIndexEntry(story_id, 0, 0, 1, 0, 2),
+        )
+    }
+    results = tuple(
+        StagewiseConditionResult(
+            condition=condition,
+            selected_node="root" if condition == "base" else "mouse",
+            selected_path=("root",) if condition == "base" else ("root", "mouse"),
+            oracle_match=condition != "base",
+            total_nll=2.0,
+            token_count=2,
+            mean_nll=1.0,
+            regret_vs_oracle=0.0,
+        )
+        for condition in (
+            "base",
+            "oracle",
+            "vamp_exhaustive",
+            "vamp_hopfield",
+            "vamp_ebt_uniform",
+            "vamp_ebt_hopfield",
+        )
+    )
+    record = StagewiseClRow(
+        1,
+        "mouse",
+        checksum,
+        "mouse",
+        story_id,
+        results,
+    ).as_record()
+    ledger = tmp_path / "stagewise.jsonl.work"
+    ledger.write_bytes(canonical_json_bytes(record) + b'{"interrupted"')
+    stagewise._repair_interrupted_tail(ledger)
+    assert stagewise.validate_stagewise_ledger(
+        ledger,
+        partition,
+        (adaptation,),
+        require_complete=True,
+        entries_by_task=entries,
+    ) == {("1", "mouse", story_id)}
+
+    tampered = json.loads(canonical_json_bytes(record))
+    tampered["results"]["vamp_hopfield"]["selected_path"] = ["root"]
+    core = {key: value for key, value in tampered.items() if key != "result_sha256"}
+    tampered["result_sha256"] = record_sha256(core)
+    ledger.write_bytes(canonical_json_bytes(tampered))
+    with pytest.raises(ValueError, match="route metadata"):
+        stagewise.validate_stagewise_ledger(
+            ledger,
+            partition,
+            (adaptation,),
+            require_complete=True,
+            entries_by_task=entries,
+        )
+
+
+def _stagewise_fixture_summary() -> dict[str, object]:
+    task_ids = ("mouse", "boat")
+
+    def row(
+        stage: int,
+        task: str,
+        oracle_nll: float,
+        exhaustive_nll: float,
+        exhaustive_match: bool,
+    ) -> dict[str, object]:
+        results = {}
+        for condition in (
+            "base",
+            "oracle",
+            "vamp_exhaustive",
+            "vamp_hopfield",
+            "vamp_ebt_uniform",
+            "vamp_ebt_hopfield",
+        ):
+            mean_nll = (
+                oracle_nll + 0.5
+                if condition == "base"
+                else exhaustive_nll
+                if condition == "vamp_exhaustive"
+                else oracle_nll
+            )
+            oracle_match = (
+                False
+                if condition == "base"
+                else exhaustive_match
+                if condition == "vamp_exhaustive"
+                else True
+            )
+            results[condition] = {
+                "mean_nll": mean_nll,
+                "oracle_match": oracle_match,
+                "regret_vs_oracle": mean_nll - oracle_nll,
+                "token_count": 2,
+                "total_nll": mean_nll * 2,
+            }
+        return {"results": results, "stage_index": stage, "task_noun": task}
+
+    return summarize_stagewise_rows(
+        (
+            row(1, "mouse", 1.0, 1.2, True),
+            row(2, "mouse", 1.0, 1.5, False),
+            row(2, "boat", 2.0, 2.2, True),
+        ),
+        task_ids,
+    )

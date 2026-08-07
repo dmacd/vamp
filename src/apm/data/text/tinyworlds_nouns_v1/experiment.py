@@ -845,37 +845,12 @@ def run_or_resume_noun_vamp(
     progress: ProgressCallback | None = None,
 ) -> LanguageAdaptationArtifact:
     """Resume completed stages and train exactly one VAMP edge per noun task."""
-    loaded_base = load_gpt_neo_checkpoint(selected_base.reference)
+    loaded_base, lora_config, train_config, run_sha256 = _noun_vamp_execution(
+        artifact,
+        preset,
+        selected_base,
+    )
     model_config = loaded_base.config
-    lora_config = LoraConfig(rank=preset.lora_rank, alpha=preset.lora_alpha)
-    train_config = LmTrainConfig(
-        learning_rate=preset.adapter_learning_rate,
-        steps=preset.adapter_updates,
-        batch_size=preset.microbatch_size,
-        weight_decay=preset.adapter_weight_decay,
-        gradient_clip_norm=preset.gradient_clip_norm,
-    )
-    run_sha256 = record_sha256(
-        {
-            "base": selected_base.training_sha256,
-            "lora_config": {
-                "alpha": lora_config.alpha,
-                "rank": lora_config.rank,
-                "target_mask": {
-                    field.name: getattr(lora_config.target_mask, field.name)
-                    for field in fields(lora_config.target_mask)
-                },
-            },
-            "model_config": _model_config_record(model_config),
-            "partition": artifact.partition_sha256,
-            "preset": preset.as_record(),
-            "train_config": {
-                field.name: getattr(train_config, field.name)
-                for field in fields(train_config)
-            },
-            "vamp_only": True,
-        }
-    )
     root = Path(checkpoint_root) / "vamp" / run_sha256
     root.mkdir(parents=True, exist_ok=True)
     tasks = tuple(
@@ -1022,6 +997,103 @@ def run_or_resume_noun_vamp(
     return final_artifact
 
 
+def load_noun_vamp_stages(
+    artifact: NounPartitionArtifact,
+    preset: NounsExperimentPreset,
+    selected_base: NounSelectedBase,
+    checkpoint_root: str | Path = CHECKPOINT_ROOT,
+) -> tuple[LanguageAdaptationArtifact, ...]:
+    """Strict-load and authenticate every committed stage of a complete VAMP run."""
+    loaded_base, lora_config, train_config, run_sha256 = _noun_vamp_execution(
+        artifact,
+        preset,
+        selected_base,
+    )
+    root = Path(checkpoint_root) / "vamp" / run_sha256
+    latest = _latest_vamp_stage(root, artifact.task_ids)
+    expected_paths = tuple(
+        root / f"stage-{index:03d}-{task_id}"
+        for index, task_id in enumerate(artifact.task_ids, start=1)
+    )
+    if latest != expected_paths[-1] or any(not path.is_dir() for path in expected_paths):
+        raise ValueError("noun VAMP stagewise audit requires all canonical stages")
+    stages: list[LanguageAdaptationArtifact] = []
+    prior_edge_checksums: tuple[str, ...] = ()
+    prior_keys: np.ndarray | None = None
+    for path in expected_paths:
+        record = _load_vamp_stage_record(path)
+        persisted = load_language_adaptation_artifact(path / "adaptation")
+        _require_vamp_bindings(
+            persisted,
+            selected_base,
+            loaded_base.config,
+            lora_config,
+            train_config,
+            artifact,
+            preset,
+        )
+        _require_vamp_stage_record(
+            record,
+            persisted,
+            artifact,
+            preset,
+            selected_base,
+            path,
+        )
+        edge_checksums = _artifact_edge_checksums(persisted)
+        if edge_checksums[: len(prior_edge_checksums)] != prior_edge_checksums:
+            raise ValueError("persisted noun VAMP stage changed an earlier edge")
+        keys = np.asarray(persisted.address_book.keys)
+        if prior_keys is not None and not np.array_equal(
+            keys[: prior_keys.shape[0]], prior_keys
+        ):
+            raise ValueError("persisted noun VAMP stage changed an earlier content key")
+        valid_count = len(persisted.vamp_graph.nodes)
+        prior_edge_checksums = edge_checksums
+        prior_keys = np.array(keys[:valid_count], copy=True)
+        stages.append(persisted)
+    return tuple(stages)
+
+
+def _noun_vamp_execution(
+    artifact: NounPartitionArtifact,
+    preset: NounsExperimentPreset,
+    selected_base: NounSelectedBase,
+):
+    """Resolve the one content-addressed VAMP configuration used by run and audit."""
+    loaded_base = load_gpt_neo_checkpoint(selected_base.reference)
+    lora_config = LoraConfig(rank=preset.lora_rank, alpha=preset.lora_alpha)
+    train_config = LmTrainConfig(
+        learning_rate=preset.adapter_learning_rate,
+        steps=preset.adapter_updates,
+        batch_size=preset.microbatch_size,
+        weight_decay=preset.adapter_weight_decay,
+        gradient_clip_norm=preset.gradient_clip_norm,
+    )
+    run_sha256 = record_sha256(
+        {
+            "base": selected_base.training_sha256,
+            "lora_config": {
+                "alpha": lora_config.alpha,
+                "rank": lora_config.rank,
+                "target_mask": {
+                    field.name: getattr(lora_config.target_mask, field.name)
+                    for field in fields(lora_config.target_mask)
+                },
+            },
+            "model_config": _model_config_record(loaded_base.config),
+            "partition": artifact.partition_sha256,
+            "preset": preset.as_record(),
+            "train_config": {
+                field.name: getattr(train_config, field.name)
+                for field in fields(train_config)
+            },
+            "vamp_only": True,
+        }
+    )
+    return loaded_base, lora_config, train_config, run_sha256
+
+
 def evaluate_token_weighted_nll(
     params: GptNeoParams,
     model_config: GptNeoConfig,
@@ -1149,6 +1221,20 @@ def _edge_checksums(
     model_config: GptNeoConfig,
     lora_config: LoraConfig,
 ) -> tuple[str, ...]:
+    return _graph_edge_checksums(run.graph.nodes, model_config, lora_config)
+
+
+def _artifact_edge_checksums(
+    artifact: LanguageAdaptationArtifact,
+) -> tuple[str, ...]:
+    return _graph_edge_checksums(
+        artifact.vamp_graph.nodes,
+        artifact.model_config,
+        artifact.lora_config,
+    )
+
+
+def _graph_edge_checksums(nodes, model_config, lora_config) -> tuple[str, ...]:
     return tuple(
         sha256(
             b"".join(
@@ -1158,7 +1244,7 @@ def _edge_checksums(
                 ).values()
             )
         ).hexdigest()
-        for node in run.graph.nodes[1:]
+        for node in nodes[1:]
         if node.incoming_edge is not None
     )
 
@@ -1578,6 +1664,7 @@ __all__ = [
     "estimate_noun_resources",
     "evaluate_token_weighted_nll",
     "load_story_index",
+    "load_noun_vamp_stages",
     "noun_model_config",
     "router_batch_from_index",
     "run_or_load_noun_gpu_preflight",

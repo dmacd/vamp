@@ -11,6 +11,7 @@ from apm.data.text.tinyworlds_nouns_v1.experiment import (
     NounGpuPreflight,
     NounSelectedBase,
     StoryIndexEntry,
+    load_noun_vamp_stages,
     load_story_index,
     noun_model_config,
     router_batch_from_index,
@@ -70,6 +71,21 @@ def run_or_resume_nouns_v2_vamp(
     )
 
 
+def load_nouns_v2_vamp_stages(
+    partition: NounsV2PartitionArtifact,
+    preset: NounsV2ExperimentPreset,
+    selected_base: NounSelectedBase,
+    checkpoint_root: str | Path = CHECKPOINT_ROOT,
+) -> tuple[LanguageAdaptationArtifact, ...]:
+    """Strict-load all 24 immutable VAMP stages for longitudinal evaluation."""
+    return load_noun_vamp_stages(
+        partition,
+        preset,
+        selected_base,
+        checkpoint_root,
+    )
+
+
 __all__ = [
     "IndexedStoryStore",
     "IndexedTokenBatchSequence",
@@ -77,6 +93,7 @@ __all__ = [
     "NounSelectedBase",
     "StoryIndexEntry",
     "load_story_index",
+    "load_nouns_v2_vamp_stages",
     "noun_model_config",
     "router_batch_from_index",
     "run_or_load_nouns_v2_gpu_preflight",

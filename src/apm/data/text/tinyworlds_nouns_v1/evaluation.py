@@ -1167,12 +1167,21 @@ def _nll_by_node_per_window(
     packed,
     windows: TokenBatch,
     microbatch_size: int,
+    *,
+    node_indices: tuple[int, ...] | None = None,
 ) -> np.ndarray:
     """Return bounded, shape-stable node totals for every input window."""
     window_count = windows.input_ids.shape[0]
     node_count = len(adaptation.vamp_graph.nodes)
-    totals = np.empty((node_count, window_count), dtype=np.float64)
-    for node_index in range(node_count):
+    selected = tuple(range(node_count)) if node_indices is None else node_indices
+    if (
+        not selected
+        or len(set(selected)) != len(selected)
+        or any(type(index) is not int or not 0 <= index < node_count for index in selected)
+    ):
+        raise ValueError("NLL node indices must be unique valid graph indices")
+    totals = np.empty((len(selected), window_count), dtype=np.float64)
+    for output_index, node_index in enumerate(selected):
         coefficients = edge_coefficients_for_node(packed, node_index)
         for start in range(0, window_count, microbatch_size):
             stop = min(start + microbatch_size, window_count)
@@ -1206,7 +1215,7 @@ def _nll_by_node_per_window(
                 ),
                 dtype=np.float64,
             )
-            totals[node_index, start:stop] = row_totals[: stop - start]
+            totals[output_index, start:stop] = row_totals[: stop - start]
     return totals
 
 
