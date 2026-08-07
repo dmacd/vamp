@@ -43,4 +43,32 @@ Verification so far:
 - nouns-v1 run manifest SHA-256 remains
   `fffa0e0f64f1c63ae3efb16363042907169737dc6858944cbcd0f46b178cc628`
 
-Next phase: outside-sandbox GPU preflight and fresh seed-zero base training.
+## Phase 2 — GPU preflight complete
+
+GPU preflight
+`c4fda525322e00f2b271d351aa263fffda50dd238acd36b85b9709ceba36cc70`
+passed on GPU 0, an RTX 4090. One representative seed-zero base update measured
+6,945,854,720 allocator bytes (6.47 GiB), below the frozen 12 GiB limit. The
+resource record projects 73,864 base microbatches per epoch, 18,466 accumulated
+optimizer updates across two epochs, 48,000 adapter updates, 10,800 parent
+node/story scores, 26,640 whole-story result rows, and 4,440 generation rows.
+
+## Phase 3 — Fresh seed-zero base selected
+
+The isolated nouns-v2 base trained from fresh seed-zero GPT-Neo parameters for
+exactly 18,466 accumulated optimizer updates across two epochs. It did not load
+or derive parameters from nouns-v1. The authenticated held-in NLL improved from
+`1.358781703409687` after epoch one to `1.2703836058418045` after epoch two, so
+the frozen quality gate passed with finite evidence and a strict second-epoch
+improvement.
+
+Selected-base identities and measurements:
+
+- training: `94831c31c8f11a594534c2989182d378fc2e022382b61168b73e7400f9648e21`
+- selection: `44ce3b0c420bb32df274e0e8ee45ddfa9244d9c7d8f959159927bfdd67ba4230`
+- parameter checksum: `fff309bfbfcee8d59c5c3fc04152cc37be2142201f3bf9116b7b024e81a24f3c`
+- measured allocator peak: 9,111,707,392 bytes (8.49 GiB), below 12 GiB
+- authenticated resume coverage: full optimizer, RNG, epoch/batch cursor, and
+  byte-stable loss trace under `tinyworlds-nouns-base-training-v2`
+
+Next phase: ordered 24-stage VAMP training with 2,000 updates per task.
