@@ -29,6 +29,7 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
     PURE_TASK_TRAIN_STORY_COUNT,
     PURE_TASK_VALIDATION_STORY_COUNT,
     REPORT_FORMAT,
+    FULL_FINETUNE_CONDITIONS,
     TASK_IDS,
     TRAIN_UNIQUE_STORY_COUNT,
     WHOLE_STORY_FORMAT,
@@ -39,6 +40,10 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
 )
 from apm.data.text.tinyworlds_nouns_v2.baseline_stagewise import (
     summarize_baseline_stagewise_ledger,
+)
+from apm.data.text.tinyworlds_nouns_v2.full_finetune import FullFinetuneStage
+from apm.data.text.tinyworlds_nouns_v2.full_finetune_stagewise import (
+    summarize_full_finetune_stagewise_ledger,
 )
 from apm.data.text.tinyworlds_nouns_v2.report_plots import (
     render_dependency_graph_svg,
@@ -52,10 +57,12 @@ def publish_nouns_v2_report(
     preset: NounsV2ExperimentPreset,
     adaptations: tuple[LanguageAdaptationArtifact, ...],
     baseline_stages: tuple[LanguageAdaptationArtifact, ...],
+    full_finetune_stages: tuple[FullFinetuneStage, ...],
     whole_story_path: str | Path,
     generation_path: str | Path,
     stagewise_path: str | Path,
     baseline_stagewise_path: str | Path,
+    full_finetune_stagewise_path: str | Path,
     result_root: str | Path,
     *,
     judge_path: str | Path | None = None,
@@ -84,6 +91,14 @@ def publish_nouns_v2_report(
         adaptations,
         stagewise_path,
     )
+    full_finetune_continual_learning = summarize_full_finetune_stagewise_ledger(
+        full_finetune_stagewise_path,
+        partition,
+        preset,
+        full_finetune_stages,
+        adaptations,
+        stagewise_path,
+    )
     _validate_final_stage_suffix_parity(stagewise_path, generation_rows)
     data = build_report_data(
         partition,
@@ -94,6 +109,7 @@ def publish_nouns_v2_report(
         judge_rows,
         continual_learning,
         baseline_continual_learning,
+        full_finetune_continual_learning,
     )
     root = Path(result_root)
     root.mkdir(parents=True, exist_ok=True)
@@ -111,11 +127,13 @@ def publish_nouns_v2_report(
         render_comparative_nll_chart_svg(
             continual_learning,
             baseline_continual_learning,
+            full_finetune_continual_learning,
         ).encode("utf-8"),
     )
     _publish_confusion_csv(root, data)
     _publish_stagewise_csvs(root, data)
     _publish_baseline_stagewise_csvs(root, data)
+    _publish_full_finetune_stagewise_csvs(root, data)
     for name in ("base-selection.csv", "task-counts.csv"):
         destination = root / name
         source = partition.root / name
@@ -140,6 +158,7 @@ def build_report_data(
     judge_rows: tuple[dict[str, object], ...],
     continual_learning: dict[str, object],
     baseline_continual_learning: dict[str, object],
+    full_finetune_continual_learning: dict[str, object],
 ) -> dict[str, object]:
     """Build the complete JSON-compatible v2 report view."""
     by_task_condition: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
@@ -212,6 +231,7 @@ def build_report_data(
             "pure_validation_pair_count": PURE_TASK_VALIDATION_STORY_COUNT,
         },
         "continual_learning": continual_learning,
+        "full_finetune_continual_learning": full_finetune_continual_learning,
         "examples": list(_representative_examples(generation_rows)),
         "format": REPORT_FORMAT,
         "graph": list(graph),
@@ -233,6 +253,10 @@ def render_report_markdown(data: dict[str, object]) -> str:
     baseline_continual = _object(
         data["baseline_continual_learning"],
         "baseline continual learning",
+    )
+    full_finetune_continual = _object(
+        data["full_finetune_continual_learning"],
+        "full-finetune continual learning",
     )
     overall = _object(data["overall_conditions"], "overall conditions")
     suffix = _object(data["suffix_conditions"], "suffix conditions")
@@ -280,33 +304,48 @@ def render_report_markdown(data: dict[str, object]) -> str:
         "",
         "</details>",
         "",
-        "## Sequential and independent-adapter comparison",
+        "## Sequential controls, independent adapters, and VAMP",
         "",
         "The sequential control is one rank-eight LoRA that is updated in place "
         "for all 24 tasks; it receives no task identity at evaluation. The "
         "independent control trains one fresh root LoRA per task and evaluates "
         "with the correct task adapter, so it is a task-aware isolation ceiling "
-        "rather than a deployable task-free router.",
+        "rather than a deployable task-free router. The full-finetune control "
+        "updates every GPT-Neo parameter sequentially and also receives no task "
+        "identity at evaluation.",
         "",
         f"The largest absolute independent-adapter NLL drift is "
         f"{float(baseline_continual['independent_max_absolute_drift']):.6g}. "
-        "All systems use the same base, rank/alpha, task order, 2,000-update "
-        "budget, validation stories, midpoint split, and true-suffix loss.",
+        "All systems use the same base, task order, 2,000-update budget, "
+        "validation stories, midpoint split, and true-suffix loss. Adapter "
+        "methods use rank/alpha eight and learning rate 1e-3; full fine-tuning "
+        "uses every model parameter at learning rate 5e-5.",
         "",
         "![Stagewise continual-learning NLL comparison](continual-nll-comparison.svg)",
         "",
         "| system | task identity | final story NLL | final token NLL | final route accuracy | mean forgetting | max forgetting | backward transfer |",
         "|---|---|---:|---:|---:|---:|---:|---:|",
-        *_comparison_markdown_rows(continual, baseline_continual),
+        *_comparison_markdown_rows(
+            continual,
+            baseline_continual,
+            full_finetune_continual,
+        ),
         "",
         "<details>",
         "<summary>All 24 sequential and independent stage aggregates</summary>",
         "",
-        "| stage | new task | retained stories | sequential NLL | independent NLL | sequential deficit |",
-        "|---:|---|---:|---:|---:|---:|",
+        "| stage | new task | retained stories | sequential LoRA | full fine-tune | independent | LoRA deficit | full deficit |",
+        "|---:|---|---:|---:|---:|---:|---:|---:|",
         *(
-            _baseline_stage_markdown_row(_object(raw, "baseline stage summary"))
-            for raw in _list(baseline_continual["stages"], "baseline stages")
+            _baseline_stage_markdown_row(
+                _object(raw_baseline, "baseline stage summary"),
+                _object(raw_full, "full-finetune stage summary"),
+            )
+            for raw_baseline, raw_full in zip(
+                _list(baseline_continual["stages"], "baseline stages"),
+                _list(full_finetune_continual["stages"], "full-finetune stages"),
+                strict=True,
+            )
         ),
         "",
         "</details>",
@@ -346,9 +385,11 @@ def render_report_markdown(data: dict[str, object]) -> str:
         "</details>",
         "",
         "Detailed task-level introduction, best, and final measurements are in "
-        "`stagewise-task-metrics.csv` and `baseline-stagewise-task-metrics.csv`; "
+        "`stagewise-task-metrics.csv`, `baseline-stagewise-task-metrics.csv`, and "
+        "`full-finetune-stagewise-task-metrics.csv`; "
         "the complete stage curves are in `stagewise-summary.csv` and "
-        "`baseline-stagewise-summary.csv`.",
+        "`baseline-stagewise-summary.csv`, and "
+        "`full-finetune-stagewise-summary.csv`.",
         "",
         "## Whole-story NLL and routing",
         "",
@@ -414,6 +455,10 @@ def render_report_html(data: dict[str, object]) -> str:
         data["baseline_continual_learning"],
         "baseline continual learning",
     )
+    full_finetune_continual = _object(
+        data["full_finetune_continual_learning"],
+        "full-finetune continual learning",
+    )
     overall = _object(data["overall_conditions"], "overall")
     task_metrics = tuple(
         _object(raw, "task metric") for raw in _list(data["task_metrics"], "tasks")
@@ -448,6 +493,7 @@ def render_report_html(data: dict[str, object]) -> str:
     comparison_chart = render_comparative_nll_chart_svg(
         continual,
         baseline_continual,
+        full_finetune_continual,
     )
     continual_conditions = _object(
         continual["condition_summaries"], "continual conditions"
@@ -464,11 +510,22 @@ def render_report_html(data: dict[str, object]) -> str:
         for raw in _list(continual["stages"], "stage summaries")
     )
     comparison_rows = "".join(
-        _comparison_html_rows(continual, baseline_continual)
+        _comparison_html_rows(
+            continual,
+            baseline_continual,
+            full_finetune_continual,
+        )
     )
     baseline_stage_rows = "".join(
-        _baseline_stage_html_row(_object(raw, "baseline stage summary"))
-        for raw in _list(baseline_continual["stages"], "baseline stages")
+        _baseline_stage_html_row(
+            _object(raw_baseline, "baseline stage summary"),
+            _object(raw_full, "full-finetune stage summary"),
+        )
+        for raw_baseline, raw_full in zip(
+            _list(baseline_continual["stages"], "baseline stages"),
+            _list(full_finetune_continual["stages"], "full-finetune stages"),
+            strict=True,
+        )
     )
     embedded = escape(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TinyWorlds nouns-v2 report</title>
@@ -476,7 +533,7 @@ def render_report_html(data: dict[str, object]) -> str:
 <h1>TinyWorlds nouns-v2 disjoint benchmark</h1><p>Every base/task boundary is story-disjoint. Multi-task stories are audited but never used for updates.</p><div class="chips"><span class="chip">{int(base['universe_story_count']):,} clean base stories</span><span class="chip">{int(construction['pure_task_train_story_count']):,} pure task stories</span><span class="chip">{int(construction['pure_validation_pair_count']):,} validation pairs</span></div>
 <details class="card" open><summary>Disjoint construction</summary><p>Zero selected concepts → base; exactly one → its sole task; two or more → permanent exclusion. The base universe covers {float(base['universe_share']):.2%} of original training; its optimizer-visible share after the internal holdout is {float(base['optimizer_share']):.2%}.</p></details>
 <details class="card" open><summary>Learned 24-stage VAMP dependency graph</summary><div class="visual">{graph_svg}</div><details><summary>Edge list</summary><ul>{graph_list}</ul></details></details>
-<details class="card" open><summary>Sequential, independent, and VAMP comparison</summary><p>The sequential control is one continually overwritten LoRA. The independent control uses a fresh task-matched root LoRA and therefore assumes task identity. Every row below uses the same base, adapter budget, validation stories, midpoint split, and true suffix.</p><p>Largest absolute independent-adapter NLL drift: {float(baseline_continual['independent_max_absolute_drift']):.6g}.</p><div class="visual">{comparison_chart}</div><div class="scroll"><table><thead><tr><th>System</th><th>Task identity</th><th>Final story NLL</th><th>Final token NLL</th><th>Final route accuracy</th><th>Mean forgetting</th><th>Max forgetting</th><th>Backward transfer</th></tr></thead><tbody>{comparison_rows}</tbody></table></div><details><summary>All 24 stored-baseline stages</summary><div class="scroll"><table><thead><tr><th>Stage</th><th>New task</th><th>Stories</th><th>Sequential NLL</th><th>Independent NLL</th><th>Sequential deficit</th></tr></thead><tbody>{baseline_stage_rows}</tbody></table></div></details></details>
+<details class="card" open><summary>Sequential controls, independent adapters, and VAMP</summary><p>One sequential control continually overwrites a rank-eight LoRA; the other fine-tunes every GPT-Neo parameter. Neither receives task identity. The independent control uses a fresh task-matched root LoRA and is a task-aware ceiling. Every row uses the same base, task order, 2,000-update budget, validation stories, midpoint split, and true suffix. Adapter methods use learning rate 1e-3; full fine-tuning uses 5e-5.</p><p>Largest absolute independent-adapter NLL drift: {float(baseline_continual['independent_max_absolute_drift']):.6g}.</p><div class="visual">{comparison_chart}</div><div class="scroll"><table><thead><tr><th>System</th><th>Task identity</th><th>Final story NLL</th><th>Final token NLL</th><th>Final route accuracy</th><th>Mean forgetting</th><th>Max forgetting</th><th>Backward transfer</th></tr></thead><tbody>{comparison_rows}</tbody></table></div><details><summary>All 24 stored-baseline stages</summary><div class="scroll"><table><thead><tr><th>Stage</th><th>New task</th><th>Stories</th><th>Sequential LoRA</th><th>Full fine-tune</th><th>Independent</th><th>LoRA deficit</th><th>Full deficit</th></tr></thead><tbody>{baseline_stage_rows}</tbody></table></div></details></details>
 <details class="card" open><summary>VAMP routing across all 24 stages</summary><p>{int(continual['row_count']):,} task/story/stage cases measure every learned task after every later stage. Stored-oracle drift isolates parameter retention; router curves show interference from adding candidate nodes. Largest absolute oracle NLL drift: {float(continual['oracle_max_absolute_drift']):.6g}.</p><div class="visual">{route_chart}</div><div class="scroll"><table><thead><tr><th>Condition</th><th>Final story NLL</th><th>Final token NLL</th><th>Final accuracy</th><th>Mean forgetting</th><th>Max forgetting</th><th>Backward transfer</th><th>Accuracy change</th></tr></thead><tbody>{continual_rows}</tbody></table></div><details><summary>All 24 VAMP stage aggregates</summary><div class="scroll"><table><thead><tr><th>Stage</th><th>New task</th><th>Stories</th><th>Exhaustive</th><th>Hopfield</th><th>EBT-U</th><th>EBT-H</th><th>Oracle NLL</th></tr></thead><tbody>{stage_rows}</tbody></table></div></details></details>
 <details class="card"><summary>Whole-story loss and routing</summary><div class="scroll"><table><thead><tr><th>Condition</th><th>Story NLL</th><th>Token NLL</th><th>Accuracy</th><th>Regret</th></tr></thead><tbody>{overall_rows}</tbody></table></div><details><summary>Per-task whole-story results</summary><div class="scroll"><table><thead><tr><th>Task</th><th>Train</th><th>Validation</th><th>Base</th><th>Oracle</th><th>Gain</th><th>Exhaustive</th><th>Hopfield</th><th>EBT-U</th><th>EBT-H</th></tr></thead><tbody>{task_rows}</tbody></table></div></details></details>
 <details class="card"><summary>Explore midpoint completions</summary><p>Each router received only the first half. All conditions had the same deterministic token budget.</p><label>Task: <select id="filter"><option value="all">all</option>{task_options}</select></label><div id="examples">{cards}</div></details>
@@ -526,6 +583,7 @@ def render_stagewise_route_chart_svg(continual: dict[str, object]) -> str:
 def render_comparative_nll_chart_svg(
     continual: dict[str, object],
     baseline_continual: dict[str, object],
+    full_finetune_continual: dict[str, object],
 ) -> str:
     """Render matched stagewise suffix NLL for stored and routed systems."""
     vamp_stages = tuple(
@@ -536,23 +594,42 @@ def render_comparative_nll_chart_svg(
         _object(raw, "baseline stage")
         for raw in _list(baseline_continual["stages"], "baseline stages")
     )
-    if len(vamp_stages) != len(baseline_stages):
+    full_stages = tuple(
+        _object(raw, "full-finetune stage")
+        for raw in _list(
+            full_finetune_continual["stages"],
+            "full-finetune stages",
+        )
+    )
+    if len(vamp_stages) != len(baseline_stages) or len(vamp_stages) != len(
+        full_stages
+    ):
         raise ValueError("comparison plot stage counts differ")
     rows = tuple(
         {
             "stage": float(vamp_stage["stage_index"]),
             "sequential": _stage_condition_nll(baseline_stage, "sequential_single_lora"),
+            "full_finetune": _stage_condition_nll(
+                full_stage,
+                FULL_FINETUNE_CONDITIONS[0],
+            ),
             "independent": _stage_condition_nll(baseline_stage, "independent_root_lora"),
             "vamp_oracle": _stage_condition_nll(vamp_stage, "oracle"),
             "vamp_exhaustive": _stage_condition_nll(vamp_stage, "vamp_exhaustive"),
             "vamp_ebt_uniform": _stage_condition_nll(vamp_stage, "vamp_ebt_uniform"),
         }
-        for vamp_stage, baseline_stage in zip(vamp_stages, baseline_stages)
+        for vamp_stage, baseline_stage, full_stage in zip(
+            vamp_stages,
+            baseline_stages,
+            full_stages,
+            strict=True,
+        )
     )
     return render_line_chart_svg(
         rows,
         (
             ("sequential", "Sequential single LoRA"),
+            ("full_finetune", "Sequential full fine-tune"),
             ("independent", "Independent task adapter"),
             ("vamp_oracle", "VAMP stored oracle"),
             ("vamp_exhaustive", "VAMP exhaustive"),
@@ -720,6 +797,7 @@ def _require_hashed_row(
 def _comparison_values(
     continual: dict[str, object],
     baseline_continual: dict[str, object],
+    full_finetune_continual: dict[str, object],
 ) -> tuple[dict[str, object], ...]:
     baseline_summaries = _object(
         baseline_continual["condition_summaries"],
@@ -728,6 +806,10 @@ def _comparison_values(
     vamp_summaries = _object(
         continual["condition_summaries"],
         "VAMP condition summaries",
+    )
+    full_finetune_summaries = _object(
+        full_finetune_continual["condition_summaries"],
+        "full-finetune condition summaries",
     )
     baseline_rows = tuple(
         {
@@ -745,6 +827,24 @@ def _comparison_values(
             ("independent_root_lora", "independent root LoRA", "required"),
         )
         for summary in (_object(baseline_summaries[condition], condition),)
+    )
+    full_finetune_rows = tuple(
+        {
+            "backward_transfer": float(summary["mean_backward_transfer"]),
+            "final_route_accuracy": None,
+            "final_story_mean_nll": float(summary["final_story_mean_nll"]),
+            "final_token_mean_nll": float(summary["final_token_mean_nll"]),
+            "max_forgetting": float(summary["max_task_forgetting"]),
+            "mean_forgetting": float(summary["mean_task_forgetting"]),
+            "system": "sequential full fine-tune",
+            "task_identity": "no",
+        }
+        for summary in (
+            _object(
+                full_finetune_summaries[FULL_FINETUNE_CONDITIONS[0]],
+                FULL_FINETUNE_CONDITIONS[0],
+            ),
+        )
     )
     vamp_rows = tuple(
         {
@@ -766,12 +866,13 @@ def _comparison_values(
         )
         for summary in (_object(vamp_summaries[condition], condition),)
     )
-    return baseline_rows + vamp_rows
+    return baseline_rows[:1] + full_finetune_rows + baseline_rows[1:] + vamp_rows
 
 
 def _comparison_markdown_rows(
     continual: dict[str, object],
     baseline_continual: dict[str, object],
+    full_finetune_continual: dict[str, object],
 ) -> tuple[str, ...]:
     return tuple(
         f"| {row['system']} | {row['task_identity']} | "
@@ -781,13 +882,18 @@ def _comparison_markdown_rows(
         f"{float(row['mean_forgetting']):+.4f} | "
         f"{float(row['max_forgetting']):+.4f} | "
         f"{float(row['backward_transfer']):+.4f} |"
-        for row in _comparison_values(continual, baseline_continual)
+        for row in _comparison_values(
+            continual,
+            baseline_continual,
+            full_finetune_continual,
+        )
     )
 
 
 def _comparison_html_rows(
     continual: dict[str, object],
     baseline_continual: dict[str, object],
+    full_finetune_continual: dict[str, object],
 ) -> tuple[str, ...]:
     return tuple(
         "<tr>"
@@ -805,7 +911,11 @@ def _comparison_html_rows(
             )
         )
         + "</tr>"
-        for row in _comparison_values(continual, baseline_continual)
+        for row in _comparison_values(
+            continual,
+            baseline_continual,
+            full_finetune_continual,
+        )
     )
 
 
@@ -821,23 +931,40 @@ def _stage_condition_nll(stage: dict[str, object], condition: str) -> float:
     )
 
 
-def _baseline_stage_markdown_row(stage: dict[str, object]) -> str:
+def _baseline_stage_markdown_row(
+    stage: dict[str, object],
+    full_finetune_stage: dict[str, object],
+) -> str:
     conditions = _object(stage["conditions"], "baseline stage conditions")
     sequential = _object(conditions["sequential_single_lora"], "sequential")
     independent = _object(conditions["independent_root_lora"], "independent")
+    full_finetune = _object(
+        _object(
+            full_finetune_stage["conditions"],
+            "full-finetune stage conditions",
+        )[FULL_FINETUNE_CONDITIONS[0]],
+        "full-finetune stage",
+    )
     return (
         f"| {int(stage['stage_index'])} | {stage['introduced_task']} | "
         f"{int(stage['story_count']):,} | "
         f"{float(sequential['story_mean_nll']):.3f} | "
+        f"{float(full_finetune['story_mean_nll']):.3f} | "
         f"{float(independent['story_mean_nll']):.3f} | "
-        f"{float(sequential['mean_deficit_vs_independent']):+.3f} |"
+        f"{float(sequential['mean_deficit_vs_independent']):+.3f} | "
+        f"{float(full_finetune['story_mean_nll']) - float(independent['story_mean_nll']):+.3f} |"
     )
 
 
-def _baseline_stage_html_row(stage: dict[str, object]) -> str:
+def _baseline_stage_html_row(
+    stage: dict[str, object],
+    full_finetune_stage: dict[str, object],
+) -> str:
     return "<tr>" + "".join(
         f"<td>{escape(value.strip())}</td>"
-        for value in _baseline_stage_markdown_row(stage).strip("|").split("|")
+        for value in _baseline_stage_markdown_row(stage, full_finetune_stage)
+        .strip("|")
+        .split("|")
     ) + "</tr>"
 
 
@@ -1139,6 +1266,143 @@ def _publish_baseline_stagewise_csvs(
             "backward_transfer",
         ),
         task_rows,
+    )
+
+
+def _publish_full_finetune_stagewise_csvs(
+    root: Path,
+    data: dict[str, object],
+) -> None:
+    full_finetune = _object(
+        data["full_finetune_continual_learning"],
+        "full-finetune continual learning",
+    )
+    baseline = _object(
+        data["baseline_continual_learning"],
+        "baseline continual learning",
+    )
+    full_stages = tuple(
+        _object(raw, "full-finetune stage summary")
+        for raw in _list(full_finetune["stages"], "full-finetune stages")
+    )
+    baseline_stages = tuple(
+        _object(raw, "baseline stage summary")
+        for raw in _list(baseline["stages"], "baseline stages")
+    )
+    if len(full_stages) != len(baseline_stages):
+        raise ValueError("full-finetune and baseline stage counts differ")
+    stage_rows: list[tuple[object, ...]] = []
+    for full_stage, baseline_stage in zip(
+        full_stages,
+        baseline_stages,
+        strict=True,
+    ):
+        if any(
+            full_stage[field] != baseline_stage[field]
+            for field in ("introduced_task", "stage_index", "story_count")
+        ):
+            raise ValueError("full-finetune and baseline stage coverage differs")
+        full_summary = _object(
+            _object(full_stage["conditions"], "full-finetune stage conditions")[
+                FULL_FINETUNE_CONDITIONS[0]
+            ],
+            "full-finetune stage condition",
+        )
+        independent = _object(
+            _object(baseline_stage["conditions"], "baseline stage conditions")[
+                "independent_root_lora"
+            ],
+            "independent stage condition",
+        )
+        stage_rows.append(
+            (
+                int(full_stage["stage_index"]),
+                str(full_stage["introduced_task"]),
+                int(full_stage["story_count"]),
+                FULL_FINETUNE_CONDITIONS[0],
+                float(full_summary["story_mean_nll"]),
+                float(full_summary["token_mean_nll"]),
+                float(independent["story_mean_nll"]),
+                float(full_summary["story_mean_nll"])
+                - float(independent["story_mean_nll"]),
+            )
+        )
+
+    full_tasks = tuple(
+        _object(raw, "full-finetune task metric")
+        for raw in _list(full_finetune["task_metrics"], "full-finetune task metrics")
+    )
+    baseline_tasks = tuple(
+        _object(raw, "baseline task metric")
+        for raw in _list(baseline["task_metrics"], "baseline task metrics")
+    )
+    if len(full_tasks) != len(baseline_tasks):
+        raise ValueError("full-finetune and baseline task counts differ")
+    task_rows: list[tuple[object, ...]] = []
+    for full_task, baseline_task in zip(full_tasks, baseline_tasks, strict=True):
+        if any(
+            full_task[field] != baseline_task[field]
+            for field in ("introduction_stage", "task")
+        ):
+            raise ValueError("full-finetune and baseline task coverage differs")
+        full_summary = _object(
+            _object(full_task["conditions"], "full-finetune task conditions")[
+                FULL_FINETUNE_CONDITIONS[0]
+            ],
+            "full-finetune task condition",
+        )
+        independent = _object(
+            _object(baseline_task["conditions"], "baseline task conditions")[
+                "independent_root_lora"
+            ],
+            "independent task condition",
+        )
+        task_rows.append(
+            (
+                str(full_task["task"]),
+                int(full_task["introduction_stage"]),
+                FULL_FINETUNE_CONDITIONS[0],
+                int(full_summary["best_stage"]),
+                float(full_summary["introduction_story_mean_nll"]),
+                float(full_summary["best_story_mean_nll"]),
+                float(full_summary["final_story_mean_nll"]),
+                float(full_summary["forgetting"]),
+                float(full_summary["backward_transfer"]),
+                float(independent["final_story_mean_nll"]),
+                float(full_summary["final_story_mean_nll"])
+                - float(independent["final_story_mean_nll"]),
+            )
+        )
+    _write_csv(
+        root / "full-finetune-stagewise-summary.csv",
+        (
+            "stage",
+            "introduced_task",
+            "story_count",
+            "condition",
+            "story_mean_nll",
+            "token_mean_nll",
+            "independent_story_mean_nll",
+            "mean_deficit_vs_independent",
+        ),
+        tuple(stage_rows),
+    )
+    _write_csv(
+        root / "full-finetune-stagewise-task-metrics.csv",
+        (
+            "task",
+            "introduction_stage",
+            "condition",
+            "best_stage",
+            "introduction_story_mean_nll",
+            "best_story_mean_nll",
+            "final_story_mean_nll",
+            "forgetting",
+            "backward_transfer",
+            "independent_final_story_mean_nll",
+            "final_deficit_vs_independent",
+        ),
+        tuple(task_rows),
     )
 
 

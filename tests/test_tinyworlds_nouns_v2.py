@@ -14,6 +14,7 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
     BASE_SELECTION_FORMAT,
     BASELINE_STAGEWISE_FORMAT,
     BASE_TRAINING_FORMAT,
+    FULL_FINETUNE_STAGEWISE_FORMAT,
     GPU_PREFLIGHT_FORMAT,
     HALF_STORY_FORMAT,
     STAGEWISE_FORMAT,
@@ -23,6 +24,8 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
     NounConceptFamily,
     BaselineStagewiseClRow,
     BaselineStagewiseConditionResult,
+    FullFinetuneStagewiseClRow,
+    FullFinetuneStagewiseConditionResult,
     NounsV2ExperimentPreset,
     StagewiseClRow,
     StagewiseConditionResult,
@@ -32,6 +35,9 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
 )
 from apm.data.text.tinyworlds_nouns_v2.baseline_stagewise import (
     summarize_baseline_stagewise_rows,
+)
+from apm.data.text.tinyworlds_nouns_v2.full_finetune_stagewise import (
+    summarize_full_finetune_stagewise_rows,
 )
 from apm.data.text.tinyworlds_nouns_v2.evaluation import build_prefix_only_query
 from apm.data.text.tinyworlds_nouns_v2.partition import (
@@ -47,6 +53,7 @@ from apm.data.text.tinyworlds_nouns_v2.report import (
 )
 import apm.data.text.tinyworlds_nouns_v2.stagewise as stagewise
 import apm.data.text.tinyworlds_nouns_v2.baseline_stagewise as baseline_stagewise
+import apm.data.text.tinyworlds_nouns_v2.full_finetune_stagewise as full_stagewise
 import apm.data.text.tinyworlds_nouns_v2.report as v2_report
 from apm.data.text.tinyworlds_nouns_v2.stagewise import summarize_stagewise_rows
 from apm.lm.text import CharTokenizer
@@ -235,6 +242,27 @@ def test_v2_preset_and_result_contracts_have_independent_hashes() -> None:
     assert baseline_row["format"] == BASELINE_STAGEWISE_FORMAT
     assert baseline_hash == record_sha256(baseline_row)
 
+    full_row = FullFinetuneStagewiseClRow(
+        stage_index=1,
+        introduced_task="mouse",
+        stage_parameter_checksum="4" * 64,
+        vamp_tensor_checksum="5" * 64,
+        task_noun="mouse",
+        story_id=sha256(b"full-finetune-stage-story").hexdigest(),
+        results=(
+            FullFinetuneStagewiseConditionResult(
+                "sequential_full_finetune",
+                "mouse",
+                2.0,
+                2,
+                1.0,
+            ),
+        ),
+    ).as_record()
+    full_hash = full_row.pop("result_sha256")
+    assert full_row["format"] == FULL_FINETUNE_STAGEWISE_FORMAT
+    assert full_hash == record_sha256(full_row)
+
 
 def test_shared_base_and_vamp_resume_formats_are_v2_bound() -> None:
     assert len(TASK_IDS) == 24
@@ -282,7 +310,7 @@ def test_versioned_evaluation_work_ledger_recovers_an_interrupted_tail(
     assert path.read_bytes() == canonical_json_bytes(record)
 
 
-def test_report_rendering_is_byte_stable_after_resume() -> None:
+def test_report_rendering_is_byte_stable_after_resume(tmp_path: Path) -> None:
     condition_summary = {
         "mean_regret": 0.0,
         "routing_accuracy": 1.0,
@@ -302,6 +330,7 @@ def test_report_rendering_is_byte_stable_after_resume() -> None:
     )}
     continual = _stagewise_fixture_summary()
     baseline_continual = _baseline_stagewise_fixture_summary()
+    full_finetune_continual = _full_finetune_stagewise_fixture_summary()
     data = {
         "base": {
             "optimizer_share": 0.79,
@@ -317,6 +346,7 @@ def test_report_rendering_is_byte_stable_after_resume() -> None:
         },
         "continual_learning": continual,
         "baseline_continual_learning": baseline_continual,
+        "full_finetune_continual_learning": full_finetune_continual,
         "examples": [],
         "graph": [{"depth": 0, "node": "root", "parent": None, "stage": 0}],
         "judge": {"available": False},
@@ -332,8 +362,17 @@ def test_report_rendering_is_byte_stable_after_resume() -> None:
         },
         "task_metrics": [],
     }
-    assert render_report_markdown(data) == render_report_markdown(data)
-    assert render_report_html(data) == render_report_html(data)
+    markdown = render_report_markdown(data)
+    html = render_report_html(data)
+    assert markdown == render_report_markdown(data)
+    assert html == render_report_html(data)
+    assert "sequential full fine-tune" in markdown
+    assert "Sequential full fine-tune" in html
+    v2_report._publish_full_finetune_stagewise_csvs(tmp_path, data)
+    published = (tmp_path / "full-finetune-stagewise-summary.csv").read_bytes()
+    v2_report._publish_full_finetune_stagewise_csvs(tmp_path, data)
+    assert (tmp_path / "full-finetune-stagewise-summary.csv").read_bytes() == published
+    assert b"mean_deficit_vs_independent" in published
     assert HALF_STORY_FORMAT.endswith("-v2")
 
 
@@ -356,6 +395,14 @@ def test_baseline_stagewise_metrics_expose_sequential_forgetting() -> None:
     assert sequential["mean_task_forgetting"] == pytest.approx(0.3)
     assert sequential["mean_backward_transfer"] == pytest.approx(-0.3)
     assert independent["mean_task_forgetting"] == pytest.approx(0.0)
+
+
+def test_full_finetune_stagewise_metrics_expose_parameter_forgetting() -> None:
+    summary = _full_finetune_stagewise_fixture_summary()
+    measured = summary["condition_summaries"]["sequential_full_finetune"]
+    assert summary["row_count"] == 3
+    assert measured["mean_task_forgetting"] == pytest.approx(0.4)
+    assert measured["mean_backward_transfer"] == pytest.approx(-0.4)
 
 
 def test_vamp_dependency_svg_is_deterministic_and_contains_every_edge() -> None:
@@ -519,6 +566,64 @@ def test_baseline_stagewise_ledger_resume_and_tamper_rejection(
         )
 
 
+def test_full_finetune_stagewise_ledger_resume_and_tamper_rejection(
+    tmp_path: Path,
+) -> None:
+    story_id = sha256(b"full-finetune-stagewise-ledger-story").hexdigest()
+    parameter_checksum = "6" * 64
+    vamp_checksum = "7" * 64
+    full = SimpleNamespace(
+        task_order=("mouse",),
+        parameter_checksum=parameter_checksum,
+    )
+    vamp = SimpleNamespace(task_order=("mouse",), tensor_checksum=vamp_checksum)
+    partition = SimpleNamespace(task_ids=("mouse",))
+    entries = {"mouse": (StoryIndexEntry(story_id, 0, 0, 1, 0, 2),)}
+    record = FullFinetuneStagewiseClRow(
+        1,
+        "mouse",
+        parameter_checksum,
+        vamp_checksum,
+        "mouse",
+        story_id,
+        (
+            FullFinetuneStagewiseConditionResult(
+                "sequential_full_finetune",
+                "mouse",
+                2.0,
+                2,
+                1.0,
+            ),
+        ),
+    ).as_record()
+    ledger = tmp_path / "full-finetune-stagewise.jsonl.work"
+    ledger.write_bytes(canonical_json_bytes(record) + b'{"interrupted"')
+    full_stagewise._repair_interrupted_tail(ledger)
+    assert full_stagewise.validate_full_finetune_stagewise_ledger(
+        ledger,
+        partition,
+        (full,),
+        (vamp,),
+        require_complete=True,
+        entries_by_task=entries,
+    ) == {("1", "mouse", story_id)}
+
+    tampered = json.loads(canonical_json_bytes(record))
+    tampered["results"]["sequential_full_finetune"]["model_task"] = "boat"
+    core = {key: value for key, value in tampered.items() if key != "result_sha256"}
+    tampered["result_sha256"] = record_sha256(core)
+    ledger.write_bytes(canonical_json_bytes(tampered))
+    with pytest.raises(ValueError, match="result changed"):
+        full_stagewise.validate_full_finetune_stagewise_ledger(
+            ledger,
+            partition,
+            (full,),
+            (vamp,),
+            require_complete=True,
+            entries_by_task=entries,
+        )
+
+
 def test_final_stage_suffix_metrics_must_equal_generation_ledger(
     tmp_path: Path,
 ) -> None:
@@ -644,6 +749,32 @@ def _baseline_stagewise_fixture_summary() -> dict[str, object]:
             row(1, "mouse", 1.0, 1.0),
             row(2, "mouse", 1.6, 1.0),
             row(2, "boat", 2.5, 2.0),
+        ),
+        task_ids,
+    )
+
+
+def _full_finetune_stagewise_fixture_summary() -> dict[str, object]:
+    task_ids = ("mouse", "boat")
+
+    def row(stage: int, task: str, mean_nll: float) -> dict[str, object]:
+        return {
+            "results": {
+                "sequential_full_finetune": {
+                    "mean_nll": mean_nll,
+                    "token_count": 2,
+                    "total_nll": mean_nll * 2,
+                }
+            },
+            "stage_index": stage,
+            "task_noun": task,
+        }
+
+    return summarize_full_finetune_stagewise_rows(
+        (
+            row(1, "mouse", 1.0),
+            row(2, "mouse", 1.8),
+            row(2, "boat", 2.2),
         ),
         task_ids,
     )

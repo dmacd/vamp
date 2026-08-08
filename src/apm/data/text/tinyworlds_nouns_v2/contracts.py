@@ -19,18 +19,21 @@ INDEX_FORMAT = "tinyworlds-nouns-story-index-v2"
 EXCLUSION_FORMAT = "tinyworlds-nouns-multitask-exclusion-v2"
 AUDIT_FORMAT = "tinyworlds-nouns-disjoint-audit-v2"
 PRESET_FORMAT = "tinyworlds-nouns-experiment-preset-v2"
-RUN_MANIFEST_FORMAT = "tinyworlds-nouns-run-v2"
+RUN_MANIFEST_FORMAT = "tinyworlds-nouns-run-v3"
 WHOLE_STORY_FORMAT = "tinyworlds-nouns-whole-story-nll-v2"
 HALF_STORY_FORMAT = "tinyworlds-nouns-half-story-generation-v2"
 STAGEWISE_FORMAT = "tinyworlds-nouns-stagewise-cl-v2"
 BASELINE_STAGEWISE_FORMAT = "tinyworlds-nouns-baseline-stagewise-cl-v2"
+FULL_FINETUNE_STAGEWISE_FORMAT = "tinyworlds-nouns-full-finetune-stagewise-cl-v2"
 JUDGE_REQUEST_FORMAT = "tinyworlds-nouns-judge-request-v2"
 JUDGE_FORMAT = "tinyworlds-nouns-judge-result-v2"
-REPORT_FORMAT = "tinyworlds-nouns-comparative-report-v2"
+REPORT_FORMAT = "tinyworlds-nouns-comparative-report-v3"
 BASE_TRAINING_FORMAT = "tinyworlds-nouns-base-training-v2"
 BASE_SELECTION_FORMAT = "tinyworlds-nouns-selected-base-v2"
 VAMP_STAGE_FORMAT = "tinyworlds-nouns-vamp-stage-v2"
 BASELINE_STAGE_FORMAT = "tinyworlds-nouns-baseline-stage-v2"
+FULL_FINETUNE_STAGE_FORMAT = "tinyworlds-nouns-full-finetune-stage-v2"
+FULL_FINETUNE_LOSS_FORMAT = "tinyworlds-nouns-full-finetune-loss-v2"
 GPU_PREFLIGHT_FORMAT = "tinyworlds-nouns-gpu-preflight-v2"
 
 DATA_ROOT = Path("data/tinyworlds-nouns-v2")
@@ -146,6 +149,11 @@ BaselineCondition: TypeAlias = Literal[
 BASELINE_CONDITIONS: tuple[BaselineCondition, ...] = (
     "sequential_single_lora",
     "independent_root_lora",
+)
+
+FullFinetuneCondition: TypeAlias = Literal["sequential_full_finetune"]
+FULL_FINETUNE_CONDITIONS: tuple[FullFinetuneCondition, ...] = (
+    "sequential_full_finetune",
 )
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -760,6 +768,85 @@ class BaselineStagewiseClRow:
         return {**core, "result_sha256": record_sha256(core)}
 
 
+@dataclass(frozen=True, slots=True)
+class FullFinetuneStagewiseConditionResult:
+    """The sequential full model's true-suffix loss at one curriculum stage."""
+
+    condition: FullFinetuneCondition
+    model_task: str
+    total_nll: float
+    token_count: int
+    mean_nll: float
+
+    def __post_init__(self) -> None:
+        if self.condition not in FULL_FINETUNE_CONDITIONS:
+            raise ValueError("unknown nouns-v2 full-finetune condition")
+        require_identifier(self.model_task, "full-finetune model task")
+        if type(self.token_count) is not int or self.token_count <= 0:
+            raise ValueError("full-finetune suffix token count must be positive")
+        if any(
+            not math.isfinite(value) or value < 0.0
+            for value in (self.total_nll, self.mean_nll)
+        ):
+            raise ValueError("full-finetune suffix NLL must be finite and nonnegative")
+
+    def as_record(self) -> dict[str, object]:
+        """Return the nested full-finetune result record."""
+        return {
+            "condition": self.condition,
+            "mean_nll": self.mean_nll,
+            "model_task": self.model_task,
+            "token_count": self.token_count,
+            "total_nll": self.total_nll,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class FullFinetuneStagewiseClRow:
+    """One learned-task measurement of the sequential full model."""
+
+    stage_index: int
+    introduced_task: str
+    stage_parameter_checksum: str
+    vamp_tensor_checksum: str
+    task_noun: str
+    story_id: str
+    results: tuple[FullFinetuneStagewiseConditionResult, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.stage_index) is not int
+            or not 1 <= self.stage_index <= len(TASK_IDS)
+        ):
+            raise ValueError("full-finetune stage index is outside the frozen order")
+        if self.introduced_task != TASK_IDS[self.stage_index - 1]:
+            raise ValueError("full-finetune introduced task does not match its stage")
+        require_sha256(self.stage_parameter_checksum, "full-finetune parameters")
+        require_sha256(self.vamp_tensor_checksum, "full-finetune VAMP reference")
+        require_identifier(self.task_noun, "full-finetune task")
+        require_sha256(self.story_id, "full-finetune story")
+        if self.task_noun not in TASK_IDS[: self.stage_index]:
+            raise ValueError("full-finetune rows may only evaluate learned tasks")
+        if tuple(result.condition for result in self.results) != FULL_FINETUNE_CONDITIONS:
+            raise ValueError("full-finetune rows require the canonical condition")
+
+    def as_record(self) -> dict[str, object]:
+        """Return the canonical content-addressed full-finetune JSONL row."""
+        core = {
+            "format": FULL_FINETUNE_STAGEWISE_FORMAT,
+            "introduced_task": self.introduced_task,
+            "results": {
+                result.condition: result.as_record() for result in self.results
+            },
+            "stage_index": self.stage_index,
+            "stage_parameter_checksum": self.stage_parameter_checksum,
+            "story_id": self.story_id,
+            "task_noun": self.task_noun,
+            "vamp_tensor_checksum": self.vamp_tensor_checksum,
+        }
+        return {**core, "result_sha256": record_sha256(core)}
+
+
 __all__ = [
     "AUDIT_FORMAT",
     "BASE_SELECTION_FORMAT",
@@ -776,6 +863,13 @@ __all__ = [
     "EXPECTED_PURE_COUNTS",
     "EXCLUDED_TRAIN_STORY_COUNT",
     "EXCLUDED_VALIDATION_STORY_COUNT",
+    "FULL_FINETUNE_CONDITIONS",
+    "FULL_FINETUNE_LOSS_FORMAT",
+    "FULL_FINETUNE_STAGEWISE_FORMAT",
+    "FULL_FINETUNE_STAGE_FORMAT",
+    "FullFinetuneCondition",
+    "FullFinetuneStagewiseClRow",
+    "FullFinetuneStagewiseConditionResult",
     "GPU_PREFLIGHT_FORMAT",
     "HALF_STORY_FORMAT",
     "JUDGE_FORMAT",

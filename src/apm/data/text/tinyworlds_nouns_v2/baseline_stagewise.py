@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
-from hashlib import sha256
 import json
 import math
 import os
@@ -25,12 +24,10 @@ from apm.data.text.tinyworlds_nouns_v1.experiment import (
     IndexedStoryStore,
     NounSelectedBase,
     StoryIndexEntry,
-    load_story_index,
 )
 from apm.data.text.tinyworlds_nouns_v2.contracts import (
     BASELINE_CONDITIONS,
     BASELINE_STAGEWISE_FORMAT,
-    STAGEWISE_CASE_COUNT,
     TASK_IDS,
     BaselineStagewiseClRow,
     BaselineStagewiseConditionResult,
@@ -38,6 +35,15 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
     NounsV2PartitionArtifact,
     canonical_json_bytes,
     record_sha256,
+)
+from apm.data.text.tinyworlds_nouns_v2.stagewise_common import (
+    expected_stagewise_keys as _expected_keys,
+    file_sha256 as _file_sha256,
+    generation_entries as _generation_entries,
+    longitudinal_metrics as _longitudinal_metrics,
+    mean as _mean,
+    object_record as _object,
+    repair_interrupted_tail as _repair_interrupted_tail,
 )
 from apm.lm.checkpoint import load_gpt_neo_checkpoint
 from apm.lm.lora import LoraEdge
@@ -181,8 +187,8 @@ def evaluate_stagewise_baselines(
         raise RuntimeError(
             f"baseline stagewise ledger has {len(completed):,} of {total:,} rows"
         )
+    _validate_vamp_reference_parity(work, vamp_stagewise_path)
     os.replace(work, output)
-    _validate_vamp_reference_parity(output, vamp_stagewise_path)
     return output
 
 
@@ -636,24 +642,6 @@ def _aggregate_cells(cells: tuple[dict[str, object], ...]) -> dict[str, object]:
     }
 
 
-def _longitudinal_metrics(
-    series: tuple[tuple[int, dict[str, object]], ...],
-) -> dict[str, object]:
-    introduction = series[0][1]
-    final = series[-1][1]
-    best_stage, best = min(series, key=lambda item: float(item[1]["story_mean_nll"]))
-    return {
-        "backward_transfer": float(introduction["story_mean_nll"])
-        - float(final["story_mean_nll"]),
-        "best_stage": best_stage,
-        "best_story_mean_nll": float(best["story_mean_nll"]),
-        "final_story_mean_nll": float(final["story_mean_nll"]),
-        "forgetting": float(final["story_mean_nll"])
-        - float(best["story_mean_nll"]),
-        "introduction_story_mean_nll": float(introduction["story_mean_nll"]),
-    }
-
-
 def _condition_summary(
     condition: str,
     stages: tuple[dict[str, object], ...],
@@ -676,75 +664,6 @@ def _condition_summary(
         ),
         "mean_task_forgetting": _mean(float(task["forgetting"]) for task in tasks),
     }
-
-
-def _generation_entries(
-    partition: NounsV2PartitionArtifact,
-) -> dict[str, tuple[StoryIndexEntry, ...]]:
-    return {
-        task_id: load_story_index(partition, f"task-{task_id}-generation")
-        for task_id in partition.task_ids
-    }
-
-
-def _expected_keys(
-    task_ids: tuple[str, ...],
-    entries_by_task: dict[str, tuple[StoryIndexEntry, ...]],
-) -> set[tuple[str, str, str]]:
-    expected = {
-        (str(stage), task_id, entry.story_id)
-        for stage in range(1, len(task_ids) + 1)
-        for task_id in task_ids[:stage]
-        for entry in entries_by_task[task_id]
-    }
-    if task_ids == TASK_IDS and len(expected) != STAGEWISE_CASE_COUNT:
-        raise ValueError("canonical baseline stagewise case count changed")
-    return expected
-
-
-def _repair_interrupted_tail(path: Path) -> None:
-    if not path.is_file() or path.stat().st_size == 0:
-        return
-    with path.open("r+b") as stream:
-        stream.seek(-1, os.SEEK_END)
-        if stream.read(1) == b"\n":
-            return
-        position = stream.tell() - 1
-        while position > 0:
-            chunk_start = max(0, position - 64 * 1024)
-            stream.seek(chunk_start)
-            chunk = stream.read(position - chunk_start)
-            newline = chunk.rfind(b"\n")
-            if newline >= 0:
-                stream.truncate(chunk_start + newline + 1)
-                stream.flush()
-                os.fsync(stream.fileno())
-                return
-            position = chunk_start
-        stream.truncate(0)
-        stream.flush()
-        os.fsync(stream.fileno())
-
-
-def _file_sha256(path: Path) -> str:
-    digest = sha256()
-    with path.open("rb") as source:
-        while chunk := source.read(1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _mean(values: Iterable[float]) -> float:
-    measured = tuple(values)
-    if not measured:
-        raise ValueError("baseline mean requires values")
-    return sum(measured) / len(measured)
-
-
-def _object(value: object, label: str) -> dict[str, object]:
-    if type(value) is not dict:
-        raise TypeError(f"{label} must be an object")
-    return value
 
 
 __all__ = [

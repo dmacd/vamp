@@ -183,3 +183,68 @@ def test_real_v2_baselines_and_comparison_ledger_strict_load() -> None:
     assert sha256(ledger.read_bytes()).hexdigest() == run[
         "baseline_stagewise_sha256"
     ]
+
+
+def test_real_v2_full_finetune_and_stagewise_ledger_strict_load() -> None:
+    manifest = authenticate_parent_manifest(PARENT_ROOT)
+    partition = find_partition(manifest, V2_ROOT)
+    assert partition is not None
+
+    from apm.data.text.tinyworlds_nouns_v2.contracts import NounsV2ExperimentPreset
+    from apm.data.text.tinyworlds_nouns_v2.experiment import (
+        load_nouns_v2_full_finetune_stages,
+        load_nouns_v2_vamp_stages,
+        run_or_load_nouns_v2_gpu_preflight,
+        run_or_resume_nouns_v2_base,
+    )
+    from apm.data.text.tinyworlds_nouns_v2.full_finetune_stagewise import (
+        validate_full_finetune_stagewise_ledger,
+    )
+
+    preset = NounsV2ExperimentPreset()
+    preflight = run_or_load_nouns_v2_gpu_preflight(
+        partition,
+        preset,
+        V2_CHECKPOINT_ROOT,
+    )
+    selected_base = run_or_resume_nouns_v2_base(
+        partition,
+        preset,
+        preflight,
+        V2_CHECKPOINT_ROOT,
+    )
+    vamp_stages = load_nouns_v2_vamp_stages(
+        partition,
+        preset,
+        selected_base,
+        V2_CHECKPOINT_ROOT,
+    )
+    full_stages = load_nouns_v2_full_finetune_stages(
+        partition,
+        preset,
+        selected_base,
+        V2_CHECKPOINT_ROOT,
+    )
+    assert len(full_stages) == 24
+    assert tuple(stage.task_order for stage in full_stages) == tuple(
+        partition.task_ids[:index] for index in range(1, 25)
+    )
+
+    ledger = V2_RESULT_ROOT / "full-finetune-stagewise-cl.jsonl"
+    assert len(
+        validate_full_finetune_stagewise_ledger(
+            ledger,
+            partition,
+            full_stages,
+            vamp_stages,
+            require_complete=True,
+        )
+    ) == STAGEWISE_CASE_COUNT
+    run = json.loads((V2_RESULT_ROOT / "run-manifest.json").read_bytes())
+    assert full_stages[-1].parameter_checksum == run[
+        "full_finetune_parameter_checksum"
+    ]
+    assert full_stages[-1].run_sha256 == run["full_finetune_run_sha256"]
+    assert sha256(ledger.read_bytes()).hexdigest() == run[
+        "full_finetune_stagewise_sha256"
+    ]

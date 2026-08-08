@@ -28,8 +28,11 @@ brother, parent, duck, sister, pet, bicycle, grandma, lion, fairy, train, cow,
 wheel, monkey, princess, plane, elephant, neighbor, dragon, queen, horse,
 bus`, ordered by descending purified training count. Every v2 format name and
 content identity is independent: manifest, partition, audit, preset, GPU
-preflight, base/resume/selection, VAMP stage, NLL row, generation row, optional
-judge row, run manifest, and report all use `-v2` contracts. The frozen preset
+preflight, base/resume/selection, VAMP stage, control stages, NLL row,
+generation row, optional judge row, run manifest, and report use versioned
+v2-family contracts. Adding the full-parameter control advances only the run
+manifest and comparative-report formats to v3; it does not change the frozen
+partition, preset, base, VAMP, or adapter-control identities. The frozen preset
 includes its format and schema in its configuration hash, so a scalar-identical
 nouns-v1 preset cannot collide with v2.
 
@@ -93,6 +96,16 @@ task and evaluates each story with its known task adapter. It is therefore a
 task-aware isolation ceiling, not a task-free deployment policy. Neither
 control loads nouns-v1 parameters or changes a committed VAMP tensor.
 
+The full-parameter sequential control starts from the same selected seed-zero
+base and updates every GPT-Neo parameter for the same 2,000 deterministic
+batches at each task, in the same 24-task order. It has no LoRA, graph, router,
+or task identity at evaluation. Its AdamW state resets at each task boundary,
+matching the task-local optimizer reset of the adapter controls; model
+parameters and the dropout RNG stream carry forward. It uses learning rate
+5e-5, weight decay 0.01, and gradient clipping at 1.0 rather than the adapter
+learning rate 1e-3. This is a capacity-appropriate full-model control under a
+matched update/data budget, not an optimizer-identical comparison.
+
 Baseline checkpoints are content-addressed by the base, v2 partition and
 preset, final authenticated VAMP identity, both seed namespaces, and training
 configuration. Each task-boundary commit contains the complete immutable
@@ -101,6 +114,16 @@ stage. The stage record binds source story/window consumption, adapter and
 combined tensor checksums, RNG state, allocator peak, and prior snapshot
 checksums. Resume occurs only at a validated task boundary and produces the
 same tensors and loss traces as uninterrupted execution.
+
+Full-model checkpoints are content-addressed independently by the selected
+base, v2 partition and preset, complete task order, seed offset five, optimizer
+reset rule, full-model training configuration, and 500-update resume interval.
+Authenticated work checkpoints retain all model, AdamW, RNG, and step leaves;
+each committed task boundary retains a params-only GPT-Neo checkpoint and the
+canonical per-update loss ledger. The transient optimizer checkpoint is
+removed only after the task-boundary stage strict-loads successfully. Every
+later stage binds the immediately preceding parameter checksum, so resume can
+continue only from one canonical immutable prefix.
 
 Whole-story evaluation emits exactly 26,640 self-hashing rows: all 4,440 pairs
 under base, oracle, exhaustive, Hopfield, EBT-uniform, and EBT-Hopfield. It
@@ -145,17 +168,26 @@ checks snapshot immutability. Sequential forgetting and backward transfer use
 the same definitions as VAMP, while direct comparison keeps task-aware ceilings
 separate from task-free routes.
 
+A third `tinyworlds-nouns-full-finetune-stagewise-cl-v2` ledger evaluates each
+full-model task-boundary checkpoint over that same 72,256-case learned-task
+triangle. It binds the full-model parameter checksum and corresponding VAMP
+stage checksum on every row, uses the VAMP audit's exact key order and suffix
+token count as a reference, and scores only the unadapted root path with the
+fine-tuned parameters. Its forgetting and backward-transfer definitions are
+identical to the adapter and VAMP audits. Because it has neither routing nor
+task identity, it reports competence directly and has no route-accuracy field.
+
 The final Markdown links a deterministic Graphviz-rendered `vamp-graph.svg`,
 and the standalone HTML embeds that SVG directly. Its dependency edges run from
 parent to child, node labels carry training stage, and layout follows the
 authenticated graph rather than a hand-maintained diagram. Matplotlib renders
 the route-accuracy and matched continual-NLL charts. Both reports use folding
-detail sections, legible high-contrast tables, and CSV exports for VAMP and
-baseline stage/task metrics; the DOT and JSON graph artifacts remain available
-for machine inspection.
+detail sections, legible high-contrast tables, and CSV exports for VAMP,
+adapter-control, and full-model stage/task metrics; the DOT and JSON graph
+artifacts remain available for machine inspection.
 
 The no-argument runner binds GPU 0, disables XLA GPU command buffers before any
-JAX-bearing import, and treats the complete local NLL, generation, both
+JAX-bearing import, and treats the complete local NLL, generation, all three
 stagewise audits, and comparative standalone Markdown/HTML report as success.
 OpenRouter is available only via `--judge`; it consumes the persisted
 generation and stagewise ledgers and regenerates the report without model work.

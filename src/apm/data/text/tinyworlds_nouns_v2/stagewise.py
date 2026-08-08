@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
-from hashlib import sha256
 import json
 import math
 import os
@@ -24,7 +23,6 @@ from apm.data.text.tinyworlds_nouns_v1.experiment import (
     IndexedStoryStore,
     NounSelectedBase,
     StoryIndexEntry,
-    load_story_index,
 )
 from apm.data.text.tinyworlds_nouns_v2.contracts import (
     CONDITIONS,
@@ -37,6 +35,14 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
     StagewiseConditionResult,
     canonical_json_bytes,
     record_sha256,
+)
+from apm.data.text.tinyworlds_nouns_v2.stagewise_common import (
+    expected_stagewise_keys as _expected_keys,
+    file_sha256 as _file_sha256,
+    generation_entries as _generation_entries,
+    mean as _mean,
+    object_record as _object,
+    repair_interrupted_tail as _repair_interrupted_tail,
 )
 from apm.lm.checkpoint import load_gpt_neo_checkpoint
 from apm.lm.lora_memory import pack_lora_memory
@@ -545,27 +551,6 @@ def _stage_metadata(
     return metadata
 
 
-def _generation_entries(
-    partition: NounsV2PartitionArtifact,
-) -> dict[str, tuple[StoryIndexEntry, ...]]:
-    return {
-        task_id: load_story_index(partition, f"task-{task_id}-generation")
-        for task_id in partition.task_ids
-    }
-
-
-def _expected_keys(
-    task_ids: tuple[str, ...],
-    entries_by_task: dict[str, tuple[StoryIndexEntry, ...]],
-) -> set[tuple[str, str, str]]:
-    return {
-        (str(stage), task_id, entry.story_id)
-        for stage in range(1, len(task_ids) + 1)
-        for task_id in task_ids[:stage]
-        for entry in entries_by_task[task_id]
-    }
-
-
 def _validated_row(
     line: bytes,
     metadata: dict[int, dict[str, object]],
@@ -647,51 +632,6 @@ def _validated_row(
         ):
             raise ValueError("stagewise oracle regret changed")
     return row
-
-
-def _repair_interrupted_tail(path: Path) -> None:
-    if not path.is_file() or path.stat().st_size == 0:
-        return
-    with path.open("r+b") as stream:
-        stream.seek(-1, os.SEEK_END)
-        if stream.read(1) == b"\n":
-            return
-        position = stream.tell() - 1
-        while position > 0:
-            chunk_start = max(0, position - 64 * 1024)
-            stream.seek(chunk_start)
-            chunk = stream.read(position - chunk_start)
-            newline = chunk.rfind(b"\n")
-            if newline >= 0:
-                stream.truncate(chunk_start + newline + 1)
-                stream.flush()
-                os.fsync(stream.fileno())
-                return
-            position = chunk_start
-        stream.truncate(0)
-        stream.flush()
-        os.fsync(stream.fileno())
-
-
-def _file_sha256(path: Path) -> str:
-    digest = sha256()
-    with path.open("rb") as source:
-        while chunk := source.read(1024 * 1024):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _mean(values: Iterable[float]) -> float:
-    measured = tuple(values)
-    if not measured:
-        raise ValueError("stagewise mean requires values")
-    return sum(measured) / len(measured)
-
-
-def _object(value: object, label: str) -> dict[str, object]:
-    if type(value) is not dict:
-        raise TypeError(f"{label} must be an object")
-    return value
 
 
 __all__ = [

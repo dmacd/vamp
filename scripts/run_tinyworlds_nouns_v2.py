@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     arguments = parser.parse_args(argv)
     started = time.monotonic()
-    print("Phase 1/10: authenticate the immutable nouns-v1 parent.", flush=True)
+    print("Phase 1/12: authenticate the immutable nouns-v1 parent.", flush=True)
     manifest = authenticate_parent_manifest(PARENT_DIRECTORY)
     manifest_path = publish_manifest(manifest, DATA_DIRECTORY)
     print(
@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
 
-    print("Phase 2/10: build and independently reconstruct the disjoint partition.", flush=True)
+    print("Phase 2/12: build and independently reconstruct the disjoint partition.", flush=True)
     partition = find_partition(manifest, DATA_DIRECTORY)
     if partition is None:
         partition = build_nouns_v2_partition(
@@ -118,6 +118,13 @@ def main(argv: list[str] | None = None) -> int:
     from apm.data.text.tinyworlds_nouns_v2.baseline_stagewise import (
         evaluate_stagewise_baselines,
     )
+    from apm.data.text.tinyworlds_nouns_v2.full_finetune import (
+        load_nouns_v2_full_finetune_stages,
+        run_or_resume_nouns_v2_full_finetune,
+    )
+    from apm.data.text.tinyworlds_nouns_v2.full_finetune_stagewise import (
+        evaluate_stagewise_full_finetune,
+    )
     from apm.data.text.tinyworlds_nouns_v2.experiment import (
         load_nouns_v2_vamp_stages,
         run_or_load_nouns_v2_gpu_preflight,
@@ -137,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
 
     preset = NounsV2ExperimentPreset()
     tokenizer = TokenizersTextTokenizer.from_file(TOKENIZER_PATH)
-    print("Phase 3/10: GPU preflight and fresh two-epoch seed-zero base.", flush=True)
+    print("Phase 3/12: GPU preflight and fresh two-epoch seed-zero base.", flush=True)
     preflight = run_or_load_nouns_v2_gpu_preflight(
         partition,
         preset,
@@ -165,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
         None,
     )
 
-    print("Phase 4/10: ordered 24-stage VAMP adapter graph.", flush=True)
+    print("Phase 4/12: ordered 24-stage VAMP adapter graph.", flush=True)
     adaptation = run_or_resume_nouns_v2_vamp(
         partition,
         preset,
@@ -192,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     print(
-        "Phase 5/10: sequential and independent adapters, 48,000 updates each.",
+        "Phase 5/12: sequential and independent adapters, 48,000 updates each.",
         flush=True,
     )
     baselines = run_or_resume_nouns_v2_baselines(
@@ -228,7 +235,45 @@ def main(argv: list[str] | None = None) -> int:
         baselines.tensor_checksum,
     )
 
-    print("Phase 6/10: all 26,640 whole-story NLL and routing rows.", flush=True)
+    print(
+        "Phase 6/12: sequential full-model control, 48,000 parameter updates.",
+        flush=True,
+    )
+    full_finetune = run_or_resume_nouns_v2_full_finetune(
+        partition,
+        preset,
+        selected_base,
+        CHECKPOINT_DIRECTORY,
+        progress=_training_progress(started),
+    )
+    full_finetune_stages = load_nouns_v2_full_finetune_stages(
+        partition,
+        preset,
+        selected_base,
+        CHECKPOINT_DIRECTORY,
+    )
+    if full_finetune_stages[-1].parameter_checksum != full_finetune.parameter_checksum:
+        raise RuntimeError("strict full-finetune audit and completed control differ")
+    _publish_run_manifest(
+        partition.partition_sha256,
+        manifest.manifest_sha256,
+        "full_finetune_complete",
+        vamp_tensor_checksum=adaptation.tensor_checksum,
+        baseline_tensor_checksum=baselines.tensor_checksum,
+        full_finetune_parameter_checksum=full_finetune.parameter_checksum,
+        full_finetune_run_sha256=full_finetune.run_sha256,
+    )
+    _publish_execution_status(
+        "full_finetune_complete",
+        partition.partition_sha256,
+        manifest.manifest_sha256,
+        selected_base.training_sha256,
+        adaptation.tensor_checksum,
+        baselines.tensor_checksum,
+        full_finetune.parameter_checksum,
+    )
+
+    print("Phase 7/12: all 26,640 whole-story NLL and routing rows.", flush=True)
     whole_path = evaluate_whole_story_nll(
         partition,
         preset,
@@ -237,7 +282,7 @@ def main(argv: list[str] | None = None) -> int:
         RESULT_DIRECTORY / "whole-story-nll.jsonl",
         progress=_evaluation_progress(started),
     )
-    print("Phase 7/10: midpoint-only routing, suffix NLL, and greedy completions.", flush=True)
+    print("Phase 8/12: midpoint-only routing, suffix NLL, and greedy completions.", flush=True)
     generation_path = evaluate_half_story_generations(
         partition,
         preset,
@@ -249,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     stagewise_count = expected_stagewise_row_count(partition)
     print(
-        f"Phase 8/10: {stagewise_count:,} VAMP continual-learning cases.",
+        f"Phase 9/12: {stagewise_count:,} VAMP continual-learning cases.",
         flush=True,
     )
     stagewise_path = evaluate_stagewise_continual_learning(
@@ -261,7 +306,7 @@ def main(argv: list[str] | None = None) -> int:
         progress=_evaluation_progress(started),
     )
     print(
-        f"Phase 9/10: {stagewise_count:,} sequential/independent comparison cases.",
+        f"Phase 10/12: {stagewise_count:,} sequential/independent adapter cases.",
         flush=True,
     )
     baseline_stagewise_path = evaluate_stagewise_baselines(
@@ -274,14 +319,32 @@ def main(argv: list[str] | None = None) -> int:
         RESULT_DIRECTORY / "baseline-stagewise-cl.jsonl",
         progress=_evaluation_progress(started),
     )
+    print(
+        f"Phase 11/12: {stagewise_count:,} sequential full-model cases.",
+        flush=True,
+    )
+    full_finetune_stagewise_path = evaluate_stagewise_full_finetune(
+        partition,
+        preset,
+        full_finetune_stages,
+        adaptations,
+        stagewise_path,
+        RESULT_DIRECTORY / "full-finetune-stagewise-cl.jsonl",
+        progress=_evaluation_progress(started),
+    )
     _publish_run_manifest(
         partition.partition_sha256,
         manifest.manifest_sha256,
         "local_evaluation_complete",
         vamp_tensor_checksum=adaptation.tensor_checksum,
         baseline_tensor_checksum=baselines.tensor_checksum,
+        full_finetune_parameter_checksum=full_finetune.parameter_checksum,
+        full_finetune_run_sha256=full_finetune.run_sha256,
         vamp_stagewise_sha256=_file_sha256(stagewise_path),
         baseline_stagewise_sha256=_file_sha256(baseline_stagewise_path),
+        full_finetune_stagewise_sha256=_file_sha256(
+            full_finetune_stagewise_path
+        ),
     )
     _publish_execution_status(
         "stagewise_audit_complete",
@@ -290,18 +353,21 @@ def main(argv: list[str] | None = None) -> int:
         selected_base.training_sha256,
         adaptation.tensor_checksum,
         baselines.tensor_checksum,
+        full_finetune.parameter_checksum,
     )
 
-    print("Phase 10/10: comparative reports, plots, and dependency graph.", flush=True)
+    print("Phase 12/12: comparative reports, plots, and dependency graph.", flush=True)
     markdown, html = publish_nouns_v2_report(
         partition,
         preset,
         adaptations,
         baseline_stages,
+        full_finetune_stages,
         whole_path,
         generation_path,
         stagewise_path,
         baseline_stagewise_path,
+        full_finetune_stagewise_path,
         RESULT_DIRECTORY,
     )
     phase = "local_complete"
@@ -325,10 +391,12 @@ def main(argv: list[str] | None = None) -> int:
             preset,
             adaptations,
             baseline_stages,
+            full_finetune_stages,
             whole_path,
             generation_path,
             stagewise_path,
             baseline_stagewise_path,
+            full_finetune_stagewise_path,
             RESULT_DIRECTORY,
             judge_path=judge_path,
         )
@@ -339,8 +407,13 @@ def main(argv: list[str] | None = None) -> int:
         phase,
         vamp_tensor_checksum=adaptation.tensor_checksum,
         baseline_tensor_checksum=baselines.tensor_checksum,
+        full_finetune_parameter_checksum=full_finetune.parameter_checksum,
+        full_finetune_run_sha256=full_finetune.run_sha256,
         vamp_stagewise_sha256=_file_sha256(stagewise_path),
         baseline_stagewise_sha256=_file_sha256(baseline_stagewise_path),
+        full_finetune_stagewise_sha256=_file_sha256(
+            full_finetune_stagewise_path
+        ),
         report_markdown_sha256=_file_sha256(markdown),
         report_html_sha256=_file_sha256(html),
     )
@@ -351,6 +424,7 @@ def main(argv: list[str] | None = None) -> int:
         selected_base.training_sha256,
         adaptation.tensor_checksum,
         baselines.tensor_checksum,
+        full_finetune.parameter_checksum,
     )
     print(f"Markdown report: {markdown}", flush=True)
     print(f"Interactive report: {html}", flush=True)
@@ -367,8 +441,11 @@ def _publish_run_manifest(
     *,
     vamp_tensor_checksum: str | None = None,
     baseline_tensor_checksum: str | None = None,
+    full_finetune_parameter_checksum: str | None = None,
+    full_finetune_run_sha256: str | None = None,
     vamp_stagewise_sha256: str | None = None,
     baseline_stagewise_sha256: str | None = None,
+    full_finetune_stagewise_sha256: str | None = None,
     report_markdown_sha256: str | None = None,
     report_html_sha256: str | None = None,
 ) -> None:
@@ -385,6 +462,15 @@ def _publish_run_manifest(
             for name, value in (
                 ("baseline_stagewise_sha256", baseline_stagewise_sha256),
                 ("baseline_tensor_checksum", baseline_tensor_checksum),
+                (
+                    "full_finetune_parameter_checksum",
+                    full_finetune_parameter_checksum,
+                ),
+                ("full_finetune_run_sha256", full_finetune_run_sha256),
+                (
+                    "full_finetune_stagewise_sha256",
+                    full_finetune_stagewise_sha256,
+                ),
                 ("report_html_sha256", report_html_sha256),
                 ("report_markdown_sha256", report_markdown_sha256),
                 ("vamp_stagewise_sha256", vamp_stagewise_sha256),
@@ -406,6 +492,7 @@ def _publish_execution_status(
     base_training_sha256: str | None,
     adaptation_checksum: str | None,
     baseline_checksum: str | None,
+    full_finetune_checksum: str | None = None,
 ) -> None:
     lines = [
         "# TinyWorlds nouns-v2 execution status",
@@ -426,6 +513,14 @@ def _publish_execution_status(
         lines.extend((f"VAMP tensor checksum: `{adaptation_checksum}`", ""))
     if baseline_checksum is not None:
         lines.extend((f"Baseline tensor checksum: `{baseline_checksum}`", ""))
+    if full_finetune_checksum is not None:
+        lines.extend(
+            (
+                "Sequential full-model parameter checksum: "
+                f"`{full_finetune_checksum}`",
+                "",
+            )
+        )
     _atomic_write(
         RESULT_DIRECTORY / "execution-report.md",
         "\n".join(lines).encode("utf-8"),
