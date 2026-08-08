@@ -294,6 +294,16 @@ class IndexedTokenBatchSequence(Sequence[TokenBatch]):
         return TokenBatch(input_ids, attention_mask, target_ids, loss_mask)
 
     @property
+    def batch_size(self) -> int:
+        """Return the fixed number of rows in every materialized batch."""
+        return self._batch_size
+
+    @property
+    def sequence_width(self) -> int:
+        """Return the fixed causal width of every materialized batch."""
+        return self._context_length
+
+    @property
     def story_count(self) -> int:
         """Return the indexed source population size."""
         return len(self._entries)

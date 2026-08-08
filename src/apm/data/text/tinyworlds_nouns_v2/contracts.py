@@ -23,12 +23,14 @@ RUN_MANIFEST_FORMAT = "tinyworlds-nouns-run-v2"
 WHOLE_STORY_FORMAT = "tinyworlds-nouns-whole-story-nll-v2"
 HALF_STORY_FORMAT = "tinyworlds-nouns-half-story-generation-v2"
 STAGEWISE_FORMAT = "tinyworlds-nouns-stagewise-cl-v2"
+BASELINE_STAGEWISE_FORMAT = "tinyworlds-nouns-baseline-stagewise-cl-v2"
 JUDGE_REQUEST_FORMAT = "tinyworlds-nouns-judge-request-v2"
 JUDGE_FORMAT = "tinyworlds-nouns-judge-result-v2"
-REPORT_FORMAT = "tinyworlds-nouns-stagewise-report-v2"
+REPORT_FORMAT = "tinyworlds-nouns-comparative-report-v2"
 BASE_TRAINING_FORMAT = "tinyworlds-nouns-base-training-v2"
 BASE_SELECTION_FORMAT = "tinyworlds-nouns-selected-base-v2"
 VAMP_STAGE_FORMAT = "tinyworlds-nouns-vamp-stage-v2"
+BASELINE_STAGE_FORMAT = "tinyworlds-nouns-baseline-stage-v2"
 GPU_PREFLIGHT_FORMAT = "tinyworlds-nouns-gpu-preflight-v2"
 
 DATA_ROOT = Path("data/tinyworlds-nouns-v2")
@@ -135,6 +137,15 @@ CONDITIONS: tuple[Condition, ...] = (
     "vamp_hopfield",
     "vamp_ebt_uniform",
     "vamp_ebt_hopfield",
+)
+
+BaselineCondition: TypeAlias = Literal[
+    "sequential_single_lora",
+    "independent_root_lora",
+]
+BASELINE_CONDITIONS: tuple[BaselineCondition, ...] = (
+    "sequential_single_lora",
+    "independent_root_lora",
 )
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -662,9 +673,100 @@ class StagewiseClRow:
         return {**core, "result_sha256": record_sha256(core)}
 
 
+@dataclass(frozen=True, slots=True)
+class BaselineStagewiseConditionResult:
+    """One stored baseline's true-suffix loss at one curriculum stage."""
+
+    condition: BaselineCondition
+    adapter_task: str
+    total_nll: float
+    token_count: int
+    mean_nll: float
+    deficit_vs_independent: float
+
+    def __post_init__(self) -> None:
+        if self.condition not in BASELINE_CONDITIONS:
+            raise ValueError("unknown nouns-v2 baseline condition")
+        require_identifier(self.adapter_task, "baseline adapter task")
+        if type(self.token_count) is not int or self.token_count <= 0:
+            raise ValueError("baseline suffix token count must be positive")
+        if any(
+            not math.isfinite(value)
+            for value in (
+                self.total_nll,
+                self.mean_nll,
+                self.deficit_vs_independent,
+            )
+        ):
+            raise ValueError("baseline suffix metrics must be finite")
+        if self.total_nll < 0.0 or self.mean_nll < 0.0:
+            raise ValueError("baseline suffix NLL must be nonnegative")
+
+    def as_record(self) -> dict[str, object]:
+        """Return one nested stored-baseline result record."""
+        return {
+            "adapter_task": self.adapter_task,
+            "condition": self.condition,
+            "deficit_vs_independent": self.deficit_vs_independent,
+            "mean_nll": self.mean_nll,
+            "token_count": self.token_count,
+            "total_nll": self.total_nll,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class BaselineStagewiseClRow:
+    """One task/story comparison of sequential and independent adapters."""
+
+    stage_index: int
+    introduced_task: str
+    baseline_tensor_checksum: str
+    vamp_tensor_checksum: str
+    task_noun: str
+    story_id: str
+    results: tuple[BaselineStagewiseConditionResult, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.stage_index) is not int
+            or not 1 <= self.stage_index <= len(TASK_IDS)
+        ):
+            raise ValueError("baseline stage index is outside the frozen task order")
+        if self.introduced_task != TASK_IDS[self.stage_index - 1]:
+            raise ValueError("baseline introduced task does not match its stage")
+        require_sha256(self.baseline_tensor_checksum, "baseline adaptation")
+        require_sha256(self.vamp_tensor_checksum, "baseline VAMP reference")
+        require_identifier(self.task_noun, "baseline task")
+        require_sha256(self.story_id, "baseline story")
+        if self.task_noun not in TASK_IDS[: self.stage_index]:
+            raise ValueError("baseline rows may only evaluate learned tasks")
+        if tuple(result.condition for result in self.results) != BASELINE_CONDITIONS:
+            raise ValueError("baseline rows require both stored controls in order")
+
+    def as_record(self) -> dict[str, object]:
+        """Return the canonical content-addressed baseline JSONL row."""
+        core = {
+            "baseline_tensor_checksum": self.baseline_tensor_checksum,
+            "format": BASELINE_STAGEWISE_FORMAT,
+            "introduced_task": self.introduced_task,
+            "results": {
+                result.condition: result.as_record() for result in self.results
+            },
+            "stage_index": self.stage_index,
+            "story_id": self.story_id,
+            "task_noun": self.task_noun,
+            "vamp_tensor_checksum": self.vamp_tensor_checksum,
+        }
+        return {**core, "result_sha256": record_sha256(core)}
+
+
 __all__ = [
     "AUDIT_FORMAT",
     "BASE_SELECTION_FORMAT",
+    "BASELINE_CONDITIONS",
+    "BaselineCondition",
+    "BASELINE_STAGEWISE_FORMAT",
+    "BASELINE_STAGE_FORMAT",
     "BASE_TRAINING_FORMAT",
     "BASE_UNIVERSE_STORY_COUNT",
     "BENCHMARK_ID",
@@ -680,6 +782,8 @@ __all__ = [
     "JUDGE_REQUEST_FORMAT",
     "MANIFEST_FORMAT",
     "NounConceptFamily",
+    "BaselineStagewiseClRow",
+    "BaselineStagewiseConditionResult",
     "NounsV2ExperimentPreset",
     "NounsV2Manifest",
     "NounsV2PartitionArtifact",

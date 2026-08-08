@@ -2,6 +2,9 @@
 
 from apm.data.text.tinyworlds_nouns_v2.contracts import (
     BENCHMARK_ID,
+    BASELINE_CONDITIONS,
+    BASELINE_STAGEWISE_FORMAT,
+    BASELINE_STAGE_FORMAT,
     CHECKPOINT_ROOT,
     CONDITIONS,
     DATA_ROOT,
@@ -10,6 +13,8 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
     STAGEWISE_FORMAT,
     TASK_IDS,
     NounConceptFamily,
+    BaselineStagewiseClRow,
+    BaselineStagewiseConditionResult,
     NounsV2ExperimentPreset,
     NounsV2Manifest,
     NounsV2PartitionArtifact,
@@ -37,6 +42,9 @@ from apm.data.text.tinyworlds_nouns_v2.partition import (
 
 __all__ = [
     "BENCHMARK_ID",
+    "BASELINE_CONDITIONS",
+    "BASELINE_STAGEWISE_FORMAT",
+    "BASELINE_STAGE_FORMAT",
     "CHECKPOINT_ROOT",
     "CONDITIONS",
     "DATA_ROOT",
@@ -45,6 +53,8 @@ __all__ = [
     "STAGEWISE_FORMAT",
     "StagewiseClRow",
     "StagewiseConditionResult",
+    "BaselineStagewiseClRow",
+    "BaselineStagewiseConditionResult",
     "TASK_IDS",
     "NounConceptFamily",
     "NounsV2ExperimentPreset",

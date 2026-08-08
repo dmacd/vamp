@@ -7,6 +7,11 @@ import jax
 import numpy as np
 import pytest
 
+from apm.continual.language_adaptation_artifact import (
+    attach_language_baseline_runs,
+    extract_language_adaptation_artifact,
+    extract_language_vamp_artifact,
+)
 from apm.continual.language_baseline_training import (
     advance_independent_root_lora_progress,
     advance_sequential_lora_progress,
@@ -217,6 +222,46 @@ def test_combined_baselines_share_budget_base_hash_and_distinct_rng_streams() ->
         baselines.vamp.rng_key,
     )
     assert len({tuple(np.asarray(key).tolist()) for key in final_rng_keys}) == 3
+
+
+def test_separately_trained_baselines_attach_to_the_exact_vamp_artifact() -> None:
+    config = _model_config()
+    params = init_gpt_neo_params(jax.random.PRNGKey(31), config)
+    lora_config = LoraConfig(rank=1, alpha=1.0)
+    train_config = _train_config()
+    task = _task("task-a", (1, 2, 3, 4, 5), evaluated=True)
+    root_probe = _stack_router_rows(task.validation_examples[0].router_batch, 2)
+    trained = train_language_adaptation_baselines(
+        _curriculum((task,)),
+        (root_probe,),
+        _base_reference(params, config),
+        params,
+        config,
+        lora_config,
+        train_config,
+        jax.random.PRNGKey(37),
+    )
+    expected = extract_language_adaptation_artifact(
+        trained,
+        config,
+        lora_config,
+    )
+    vamp_only = extract_language_vamp_artifact(
+        trained.vamp,
+        config,
+        lora_config,
+        train_config,
+    )
+    attached = attach_language_baseline_runs(
+        vamp_only,
+        trained.sequential_single_lora,
+        trained.independent_root_lora,
+    )
+
+    assert attached.tensor_checksum == expected.tensor_checksum
+    assert attached.tensor_checksums == expected.tensor_checksums
+    assert attached.task_order == expected.task_order
+    assert dict(attached.config_hashes) == dict(expected.config_hashes)
 
 
 def test_training_contract_rejects_different_task_sequence_widths() -> None:

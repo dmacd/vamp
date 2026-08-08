@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 import math
-from typing import Callable, NamedTuple
+from typing import Callable, NamedTuple, Protocol, runtime_checkable
 
 import jax
 import jax.numpy as jnp
@@ -35,6 +36,19 @@ from apm.lm.training import (
 )
 from apm.lm.workflow import run_candidate_edge_updates
 from apm.memory.graph import MemoryGraph, add_memory_node, init_memory_graph
+
+
+@runtime_checkable
+class HomogeneousTokenBatchSequence(Protocol):
+    """Expose fixed batch dimensions without materializing every lazy batch."""
+
+    @property
+    def batch_size(self) -> int:
+        """Return the fixed row count."""
+
+    @property
+    def sequence_width(self) -> int:
+        """Return the fixed causal sequence width."""
 
 
 @dataclass(frozen=True)
@@ -566,19 +580,25 @@ def _validate_training_contract(
         raise ValueError("training requires a nonempty LanguageCurriculum")
     if not isinstance(train_config, LmTrainConfig):
         raise TypeError("train_config must be an LmTrainConfig")
-    if any(
-        batch.input_ids.shape[0] != train_config.batch_size
+    shapes = tuple(
+        shape
         for task in curriculum.tasks
-        for batch in task.train_batches
-    ):
+        for shape in _training_shapes(task.train_batches)
+    )
+    if any(batch_size != train_config.batch_size for batch_size, _ in shapes):
         raise ValueError("every task batch must match the shared training batch size")
-    sequence_widths = {
-        batch.input_ids.shape[1]
-        for task in curriculum.tasks
-        for batch in task.train_batches
-    }
+    sequence_widths = {sequence_width for _, sequence_width in shapes}
     if len(sequence_widths) != 1:
         raise ValueError("all baseline batches must share one sequence width")
+
+
+def _training_shapes(batches: Sequence[TokenBatch]) -> set[tuple[int, int]]:
+    if isinstance(batches, HomogeneousTokenBatchSequence):
+        shape = (batches.batch_size, batches.sequence_width)
+        if any(value <= 0 for value in shape):
+            raise ValueError("homogeneous batch dimensions must be positive")
+        return {shape}
+    return {tuple(batch.input_ids.shape) for batch in batches}
 
 
 def _validate_one_task(task: LanguageTask, train_config: LmTrainConfig) -> None:
@@ -593,7 +613,7 @@ def _validate_one_task(task: LanguageTask, train_config: LmTrainConfig) -> None:
 def _train_root_adapter(
     adapter: LoraEdge,
     rng_key: jax.Array,
-    batches: tuple[TokenBatch, ...],
+    batches: Sequence[TokenBatch],
     base_params: GptNeoParams,
     model_config: GptNeoConfig,
     empty_memory: PackedLoraMemory,

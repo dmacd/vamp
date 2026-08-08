@@ -83,6 +83,25 @@ then trains on the selected parent's complete path. Persisted raw scores,
 eligibility, source consumption, graph, RNG, tensor checksum, and prior-edge
 checksums make a completed stage the unit of exact graph resume.
 
+Two matched stored-adapter controls use the same selected base, LoRA
+rank/alpha, optimizer, task order, deterministic task batches, and 2,000-update
+per-task budget. The sequential control initializes one root LoRA from seed
+offset three and overwrites it across all 24 tasks; its task-boundary snapshots
+measure ordinary parameter interference without a router or task identity. The
+independent control uses seed offset four to initialize one fresh root LoRA per
+task and evaluates each story with its known task adapter. It is therefore a
+task-aware isolation ceiling, not a task-free deployment policy. Neither
+control loads nouns-v1 parameters or changes a committed VAMP tensor.
+
+Baseline checkpoints are content-addressed by the base, v2 partition and
+preset, final authenticated VAMP identity, both seed namespaces, and training
+configuration. Each task-boundary commit contains the complete immutable
+sequential and independent prefixes paired with the corresponding strict VAMP
+stage. The stage record binds source story/window consumption, adapter and
+combined tensor checksums, RNG state, allocator peak, and prior snapshot
+checksums. Resume occurs only at a validated task boundary and produces the
+same tensors and loss traces as uninterrupted execution.
+
 Whole-story evaluation emits exactly 26,640 self-hashing rows: all 4,440 pairs
 under base, oracle, exhaustive, Hopfield, EBT-uniform, and EBT-Hopfield. It
 retains every causal target once and reports story- and token-weighted NLL,
@@ -116,18 +135,30 @@ check. Exhaustive, Hopfield, EBT-uniform, and EBT-Hopfield are therefore
 reported as routing policies over one VAMP memory graph, not as four separately
 trained continual learners.
 
-The final Markdown links a deterministic `vamp-graph.svg`, and the standalone
-HTML embeds that SVG directly. Its dependency edges run from parent to child,
-node labels carry training stage, and layout follows the authenticated graph
-rather than a hand-maintained diagram. Both reports also include an inline
-stagewise route-accuracy chart plus CSV exports for stage and task metrics; the
-DOT and JSON graph artifacts remain available for machine inspection.
+A second `tinyworlds-nouns-baseline-stagewise-cl-v2` ledger evaluates the
+sequential snapshot current at each stage and the matching independent adapter
+on the identical 72,256 learned-task triangle, midpoint split, true suffix, and
+token budgets used by the VAMP audit. Every row binds both baseline and VAMP
+stage tensor identities, and publication verifies byte-order key alignment and
+token-count parity against the VAMP ledger. Independent-adapter drift directly
+checks snapshot immutability. Sequential forgetting and backward transfer use
+the same definitions as VAMP, while direct comparison keeps task-aware ceilings
+separate from task-free routes.
+
+The final Markdown links a deterministic Graphviz-rendered `vamp-graph.svg`,
+and the standalone HTML embeds that SVG directly. Its dependency edges run from
+parent to child, node labels carry training stage, and layout follows the
+authenticated graph rather than a hand-maintained diagram. Matplotlib renders
+the route-accuracy and matched continual-NLL charts. Both reports use folding
+detail sections, legible high-contrast tables, and CSV exports for VAMP and
+baseline stage/task metrics; the DOT and JSON graph artifacts remain available
+for machine inspection.
 
 The no-argument runner binds GPU 0, disables XLA GPU command buffers before any
-JAX-bearing import, and treats the complete local NLL, generation, and
-stagewise audit plus standalone Markdown/HTML report as success. OpenRouter is
-available only via `--judge`; it consumes the persisted generation and
-stagewise ledgers and regenerates the report without model work.
+JAX-bearing import, and treats the complete local NLL, generation, both
+stagewise audits, and comparative standalone Markdown/HTML report as success.
+OpenRouter is available only via `--judge`; it consumes the persisted
+generation and stagewise ledgers and regenerates the report without model work.
 
 ## TinyWorlds Noun-Overlap v1
 

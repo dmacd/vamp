@@ -20,6 +20,7 @@ from apm.data.text.tinyworlds_nouns_v1.report import (
 )
 from apm.data.text.tinyworlds_nouns_v2.contracts import (
     BASE_UNIVERSE_STORY_COUNT,
+    BASELINE_CONDITIONS,
     CONDITIONS,
     EXCLUDED_TRAIN_STORY_COUNT,
     EXCLUDED_VALIDATION_STORY_COUNT,
@@ -36,6 +37,13 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
     canonical_json_bytes,
     record_sha256,
 )
+from apm.data.text.tinyworlds_nouns_v2.baseline_stagewise import (
+    summarize_baseline_stagewise_ledger,
+)
+from apm.data.text.tinyworlds_nouns_v2.report_plots import (
+    render_dependency_graph_svg,
+    render_line_chart_svg,
+)
 from apm.data.text.tinyworlds_nouns_v2.stagewise import summarize_stagewise_ledger
 
 
@@ -43,9 +51,11 @@ def publish_nouns_v2_report(
     partition: NounsV2PartitionArtifact,
     preset: NounsV2ExperimentPreset,
     adaptations: tuple[LanguageAdaptationArtifact, ...],
+    baseline_stages: tuple[LanguageAdaptationArtifact, ...],
     whole_story_path: str | Path,
     generation_path: str | Path,
     stagewise_path: str | Path,
+    baseline_stagewise_path: str | Path,
     result_root: str | Path,
     *,
     judge_path: str | Path | None = None,
@@ -67,6 +77,13 @@ def publish_nouns_v2_report(
         partition,
         adaptations,
     )
+    baseline_continual_learning = summarize_baseline_stagewise_ledger(
+        baseline_stagewise_path,
+        partition,
+        baseline_stages,
+        adaptations,
+        stagewise_path,
+    )
     _validate_final_stage_suffix_parity(stagewise_path, generation_rows)
     data = build_report_data(
         partition,
@@ -76,6 +93,7 @@ def publish_nouns_v2_report(
         generation_rows,
         judge_rows,
         continual_learning,
+        baseline_continual_learning,
     )
     root = Path(result_root)
     root.mkdir(parents=True, exist_ok=True)
@@ -84,8 +102,20 @@ def publish_nouns_v2_report(
         root / "vamp-graph.svg",
         render_vamp_graph_svg(data["graph"]).encode("utf-8"),
     )
+    _atomic_write(
+        root / "stagewise-routing.svg",
+        render_stagewise_route_chart_svg(continual_learning).encode("utf-8"),
+    )
+    _atomic_write(
+        root / "continual-nll-comparison.svg",
+        render_comparative_nll_chart_svg(
+            continual_learning,
+            baseline_continual_learning,
+        ).encode("utf-8"),
+    )
     _publish_confusion_csv(root, data)
     _publish_stagewise_csvs(root, data)
+    _publish_baseline_stagewise_csvs(root, data)
     for name in ("base-selection.csv", "task-counts.csv"):
         destination = root / name
         source = partition.root / name
@@ -109,6 +139,7 @@ def build_report_data(
     generation_rows: tuple[dict[str, object], ...],
     judge_rows: tuple[dict[str, object], ...],
     continual_learning: dict[str, object],
+    baseline_continual_learning: dict[str, object],
 ) -> dict[str, object]:
     """Build the complete JSON-compatible v2 report view."""
     by_task_condition: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
@@ -172,6 +203,7 @@ def build_report_data(
             / TRAIN_UNIQUE_STORY_COUNT,
             "universe_story_count": BASE_UNIVERSE_STORY_COUNT,
         },
+        "baseline_continual_learning": baseline_continual_learning,
         "config_sha256": preset.config_sha256,
         "construction": {
             "excluded_train_story_count": EXCLUDED_TRAIN_STORY_COUNT,
@@ -198,6 +230,10 @@ def render_report_markdown(data: dict[str, object]) -> str:
     base = _object(data["base"], "report base")
     construction = _object(data["construction"], "report construction")
     continual = _object(data["continual_learning"], "continual learning")
+    baseline_continual = _object(
+        data["baseline_continual_learning"],
+        "baseline continual learning",
+    )
     overall = _object(data["overall_conditions"], "overall conditions")
     suffix = _object(data["suffix_conditions"], "suffix conditions")
     task_metrics = tuple(
@@ -232,12 +268,48 @@ def render_report_markdown(data: dict[str, object]) -> str:
         "",
         "![VAMP node dependency graph](vamp-graph.svg)",
         "",
+        "<details>",
+        "<summary>Complete parent-to-child edge list</summary>",
+        "",
         *(
             f"- `{row['node']}` attached to "
             f"`{row['parent'] if row['parent'] is not None else 'none (root)'}` "
             f"at depth {row['depth']}."
             for row in graph
         ),
+        "",
+        "</details>",
+        "",
+        "## Sequential and independent-adapter comparison",
+        "",
+        "The sequential control is one rank-eight LoRA that is updated in place "
+        "for all 24 tasks; it receives no task identity at evaluation. The "
+        "independent control trains one fresh root LoRA per task and evaluates "
+        "with the correct task adapter, so it is a task-aware isolation ceiling "
+        "rather than a deployable task-free router.",
+        "",
+        f"The largest absolute independent-adapter NLL drift is "
+        f"{float(baseline_continual['independent_max_absolute_drift']):.6g}. "
+        "All systems use the same base, rank/alpha, task order, 2,000-update "
+        "budget, validation stories, midpoint split, and true-suffix loss.",
+        "",
+        "![Stagewise continual-learning NLL comparison](continual-nll-comparison.svg)",
+        "",
+        "| system | task identity | final story NLL | final token NLL | final route accuracy | mean forgetting | max forgetting | backward transfer |",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
+        *_comparison_markdown_rows(continual, baseline_continual),
+        "",
+        "<details>",
+        "<summary>All 24 sequential and independent stage aggregates</summary>",
+        "",
+        "| stage | new task | retained stories | sequential NLL | independent NLL | sequential deficit |",
+        "|---:|---|---:|---:|---:|---:|",
+        *(
+            _baseline_stage_markdown_row(_object(raw, "baseline stage summary"))
+            for raw in _list(baseline_continual["stages"], "baseline stages")
+        ),
+        "",
+        "</details>",
         "",
         "## Stagewise continual-learning audit",
         "",
@@ -252,12 +324,17 @@ def render_report_markdown(data: dict[str, object]) -> str:
         "final task NLL minus its best earlier NLL (higher is worse); backward "
         "transfer is introduction NLL minus final NLL (higher is better).",
         "",
+        "![Stagewise task-free routing accuracy](stagewise-routing.svg)",
+        "",
         "| condition | final story NLL | final token NLL | final route accuracy | mean forgetting | max forgetting | backward transfer | route accuracy change |",
         "|---|---:|---:|---:|---:|---:|---:|---:|",
         *(
             _continual_markdown_row(condition, continual)
             for condition in CONDITIONS
         ),
+        "",
+        "<details>",
+        "<summary>All 24 VAMP stage aggregates</summary>",
         "",
         "| stage | new task | retained stories | exhaustive | Hopfield | EBT uniform | EBT Hopfield | oracle NLL |",
         "|---:|---|---:|---:|---:|---:|---:|---:|",
@@ -266,9 +343,12 @@ def render_report_markdown(data: dict[str, object]) -> str:
             for raw in _list(continual["stages"], "stage summaries")
         ),
         "",
+        "</details>",
+        "",
         "Detailed task-level introduction, best, and final measurements are in "
-        "`stagewise-task-metrics.csv`; the complete stage curves are in "
-        "`stagewise-summary.csv`.",
+        "`stagewise-task-metrics.csv` and `baseline-stagewise-task-metrics.csv`; "
+        "the complete stage curves are in `stagewise-summary.csv` and "
+        "`baseline-stagewise-summary.csv`.",
         "",
         "## Whole-story NLL and routing",
         "",
@@ -279,9 +359,14 @@ def render_report_markdown(data: dict[str, object]) -> str:
             for condition in CONDITIONS
         ),
         "",
+        "<details>",
+        "<summary>Whole-story results for every task</summary>",
+        "",
         "| task | training stories | validation | base NLL | oracle NLL | acquisition | exhaustive | Hopfield | EBT uniform | EBT Hopfield |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         *(_task_markdown_row(row) for row in task_metrics),
+        "",
+        "</details>",
         "",
         "## Midpoint-only routing and true-suffix NLL",
         "",
@@ -325,6 +410,10 @@ def render_report_html(data: dict[str, object]) -> str:
     base = _object(data["base"], "report base")
     construction = _object(data["construction"], "construction")
     continual = _object(data["continual_learning"], "continual learning")
+    baseline_continual = _object(
+        data["baseline_continual_learning"],
+        "baseline continual learning",
+    )
     overall = _object(data["overall_conditions"], "overall")
     task_metrics = tuple(
         _object(raw, "task metric") for raw in _list(data["task_metrics"], "tasks")
@@ -356,6 +445,10 @@ def render_report_html(data: dict[str, object]) -> str:
     )
     graph_svg = render_vamp_graph_svg(data["graph"])
     route_chart = render_stagewise_route_chart_svg(continual)
+    comparison_chart = render_comparative_nll_chart_svg(
+        continual,
+        baseline_continual,
+    )
     continual_conditions = _object(
         continual["condition_summaries"], "continual conditions"
     )
@@ -370,198 +463,103 @@ def render_report_html(data: dict[str, object]) -> str:
         _stagewise_html_row(_object(raw, "stage summary"))
         for raw in _list(continual["stages"], "stage summaries")
     )
+    comparison_rows = "".join(
+        _comparison_html_rows(continual, baseline_continual)
+    )
+    baseline_stage_rows = "".join(
+        _baseline_stage_html_row(_object(raw, "baseline stage summary"))
+        for raw in _list(baseline_continual["stages"], "baseline stages")
+    )
     embedded = escape(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TinyWorlds nouns-v2 report</title>
-<style>:root{{--ink:#172331;--line:#d5dde6;--wash:#f3f6f9;--paper:#fff;--accent:#315d9b}}*{{box-sizing:border-box}}body{{margin:0;background:var(--wash);color:var(--ink);font:16px/1.55 system-ui,sans-serif}}main{{max-width:1180px;margin:auto;padding:2rem 1rem 5rem}}section,details.card{{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:1.1rem;margin:1rem 0}}summary{{cursor:pointer;font-weight:650}}table{{border-collapse:collapse;width:100%}}th,td{{padding:.5rem;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}}.scroll{{overflow:auto}}.visual{{overflow:auto;background:#fbfcfe;border:1px solid var(--line);border-radius:10px;padding:.5rem}}.visual svg{{display:block;min-width:760px;width:100%;height:auto}}.chips{{display:flex;gap:.5rem;flex-wrap:wrap}}.chip{{background:#e7eef8;border-radius:999px;padding:.3rem .7rem}}pre{{white-space:pre-wrap;background:var(--wash);padding:.7rem;border-radius:8px}}.hidden{{display:none}}select{{font:inherit;padding:.35rem}}</style></head><body><main>
+<style>:root{{--ink:#172331;--line:#cbd5e1;--wash:#f1f5f9;--paper:#fff;--accent:#315d9b}}*{{box-sizing:border-box}}body{{margin:0;background:var(--wash);color:var(--ink);font:17px/1.6 system-ui,sans-serif}}main{{max-width:1220px;margin:auto;padding:2rem 1rem 5rem}}section,details.card{{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:1.15rem;margin:1rem 0}}summary{{cursor:pointer;font-weight:700;font-size:1.08rem}}table{{border-collapse:collapse;width:100%;font-size:.96rem}}th,td{{padding:.55rem;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}}th{{color:#334155;background:#f8fafc}}.scroll{{overflow:auto}}.visual{{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:10px;padding:.7rem;margin:.8rem 0}}.visual svg{{display:block;min-width:780px;width:100%;height:auto}}.chips{{display:flex;gap:.5rem;flex-wrap:wrap}}.chip{{background:#dbeafe;color:#1e3a5f;border-radius:999px;padding:.3rem .7rem}}pre{{white-space:pre-wrap;background:var(--wash);padding:.7rem;border-radius:8px}}.hidden{{display:none}}select{{font:inherit;padding:.35rem}}</style></head><body><main>
 <h1>TinyWorlds nouns-v2 disjoint benchmark</h1><p>Every base/task boundary is story-disjoint. Multi-task stories are audited but never used for updates.</p><div class="chips"><span class="chip">{int(base['universe_story_count']):,} clean base stories</span><span class="chip">{int(construction['pure_task_train_story_count']):,} pure task stories</span><span class="chip">{int(construction['pure_validation_pair_count']):,} validation pairs</span></div>
 <details class="card" open><summary>Disjoint construction</summary><p>Zero selected concepts → base; exactly one → its sole task; two or more → permanent exclusion. The base universe covers {float(base['universe_share']):.2%} of original training; its optimizer-visible share after the internal holdout is {float(base['optimizer_share']):.2%}.</p></details>
 <details class="card" open><summary>Learned 24-stage VAMP dependency graph</summary><div class="visual">{graph_svg}</div><details><summary>Edge list</summary><ul>{graph_list}</ul></details></details>
-<section><h2>Stagewise continual learning</h2><p>{int(continual['row_count']):,} task/story/stage cases measure every learned task after every later stage. Stored-oracle drift isolates parameter retention; router curves show interference from adding candidate nodes. Largest absolute oracle NLL drift: {float(continual['oracle_max_absolute_drift']):.6g}.</p><div class="visual">{route_chart}</div><div class="scroll"><table><thead><tr><th>Condition</th><th>Final story NLL</th><th>Final token NLL</th><th>Final accuracy</th><th>Mean forgetting</th><th>Max forgetting</th><th>Backward transfer</th><th>Accuracy change</th></tr></thead><tbody>{continual_rows}</tbody></table></div><details><summary>All 24 stage aggregates</summary><div class="scroll"><table><thead><tr><th>Stage</th><th>New task</th><th>Stories</th><th>Exhaustive</th><th>Hopfield</th><th>EBT-U</th><th>EBT-H</th><th>Oracle NLL</th></tr></thead><tbody>{stage_rows}</tbody></table></div></details></section>
-<section><h2>Whole-story loss and routing</h2><div class="scroll"><table><thead><tr><th>Condition</th><th>Story NLL</th><th>Token NLL</th><th>Accuracy</th><th>Regret</th></tr></thead><tbody>{overall_rows}</tbody></table></div><h3>Per task</h3><div class="scroll"><table><thead><tr><th>Task</th><th>Train</th><th>Validation</th><th>Base</th><th>Oracle</th><th>Gain</th><th>Exhaustive</th><th>Hopfield</th><th>EBT-U</th><th>EBT-H</th></tr></thead><tbody>{task_rows}</tbody></table></div></section>
-<section><h2>Explore midpoint completions</h2><p>Each router received only the first half. All conditions had the same deterministic token budget.</p><label>Task: <select id="filter"><option value="all">all</option>{task_options}</select></label><div id="examples">{cards}</div></section>
+<details class="card" open><summary>Sequential, independent, and VAMP comparison</summary><p>The sequential control is one continually overwritten LoRA. The independent control uses a fresh task-matched root LoRA and therefore assumes task identity. Every row below uses the same base, adapter budget, validation stories, midpoint split, and true suffix.</p><p>Largest absolute independent-adapter NLL drift: {float(baseline_continual['independent_max_absolute_drift']):.6g}.</p><div class="visual">{comparison_chart}</div><div class="scroll"><table><thead><tr><th>System</th><th>Task identity</th><th>Final story NLL</th><th>Final token NLL</th><th>Final route accuracy</th><th>Mean forgetting</th><th>Max forgetting</th><th>Backward transfer</th></tr></thead><tbody>{comparison_rows}</tbody></table></div><details><summary>All 24 stored-baseline stages</summary><div class="scroll"><table><thead><tr><th>Stage</th><th>New task</th><th>Stories</th><th>Sequential NLL</th><th>Independent NLL</th><th>Sequential deficit</th></tr></thead><tbody>{baseline_stage_rows}</tbody></table></div></details></details>
+<details class="card" open><summary>VAMP routing across all 24 stages</summary><p>{int(continual['row_count']):,} task/story/stage cases measure every learned task after every later stage. Stored-oracle drift isolates parameter retention; router curves show interference from adding candidate nodes. Largest absolute oracle NLL drift: {float(continual['oracle_max_absolute_drift']):.6g}.</p><div class="visual">{route_chart}</div><div class="scroll"><table><thead><tr><th>Condition</th><th>Final story NLL</th><th>Final token NLL</th><th>Final accuracy</th><th>Mean forgetting</th><th>Max forgetting</th><th>Backward transfer</th><th>Accuracy change</th></tr></thead><tbody>{continual_rows}</tbody></table></div><details><summary>All 24 VAMP stage aggregates</summary><div class="scroll"><table><thead><tr><th>Stage</th><th>New task</th><th>Stories</th><th>Exhaustive</th><th>Hopfield</th><th>EBT-U</th><th>EBT-H</th><th>Oracle NLL</th></tr></thead><tbody>{stage_rows}</tbody></table></div></details></details>
+<details class="card"><summary>Whole-story loss and routing</summary><div class="scroll"><table><thead><tr><th>Condition</th><th>Story NLL</th><th>Token NLL</th><th>Accuracy</th><th>Regret</th></tr></thead><tbody>{overall_rows}</tbody></table></div><details><summary>Per-task whole-story results</summary><div class="scroll"><table><thead><tr><th>Task</th><th>Train</th><th>Validation</th><th>Base</th><th>Oracle</th><th>Gain</th><th>Exhaustive</th><th>Hopfield</th><th>EBT-U</th><th>EBT-H</th></tr></thead><tbody>{task_rows}</tbody></table></div></details></details>
+<details class="card"><summary>Explore midpoint completions</summary><p>Each router received only the first half. All conditions had the same deterministic token budget.</p><label>Task: <select id="filter"><option value="all">all</option>{task_options}</select></label><div id="examples">{cards}</div></details>
 <details class="card"><summary>Exact report data and identities</summary><pre>{embedded}</pre></details><script>const f=document.getElementById('filter');f.addEventListener('change',()=>document.querySelectorAll('[data-task]').forEach(x=>x.classList.toggle('hidden',f.value!=='all'&&x.dataset.task!==f.value)));</script></main></body></html>"""
 
 
 def render_vamp_graph_svg(raw_graph: object) -> str:
-    """Render the learned dependency tree as deterministic standalone SVG."""
-    if type(raw_graph) is not list or not raw_graph:
-        raise TypeError("VAMP graph rendering requires a nonempty row list")
-    graph = tuple(_object(raw, "graph row") for raw in raw_graph)
-    by_node = {str(row["node"]): row for row in graph}
-    if len(by_node) != len(graph) or "root" not in by_node:
-        raise ValueError("VAMP graph rows must contain unique nodes and one root")
-    children: dict[str, tuple[str, ...]] = {
-        node_id: tuple(
-            str(candidate["node"])
-            for candidate in graph
-            if candidate["parent"] == node_id
-        )
-        for node_id in by_node
-    }
-
-    def place_subtree(
-        node_id: str,
-        next_leaf: int,
-        active: frozenset[str],
-    ) -> tuple[dict[str, float], int]:
-        if node_id in active:
-            raise ValueError("VAMP graph rendering found a dependency cycle")
-        descendants = children[node_id]
-        if not descendants:
-            return {node_id: 42.0 + next_leaf * 58.0}, next_leaf + 1
-        positions: dict[str, float] = {}
-        cursor = next_leaf
-        for child in descendants:
-            child_positions, cursor = place_subtree(
-                child,
-                cursor,
-                active | {node_id},
-            )
-            positions.update(child_positions)
-        positions[node_id] = sum(positions[child] for child in descendants) / len(
-            descendants
-        )
-        return positions, cursor
-
-    y_by_node, leaf_count = place_subtree("root", 0, frozenset())
-    if set(y_by_node) != set(by_node):
-        raise ValueError("VAMP graph contains nodes disconnected from root")
-    node_width = 146.0
-    node_height = 34.0
-    x_by_node = {
-        node_id: 30.0 + int(row["depth"]) * 184.0
-        for node_id, row in by_node.items()
-    }
-    width = max(x_by_node.values()) + node_width + 30.0
-    height = max(110.0, 84.0 + max(1, leaf_count - 1) * 58.0)
-    palette = ("#334155", "#315d9b", "#287271", "#8c5e24", "#744e91", "#a13d4f")
-    edges = "".join(
-        (
-            f"<path d='M{x_by_node[str(row['parent'])] + node_width:.1f},"
-            f"{y_by_node[str(row['parent'])]:.1f} C"
-            f"{x_by_node[str(row['parent'])] + node_width + 32:.1f},"
-            f"{y_by_node[str(row['parent'])]:.1f} "
-            f"{x_by_node[str(row['node'])] - 32:.1f},"
-            f"{y_by_node[str(row['node'])]:.1f} "
-            f"{x_by_node[str(row['node'])]:.1f},"
-            f"{y_by_node[str(row['node'])]:.1f}'/>"
-        )
-        for row in graph
-        if row["parent"] is not None
-    )
-    nodes = "".join(
-        (
-            f"<g><title>stage {int(row['stage'])}: {escape(str(row['node']))}; "
-            f"parent {escape(str(row['parent'] or 'none'))}</title>"
-            f"<rect x='{x_by_node[str(row['node'])]:.1f}' "
-            f"y='{y_by_node[str(row['node'])] - node_height / 2:.1f}' "
-            f"width='{node_width:.1f}' height='{node_height:.1f}' rx='8' "
-            f"fill='{palette[min(int(row['depth']), len(palette) - 1)]}'/>"
-            f"<text x='{x_by_node[str(row['node'])] + 10:.1f}' "
-            f"y='{y_by_node[str(row['node'])] + 5:.1f}'>"
-            f"{int(row['stage']):02d} · {escape(str(row['node']))}</text></g>"
-        )
-        for row in graph
-    )
-    return (
-        f"<svg xmlns='http://www.w3.org/2000/svg' role='img' "
-        f"aria-labelledby='graph-title graph-desc' viewBox='0 0 {width:.0f} {height:.0f}'>"
-        "<title id='graph-title'>Learned VAMP node dependencies</title>"
-        "<desc id='graph-desc'>Directed edges run from each parent node to the "
-        "task node trained from it. Labels begin with the training stage.</desc>"
-        "<style>path{fill:none;stroke:#9aa8b7;stroke-width:1.8}"
-        "text{fill:#fff;font:12px system-ui,sans-serif;font-weight:650}</style>"
-        f"{edges}{nodes}</svg>"
-    )
+    """Render the learned dependency tree through Graphviz."""
+    return render_dependency_graph_svg(raw_graph)
 
 
 def render_stagewise_route_chart_svg(continual: dict[str, object]) -> str:
-    """Render stagewise task-free route accuracy as inline deterministic SVG."""
+    """Render stagewise task-free routing accuracy through Matplotlib."""
     stages = tuple(
         _object(raw, "stage summary")
         for raw in _list(continual["stages"], "stage summaries")
     )
-    if len(stages) < 2:
-        raise ValueError("stagewise route chart requires at least two stages")
-    conditions = CONDITIONS[2:]
-    colors = ("#315d9b", "#287271", "#c06c2b", "#a13d4f")
-    labels = ("exhaustive", "Hopfield", "EBT uniform", "EBT Hopfield")
-    width, height = 920.0, 350.0
-    left, right, top, bottom = 62.0, 22.0, 28.0, 62.0
-    plot_width = width - left - right
-    plot_height = height - top - bottom
-
-    def point(stage_index: int, accuracy: float) -> tuple[float, float]:
-        return (
-            left + (stage_index - 1) * plot_width / (len(stages) - 1),
-            top + (1.0 - accuracy) * plot_height,
-        )
-
-    grid = "".join(
+    rows = tuple(
+        {
+            "stage": float(stage["stage_index"]),
+            **{
+                condition: float(
+                    _object(
+                        _object(stage["conditions"], "stage conditions")[condition],
+                        condition,
+                    )["routing_accuracy"]
+                )
+                for condition in CONDITIONS[2:]
+            },
+        }
+        for stage in stages
+    )
+    return render_line_chart_svg(
+        rows,
         (
-            f"<line x1='{left:.1f}' y1='{top + (1-value) * plot_height:.1f}' "
-            f"x2='{width-right:.1f}' y2='{top + (1-value) * plot_height:.1f}'/>"
-            f"<text x='{left-10:.1f}' y='{top + (1-value) * plot_height + 4:.1f}' "
-            f"text-anchor='end'>{value:.0%}</text>"
-        )
-        for value in (0.0, 0.25, 0.5, 0.75, 1.0)
+            ("vamp_exhaustive", "VAMP exhaustive"),
+            ("vamp_hopfield", "VAMP Hopfield"),
+            ("vamp_ebt_uniform", "VAMP EBT uniform"),
+            ("vamp_ebt_hopfield", "VAMP EBT Hopfield"),
+        ),
+        title="Task-free routing as the VAMP graph grows",
+        y_label="routing accuracy",
+        y_bounds=(0.0, 1.0),
     )
-    series = []
-    for condition, color, label in zip(conditions, colors, labels):
-        accuracies = tuple(
-            float(
-                _object(
-                    _object(stage["conditions"], "stage conditions")[condition],
-                    condition,
-                )["routing_accuracy"]
-            )
-            for stage in stages
-        )
-        points = tuple(
-            point(index, accuracy)
-            for index, accuracy in enumerate(accuracies, start=1)
-        )
-        polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
-        markers = "".join(
-            f"<circle cx='{x:.1f}' cy='{y:.1f}' r='2.7'><title>stage "
-            f"{index}: {label} {accuracy:.2%}</title></circle>"
-            for index, ((x, y), accuracy) in enumerate(
-                zip(points, accuracies), start=1
-            )
-        )
-        series.append(
-            f"<g style='color:{color}'><polyline points='{polyline}'/>"
-            f"{markers}</g>"
-        )
-    tick_stages = tuple(
-        stage for stage in (1, 4, 8, 12, 16, 20, len(stages))
-        if stage <= len(stages)
+
+
+def render_comparative_nll_chart_svg(
+    continual: dict[str, object],
+    baseline_continual: dict[str, object],
+) -> str:
+    """Render matched stagewise suffix NLL for stored and routed systems."""
+    vamp_stages = tuple(
+        _object(raw, "VAMP stage")
+        for raw in _list(continual["stages"], "VAMP stages")
     )
-    x_ticks = "".join(
-        f"<text x='{point(stage, 0.0)[0]:.1f}' y='{height-bottom+22:.1f}' "
-        f"text-anchor='middle'>{stage}</text>"
-        for stage in dict.fromkeys(tick_stages)
+    baseline_stages = tuple(
+        _object(raw, "baseline stage")
+        for raw in _list(baseline_continual["stages"], "baseline stages")
     )
-    legend = "".join(
-        f"<g transform='translate({left + index * 190:.0f},{height-13:.0f})' "
-        f"style='color:{color}'><line x1='0' y1='0' x2='25' y2='0'/>"
-        f"<text x='32' y='4'>{escape(label)}</text></g>"
-        for index, (color, label) in enumerate(zip(colors, labels))
+    if len(vamp_stages) != len(baseline_stages):
+        raise ValueError("comparison plot stage counts differ")
+    rows = tuple(
+        {
+            "stage": float(vamp_stage["stage_index"]),
+            "sequential": _stage_condition_nll(baseline_stage, "sequential_single_lora"),
+            "independent": _stage_condition_nll(baseline_stage, "independent_root_lora"),
+            "vamp_oracle": _stage_condition_nll(vamp_stage, "oracle"),
+            "vamp_exhaustive": _stage_condition_nll(vamp_stage, "vamp_exhaustive"),
+            "vamp_ebt_uniform": _stage_condition_nll(vamp_stage, "vamp_ebt_uniform"),
+        }
+        for vamp_stage, baseline_stage in zip(vamp_stages, baseline_stages)
     )
-    return (
-        f"<svg xmlns='http://www.w3.org/2000/svg' role='img' "
-        f"aria-labelledby='route-title route-desc' viewBox='0 0 {width:.0f} {height:.0f}'>"
-        "<title id='route-title'>Stagewise task-free routing accuracy</title>"
-        "<desc id='route-desc'>Four routing methods evaluated on every learned task "
-        "after each VAMP training stage.</desc>"
-        "<style>line{stroke:#d5dde6;stroke-width:1}polyline{fill:none;stroke:currentColor;"
-        "stroke-width:2.4}circle{fill:currentColor}text{fill:#425466;font:11px "
-        "system-ui,sans-serif}.axis{fill:#172331;font-weight:650}</style>"
-        f"{grid}{''.join(series)}{x_ticks}{legend}"
-        f"<text class='axis' x='{left + plot_width/2:.1f}' y='{height-bottom+42:.1f}' "
-        "text-anchor='middle'>VAMP training stage</text>"
-        f"<text class='axis' transform='translate(16 {top+plot_height/2:.1f}) rotate(-90)' "
-        "text-anchor='middle'>routing accuracy</text></svg>"
+    return render_line_chart_svg(
+        rows,
+        (
+            ("sequential", "Sequential single LoRA"),
+            ("independent", "Independent task adapter"),
+            ("vamp_oracle", "VAMP stored oracle"),
+            ("vamp_exhaustive", "VAMP exhaustive"),
+            ("vamp_ebt_uniform", "VAMP EBT uniform"),
+        ),
+        title="Continual-learning suffix loss under matched budgets",
+        y_label="story-weighted true-suffix NLL",
     )
 
 
@@ -717,6 +715,130 @@ def _require_hashed_row(
     core = {key: value for key, value in row.items() if key != hash_field}
     if row.get("format") != expected_format or supplied != record_sha256(core):
         raise ValueError(f"{expected_format} row identity changed")
+
+
+def _comparison_values(
+    continual: dict[str, object],
+    baseline_continual: dict[str, object],
+) -> tuple[dict[str, object], ...]:
+    baseline_summaries = _object(
+        baseline_continual["condition_summaries"],
+        "baseline condition summaries",
+    )
+    vamp_summaries = _object(
+        continual["condition_summaries"],
+        "VAMP condition summaries",
+    )
+    baseline_rows = tuple(
+        {
+            "backward_transfer": float(summary["mean_backward_transfer"]),
+            "final_route_accuracy": None,
+            "final_story_mean_nll": float(summary["final_story_mean_nll"]),
+            "final_token_mean_nll": float(summary["final_token_mean_nll"]),
+            "max_forgetting": float(summary["max_task_forgetting"]),
+            "mean_forgetting": float(summary["mean_task_forgetting"]),
+            "system": label,
+            "task_identity": task_identity,
+        }
+        for condition, label, task_identity in (
+            ("sequential_single_lora", "sequential single LoRA", "no"),
+            ("independent_root_lora", "independent root LoRA", "required"),
+        )
+        for summary in (_object(baseline_summaries[condition], condition),)
+    )
+    vamp_rows = tuple(
+        {
+            "backward_transfer": float(summary["mean_backward_transfer"]),
+            "final_route_accuracy": float(summary["final_routing_accuracy"]),
+            "final_story_mean_nll": float(summary["final_story_mean_nll"]),
+            "final_token_mean_nll": float(summary["final_token_mean_nll"]),
+            "max_forgetting": float(summary["max_task_forgetting"]),
+            "mean_forgetting": float(summary["mean_task_forgetting"]),
+            "system": label,
+            "task_identity": task_identity,
+        }
+        for condition, label, task_identity in (
+            ("oracle", "VAMP stored oracle", "required"),
+            ("vamp_exhaustive", "VAMP exhaustive", "no"),
+            ("vamp_hopfield", "VAMP Hopfield", "no"),
+            ("vamp_ebt_uniform", "VAMP EBT uniform", "no"),
+            ("vamp_ebt_hopfield", "VAMP EBT Hopfield", "no"),
+        )
+        for summary in (_object(vamp_summaries[condition], condition),)
+    )
+    return baseline_rows + vamp_rows
+
+
+def _comparison_markdown_rows(
+    continual: dict[str, object],
+    baseline_continual: dict[str, object],
+) -> tuple[str, ...]:
+    return tuple(
+        f"| {row['system']} | {row['task_identity']} | "
+        f"{float(row['final_story_mean_nll']):.3f} | "
+        f"{float(row['final_token_mean_nll']):.3f} | "
+        f"{_optional_accuracy(row['final_route_accuracy'])} | "
+        f"{float(row['mean_forgetting']):+.4f} | "
+        f"{float(row['max_forgetting']):+.4f} | "
+        f"{float(row['backward_transfer']):+.4f} |"
+        for row in _comparison_values(continual, baseline_continual)
+    )
+
+
+def _comparison_html_rows(
+    continual: dict[str, object],
+    baseline_continual: dict[str, object],
+) -> tuple[str, ...]:
+    return tuple(
+        "<tr>"
+        + "".join(
+            f"<td>{escape(value)}</td>"
+            for value in (
+                str(row["system"]),
+                str(row["task_identity"]),
+                f"{float(row['final_story_mean_nll']):.3f}",
+                f"{float(row['final_token_mean_nll']):.3f}",
+                _optional_accuracy(row["final_route_accuracy"]),
+                f"{float(row['mean_forgetting']):+.4f}",
+                f"{float(row['max_forgetting']):+.4f}",
+                f"{float(row['backward_transfer']):+.4f}",
+            )
+        )
+        + "</tr>"
+        for row in _comparison_values(continual, baseline_continual)
+    )
+
+
+def _optional_accuracy(value: object) -> str:
+    return "n/a" if value is None else f"{float(value):.1%}"
+
+
+def _stage_condition_nll(stage: dict[str, object], condition: str) -> float:
+    return float(
+        _object(_object(stage["conditions"], "stage conditions")[condition], condition)[
+            "story_mean_nll"
+        ]
+    )
+
+
+def _baseline_stage_markdown_row(stage: dict[str, object]) -> str:
+    conditions = _object(stage["conditions"], "baseline stage conditions")
+    sequential = _object(conditions["sequential_single_lora"], "sequential")
+    independent = _object(conditions["independent_root_lora"], "independent")
+    return (
+        f"| {int(stage['stage_index'])} | {stage['introduced_task']} | "
+        f"{int(stage['story_count']):,} | "
+        f"{float(sequential['story_mean_nll']):.3f} | "
+        f"{float(independent['story_mean_nll']):.3f} | "
+        f"{float(sequential['mean_deficit_vs_independent']):+.3f} |"
+    )
+
+
+def _baseline_stage_html_row(stage: dict[str, object]) -> str:
+    return "<tr>" + "".join(
+        f"<td>{escape(value.strip())}</td>"
+        for value in _baseline_stage_markdown_row(stage).strip("|").split("|")
+    ) + "</tr>"
 
 
 def _overall_markdown_row(condition: str, summary: dict[str, object]) -> str:
@@ -940,6 +1062,86 @@ def _publish_stagewise_csvs(root: Path, data: dict[str, object]) -> None:
     )
 
 
+def _publish_baseline_stagewise_csvs(
+    root: Path,
+    data: dict[str, object],
+) -> None:
+    baseline = _object(
+        data["baseline_continual_learning"],
+        "baseline continual learning",
+    )
+    stage_rows = tuple(
+        (
+            int(stage["stage_index"]),
+            str(stage["introduced_task"]),
+            int(stage["story_count"]),
+            condition,
+            float(summary["story_mean_nll"]),
+            float(summary["token_mean_nll"]),
+            float(summary["mean_deficit_vs_independent"]),
+        )
+        for raw_stage in _list(baseline["stages"], "baseline stage summaries")
+        for stage in (_object(raw_stage, "baseline stage summary"),)
+        for condition in BASELINE_CONDITIONS
+        for summary in (
+            _object(
+                _object(stage["conditions"], "baseline stage conditions")[condition],
+                condition,
+            ),
+        )
+    )
+    task_rows = tuple(
+        (
+            str(task["task"]),
+            int(task["introduction_stage"]),
+            condition,
+            int(summary["best_stage"]),
+            float(summary["introduction_story_mean_nll"]),
+            float(summary["best_story_mean_nll"]),
+            float(summary["final_story_mean_nll"]),
+            float(summary["forgetting"]),
+            float(summary["backward_transfer"]),
+        )
+        for raw_task in _list(baseline["task_metrics"], "baseline task metrics")
+        for task in (_object(raw_task, "baseline task metric"),)
+        for condition in BASELINE_CONDITIONS
+        for summary in (
+            _object(
+                _object(task["conditions"], "baseline task conditions")[condition],
+                condition,
+            ),
+        )
+    )
+    _write_csv(
+        root / "baseline-stagewise-summary.csv",
+        (
+            "stage",
+            "introduced_task",
+            "story_count",
+            "condition",
+            "story_mean_nll",
+            "token_mean_nll",
+            "mean_deficit_vs_independent",
+        ),
+        stage_rows,
+    )
+    _write_csv(
+        root / "baseline-stagewise-task-metrics.csv",
+        (
+            "task",
+            "introduction_stage",
+            "condition",
+            "best_stage",
+            "introduction_story_mean_nll",
+            "best_story_mean_nll",
+            "final_story_mean_nll",
+            "forgetting",
+            "backward_transfer",
+        ),
+        task_rows,
+    )
+
+
 def _write_csv(
     path: Path,
     header: tuple[str, ...],
@@ -1006,6 +1208,7 @@ def _atomic_write(path: Path, payload: bytes) -> None:
 __all__ = [
     "build_report_data",
     "publish_nouns_v2_report",
+    "render_comparative_nll_chart_svg",
     "render_report_html",
     "render_report_markdown",
     "render_stagewise_route_chart_svg",

@@ -12,6 +12,7 @@ from apm.data.text.tinyworlds_nouns_v1.contracts import NounsExperimentPreset
 from apm.data.text.tinyworlds_nouns_v1.experiment import StoryIndexEntry
 from apm.data.text.tinyworlds_nouns_v2.contracts import (
     BASE_SELECTION_FORMAT,
+    BASELINE_STAGEWISE_FORMAT,
     BASE_TRAINING_FORMAT,
     GPU_PREFLIGHT_FORMAT,
     HALF_STORY_FORMAT,
@@ -20,12 +21,17 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
     VAMP_STAGE_FORMAT,
     WHOLE_STORY_FORMAT,
     NounConceptFamily,
+    BaselineStagewiseClRow,
+    BaselineStagewiseConditionResult,
     NounsV2ExperimentPreset,
     StagewiseClRow,
     StagewiseConditionResult,
     WholeStoryNllRow,
     canonical_json_bytes,
     record_sha256,
+)
+from apm.data.text.tinyworlds_nouns_v2.baseline_stagewise import (
+    summarize_baseline_stagewise_rows,
 )
 from apm.data.text.tinyworlds_nouns_v2.evaluation import build_prefix_only_query
 from apm.data.text.tinyworlds_nouns_v2.partition import (
@@ -40,6 +46,7 @@ from apm.data.text.tinyworlds_nouns_v2.report import (
     render_vamp_graph_svg,
 )
 import apm.data.text.tinyworlds_nouns_v2.stagewise as stagewise
+import apm.data.text.tinyworlds_nouns_v2.baseline_stagewise as baseline_stagewise
 import apm.data.text.tinyworlds_nouns_v2.report as v2_report
 from apm.data.text.tinyworlds_nouns_v2.stagewise import summarize_stagewise_rows
 from apm.lm.text import CharTokenizer
@@ -198,6 +205,36 @@ def test_v2_preset_and_result_contracts_have_independent_hashes() -> None:
     assert stage_row["format"] == STAGEWISE_FORMAT
     assert stage_hash == record_sha256(stage_row)
 
+    baseline_row = BaselineStagewiseClRow(
+        stage_index=1,
+        introduced_task="mouse",
+        baseline_tensor_checksum="2" * 64,
+        vamp_tensor_checksum="3" * 64,
+        task_noun="mouse",
+        story_id=sha256(b"baseline-stage-story").hexdigest(),
+        results=(
+            BaselineStagewiseConditionResult(
+                "sequential_single_lora",
+                "mouse",
+                2.0,
+                2,
+                1.0,
+                0.1,
+            ),
+            BaselineStagewiseConditionResult(
+                "independent_root_lora",
+                "mouse",
+                1.8,
+                2,
+                0.9,
+                0.0,
+            ),
+        ),
+    ).as_record()
+    baseline_hash = baseline_row.pop("result_sha256")
+    assert baseline_row["format"] == BASELINE_STAGEWISE_FORMAT
+    assert baseline_hash == record_sha256(baseline_row)
+
 
 def test_shared_base_and_vamp_resume_formats_are_v2_bound() -> None:
     assert len(TASK_IDS) == 24
@@ -264,6 +301,7 @@ def test_report_rendering_is_byte_stable_after_resume() -> None:
         "vamp_ebt_hopfield",
     )}
     continual = _stagewise_fixture_summary()
+    baseline_continual = _baseline_stagewise_fixture_summary()
     data = {
         "base": {
             "optimizer_share": 0.79,
@@ -278,6 +316,7 @@ def test_report_rendering_is_byte_stable_after_resume() -> None:
             "pure_validation_pair_count": 2,
         },
         "continual_learning": continual,
+        "baseline_continual_learning": baseline_continual,
         "examples": [],
         "graph": [{"depth": 0, "node": "root", "parent": None, "stage": 0}],
         "judge": {"available": False},
@@ -306,6 +345,17 @@ def test_stagewise_metrics_separate_stored_retention_from_router_decay() -> None
     assert exhaustive["mean_task_forgetting"] == pytest.approx(0.15)
     assert exhaustive["mean_backward_transfer"] == pytest.approx(-0.15)
     assert exhaustive["mean_route_accuracy_change"] == pytest.approx(-0.5)
+
+
+def test_baseline_stagewise_metrics_expose_sequential_forgetting() -> None:
+    summary = _baseline_stagewise_fixture_summary()
+    sequential = summary["condition_summaries"]["sequential_single_lora"]
+    independent = summary["condition_summaries"]["independent_root_lora"]
+    assert summary["row_count"] == 3
+    assert summary["independent_max_absolute_drift"] == pytest.approx(0.0)
+    assert sequential["mean_task_forgetting"] == pytest.approx(0.3)
+    assert sequential["mean_backward_transfer"] == pytest.approx(-0.3)
+    assert independent["mean_task_forgetting"] == pytest.approx(0.0)
 
 
 def test_vamp_dependency_svg_is_deterministic_and_contains_every_edge() -> None:
@@ -399,6 +449,76 @@ def test_stagewise_ledger_resume_and_tamper_rejection(tmp_path: Path) -> None:
         )
 
 
+def test_baseline_stagewise_ledger_resume_and_tamper_rejection(
+    tmp_path: Path,
+) -> None:
+    story_id = sha256(b"baseline-stagewise-ledger-story").hexdigest()
+    baseline_checksum = "4" * 64
+    vamp_checksum = "5" * 64
+    baseline = SimpleNamespace(
+        task_order=("mouse",),
+        tensor_checksum=baseline_checksum,
+        sequential_stages=(object(),),
+        independent_adapters=(object(),),
+    )
+    vamp = SimpleNamespace(task_order=("mouse",), tensor_checksum=vamp_checksum)
+    partition = SimpleNamespace(task_ids=("mouse",))
+    entries = {"mouse": (StoryIndexEntry(story_id, 0, 0, 1, 0, 2),)}
+    results = (
+        BaselineStagewiseConditionResult(
+            "sequential_single_lora",
+            "mouse",
+            2.2,
+            2,
+            1.1,
+            0.1,
+        ),
+        BaselineStagewiseConditionResult(
+            "independent_root_lora",
+            "mouse",
+            2.0,
+            2,
+            1.0,
+            0.0,
+        ),
+    )
+    record = BaselineStagewiseClRow(
+        1,
+        "mouse",
+        baseline_checksum,
+        vamp_checksum,
+        "mouse",
+        story_id,
+        results,
+    ).as_record()
+    ledger = tmp_path / "baseline-stagewise.jsonl.work"
+    ledger.write_bytes(canonical_json_bytes(record) + b'{"interrupted"')
+    baseline_stagewise._repair_interrupted_tail(ledger)
+    assert baseline_stagewise.validate_baseline_stagewise_ledger(
+        ledger,
+        partition,
+        (baseline,),
+        (vamp,),
+        require_complete=True,
+        entries_by_task=entries,
+    ) == {("1", "mouse", story_id)}
+
+    tampered = json.loads(canonical_json_bytes(record))
+    tampered["results"]["independent_root_lora"]["adapter_task"] = "boat"
+    core = {key: value for key, value in tampered.items() if key != "result_sha256"}
+    tampered["result_sha256"] = record_sha256(core)
+    ledger.write_bytes(canonical_json_bytes(tampered))
+    with pytest.raises(ValueError, match="comparison metadata"):
+        baseline_stagewise.validate_baseline_stagewise_ledger(
+            ledger,
+            partition,
+            (baseline,),
+            (vamp,),
+            require_complete=True,
+            entries_by_task=entries,
+        )
+
+
 def test_final_stage_suffix_metrics_must_equal_generation_ledger(
     tmp_path: Path,
 ) -> None:
@@ -486,6 +606,44 @@ def _stagewise_fixture_summary() -> dict[str, object]:
             row(1, "mouse", 1.0, 1.2, True),
             row(2, "mouse", 1.0, 1.5, False),
             row(2, "boat", 2.0, 2.2, True),
+        ),
+        task_ids,
+    )
+
+
+def _baseline_stagewise_fixture_summary() -> dict[str, object]:
+    task_ids = ("mouse", "boat")
+
+    def row(
+        stage: int,
+        task: str,
+        sequential_nll: float,
+        independent_nll: float,
+    ) -> dict[str, object]:
+        return {
+            "results": {
+                "sequential_single_lora": {
+                    "deficit_vs_independent": sequential_nll - independent_nll,
+                    "mean_nll": sequential_nll,
+                    "token_count": 2,
+                    "total_nll": sequential_nll * 2,
+                },
+                "independent_root_lora": {
+                    "deficit_vs_independent": 0.0,
+                    "mean_nll": independent_nll,
+                    "token_count": 2,
+                    "total_nll": independent_nll * 2,
+                },
+            },
+            "stage_index": stage,
+            "task_noun": task,
+        }
+
+    return summarize_baseline_stagewise_rows(
+        (
+            row(1, "mouse", 1.0, 1.0),
+            row(2, "mouse", 1.6, 1.0),
+            row(2, "boat", 2.5, 2.0),
         ),
         task_ids,
     )

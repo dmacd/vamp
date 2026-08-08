@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from hashlib import sha256
+import json
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,7 @@ PARENT_ROOT = (
 )
 V2_ROOT = REPOSITORY_ROOT / "data/tinyworlds-nouns-v2"
 V2_CHECKPOINT_ROOT = REPOSITORY_ROOT / "checkpoints/tinyworlds-nouns-v2"
+V2_RESULT_ROOT = REPOSITORY_ROOT / "results/language_cl/tinyworlds-nouns-v2"
 
 
 def test_real_24_task_counts_and_byte_identical_rebuild() -> None:
@@ -117,3 +119,67 @@ def test_all_real_v2_vamp_stages_strict_load_as_one_immutable_prefix() -> None:
     assert stages[-1].tensor_checksum == (
         "97414ac3d8656ab083b2e570a4162dc69b024f90cf819b80b1cab94213553e63"
     )
+
+
+def test_real_v2_baselines_and_comparison_ledger_strict_load() -> None:
+    manifest = authenticate_parent_manifest(PARENT_ROOT)
+    partition = find_partition(manifest, V2_ROOT)
+    assert partition is not None
+
+    from apm.data.text.tinyworlds_nouns_v2.baseline_stagewise import (
+        validate_baseline_stagewise_ledger,
+    )
+    from apm.data.text.tinyworlds_nouns_v2.contracts import NounsV2ExperimentPreset
+    from apm.data.text.tinyworlds_nouns_v2.experiment import (
+        load_nouns_v2_baseline_stages,
+        load_nouns_v2_vamp_stages,
+        run_or_load_nouns_v2_gpu_preflight,
+        run_or_resume_nouns_v2_base,
+    )
+
+    preset = NounsV2ExperimentPreset()
+    preflight = run_or_load_nouns_v2_gpu_preflight(
+        partition,
+        preset,
+        V2_CHECKPOINT_ROOT,
+    )
+    selected_base = run_or_resume_nouns_v2_base(
+        partition,
+        preset,
+        preflight,
+        V2_CHECKPOINT_ROOT,
+    )
+    vamp_stages = load_nouns_v2_vamp_stages(
+        partition,
+        preset,
+        selected_base,
+        V2_CHECKPOINT_ROOT,
+    )
+    baseline_stages = load_nouns_v2_baseline_stages(
+        partition,
+        preset,
+        selected_base,
+        vamp_stages,
+        V2_CHECKPOINT_ROOT,
+    )
+    assert len(baseline_stages) == 24
+    assert tuple(
+        tuple(str(task) for task in stage.task_order)
+        for stage in baseline_stages
+    ) == tuple(partition.task_ids[:index] for index in range(1, 25))
+
+    ledger = V2_RESULT_ROOT / "baseline-stagewise-cl.jsonl"
+    assert len(
+        validate_baseline_stagewise_ledger(
+            ledger,
+            partition,
+            baseline_stages,
+            vamp_stages,
+            require_complete=True,
+        )
+    ) == STAGEWISE_CASE_COUNT
+    run = json.loads((V2_RESULT_ROOT / "run-manifest.json").read_bytes())
+    assert baseline_stages[-1].tensor_checksum == run["baseline_tensor_checksum"]
+    assert sha256(ledger.read_bytes()).hexdigest() == run[
+        "baseline_stagewise_sha256"
+    ]

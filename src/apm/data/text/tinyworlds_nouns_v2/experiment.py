@@ -24,6 +24,10 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
     NounsV2ExperimentPreset,
     NounsV2PartitionArtifact,
 )
+from apm.data.text.tinyworlds_nouns_v2.baselines import (
+    load_nouns_v2_baseline_stages,
+    run_or_resume_nouns_v2_baselines,
+)
 
 
 def run_or_load_nouns_v2_gpu_preflight(
@@ -94,9 +98,11 @@ __all__ = [
     "StoryIndexEntry",
     "load_story_index",
     "load_nouns_v2_vamp_stages",
+    "load_nouns_v2_baseline_stages",
     "noun_model_config",
     "router_batch_from_index",
     "run_or_load_nouns_v2_gpu_preflight",
     "run_or_resume_nouns_v2_base",
+    "run_or_resume_nouns_v2_baselines",
     "run_or_resume_nouns_v2_vamp",
 ]

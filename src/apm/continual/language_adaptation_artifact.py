@@ -17,7 +17,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from apm.continual.language_baseline_training import LanguageAdaptationBaselines
+from apm.continual.language_baseline_training import (
+    IndependentRootLoraRun,
+    LanguageAdaptationBaselines,
+    SequentialLoraRun,
+)
 from apm.continual.language_run import LanguageVampRun
 from apm.continual.language_tasks import AddressBook
 from apm.lm.checkpoint import BaseCheckpointRef
@@ -349,6 +353,81 @@ def extract_language_vamp_artifact(
         ),
         max_nodes=run.max_nodes,
         max_edges=run.max_edges,
+    )
+
+
+def attach_language_baseline_runs(
+    vamp_artifact: LanguageAdaptationArtifact,
+    sequential: SequentialLoraRun,
+    independent: IndependentRootLoraRun,
+    *,
+    config_hashes: Mapping[str, str] | None = None,
+) -> LanguageAdaptationArtifact:
+    """Attach complete baseline prefixes to one authenticated VAMP-only artifact."""
+    if not isinstance(vamp_artifact, LanguageAdaptationArtifact):
+        raise TypeError("vamp_artifact must be a LanguageAdaptationArtifact")
+    if not isinstance(sequential, SequentialLoraRun):
+        raise TypeError("sequential must be a SequentialLoraRun")
+    if not isinstance(independent, IndependentRootLoraRun):
+        raise TypeError("independent must be an IndependentRootLoraRun")
+    task_order = tuple(stage.task_id for stage in sequential.stages)
+    if (
+        vamp_artifact.sequential_stages
+        or vamp_artifact.independent_adapters
+        or task_order != tuple(adapter.task_id for adapter in independent.adapters)
+        or task_order != vamp_artifact.task_order
+    ):
+        raise ValueError("baseline runs must align with one VAMP-only task prefix")
+    if (
+        sequential.train_config != vamp_artifact.train_config
+        or independent.train_config != vamp_artifact.train_config
+        or sequential.base_parameter_checksum
+        != vamp_artifact.base_checkpoint.parameter_checksum
+        or independent.base_parameter_checksum
+        != vamp_artifact.base_checkpoint.parameter_checksum
+    ):
+        raise ValueError("baseline runs must share the VAMP base and training config")
+    merged_hashes = dict(vamp_artifact.config_hashes)
+    merged_hashes.pop("adaptation_mode", None)
+    for name, digest in (config_hashes or {}).items():
+        if name in merged_hashes and merged_hashes[name] != digest:
+            raise ValueError(f"supplied {name} config hash changed the VAMP binding")
+        merged_hashes[name] = digest
+    return LanguageAdaptationArtifact(
+        base_checkpoint=vamp_artifact.base_checkpoint,
+        model_config=vamp_artifact.model_config,
+        lora_config=vamp_artifact.lora_config,
+        train_config=vamp_artifact.train_config,
+        config_hashes=tuple(merged_hashes.items()),
+        task_order=vamp_artifact.task_order,
+        sequential_stages=tuple(
+            AdapterTrainingRecord(
+                stage.stage_index,
+                stage.task_id,
+                stage.adapter,
+                stage.step_losses,
+            )
+            for stage in sequential.stages
+        ),
+        independent_adapters=tuple(
+            AdapterTrainingRecord(
+                stage_index,
+                adapter.task_id,
+                adapter.adapter,
+                adapter.step_losses,
+            )
+            for stage_index, adapter in enumerate(independent.adapters, start=1)
+        ),
+        vamp_graph=vamp_artifact.vamp_graph,
+        address_book=vamp_artifact.address_book,
+        rng_state=LanguageAdaptationRngState(
+            np.asarray(sequential.rng_key, dtype=np.uint32),
+            np.asarray(independent.rng_key, dtype=np.uint32),
+            vamp_artifact.rng_state.vamp,
+        ),
+        vamp_stages=vamp_artifact.vamp_stages,
+        max_nodes=vamp_artifact.max_nodes,
+        max_edges=vamp_artifact.max_edges,
     )
 
 
@@ -1782,6 +1861,7 @@ __all__ = [
     "LanguageAdaptationArtifact",
     "LanguageAdaptationRngState",
     "VampTrainingRecord",
+    "attach_language_baseline_runs",
     "extract_language_adaptation_artifact",
     "extract_language_vamp_artifact",
     "flatten_lora_edge",

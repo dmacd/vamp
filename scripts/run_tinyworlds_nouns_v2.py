@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -63,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     arguments = parser.parse_args(argv)
     started = time.monotonic()
-    print("Phase 1/8: authenticate the immutable nouns-v1 parent.", flush=True)
+    print("Phase 1/10: authenticate the immutable nouns-v1 parent.", flush=True)
     manifest = authenticate_parent_manifest(PARENT_DIRECTORY)
     manifest_path = publish_manifest(manifest, DATA_DIRECTORY)
     print(
@@ -71,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
 
-    print("Phase 2/8: build and independently reconstruct the disjoint partition.", flush=True)
+    print("Phase 2/10: build and independently reconstruct the disjoint partition.", flush=True)
     partition = find_partition(manifest, DATA_DIRECTORY)
     if partition is None:
         partition = build_nouns_v2_partition(
@@ -87,11 +88,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     RESULT_DIRECTORY.mkdir(parents=True, exist_ok=True)
     _copy_exact(partition.root / "partition.json", RESULT_DIRECTORY / "partition.json")
-    _publish_run_manifest(partition.partition_sha256, manifest.manifest_sha256, "partition_complete")
+    _publish_run_manifest(
+        partition.partition_sha256,
+        manifest.manifest_sha256,
+        "partition_complete",
+    )
     _publish_execution_status(
         "partition_complete",
         partition.partition_sha256,
         manifest.manifest_sha256,
+        None,
         None,
         None,
     )
@@ -104,6 +110,13 @@ def main(argv: list[str] | None = None) -> int:
     from apm.data.text.tinyworlds_nouns_v2.evaluation import (
         evaluate_half_story_generations,
         evaluate_whole_story_nll,
+    )
+    from apm.data.text.tinyworlds_nouns_v2.baselines import (
+        load_nouns_v2_baseline_stages,
+        run_or_resume_nouns_v2_baselines,
+    )
+    from apm.data.text.tinyworlds_nouns_v2.baseline_stagewise import (
+        evaluate_stagewise_baselines,
     )
     from apm.data.text.tinyworlds_nouns_v2.experiment import (
         load_nouns_v2_vamp_stages,
@@ -124,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
 
     preset = NounsV2ExperimentPreset()
     tokenizer = TokenizersTextTokenizer.from_file(TOKENIZER_PATH)
-    print("Phase 3/8: GPU preflight and fresh two-epoch seed-zero base.", flush=True)
+    print("Phase 3/10: GPU preflight and fresh two-epoch seed-zero base.", flush=True)
     preflight = run_or_load_nouns_v2_gpu_preflight(
         partition,
         preset,
@@ -149,9 +162,10 @@ def main(argv: list[str] | None = None) -> int:
         manifest.manifest_sha256,
         selected_base.training_sha256,
         None,
+        None,
     )
 
-    print("Phase 4/8: ordered 24-stage VAMP adapter graph.", flush=True)
+    print("Phase 4/10: ordered 24-stage VAMP adapter graph.", flush=True)
     adaptation = run_or_resume_nouns_v2_vamp(
         partition,
         preset,
@@ -174,9 +188,47 @@ def main(argv: list[str] | None = None) -> int:
         manifest.manifest_sha256,
         selected_base.training_sha256,
         adaptation.tensor_checksum,
+        None,
     )
 
-    print("Phase 5/8: all 26,640 whole-story NLL and routing rows.", flush=True)
+    print(
+        "Phase 5/10: sequential and independent adapters, 48,000 updates each.",
+        flush=True,
+    )
+    baselines = run_or_resume_nouns_v2_baselines(
+        partition,
+        preset,
+        selected_base,
+        adaptations,
+        CHECKPOINT_DIRECTORY,
+        progress=_training_progress(started),
+    )
+    baseline_stages = load_nouns_v2_baseline_stages(
+        partition,
+        preset,
+        selected_base,
+        adaptations,
+        CHECKPOINT_DIRECTORY,
+    )
+    if baseline_stages[-1].tensor_checksum != baselines.tensor_checksum:
+        raise RuntimeError("strict baseline audit and completed controls differ")
+    _publish_run_manifest(
+        partition.partition_sha256,
+        manifest.manifest_sha256,
+        "baselines_complete",
+        vamp_tensor_checksum=adaptation.tensor_checksum,
+        baseline_tensor_checksum=baselines.tensor_checksum,
+    )
+    _publish_execution_status(
+        "baselines_complete",
+        partition.partition_sha256,
+        manifest.manifest_sha256,
+        selected_base.training_sha256,
+        adaptation.tensor_checksum,
+        baselines.tensor_checksum,
+    )
+
+    print("Phase 6/10: all 26,640 whole-story NLL and routing rows.", flush=True)
     whole_path = evaluate_whole_story_nll(
         partition,
         preset,
@@ -185,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
         RESULT_DIRECTORY / "whole-story-nll.jsonl",
         progress=_evaluation_progress(started),
     )
-    print("Phase 6/8: midpoint-only routing, suffix NLL, and greedy completions.", flush=True)
+    print("Phase 7/10: midpoint-only routing, suffix NLL, and greedy completions.", flush=True)
     generation_path = evaluate_half_story_generations(
         partition,
         preset,
@@ -197,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     stagewise_count = expected_stagewise_row_count(partition)
     print(
-        f"Phase 7/8: {stagewise_count:,} stagewise continual-learning cases.",
+        f"Phase 8/10: {stagewise_count:,} VAMP continual-learning cases.",
         flush=True,
     )
     stagewise_path = evaluate_stagewise_continual_learning(
@@ -208,10 +260,28 @@ def main(argv: list[str] | None = None) -> int:
         RESULT_DIRECTORY / "stagewise-cl.jsonl",
         progress=_evaluation_progress(started),
     )
+    print(
+        f"Phase 9/10: {stagewise_count:,} sequential/independent comparison cases.",
+        flush=True,
+    )
+    baseline_stagewise_path = evaluate_stagewise_baselines(
+        partition,
+        preset,
+        selected_base,
+        baseline_stages,
+        adaptations,
+        stagewise_path,
+        RESULT_DIRECTORY / "baseline-stagewise-cl.jsonl",
+        progress=_evaluation_progress(started),
+    )
     _publish_run_manifest(
         partition.partition_sha256,
         manifest.manifest_sha256,
         "local_evaluation_complete",
+        vamp_tensor_checksum=adaptation.tensor_checksum,
+        baseline_tensor_checksum=baselines.tensor_checksum,
+        vamp_stagewise_sha256=_file_sha256(stagewise_path),
+        baseline_stagewise_sha256=_file_sha256(baseline_stagewise_path),
     )
     _publish_execution_status(
         "stagewise_audit_complete",
@@ -219,16 +289,19 @@ def main(argv: list[str] | None = None) -> int:
         manifest.manifest_sha256,
         selected_base.training_sha256,
         adaptation.tensor_checksum,
+        baselines.tensor_checksum,
     )
 
-    print("Phase 8/8: standalone local report with dependency graph.", flush=True)
+    print("Phase 10/10: comparative reports, plots, and dependency graph.", flush=True)
     markdown, html = publish_nouns_v2_report(
         partition,
         preset,
         adaptations,
+        baseline_stages,
         whole_path,
         generation_path,
         stagewise_path,
+        baseline_stagewise_path,
         RESULT_DIRECTORY,
     )
     phase = "local_complete"
@@ -251,20 +324,33 @@ def main(argv: list[str] | None = None) -> int:
             partition,
             preset,
             adaptations,
+            baseline_stages,
             whole_path,
             generation_path,
             stagewise_path,
+            baseline_stagewise_path,
             RESULT_DIRECTORY,
             judge_path=judge_path,
         )
         phase = "complete_with_judge"
-    _publish_run_manifest(partition.partition_sha256, manifest.manifest_sha256, phase)
+    _publish_run_manifest(
+        partition.partition_sha256,
+        manifest.manifest_sha256,
+        phase,
+        vamp_tensor_checksum=adaptation.tensor_checksum,
+        baseline_tensor_checksum=baselines.tensor_checksum,
+        vamp_stagewise_sha256=_file_sha256(stagewise_path),
+        baseline_stagewise_sha256=_file_sha256(baseline_stagewise_path),
+        report_markdown_sha256=_file_sha256(markdown),
+        report_html_sha256=_file_sha256(html),
+    )
     _publish_execution_status(
         phase,
         partition.partition_sha256,
         manifest.manifest_sha256,
         selected_base.training_sha256,
         adaptation.tensor_checksum,
+        baselines.tensor_checksum,
     )
     print(f"Markdown report: {markdown}", flush=True)
     print(f"Interactive report: {html}", flush=True)
@@ -278,6 +364,13 @@ def _publish_run_manifest(
     partition_sha256: str,
     manifest_sha256: str,
     phase: str,
+    *,
+    vamp_tensor_checksum: str | None = None,
+    baseline_tensor_checksum: str | None = None,
+    vamp_stagewise_sha256: str | None = None,
+    baseline_stagewise_sha256: str | None = None,
+    report_markdown_sha256: str | None = None,
+    report_html_sha256: str | None = None,
 ) -> None:
     preset = NounsV2ExperimentPreset()
     core = {
@@ -287,6 +380,18 @@ def _publish_run_manifest(
         "manifest_sha256": manifest_sha256,
         "partition_sha256": partition_sha256,
         "phase": phase,
+        **{
+            name: value
+            for name, value in (
+                ("baseline_stagewise_sha256", baseline_stagewise_sha256),
+                ("baseline_tensor_checksum", baseline_tensor_checksum),
+                ("report_html_sha256", report_html_sha256),
+                ("report_markdown_sha256", report_markdown_sha256),
+                ("vamp_stagewise_sha256", vamp_stagewise_sha256),
+                ("vamp_tensor_checksum", vamp_tensor_checksum),
+            )
+            if value is not None
+        },
     }
     _atomic_write(
         RESULT_DIRECTORY / "run-manifest.json",
@@ -300,6 +405,7 @@ def _publish_execution_status(
     manifest_sha256: str,
     base_training_sha256: str | None,
     adaptation_checksum: str | None,
+    baseline_checksum: str | None,
 ) -> None:
     lines = [
         "# TinyWorlds nouns-v2 execution status",
@@ -318,6 +424,8 @@ def _publish_execution_status(
         lines.extend((f"Fresh base training identity: `{base_training_sha256}`", ""))
     if adaptation_checksum is not None:
         lines.extend((f"VAMP tensor checksum: `{adaptation_checksum}`", ""))
+    if baseline_checksum is not None:
+        lines.extend((f"Baseline tensor checksum: `{baseline_checksum}`", ""))
     _atomic_write(
         RESULT_DIRECTORY / "execution-report.md",
         "\n".join(lines).encode("utf-8"),
@@ -346,7 +454,8 @@ def _partition_progress(started: float):
         eta = f"; phase ETA {_duration(remaining)}" if remaining is not None else ""
         total_text = f"/{total:,}" if total is not None else ""
         print(
-            f"  [{phase}] {completed:,}{total_text} stories; "
+            f"  [{phase}] {_progress_bar(completed, total)} "
+            f"{completed:,}{total_text} stories; "
             f"{completed / elapsed:,.0f}/s{eta}; overall "
             f"{_duration(time.monotonic() - started)}",
             flush=True,
@@ -367,7 +476,8 @@ def _training_progress(started: float):
         remaining = elapsed * (total - completed) / max(1, observed)
         if completed == 1 or completed % 100 == 0 or completed == total:
             print(
-                f"  [{phase}] {completed:,}/{total:,}; NLL {value:.5f}; "
+                f"  [{phase}] {_progress_bar(completed, total)} "
+                f"{completed:,}/{total:,}; NLL {value:.5f}; "
                 f"phase ETA {_duration(remaining)}; overall "
                 f"{_duration(time.monotonic() - started)}",
                 flush=True,
@@ -388,7 +498,8 @@ def _evaluation_progress(started: float):
         remaining = elapsed * (total - completed) / max(1, observed)
         if completed == 1 or completed % 100 == 0 or completed == total:
             print(
-                f"  [{phase}] {completed:,}/{total:,}; phase ETA "
+                f"  [{phase}] {_progress_bar(completed, total)} "
+                f"{completed:,}/{total:,}; phase ETA "
                 f"{_duration(remaining)}; overall "
                 f"{_duration(time.monotonic() - started)}",
                 flush=True,
@@ -404,11 +515,27 @@ def _duration(seconds: float) -> str:
     return f"{hours:d}:{minutes:02d}:{seconds:02d}"
 
 
+def _progress_bar(completed: int, total: int | None, width: int = 20) -> str:
+    if total is None or total <= 0:
+        return "[working]"
+    ratio = min(1.0, max(0.0, completed / total))
+    filled = min(width, int(ratio * width))
+    return f"[{'#' * filled}{'-' * (width - filled)}] {ratio:6.2%}"
+
+
 def _copy_exact(source: Path, destination: Path) -> None:
     payload = source.read_bytes()
     if destination.is_file() and destination.read_bytes() == payload:
         return
     _atomic_write(destination, payload)
+
+
+def _file_sha256(path: str | Path) -> str:
+    digest = sha256()
+    with Path(path).open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _atomic_write(path: Path, payload: bytes) -> None:
