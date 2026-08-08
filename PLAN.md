@@ -1,5 +1,73 @@
 # Development Plan
 
+## Active Outcome — TinyWorlds Nouns-v2 Disjoint Benchmark
+
+The isolated `tinyworlds-nouns-v2` contracts, partitioner, shared-engine
+version bindings, canonical runner, bounded evaluation wrappers, optional
+judging wrapper, standalone audit/report builders, and CPU/real-source gates are
+implemented. Nouns-v1 remains unchanged on disk and strict-loads with its
+completed Markdown, HTML, and run-manifest hashes intact.
+
+The v2 manifest authenticates the complete nouns-v1 parent partition, reviewed
+breakdown, decisions, sources, tokenizer, and all 2,745,124 story/token records.
+Production partition
+`210c4e2d067077fe774782024a594ade7e7472a986d554f186453549cf910f1b`
+was independently rebuilt byte-for-byte. It contains the frozen 24 tasks in
+descending purified mass, 2,210,934 clean base-universe stories, 429,199 pure
+task-training stories, 4,440 pure validation pairs, and permanent ledgers for
+77,361/776 excluded multi-task train/validation stories. The 2% internal base
+holdout is 44,286 stories, leaving 2,166,648 optimizer-visible stories (79.73%
+of original training versus 81.36% universe coverage). Every task still clears
+the 256/64 threshold; 36 context-fitting probes per task are excluded only from
+that task's update stream.
+
+The baseline-focused CPU suite passes 20 tests. RTX 4090 preflight
+`c4fda525322e00f2b271d351aa263fffda50dd238acd36b85b9709ceba36cc70`
+passed at 6.47 GiB against the frozen 12 GiB gate. Fresh seed-zero base training
+is complete under identity
+`94831c31c8f11a594534c2989182d378fc2e022382b61168b73e7400f9648e21`:
+held-in NLL improved from 1.35878 to 1.27038, the selected parameter checksum is
+`fff309bfbfcee8d59c5c3fc04152cc37be2142201f3bf9116b7b024e81a24f3c`,
+and measured allocator peak was 8.49 GiB. All 24 immutable VAMP stages and
+48,000 adapter updates are complete; the final tensor checksum is
+`97414ac3d8656ab083b2e570a4162dc69b024f90cf819b80b1cab94213553e63`.
+The matched controls are also complete: one sequential LoRA received 48,000
+updates across the 24-task stream, while 24 independent root LoRAs received
+2,000 updates apiece. Their authenticated cumulative tensor checksum is
+`24257b20257e99fa99e74c7cae6a133232c601f1407ac04ed3b96893bd73e464`.
+All 26,640 whole-story NLL/routing rows and all 4,440 midpoint generation rows
+are complete. The follow-up continual-learning audit published 72,256
+VAMP task/story/stage cases spanning each task's introduction through stage 24,
+plus 72,256 matched sequential/independent cases.
+Stored-oracle NLL drift is exactly zero, confirming that immutable VAMP task
+functions are retained, and independent-adapter drift is exactly zero. The
+sequential LoRA finishes at 1.746 story NLL with +0.2156 mean forgetting and
++0.3661 worst-task forgetting. The task-aware independent ceiling finishes at
+1.523 story NLL; VAMP's task-aware stored oracle reaches 1.539. Among task-free
+methods, exhaustive routing finishes at 1.572 NLL, 73.9% accuracy, and +0.0029
+mean forgetting, versus 1.615/37.4%/+0.0160 for Hopfield,
+1.581/70.4%/+0.0128 for EBT uniform, and 1.582/64.5%/+0.0118 for EBT Hopfield.
+The final-stage suffix results match the existing generation ledger exactly.
+
+The refreshed Markdown and self-contained folding HTML reports include the
+comparative continual-NLL plot, routing plot, and rendered 25-node/24-edge VAMP
+dependency graph. Report identity is
+`9b1ab0d823a71c3a9e6326bd82f78cfe6bde6b91104ec796bd361ea606806410`;
+the VAMP and baseline stagewise ledger SHA-256 values are respectively
+`e8ee50c59b04a1656fec440e8dec801b556df85577d57252eee0e51cf6d88def` and
+`6821b6d04d52dd9c6fd5445e5cef7ad0a6491b6a6a2165d6138caceaf054fb13`.
+The canonical command reached `local_complete`, notified successfully, and a
+final invocation independently reconstructed the partition and strict-loaded
+the base, all 24 VAMP stages, all 24 cumulative baseline stages, and every
+evaluation ledger without repeating model work. The complete default suite
+passes 661 tests with 274 resource skips and 15 marker deselections; the opt-in
+production gate passes all 4 tests, including full partition reconstruction,
+strict VAMP/baseline loading, comparison-ledger authentication, and frozen
+nouns-v1 hashes. Nouns-v1's report and run hashes remain unchanged. The local
+nouns-v2 benchmark, stagewise audits, controls, plots, and graph report are
+complete; OpenRouter judgment remains an optional resumable extension behind
+`--judge`.
+
 ## Active Outcome — TinyWorlds Noun-Overlap v1
 
 The isolated `tinyworlds-nouns-v1` engine is implemented through partitioning,
