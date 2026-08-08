@@ -117,4 +117,19 @@ Do NOT create long running integration tests that automatically get rerun.
 If it takes more than 30s, its long-running. In situations where tests 
 validate large artifacts and long run times are unavoidable, mark them 
 skipped by default and then run them intentionally as needed. Long running 
-tests should be parallelized if possible to reduce the run time. 
+tests should be parallelized if possible to reduce the run time.
+
+
+## reports
+
+For long-running experiments with lots of data + results to communicate:
+- Generate separate markdown reports and self-contained html reports
+- Include renders of any relevant node-edge-like structures 
+- Use a proper plotting lib for normal graphs, dont fake it and construct 
+  them manually
+- Include enough plain-language text context such that someone with only rough 
+  familiarity with the project can understand the experiment and the results 
+  being presented 
+- Use collapsible containers to organize sections and subsections
+- Double-check that text is legible (size, contrast, etc), especially on 
+  plots and renders 
