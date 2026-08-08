@@ -21,7 +21,7 @@ of original training versus 81.36% universe coverage). Every task still clears
 the 256/64 threshold; 36 context-fitting probes per task are excluded only from
 that task's update stream.
 
-The baseline-focused CPU suite passes 20 tests. RTX 4090 preflight
+The baseline-focused CPU suite passes 29 tests. RTX 4090 preflight
 `c4fda525322e00f2b271d351aa263fffda50dd238acd36b85b9709ceba36cc70`
 passed at 6.47 GiB against the frozen 12 GiB gate. Fresh seed-zero base training
 is complete under identity
@@ -35,15 +35,26 @@ The matched controls are also complete: one sequential LoRA received 48,000
 updates across the 24-task stream, while 24 independent root LoRAs received
 2,000 updates apiece. Their authenticated cumulative tensor checksum is
 `24257b20257e99fa99e74c7cae6a133232c601f1407ac04ed3b96893bd73e464`.
+The sequential full-model control also completed 48,000 matched updates with no
+LoRA and no task identity at evaluation. It carried every GPT-Neo parameter
+through the 24-task stream, reset AdamW at each task boundary, stayed within the
+allocator gate at 8.58 GiB, and finished in run
+`ea80b00eab0ee31bf93678e1e0612b82fc32fa459147af47eccbcac45306bba5`
+with parameter checksum
+`c177ba1080fb8fc989aaf5705ebc2b05529e5d5bbe30c02f0be02f423b37720a`.
 All 26,640 whole-story NLL/routing rows and all 4,440 midpoint generation rows
 are complete. The follow-up continual-learning audit published 72,256
 VAMP task/story/stage cases spanning each task's introduction through stage 24,
-plus 72,256 matched sequential/independent cases.
+plus 72,256 matched sequential/independent adapter cases and 72,256 sequential
+full-model cases.
+
 Stored-oracle NLL drift is exactly zero, confirming that immutable VAMP task
 functions are retained, and independent-adapter drift is exactly zero. The
 sequential LoRA finishes at 1.746 story NLL with +0.2156 mean forgetting and
-+0.3661 worst-task forgetting. The task-aware independent ceiling finishes at
-1.523 story NLL; VAMP's task-aware stored oracle reaches 1.539. Among task-free
++0.3661 worst-task forgetting. Full-model fine-tuning is substantially worse:
+it finishes at 2.048 story NLL with +0.5744 mean forgetting and +0.9411
+worst-task forgetting. The task-aware independent ceiling finishes at 1.523
+story NLL; VAMP's task-aware stored oracle reaches 1.539. Among task-free
 methods, exhaustive routing finishes at 1.572 NLL, 73.9% accuracy, and +0.0029
 mean forgetting, versus 1.615/37.4%/+0.0160 for Hopfield,
 1.581/70.4%/+0.0128 for EBT uniform, and 1.582/64.5%/+0.0118 for EBT Hopfield.
@@ -52,21 +63,25 @@ The final-stage suffix results match the existing generation ledger exactly.
 The refreshed Markdown and self-contained folding HTML reports include the
 comparative continual-NLL plot, routing plot, and rendered 25-node/24-edge VAMP
 dependency graph. Report identity is
-`9b1ab0d823a71c3a9e6326bd82f78cfe6bde6b91104ec796bd361ea606806410`;
-the VAMP and baseline stagewise ledger SHA-256 values are respectively
-`e8ee50c59b04a1656fec440e8dec801b556df85577d57252eee0e51cf6d88def` and
-`6821b6d04d52dd9c6fd5445e5cef7ad0a6491b6a6a2165d6138caceaf054fb13`.
+`f15725c35bc459d55f87c8078c4a99829de207d16aafb5c08291418b704c8be7`;
+the VAMP, adapter-baseline, and full-model stagewise ledger SHA-256 values are
+respectively
+`e8ee50c59b04a1656fec440e8dec801b556df85577d57252eee0e51cf6d88def`,
+`6821b6d04d52dd9c6fd5445e5cef7ad0a6491b6a6a2165d6138caceaf054fb13`, and
+`cfcc4639a34b2a5865b0c19ef20b5f70aa27294a5831ffeaede5b75f32ebed68`.
 The canonical command reached `local_complete`, notified successfully, and a
 final invocation independently reconstructed the partition and strict-loaded
-the base, all 24 VAMP stages, all 24 cumulative baseline stages, and every
-evaluation ledger without repeating model work. The complete default suite
-passes 661 tests with 274 resource skips and 15 marker deselections; the opt-in
-production gate passes all 4 tests, including full partition reconstruction,
-strict VAMP/baseline loading, comparison-ledger authentication, and frozen
+the base, all 24 VAMP stages, all 24 cumulative adapter stages, all 24
+full-model stages, and every evaluation ledger without repeating model work;
+all publication hashes reproduced byte-for-byte. The full-model extension took
+55 minutes on the RTX 4090. The complete default suite passes 667 tests with
+274 resource skips and 16 marker deselections; the opt-in production gate
+passes all 5 tests, including full partition reconstruction, strict
+VAMP/adapter/full-model loading, comparison-ledger authentication, and frozen
 nouns-v1 hashes. Nouns-v1's report and run hashes remain unchanged. The local
-nouns-v2 benchmark, stagewise audits, controls, plots, and graph report are
-complete; OpenRouter judgment remains an optional resumable extension behind
-`--judge`.
+nouns-v2 benchmark, all three stagewise audits, controls, plots, and graph
+report are complete; OpenRouter judgment remains an optional resumable
+extension behind `--judge`.
 
 ## Active Outcome — TinyWorlds Noun-Overlap v1
 
