@@ -1,5 +1,15 @@
 # VAMP Technical Design
 
+## Public Result Boundary
+
+Generated result trees remain ignored by default. A public result snapshot may
+contain a selected HTML or Markdown report and only the local SVG, PNG, or
+small text files directly referenced by that report. Raw data, checkpoints,
+optimizer state, manifests, CSV/JSON/JSONL ledgers, and intermediate run
+artifacts are not part of the public report surface. This keeps published
+evidence readable while preserving the existing content-addressed artifact
+stores as local research state rather than source-controlled deliverables.
+
 ## TinyWorlds Nouns-v2 Disjoint Benchmark
 
 `tinyworlds-nouns-v2` is an isolated 24-task experiment derived from, but not

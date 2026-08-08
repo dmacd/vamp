@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="220" viewBox="0 0 900 220">
+<style>text{font-family:Inter,Arial,sans-serif;fill:#111827}.muted{fill:#4b5563;font-size:12px}.edge{fill:#374151;font-size:11px}</style>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="24" y="28" font-size="18" font-weight="700">Memory Graph After Stage 1</text>
+<path d="M 338.0 118.0 C 447.0 118.0, 447.0 118.0, 556.0 118.0" fill="none" stroke="#6b7280" stroke-width="1.8"/>
+<polygon points="564.0,118.0 556.0,113.0 556.0,123.0" fill="#6b7280"/>
+<rect x="352.0" y="40.0" width="190" height="58" rx="5" fill="#ffffff" stroke="#d1d5db"/>
+<text class="edge" x="362.0" y="58.0">S0_P0</text>
+<text class="edge" x="362.0" y="74.0">||d|| 45.76</text>
+<text class="edge" x="362.0" y="90.0">623.3K B | gain +0.979</text>
+<rect x="50" y="62" width="280" height="112" rx="6" fill="#f9fafb" stroke="#9ca3af"/>
+<text x="62" y="86" font-size="13" font-weight="650">root | task root</text>
+<text x="62" y="103" font-size="12" font-weight="400">depth 0 | bytes 623.3K</text>
+<text x="62" y="120" font-size="12" font-weight="400">best acc 0.021</text>
+
+<text class="muted" x="62" y="150">wins: none</text>
+<rect x="570" y="62" width="280" height="112" rx="6" fill="#f9fafb" stroke="#9ca3af"/>
+<text x="582" y="86" font-size="13" font-weight="650">node_1_S0_P0 | task S0_P0</text>
+<text x="582" y="103" font-size="12" font-weight="400">depth 1 | bytes 623.3K</text>
+<text x="582" y="120" font-size="12" font-weight="400">best acc 1.000</text>
+<rect x="582" y="138" width="50" height="20" rx="4" fill="#2563eb"/>
+<text x="589" y="152" font-size="11" fill="#ffffff">S0_P0</text>
+
+</svg>

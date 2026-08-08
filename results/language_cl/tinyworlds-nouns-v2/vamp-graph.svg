@@ -1,0 +1,375 @@
+<svg width="812pt" height="681pt"
+ viewBox="0.00 0.00 811.80 680.80" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-label="Learned VAMP node dependencies"><title>Learned VAMP node dependencies</title>
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(14.4 666.4)">
+<title>tinyworlds_nouns_v2</title>
+<!-- root -->
+<g id="node1" class="node">
+<title>root</title>
+<g id="a_node1"><a xlink:title="stage 0: root; parent none">
+<path fill="#334155" stroke="black" d="M66,-176C66,-176 12,-176 12,-176 6,-176 0,-170 0,-164 0,-164 0,-152 0,-152 0,-146 6,-140 12,-140 12,-140 66,-140 66,-140 72,-140 78,-146 78,-152 78,-152 78,-164 78,-164 78,-170 72,-176 66,-176"/>
+<text text-anchor="middle" x="39" y="-154.6" font-family="DejaVu Sans" font-size="13.00" fill="white">00 · root</text>
+</a>
+</g>
+</g>
+<!-- mouse -->
+<g id="node2" class="node">
+<title>mouse</title>
+<g id="a_node2"><a xlink:title="stage 1: mouse; parent root">
+<path fill="#315d9b" stroke="black" d="M204,-176C204,-176 133,-176 133,-176 127,-176 121,-170 121,-164 121,-164 121,-152 121,-152 121,-146 127,-140 133,-140 133,-140 204,-140 204,-140 210,-140 216,-146 216,-152 216,-152 216,-164 216,-164 216,-170 210,-176 204,-176"/>
+<text text-anchor="middle" x="168.5" y="-154.6" font-family="DejaVu Sans" font-size="13.00" fill="white">01 · mouse</text>
+</a>
+</g>
+</g>
+<!-- root&#45;&gt;mouse -->
+<g id="edge1" class="edge">
+<title>root&#45;&gt;mouse</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M78.25,-158C89.21,-158 101.36,-158 113.08,-158"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="113.21,-160.63 120.71,-158 113.21,-155.38 113.21,-160.63"/>
+</g>
+<!-- rabbit -->
+<g id="node3" class="node">
+<title>rabbit</title>
+<g id="a_node3"><a xlink:title="stage 2: rabbit; parent mouse">
+<path fill="#287271" stroke="black" d="M343,-568C343,-568 277,-568 277,-568 271,-568 265,-562 265,-556 265,-556 265,-544 265,-544 265,-538 271,-532 277,-532 277,-532 343,-532 343,-532 349,-532 355,-538 355,-544 355,-544 355,-556 355,-556 355,-562 349,-568 343,-568"/>
+<text text-anchor="middle" x="310" y="-546.6" font-family="DejaVu Sans" font-size="13.00" fill="white">02 · rabbit</text>
+</a>
+</g>
+</g>
+<!-- mouse&#45;&gt;rabbit -->
+<g id="edge2" class="edge">
+<title>mouse&#45;&gt;rabbit</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M175.95,-176.12C198.48,-239.45 273.77,-451 299.94,-524.54"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="297.47,-525.43 302.46,-531.62 302.42,-523.67 297.47,-525.43"/>
+</g>
+<!-- boat -->
+<g id="node4" class="node">
+<title>boat</title>
+<g id="a_node4"><a xlink:title="stage 3: boat; parent mouse">
+<path fill="#287271" stroke="black" d="M338.5,-372C338.5,-372 281.5,-372 281.5,-372 275.5,-372 269.5,-366 269.5,-360 269.5,-360 269.5,-348 269.5,-348 269.5,-342 275.5,-336 281.5,-336 281.5,-336 338.5,-336 338.5,-336 344.5,-336 350.5,-342 350.5,-348 350.5,-348 350.5,-360 350.5,-360 350.5,-366 344.5,-372 338.5,-372"/>
+<text text-anchor="middle" x="310" y="-350.6" font-family="DejaVu Sans" font-size="13.00" fill="white">03 · boat</text>
+</a>
+</g>
+</g>
+<!-- mouse&#45;&gt;boat -->
+<g id="edge3" class="edge">
+<title>mouse&#45;&gt;boat</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M182.37,-176.09C207.5,-211.38 263.08,-289.48 291.51,-329.42"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="289.67,-331.37 296.16,-335.96 293.95,-328.32 289.67,-331.37"/>
+</g>
+<!-- brother -->
+<g id="node5" class="node">
+<title>brother</title>
+<g id="a_node5"><a xlink:title="stage 4: brother; parent mouse">
+<path fill="#287271" stroke="black" d="M347.5,-204C347.5,-204 272.5,-204 272.5,-204 266.5,-204 260.5,-198 260.5,-192 260.5,-192 260.5,-180 260.5,-180 260.5,-174 266.5,-168 272.5,-168 272.5,-168 347.5,-168 347.5,-168 353.5,-168 359.5,-174 359.5,-180 359.5,-180 359.5,-192 359.5,-192 359.5,-198 353.5,-204 347.5,-204"/>
+<text text-anchor="middle" x="310" y="-182.6" font-family="DejaVu Sans" font-size="13.00" fill="white">04 · brother</text>
+</a>
+</g>
+</g>
+<!-- mouse&#45;&gt;brother -->
+<g id="edge4" class="edge">
+<title>mouse&#45;&gt;brother</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M216.34,-167.4C228.01,-169.74 240.64,-172.28 252.71,-174.7"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="252.27,-177.29 260.14,-176.19 253.3,-172.14 252.27,-177.29"/>
+</g>
+<!-- fairy -->
+<g id="node13" class="node">
+<title>fairy</title>
+<g id="a_node13"><a xlink:title="stage 12: fairy; parent mouse">
+<path fill="#287271" stroke="black" d="M338,-148C338,-148 282,-148 282,-148 276,-148 270,-142 270,-136 270,-136 270,-124 270,-124 270,-118 276,-112 282,-112 282,-112 338,-112 338,-112 344,-112 350,-118 350,-124 350,-124 350,-136 350,-136 350,-142 344,-148 338,-148"/>
+<text text-anchor="middle" x="310" y="-126.6" font-family="DejaVu Sans" font-size="13.00" fill="white">12 · fairy</text>
+</a>
+</g>
+</g>
+<!-- mouse&#45;&gt;fairy -->
+<g id="edge12" class="edge">
+<title>mouse&#45;&gt;fairy</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M216.34,-148.6C231.17,-145.62 247.55,-142.33 262.37,-139.36"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="263.12,-141.89 269.95,-137.84 262.08,-136.74 263.12,-141.89"/>
+</g>
+<!-- monkey -->
+<g id="node17" class="node">
+<title>monkey</title>
+<g id="a_node17"><a xlink:title="stage 16: monkey; parent mouse">
+<path fill="#287271" stroke="black" d="M349,-92C349,-92 271,-92 271,-92 265,-92 259,-86 259,-80 259,-80 259,-68 259,-68 259,-62 265,-56 271,-56 271,-56 349,-56 349,-56 355,-56 361,-62 361,-68 361,-68 361,-80 361,-80 361,-86 355,-92 349,-92"/>
+<text text-anchor="middle" x="310" y="-70.6" font-family="DejaVu Sans" font-size="13.00" fill="white">16 · monkey</text>
+</a>
+</g>
+</g>
+<!-- mouse&#45;&gt;monkey -->
+<g id="edge16" class="edge">
+<title>mouse&#45;&gt;monkey</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M197.5,-139.99C215.04,-128.83 238.18,-114.33 259,-102 262.34,-100.02 265.82,-98 269.32,-95.99"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="270.84,-98.14 276.06,-92.15 268.24,-93.58 270.84,-98.14"/>
+</g>
+<!-- horse -->
+<g id="node24" class="node">
+<title>horse</title>
+<g id="a_node24"><a xlink:title="stage 23: horse; parent mouse">
+<path fill="#287271" stroke="black" d="M341.5,-36C341.5,-36 278.5,-36 278.5,-36 272.5,-36 266.5,-30 266.5,-24 266.5,-24 266.5,-12 266.5,-12 266.5,-6 272.5,0 278.5,0 278.5,0 341.5,0 341.5,0 347.5,0 353.5,-6 353.5,-12 353.5,-12 353.5,-24 353.5,-24 353.5,-30 347.5,-36 341.5,-36"/>
+<text text-anchor="middle" x="310" y="-14.6" font-family="DejaVu Sans" font-size="13.00" fill="white">23 · horse</text>
+</a>
+</g>
+</g>
+<!-- mouse&#45;&gt;horse -->
+<g id="edge23" class="edge">
+<title>mouse&#45;&gt;horse</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M180.73,-139.92C196.16,-116.17 225.78,-74.18 259,-46 261.22,-44.12 263.58,-42.3 266.02,-40.56"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="267.87,-42.48 272.65,-36.13 264.96,-38.12 267.87,-42.48"/>
+</g>
+<!-- lion -->
+<g id="node12" class="node">
+<title>lion</title>
+<g id="a_node12"><a xlink:title="stage 11: lion; parent rabbit">
+<path fill="#8c5e24" stroke="black" d="M484,-652C484,-652 433,-652 433,-652 427,-652 421,-646 421,-640 421,-640 421,-628 421,-628 421,-622 427,-616 433,-616 433,-616 484,-616 484,-616 490,-616 496,-622 496,-628 496,-628 496,-640 496,-640 496,-646 490,-652 484,-652"/>
+<text text-anchor="middle" x="458.5" y="-630.6" font-family="DejaVu Sans" font-size="13.00" fill="white">11 · lion</text>
+</a>
+</g>
+</g>
+<!-- rabbit&#45;&gt;lion -->
+<g id="edge11" class="edge">
+<title>rabbit&#45;&gt;lion</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M340.06,-568.11C358.27,-579.3 382.31,-593.81 404,-606 407.75,-608.11 411.67,-610.26 415.61,-612.38"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="414.38,-614.7 422.23,-615.92 416.85,-610.07 414.38,-614.7"/>
+</g>
+<!-- elephant -->
+<g id="node20" class="node">
+<title>elephant</title>
+<g id="a_node20"><a xlink:title="stage 19: elephant; parent rabbit">
+<path fill="#8c5e24" stroke="black" d="M501,-596C501,-596 416,-596 416,-596 410,-596 404,-590 404,-584 404,-584 404,-572 404,-572 404,-566 410,-560 416,-560 416,-560 501,-560 501,-560 507,-560 513,-566 513,-572 513,-572 513,-584 513,-584 513,-590 507,-596 501,-596"/>
+<text text-anchor="middle" x="458.5" y="-574.6" font-family="DejaVu Sans" font-size="13.00" fill="white">19 · elephant</text>
+</a>
+</g>
+</g>
+<!-- rabbit&#45;&gt;elephant -->
+<g id="edge19" class="edge">
+<title>rabbit&#45;&gt;elephant</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M355.35,-558.48C368.28,-560.95 382.65,-563.69 396.42,-566.33"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="396.14,-568.94 404,-567.77 397.13,-563.79 396.14,-568.94"/>
+</g>
+<!-- dragon -->
+<g id="node22" class="node">
+<title>dragon</title>
+<g id="a_node22"><a xlink:title="stage 21: dragon; parent rabbit">
+<path fill="#8c5e24" stroke="black" d="M495,-540C495,-540 422,-540 422,-540 416,-540 410,-534 410,-528 410,-528 410,-516 410,-516 410,-510 416,-504 422,-504 422,-504 495,-504 495,-504 501,-504 507,-510 507,-516 507,-516 507,-528 507,-528 507,-534 501,-540 495,-540"/>
+<text text-anchor="middle" x="458.5" y="-518.6" font-family="DejaVu Sans" font-size="13.00" fill="white">21 · dragon</text>
+</a>
+</g>
+</g>
+<!-- rabbit&#45;&gt;dragon -->
+<g id="edge21" class="edge">
+<title>rabbit&#45;&gt;dragon</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M355.35,-541.52C370.19,-538.69 386.91,-535.49 402.46,-532.52"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="403.11,-535.07 409.99,-531.08 402.13,-529.91 403.11,-535.07"/>
+</g>
+<!-- duck -->
+<g id="node7" class="node">
+<title>duck</title>
+<g id="a_node7"><a xlink:title="stage 6: duck; parent boat">
+<path fill="#8c5e24" stroke="black" d="M487.5,-484C487.5,-484 429.5,-484 429.5,-484 423.5,-484 417.5,-478 417.5,-472 417.5,-472 417.5,-460 417.5,-460 417.5,-454 423.5,-448 429.5,-448 429.5,-448 487.5,-448 487.5,-448 493.5,-448 499.5,-454 499.5,-460 499.5,-460 499.5,-472 499.5,-472 499.5,-478 493.5,-484 487.5,-484"/>
+<text text-anchor="middle" x="458.5" y="-462.6" font-family="DejaVu Sans" font-size="13.00" fill="white">06 · duck</text>
+</a>
+</g>
+</g>
+<!-- boat&#45;&gt;duck -->
+<g id="edge6" class="edge">
+<title>boat&#45;&gt;duck</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M328.37,-372.18C346.25,-390.27 375.43,-418.1 404,-438 406.96,-440.06 410.1,-442.08 413.3,-444.02"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="412.15,-446.39 419.95,-447.9 414.79,-441.85 412.15,-446.39"/>
+</g>
+<!-- bicycle -->
+<g id="node10" class="node">
+<title>bicycle</title>
+<g id="a_node10"><a xlink:title="stage 9: bicycle; parent boat">
+<path fill="#8c5e24" stroke="black" d="M495,-428C495,-428 422,-428 422,-428 416,-428 410,-422 410,-416 410,-416 410,-404 410,-404 410,-398 416,-392 422,-392 422,-392 495,-392 495,-392 501,-392 507,-398 507,-404 507,-404 507,-416 507,-416 507,-422 501,-428 495,-428"/>
+<text text-anchor="middle" x="458.5" y="-406.6" font-family="DejaVu Sans" font-size="13.00" fill="white">09 · bicycle</text>
+</a>
+</g>
+</g>
+<!-- boat&#45;&gt;bicycle -->
+<g id="edge9" class="edge">
+<title>boat&#45;&gt;bicycle</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M350.65,-369.15C366.73,-375.3 385.59,-382.51 402.94,-389.14"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="402.33,-391.72 410.27,-391.95 404.2,-386.82 402.33,-391.72"/>
+</g>
+<!-- train -->
+<g id="node14" class="node">
+<title>train</title>
+<g id="a_node14"><a xlink:title="stage 13: train; parent boat">
+<path fill="#8c5e24" stroke="black" d="M487,-372C487,-372 430,-372 430,-372 424,-372 418,-366 418,-360 418,-360 418,-348 418,-348 418,-342 424,-336 430,-336 430,-336 487,-336 487,-336 493,-336 499,-342 499,-348 499,-348 499,-360 499,-360 499,-366 493,-372 487,-372"/>
+<text text-anchor="middle" x="458.5" y="-350.6" font-family="DejaVu Sans" font-size="13.00" fill="white">13 · train</text>
+</a>
+</g>
+</g>
+<!-- boat&#45;&gt;train -->
+<g id="edge13" class="edge">
+<title>boat&#45;&gt;train</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M350.65,-354C369.05,-354 391.06,-354 410.32,-354"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="410.32,-356.63 417.82,-354 410.32,-351.38 410.32,-356.63"/>
+</g>
+<!-- plane -->
+<g id="node19" class="node">
+<title>plane</title>
+<g id="a_node19"><a xlink:title="stage 18: plane; parent boat">
+<path fill="#8c5e24" stroke="black" d="M490,-316C490,-316 427,-316 427,-316 421,-316 415,-310 415,-304 415,-304 415,-292 415,-292 415,-286 421,-280 427,-280 427,-280 490,-280 490,-280 496,-280 502,-286 502,-292 502,-292 502,-304 502,-304 502,-310 496,-316 490,-316"/>
+<text text-anchor="middle" x="458.5" y="-294.6" font-family="DejaVu Sans" font-size="13.00" fill="white">18 · plane</text>
+</a>
+</g>
+</g>
+<!-- boat&#45;&gt;plane -->
+<g id="edge18" class="edge">
+<title>boat&#45;&gt;plane</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M350.65,-338.85C368.23,-332.13 389.1,-324.15 407.72,-317.03"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="408.93,-319.38 415,-314.25 407.06,-314.47 408.93,-319.38"/>
+</g>
+<!-- parent -->
+<g id="node6" class="node">
+<title>parent</title>
+<g id="a_node6"><a xlink:title="stage 5: parent; parent brother">
+<path fill="#8c5e24" stroke="black" d="M493.5,-260C493.5,-260 423.5,-260 423.5,-260 417.5,-260 411.5,-254 411.5,-248 411.5,-248 411.5,-236 411.5,-236 411.5,-230 417.5,-224 423.5,-224 423.5,-224 493.5,-224 493.5,-224 499.5,-224 505.5,-230 505.5,-236 505.5,-236 505.5,-248 505.5,-248 505.5,-254 499.5,-260 493.5,-260"/>
+<text text-anchor="middle" x="458.5" y="-238.6" font-family="DejaVu Sans" font-size="13.00" fill="white">05 · parent</text>
+</a>
+</g>
+</g>
+<!-- brother&#45;&gt;parent -->
+<g id="edge5" class="edge">
+<title>brother&#45;&gt;parent</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M358.16,-204.03C372.82,-209.63 389.09,-215.85 404.15,-221.61"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="403.49,-224.16 411.43,-224.39 405.36,-219.26 403.49,-224.16"/>
+</g>
+<!-- sister -->
+<g id="node8" class="node">
+<title>sister</title>
+<g id="a_node8"><a xlink:title="stage 7: sister; parent brother">
+<path fill="#8c5e24" stroke="black" d="M490,-204C490,-204 427,-204 427,-204 421,-204 415,-198 415,-192 415,-192 415,-180 415,-180 415,-174 421,-168 427,-168 427,-168 490,-168 490,-168 496,-168 502,-174 502,-180 502,-180 502,-192 502,-192 502,-198 496,-204 490,-204"/>
+<text text-anchor="middle" x="458.5" y="-182.6" font-family="DejaVu Sans" font-size="13.00" fill="white">07 · sister</text>
+</a>
+</g>
+</g>
+<!-- brother&#45;&gt;sister -->
+<g id="edge7" class="edge">
+<title>brother&#45;&gt;sister</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M359.78,-186C374.95,-186 391.7,-186 406.98,-186"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="407.33,-188.63 414.83,-186 407.33,-183.38 407.33,-188.63"/>
+</g>
+<!-- pet -->
+<g id="node9" class="node">
+<title>pet</title>
+<g id="a_node9"><a xlink:title="stage 8: pet; parent brother">
+<path fill="#8c5e24" stroke="black" d="M482.5,-148C482.5,-148 434.5,-148 434.5,-148 428.5,-148 422.5,-142 422.5,-136 422.5,-136 422.5,-124 422.5,-124 422.5,-118 428.5,-112 434.5,-112 434.5,-112 482.5,-112 482.5,-112 488.5,-112 494.5,-118 494.5,-124 494.5,-124 494.5,-136 494.5,-136 494.5,-142 488.5,-148 482.5,-148"/>
+<text text-anchor="middle" x="458.5" y="-126.6" font-family="DejaVu Sans" font-size="13.00" fill="white">08 · pet</text>
+</a>
+</g>
+</g>
+<!-- brother&#45;&gt;pet -->
+<g id="edge8" class="edge">
+<title>brother&#45;&gt;pet</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M358.16,-167.97C376.31,-161.03 396.92,-153.16 414.64,-146.38"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="415.98,-148.68 422.05,-143.55 414.11,-143.78 415.98,-148.68"/>
+</g>
+<!-- neighbor -->
+<g id="node21" class="node">
+<title>neighbor</title>
+<g id="a_node21"><a xlink:title="stage 20: neighbor; parent brother">
+<path fill="#8c5e24" stroke="black" d="M501,-92C501,-92 416,-92 416,-92 410,-92 404,-86 404,-80 404,-80 404,-68 404,-68 404,-62 410,-56 416,-56 416,-56 501,-56 501,-56 507,-56 513,-62 513,-68 513,-68 513,-80 513,-80 513,-86 507,-92 501,-92"/>
+<text text-anchor="middle" x="458.5" y="-70.6" font-family="DejaVu Sans" font-size="13.00" fill="white">20 · neighbor</text>
+</a>
+</g>
+</g>
+<!-- brother&#45;&gt;neighbor -->
+<g id="edge20" class="edge">
+<title>brother&#45;&gt;neighbor</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M347.41,-167.94C352.19,-164.91 356.86,-161.58 361,-158 384.73,-137.47 379.98,-122.19 404,-102 406.39,-99.99 408.95,-98.07 411.61,-96.24"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="413.07,-98.42 417.95,-92.15 410.23,-94.01 413.07,-98.42"/>
+</g>
+<!-- grandma -->
+<g id="node11" class="node">
+<title>grandma</title>
+<g id="a_node11"><a xlink:title="stage 10: grandma; parent parent">
+<path fill="#744e91" stroke="black" d="M654,-260C654,-260 568,-260 568,-260 562,-260 556,-254 556,-248 556,-248 556,-236 556,-236 556,-230 562,-224 568,-224 568,-224 654,-224 654,-224 660,-224 666,-230 666,-236 666,-236 666,-248 666,-248 666,-254 660,-260 654,-260"/>
+<text text-anchor="middle" x="611" y="-238.6" font-family="DejaVu Sans" font-size="13.00" fill="white">10 · grandma</text>
+</a>
+</g>
+</g>
+<!-- parent&#45;&gt;grandma -->
+<g id="edge10" class="edge">
+<title>parent&#45;&gt;grandma</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M505.88,-242C519.22,-242 533.98,-242 548.09,-242"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="548.36,-244.63 555.86,-242 548.36,-239.38 548.36,-244.63"/>
+</g>
+<!-- cow -->
+<g id="node15" class="node">
+<title>cow</title>
+<g id="a_node15"><a xlink:title="stage 14: cow; parent duck">
+<path fill="#744e91" stroke="black" d="M637.5,-512C637.5,-512 584.5,-512 584.5,-512 578.5,-512 572.5,-506 572.5,-500 572.5,-500 572.5,-488 572.5,-488 572.5,-482 578.5,-476 584.5,-476 584.5,-476 637.5,-476 637.5,-476 643.5,-476 649.5,-482 649.5,-488 649.5,-488 649.5,-500 649.5,-500 649.5,-506 643.5,-512 637.5,-512"/>
+<text text-anchor="middle" x="611" y="-490.6" font-family="DejaVu Sans" font-size="13.00" fill="white">14 · cow</text>
+</a>
+</g>
+</g>
+<!-- duck&#45;&gt;cow -->
+<g id="edge14" class="edge">
+<title>duck&#45;&gt;cow</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M499.83,-473.5C519.92,-477.24 544.26,-481.77 564.96,-485.62"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="564.55,-488.21 572.4,-487.01 565.51,-483.05 564.55,-488.21"/>
+</g>
+<!-- wheel -->
+<g id="node16" class="node">
+<title>wheel</title>
+<g id="a_node16"><a xlink:title="stage 15: wheel; parent duck">
+<path fill="#744e91" stroke="black" d="M644,-456C644,-456 578,-456 578,-456 572,-456 566,-450 566,-444 566,-444 566,-432 566,-432 566,-426 572,-420 578,-420 578,-420 644,-420 644,-420 650,-420 656,-426 656,-432 656,-432 656,-444 656,-444 656,-450 650,-456 644,-456"/>
+<text text-anchor="middle" x="611" y="-434.6" font-family="DejaVu Sans" font-size="13.00" fill="white">15 · wheel</text>
+</a>
+</g>
+</g>
+<!-- duck&#45;&gt;wheel -->
+<g id="edge15" class="edge">
+<title>duck&#45;&gt;wheel</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M499.83,-458.5C517.82,-455.15 539.22,-451.17 558.36,-447.61"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="558.96,-450.17 565.85,-446.21 558,-445 558.96,-450.17"/>
+</g>
+<!-- princess -->
+<g id="node18" class="node">
+<title>princess</title>
+<g id="a_node18"><a xlink:title="stage 17: princess; parent fairy">
+<path fill="#8c5e24" stroke="black" d="M499,-36C499,-36 418,-36 418,-36 412,-36 406,-30 406,-24 406,-24 406,-12 406,-12 406,-6 412,0 418,0 418,0 499,0 499,0 505,0 511,-6 511,-12 511,-12 511,-24 511,-24 511,-30 505,-36 499,-36"/>
+<text text-anchor="middle" x="458.5" y="-14.6" font-family="DejaVu Sans" font-size="13.00" fill="white">17 · princess</text>
+</a>
+</g>
+</g>
+<!-- fairy&#45;&gt;princess -->
+<g id="edge17" class="edge">
+<title>fairy&#45;&gt;princess</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M347.41,-111.94C352.19,-108.91 356.86,-105.58 361,-102 384.73,-81.47 379.98,-66.19 404,-46 406.39,-43.99 408.95,-42.07 411.61,-40.24"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="413.07,-42.42 417.95,-36.15 410.23,-38.01 413.07,-42.42"/>
+</g>
+<!-- bus -->
+<g id="node25" class="node">
+<title>bus</title>
+<g id="a_node25"><a xlink:title="stage 24: bus; parent wheel">
+<path fill="#a13d4f" stroke="black" d="M771,-456C771,-456 721,-456 721,-456 715,-456 709,-450 709,-444 709,-444 709,-432 709,-432 709,-426 715,-420 721,-420 721,-420 771,-420 771,-420 777,-420 783,-426 783,-432 783,-432 783,-444 783,-444 783,-450 777,-456 771,-456"/>
+<text text-anchor="middle" x="746" y="-434.6" font-family="DejaVu Sans" font-size="13.00" fill="white">24 · bus</text>
+</a>
+</g>
+</g>
+<!-- wheel&#45;&gt;bus -->
+<g id="edge24" class="edge">
+<title>wheel&#45;&gt;bus</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M656.29,-438C670.7,-438 686.68,-438 701.06,-438"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="701.37,-440.63 708.87,-438 701.37,-435.38 701.37,-440.63"/>
+</g>
+<!-- queen -->
+<g id="node23" class="node">
+<title>queen</title>
+<g id="a_node23"><a xlink:title="stage 22: queen; parent princess">
+<path fill="#744e91" stroke="black" d="M645,-36C645,-36 577,-36 577,-36 571,-36 565,-30 565,-24 565,-24 565,-12 565,-12 565,-6 571,0 577,0 577,0 645,0 645,0 651,0 657,-6 657,-12 657,-12 657,-24 657,-24 657,-30 651,-36 645,-36"/>
+<text text-anchor="middle" x="611" y="-14.6" font-family="DejaVu Sans" font-size="13.00" fill="white">22 · queen</text>
+</a>
+</g>
+</g>
+<!-- princess&#45;&gt;queen -->
+<g id="edge22" class="edge">
+<title>princess&#45;&gt;queen</title>
+<path fill="none" stroke="#94a3b8" stroke-width="1.8" d="M511.29,-18C526.06,-18 542.18,-18 557.02,-18"/>
+<polygon fill="#94a3b8" stroke="#94a3b8" stroke-width="1.8" points="557.15,-20.63 564.65,-18 557.15,-15.38 557.15,-20.63"/>
+</g>
+</g>
+</svg>

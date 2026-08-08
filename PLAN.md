@@ -1,5 +1,16 @@
 # Development Plan
 
+## Public Repository Surface
+
+- `README.md` now presents VAMP as a public research project and identifies
+  TinyWorlds Nouns-v2 as the only experiment currently in usable shape.
+  MNIST/FabricPC, TinyShakespeare, TinyStories, and all other TinyWorlds work is
+  explicitly labeled notional, failed, or deprecated.
+- Selected nouns-v2, TinyShakespeare, and MNIST/FabricPC reports are published
+  with only their directly referenced SVG/PNG and small text dependencies.
+  Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
+  and other generated artifacts remain excluded.
+
 ## Active Outcome — TinyWorlds Nouns-v2 Disjoint Benchmark
 
 The isolated `tinyworlds-nouns-v2` contracts, partitioner, shared-engine

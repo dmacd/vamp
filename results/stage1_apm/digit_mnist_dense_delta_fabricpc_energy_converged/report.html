@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage 1 DigitMNIST Dense-Delta APM (fabricpc, energy-convergence)</title>
+<style>
+body { margin: 0; background: #f8fafc; color: #111827; font: 15px/1.45 Inter, Arial, sans-serif; }
+main { max-width: 1240px; margin: 0 auto; padding: 32px 24px 48px; }
+h1 { margin: 0 0 24px; font-size: 28px; }
+h2 { margin: 0 0 14px; font-size: 20px; }
+section { margin: 0 0 28px; }
+table { border-collapse: collapse; width: 100%; background: #ffffff; }
+th, td { border: 1px solid #d1d5db; padding: 7px 9px; text-align: left; vertical-align: top; }
+th { width: 240px; background: #f3f4f6; font-weight: 650; }
+pre { overflow-x: auto; background: #111827; color: #f9fafb; padding: 16px; border-radius: 6px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; }
+figure { margin: 0; background: #ffffff; border: 1px solid #d1d5db; border-radius: 6px; padding: 10px; }
+.figure-card { cursor: zoom-in; transition: border-color 120ms ease, box-shadow 120ms ease; }
+.figure-card:focus { outline: 2px solid #2563eb; outline-offset: 2px; }
+.figure-card:hover { border-color: #94a3b8; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08); }
+img { display: block; width: 100%; height: auto; image-rendering: auto; }
+img[src$=".png"] { image-rendering: pixelated; }
+figcaption { margin-top: 8px; color: #374151; font-size: 13px; }
+body.modal-open { overflow: hidden; }
+.lightbox[hidden] { display: none; }
+.lightbox { box-sizing: border-box; position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; background: rgba(15, 23, 42, 0.9); }
+.lightbox-figure { box-sizing: border-box; width: min(96vw, 1800px); height: min(94vh, 1100px); min-height: 320px; margin: 0; padding: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34); }
+.lightbox-toolbar { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-bottom: 1px solid #d1d5db; background: #f8fafc; }
+.lightbox-zoom-controls { display: flex; align-items: center; gap: 6px; }
+.lightbox-tool { box-sizing: border-box; min-width: 34px; height: 32px; display: inline-grid; place-items: center; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0 9px; background: #ffffff; color: #111827; font: 600 14px/1 Inter, Arial, sans-serif; text-decoration: none; cursor: pointer; }
+.lightbox-tool:hover { border-color: #64748b; background: #f1f5f9; }
+.lightbox-tool:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.lightbox-tool:disabled { color: #94a3b8; cursor: default; }
+.lightbox-fit, .lightbox-open { min-width: 48px; }
+.lightbox-close { min-width: 32px; flex: 0 0 32px; padding: 0; font-size: 16px; }
+.lightbox-zoom { width: 54px; color: #334155; font: 600 12px/1 Inter, Arial, sans-serif; text-align: center; }
+.lightbox-viewport { min-width: 0; min-height: 0; overflow: auto; padding: 16px; overscroll-behavior: contain; background: #e2e8f0; outline: none; }
+.lightbox-viewport:focus-visible { box-shadow: inset 0 0 0 2px #2563eb; }
+.lightbox-viewport.is-zoomed { cursor: grab; }
+.lightbox-viewport.is-dragging { cursor: grabbing; user-select: none; }
+.lightbox-viewport img { width: auto; max-width: none; max-height: none; height: auto; margin: 0 auto; object-fit: initial; }
+.lightbox-viewport img[src$=".png"] { image-rendering: pixelated; }
+.lightbox-figure figcaption { min-height: 20px; margin: 0; padding: 8px 12px; border-top: 1px solid #d1d5db; color: #334155; font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .lightbox { padding: 8px; }
+  .lightbox-figure { width: 100%; height: 100%; }
+  .lightbox-toolbar { gap: 6px; }
+  .lightbox-tool { padding: 0 7px; }
+}
+@media (max-width: 420px) {
+  .lightbox-open { display: none; }
+  .lightbox-zoom { width: 44px; }
+}
+</style>
+</head>
+<body><main>
+<h1>Stage 1 DigitMNIST Dense-Delta APM (fabricpc, energy-convergence)</h1>
+<section><h2>Summary</h2>
+<table><tr><th>final_stage</th><td>10</td></tr>
+<tr><th>graph_node_count</th><td>11</td></tr>
+<tr><th>graph_memory_bytes</th><td>6856608</td></tr>
+<tr><th>final_average_accuracy</th><td>{&#x27;addressed_memory&#x27;: 0.8123108005504891, &#x27;memory_oracle&#x27;: 0.9167999986474358}</td></tr></table>
+</section>
+<section><h2>Curves</h2>
+<div class="grid"><figure class="figure-card" role="button" tabindex="0" data-lightbox-src="average_accuracy_curves.svg" data-lightbox-caption="average_accuracy_curves.svg"><img src="average_accuracy_curves.svg" alt="average_accuracy_curves.svg"><figcaption>average_accuracy_curves.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="average_loss_curves.svg" data-lightbox-caption="average_loss_curves.svg"><img src="average_loss_curves.svg" alt="average_loss_curves.svg"><figcaption>average_loss_curves.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="forgetting_curves.svg" data-lightbox-caption="forgetting_curves.svg"><img src="forgetting_curves.svg" alt="forgetting_curves.svg"><figcaption>forgetting_curves.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="addressing_cost_curves.svg" data-lightbox-caption="addressing_cost_curves.svg"><img src="addressing_cost_curves.svg" alt="addressing_cost_curves.svg"><figcaption>addressing_cost_curves.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="memory_growth_curves.svg" data-lightbox-caption="memory_growth_curves.svg"><img src="memory_growth_curves.svg" alt="memory_growth_curves.svg"><figcaption>memory_growth_curves.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="training_convergence_curves.svg" data-lightbox-caption="training_convergence_curves.svg"><img src="training_convergence_curves.svg" alt="training_convergence_curves.svg"><figcaption>training_convergence_curves.svg</figcaption></figure></div>
+</section>
+<section><h2>Task Training Convergence</h2>
+<table><tr><th>algorithm</th><th>task</th><th>epochs</th><th>selected epoch</th><th>energy</th><th>status</th></tr><tr><td>dense_memory</td><td>S0_P0</td><td>100</td><td>100</td><td>1.20093</td><td>max_epochs</td></tr>
+<tr><td>dense_memory</td><td>S1_P0</td><td>100</td><td>100</td><td>0.263499</td><td>max_epochs</td></tr>
+<tr><td>dense_memory</td><td>S2_P0</td><td>61</td><td>56</td><td>1.5766</td><td>converged</td></tr>
+<tr><td>dense_memory</td><td>S3_P0</td><td>100</td><td>100</td><td>1.36985</td><td>max_epochs</td></tr>
+<tr><td>dense_memory</td><td>S4_P0</td><td>81</td><td>76</td><td>1.1913</td><td>converged</td></tr>
+<tr><td>dense_memory</td><td>S5_P0</td><td>72</td><td>68</td><td>1.29733</td><td>converged</td></tr>
+<tr><td>dense_memory</td><td>S6_P0</td><td>100</td><td>100</td><td>1.08537</td><td>max_epochs</td></tr>
+<tr><td>dense_memory</td><td>S7_P0</td><td>10</td><td>2</td><td>1.90513</td><td>converged</td></tr>
+<tr><td>dense_memory</td><td>S8_P0</td><td>59</td><td>55</td><td>1.37731</td><td>converged</td></tr>
+<tr><td>dense_memory</td><td>S9_P0</td><td>15</td><td>10</td><td>3.52295</td><td>converged</td></tr></table>
+</section>
+<section><h2>Heatmaps</h2>
+<div class="grid"><figure class="figure-card" role="button" tabindex="0" data-lightbox-src="final_test_retention_heatmap.svg" data-lightbox-caption="final_test_retention_heatmap.svg"><img src="final_test_retention_heatmap.svg" alt="final_test_retention_heatmap.svg"><figcaption>final_test_retention_heatmap.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="final_train_retention_heatmap.svg" data-lightbox-caption="final_train_retention_heatmap.svg"><img src="final_train_retention_heatmap.svg" alt="final_train_retention_heatmap.svg"><figcaption>final_train_retention_heatmap.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="final_test_address_confusion_heatmap.svg" data-lightbox-caption="final_test_address_confusion_heatmap.svg"><img src="final_test_address_confusion_heatmap.svg" alt="final_test_address_confusion_heatmap.svg"><figcaption>final_test_address_confusion_heatmap.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="final_train_address_confusion_heatmap.svg" data-lightbox-caption="final_train_address_confusion_heatmap.svg"><img src="final_train_address_confusion_heatmap.svg" alt="final_train_address_confusion_heatmap.svg"><figcaption>final_train_address_confusion_heatmap.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="final_test_observed_energy_heatmap.svg" data-lightbox-caption="final_test_observed_energy_heatmap.svg"><img src="final_test_observed_energy_heatmap.svg" alt="final_test_observed_energy_heatmap.svg"><figcaption>final_test_observed_energy_heatmap.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="final_train_observed_energy_heatmap.svg" data-lightbox-caption="final_train_observed_energy_heatmap.svg"><img src="final_train_observed_energy_heatmap.svg" alt="final_train_observed_energy_heatmap.svg"><figcaption>final_train_observed_energy_heatmap.svg</figcaption></figure></div>
+</section>
+<section><h2>Memory Graphs</h2>
+<div class="grid"><figure class="figure-card" role="button" tabindex="0" data-lightbox-src="memory_graph_stage_1.svg" data-lightbox-caption="memory_graph_stage_1.svg"><img src="memory_graph_stage_1.svg" alt="memory_graph_stage_1.svg"><figcaption>memory_graph_stage_1.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="memory_graph_stage_2.svg" data-lightbox-caption="memory_graph_stage_2.svg"><img src="memory_graph_stage_2.svg" alt="memory_graph_stage_2.svg"><figcaption>memory_graph_stage_2.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="memory_graph_stage_3.svg" data-lightbox-caption="memory_graph_stage_3.svg"><img src="memory_graph_stage_3.svg" alt="memory_graph_stage_3.svg"><figcaption>memory_graph_stage_3.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="memory_graph_stage_4.svg" data-lightbox-caption="memory_graph_stage_4.svg"><img src="memory_graph_stage_4.svg" alt="memory_graph_stage_4.svg"><figcaption>memory_graph_stage_4.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="memory_graph_stage_5.svg" data-lightbox-caption="memory_graph_stage_5.svg"><img src="memory_graph_stage_5.svg" alt="memory_graph_stage_5.svg"><figcaption>memory_graph_stage_5.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="memory_graph_stage_6.svg" data-lightbox-caption="memory_graph_stage_6.svg"><img src="memory_graph_stage_6.svg" alt="memory_graph_stage_6.svg"><figcaption>memory_graph_stage_6.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="memory_graph_stage_7.svg" data-lightbox-caption="memory_graph_stage_7.svg"><img src="memory_graph_stage_7.svg" alt="memory_graph_stage_7.svg"><figcaption>memory_graph_stage_7.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="memory_graph_stage_8.svg" data-lightbox-caption="memory_graph_stage_8.svg"><img src="memory_graph_stage_8.svg" alt="memory_graph_stage_8.svg"><figcaption>memory_graph_stage_8.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="memory_graph_stage_9.svg" data-lightbox-caption="memory_graph_stage_9.svg"><img src="memory_graph_stage_9.svg" alt="memory_graph_stage_9.svg"><figcaption>memory_graph_stage_9.svg</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="memory_graph_stage_10.svg" data-lightbox-caption="memory_graph_stage_10.svg"><img src="memory_graph_stage_10.svg" alt="memory_graph_stage_10.svg"><figcaption>memory_graph_stage_10.svg</figcaption></figure></div>
+</section>
+<section><h2>Reconstructions</h2>
+<div class="grid"><figure class="figure-card" role="button" tabindex="0" data-lightbox-src="oracle_recon_s0_p0.png" data-lightbox-caption="oracle_recon_s0_p0.png"><img src="oracle_recon_s0_p0.png" alt="oracle_recon_s0_p0.png"><figcaption>oracle_recon_s0_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="addressed_recon_s0_p0.png" data-lightbox-caption="addressed_recon_s0_p0.png"><img src="addressed_recon_s0_p0.png" alt="addressed_recon_s0_p0.png"><figcaption>addressed_recon_s0_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="oracle_recon_s1_p0.png" data-lightbox-caption="oracle_recon_s1_p0.png"><img src="oracle_recon_s1_p0.png" alt="oracle_recon_s1_p0.png"><figcaption>oracle_recon_s1_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="addressed_recon_s1_p0.png" data-lightbox-caption="addressed_recon_s1_p0.png"><img src="addressed_recon_s1_p0.png" alt="addressed_recon_s1_p0.png"><figcaption>addressed_recon_s1_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="oracle_recon_s2_p0.png" data-lightbox-caption="oracle_recon_s2_p0.png"><img src="oracle_recon_s2_p0.png" alt="oracle_recon_s2_p0.png"><figcaption>oracle_recon_s2_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="addressed_recon_s2_p0.png" data-lightbox-caption="addressed_recon_s2_p0.png"><img src="addressed_recon_s2_p0.png" alt="addressed_recon_s2_p0.png"><figcaption>addressed_recon_s2_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="oracle_recon_s3_p0.png" data-lightbox-caption="oracle_recon_s3_p0.png"><img src="oracle_recon_s3_p0.png" alt="oracle_recon_s3_p0.png"><figcaption>oracle_recon_s3_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="addressed_recon_s3_p0.png" data-lightbox-caption="addressed_recon_s3_p0.png"><img src="addressed_recon_s3_p0.png" alt="addressed_recon_s3_p0.png"><figcaption>addressed_recon_s3_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="oracle_recon_s4_p0.png" data-lightbox-caption="oracle_recon_s4_p0.png"><img src="oracle_recon_s4_p0.png" alt="oracle_recon_s4_p0.png"><figcaption>oracle_recon_s4_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="addressed_recon_s4_p0.png" data-lightbox-caption="addressed_recon_s4_p0.png"><img src="addressed_recon_s4_p0.png" alt="addressed_recon_s4_p0.png"><figcaption>addressed_recon_s4_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="oracle_recon_s5_p0.png" data-lightbox-caption="oracle_recon_s5_p0.png"><img src="oracle_recon_s5_p0.png" alt="oracle_recon_s5_p0.png"><figcaption>oracle_recon_s5_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="addressed_recon_s5_p0.png" data-lightbox-caption="addressed_recon_s5_p0.png"><img src="addressed_recon_s5_p0.png" alt="addressed_recon_s5_p0.png"><figcaption>addressed_recon_s5_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="oracle_recon_s6_p0.png" data-lightbox-caption="oracle_recon_s6_p0.png"><img src="oracle_recon_s6_p0.png" alt="oracle_recon_s6_p0.png"><figcaption>oracle_recon_s6_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="addressed_recon_s6_p0.png" data-lightbox-caption="addressed_recon_s6_p0.png"><img src="addressed_recon_s6_p0.png" alt="addressed_recon_s6_p0.png"><figcaption>addressed_recon_s6_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="oracle_recon_s7_p0.png" data-lightbox-caption="oracle_recon_s7_p0.png"><img src="oracle_recon_s7_p0.png" alt="oracle_recon_s7_p0.png"><figcaption>oracle_recon_s7_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="addressed_recon_s7_p0.png" data-lightbox-caption="addressed_recon_s7_p0.png"><img src="addressed_recon_s7_p0.png" alt="addressed_recon_s7_p0.png"><figcaption>addressed_recon_s7_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="oracle_recon_s8_p0.png" data-lightbox-caption="oracle_recon_s8_p0.png"><img src="oracle_recon_s8_p0.png" alt="oracle_recon_s8_p0.png"><figcaption>oracle_recon_s8_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="addressed_recon_s8_p0.png" data-lightbox-caption="addressed_recon_s8_p0.png"><img src="addressed_recon_s8_p0.png" alt="addressed_recon_s8_p0.png"><figcaption>addressed_recon_s8_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="oracle_recon_s9_p0.png" data-lightbox-caption="oracle_recon_s9_p0.png"><img src="oracle_recon_s9_p0.png" alt="oracle_recon_s9_p0.png"><figcaption>oracle_recon_s9_p0.png</figcaption></figure>
+<figure class="figure-card" role="button" tabindex="0" data-lightbox-src="addressed_recon_s9_p0.png" data-lightbox-caption="addressed_recon_s9_p0.png"><img src="addressed_recon_s9_p0.png" alt="addressed_recon_s9_p0.png"><figcaption>addressed_recon_s9_p0.png</figcaption></figure></div>
+</section>
+<section><h2>Raw Summary</h2>
+<pre>{
+  &quot;config&quot;: {
+    &quot;benchmark&quot;: {
+      &quot;include_baselines&quot;: false
+    },
+    &quot;fabricpc&quot;: {
+      &quot;hidden_precision&quot;: 1.0,
+      &quot;hidden_widths&quot;: [
+        256,
+        128
+      ],
+      &quot;latent_dim&quot;: 64,
+      &quot;latent_init_std&quot;: 0.25,
+      &quot;output_precision&quot;: 1.0,
+      &quot;weight_init_std&quot;: 0.05
+    },
+    &quot;model&quot;: {
+      &quot;kind&quot;: &quot;fabricpc&quot;
+    },
+    &quot;stream&quot;: {
+      &quot;digits&quot;: [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      &quot;kind&quot;: &quot;digit_mnist&quot;,
+      &quot;replay_examples_per_task&quot;: 1000,
+      &quot;task_names&quot;: [
+        &quot;S0_P0&quot;,
+        &quot;S1_P0&quot;,
+        &quot;S2_P0&quot;,
+        &quot;S3_P0&quot;,
+        &quot;S4_P0&quot;,
+        &quot;S5_P0&quot;,
+        &quot;S6_P0&quot;,
+        &quot;S7_P0&quot;,
+        &quot;S8_P0&quot;,
+        &quot;S9_P0&quot;
+      ],
+      &quot;test_examples_per_digit&quot;: 1000,
+      &quot;train_examples_per_digit&quot;: 6000
+    },
+    &quot;train&quot;: {
+      &quot;batch_size&quot;: 256,
+      &quot;epochs&quot;: 100,
+      &quot;eta_infer&quot;: 0.05,
+      &quot;eval_batch_size&quot;: 256,
+      &quot;eval_test_count&quot;: 2000,
+      &quot;eval_train_count&quot;: 2000,
+      &quot;infer_steps&quot;: 40,
+      &quot;learning_rate&quot;: 0.001,
+      &quot;seed&quot;: 0,
+      &quot;show_progress&quot;: false,
+      &quot;weight_decay&quot;: 0.001
+    },
+    &quot;training_schedule&quot;: {
+      &quot;max_epochs&quot;: 100,
+      &quot;min_epochs&quot;: 10,
+      &quot;mode&quot;: &quot;energy_convergence&quot;,
+      &quot;patience&quot;: 5,
+      &quot;probe_count&quot;: 1024,
+      &quot;relative_delta&quot;: 0.001
+    }
+  },
+  &quot;final_address_counts&quot;: {
+    &quot;test:S0_P0:node_1_S0_P0&quot;: 936,
+    &quot;test:S0_P0:node_2_S1_P0&quot;: 1,
+    &quot;test:S0_P0:node_3_S2_P0&quot;: 4,
+    &quot;test:S0_P0:node_4_S3_P0&quot;: 7,
+    &quot;test:S0_P0:node_5_S4_P0&quot;: 1,
+    &quot;test:S0_P0:node_6_S5_P0&quot;: 4,
+    &quot;test:S0_P0:node_7_S6_P0&quot;: 15,
+    &quot;test:S0_P0:node_9_S8_P0&quot;: 12,
+    &quot;test:S1_P0:node_2_S1_P0&quot;: 984,
+    &quot;test:S1_P0:node_3_S2_P0&quot;: 4,
+    &quot;test:S1_P0:node_4_S3_P0&quot;: 1,
+    &quot;test:S1_P0:node_5_S4_P0&quot;: 1,
+    &quot;test:S1_P0:node_7_S6_P0&quot;: 4,
+    &quot;test:S1_P0:node_9_S8_P0&quot;: 6,
+    &quot;test:S2_P0:node_1_S0_P0&quot;: 2,
+    &quot;test:S2_P0:node_2_S1_P0&quot;: 9,
+    &quot;test:S2_P0:node_3_S2_P0&quot;: 878,
+    &quot;test:S2_P0:node_4_S3_P0&quot;: 45,
+    &quot;test:S2_P0:node_5_S4_P0&quot;: 5,
+    &quot;test:S2_P0:node_6_S5_P0&quot;: 1,
+    &quot;test:S2_P0:node_7_S6_P0&quot;: 12,
+    &quot;test:S2_P0:node_8_S7_P0&quot;: 3,
+    &quot;test:S2_P0:node_9_S8_P0&quot;: 45,
+    &quot;test:S3_P0:node_1_S0_P0&quot;: 7,
+    &quot;test:S3_P0:node_2_S1_P0&quot;: 3,
+    &quot;test:S3_P0:node_3_S2_P0&quot;: 9,
+    &quot;test:S3_P0:node_4_S3_P0&quot;: 828,
+    &quot;test:S3_P0:node_6_S5_P0&quot;: 48,
+    &quot;test:S3_P0:node_7_S6_P0&quot;: 4,
+    &quot;test:S3_P0:node_8_S7_P0&quot;: 7,
+    &quot;test:S3_P0:node_9_S8_P0&quot;: 94,
+    &quot;test:S4_P0:node_2_S1_P0&quot;: 5,
+    &quot;test:S4_P0:node_3_S2_P0&quot;: 7,
+    &quot;test:S4_P0:node_4_S3_P0&quot;: 2,
+    &quot;test:S4_P0:node_5_S4_P0&quot;: 941,
+    &quot;test:S4_P0:node_7_S6_P0&quot;: 10,
+    &quot;test:S4_P0:node_8_S7_P0&quot;: 13,
+    &quot;test:S4_P0:node_9_S8_P0&quot;: 4,
+    &quot;test:S5_P0:node_1_S0_P0&quot;: 5,
+    &quot;test:S5_P0:node_2_S1_P0&quot;: 8,
+    &quot;test:S5_P0:node_3_S2_P0&quot;: 1,
+    &quot;test:S5_P0:node_4_S3_P0&quot;: 20,
+    &quot;test:S5_P0:node_5_S4_P0&quot;: 3,
+    &quot;test:S5_P0:node_6_S5_P0&quot;: 767,
+    &quot;test:S5_P0:node_7_S6_P0&quot;: 15,
+    &quot;test:S5_P0:node_8_S7_P0&quot;: 2,
+    &quot;test:S5_P0:node_9_S8_P0&quot;: 71,
+    &quot;test:S6_P0:node_1_S0_P0&quot;: 5,
+    &quot;test:S6_P0:node_2_S1_P0&quot;: 6,
+    &quot;test:S6_P0:node_3_S2_P0&quot;: 1,
+    &quot;test:S6_P0:node_4_S3_P0&quot;: 1,
+    &quot;test:S6_P0:node_5_S4_P0&quot;: 1,
+    &quot;test:S6_P0:node_6_S5_P0&quot;: 13,
+    &quot;test:S6_P0:node_7_S6_P0&quot;: 914,
+    &quot;test:S6_P0:node_8_S7_P0&quot;: 1,
+    &quot;test:S6_P0:node_9_S8_P0&quot;: 16,
+    &quot;test:S7_P0:node_2_S1_P0&quot;: 14,
+    &quot;test:S7_P0:node_3_S2_P0&quot;: 8,
+    &quot;test:S7_P0:node_4_S3_P0&quot;: 51,
+    &quot;test:S7_P0:node_5_S4_P0&quot;: 65,
+    &quot;test:S7_P0:node_6_S5_P0&quot;: 2,
+    &quot;test:S7_P0:node_8_S7_P0&quot;: 791,
+    &quot;test:S7_P0:node_9_S8_P0&quot;: 69,
+    &quot;test:S8_P0:node_1_S0_P0&quot;: 7,
+    &quot;test:S8_P0:node_2_S1_P0&quot;: 18,
+    &quot;test:S8_P0:node_3_S2_P0&quot;: 7,
+    &quot;test:S8_P0:node_4_S3_P0&quot;: 30,
+    &quot;test:S8_P0:node_5_S4_P0&quot;: 7,
+    &quot;test:S8_P0:node_6_S5_P0&quot;: 9,
+    &quot;test:S8_P0:node_7_S6_P0&quot;: 3,
+    &quot;test:S8_P0:node_8_S7_P0&quot;: 2,
+    &quot;test:S8_P0:node_9_S8_P0&quot;: 891,
+    &quot;test:S9_P0:node_1_S0_P0&quot;: 3,
+    &quot;test:S9_P0:node_2_S1_P0&quot;: 8,
+    &quot;test:S9_P0:node_3_S2_P0&quot;: 4,
+    &quot;test:S9_P0:node_4_S3_P0&quot;: 14,
+    &quot;test:S9_P0:node_5_S4_P0&quot;: 491,
+    &quot;test:S9_P0:node_6_S5_P0&quot;: 4,
+    &quot;test:S9_P0:node_8_S7_P0&quot;: 380,
+    &quot;test:S9_P0:node_9_S8_P0&quot;: 96,
+    &quot;train:S0_P0:node_1_S0_P0&quot;: 5710,
+    &quot;train:S0_P0:node_2_S1_P0&quot;: 18,
+    &quot;train:S0_P0:node_3_S2_P0&quot;: 21,
+    &quot;train:S0_P0:node_4_S3_P0&quot;: 23,
+    &quot;train:S0_P0:node_5_S4_P0&quot;: 3,
+    &quot;train:S0_P0:node_6_S5_P0&quot;: 11,
+    &quot;train:S0_P0:node_7_S6_P0&quot;: 63,
+    &quot;train:S0_P0:node_8_S7_P0&quot;: 2,
+    &quot;train:S0_P0:node_9_S8_P0&quot;: 72,
+    &quot;train:S1_P0:node_2_S1_P0&quot;: 5911,
+    &quot;train:S1_P0:node_3_S2_P0&quot;: 26,
+    &quot;train:S1_P0:node_4_S3_P0&quot;: 1,
+    &quot;train:S1_P0:node_5_S4_P0&quot;: 21,
+    &quot;train:S1_P0:node_7_S6_P0&quot;: 13,
+    &quot;train:S1_P0:node_8_S7_P0&quot;: 2,
+    &quot;train:S1_P0:node_9_S8_P0&quot;: 26,
+    &quot;train:S2_P0:node_1_S0_P0&quot;: 5,
+    &quot;train:S2_P0:node_2_S1_P0&quot;: 71,
+    &quot;train:S2_P0:node_3_S2_P0&quot;: 5411,
+    &quot;train:S2_P0:node_4_S3_P0&quot;: 163,
+    &quot;train:S2_P0:node_5_S4_P0&quot;: 41,
+    &quot;train:S2_P0:node_7_S6_P0&quot;: 73,
+    &quot;train:S2_P0:node_8_S7_P0&quot;: 17,
+    &quot;train:S2_P0:node_9_S8_P0&quot;: 177,
+    &quot;train:S3_P0:node_1_S0_P0&quot;: 26,
+    &quot;train:S3_P0:node_2_S1_P0&quot;: 57,
+    &quot;train:S3_P0:node_3_S2_P0&quot;: 59,
+    &quot;train:S3_P0:node_4_S3_P0&quot;: 5150,
+    &quot;train:S3_P0:node_5_S4_P0&quot;: 22,
+    &quot;train:S3_P0:node_6_S5_P0&quot;: 135,
+    &quot;train:S3_P0:node_7_S6_P0&quot;: 27,
+    &quot;train:S3_P0:node_8_S7_P0&quot;: 29,
+    &quot;train:S3_P0:node_9_S8_P0&quot;: 495,
+    &quot;train:S4_P0:node_1_S0_P0&quot;: 1,
+    &quot;train:S4_P0:node_2_S1_P0&quot;: 33,
+    &quot;train:S4_P0:node_3_S2_P0&quot;: 33,
+    &quot;train:S4_P0:node_4_S3_P0&quot;: 1,
+    &quot;train:S4_P0:node_5_S4_P0&quot;: 5614,
+    &quot;train:S4_P0:node_6_S5_P0&quot;: 2,
+    &quot;train:S4_P0:node_7_S6_P0&quot;: 35,
+    &quot;train:S4_P0:node_8_S7_P0&quot;: 76,
+    &quot;train:S4_P0:node_9_S8_P0&quot;: 47,
+    &quot;train:S5_P0:node_1_S0_P0&quot;: 25,
+    &quot;train:S5_P0:node_2_S1_P0&quot;: 18,
+    &quot;train:S5_P0:node_3_S2_P0&quot;: 13,
+    &quot;train:S5_P0:node_4_S3_P0&quot;: 72,
+    &quot;train:S5_P0:node_5_S4_P0&quot;: 11,
+    &quot;train:S5_P0:node_6_S5_P0&quot;: 4908,
+    &quot;train:S5_P0:node_7_S6_P0&quot;: 85,
+    &quot;train:S5_P0:node_8_S7_P0&quot;: 12,
+    &quot;train:S5_P0:node_9_S8_P0&quot;: 277,
+    &quot;train:S6_P0:node_1_S0_P0&quot;: 18,
+    &quot;train:S6_P0:node_2_S1_P0&quot;: 32,
+    &quot;train:S6_P0:node_3_S2_P0&quot;: 4,
+    &quot;train:S6_P0:node_4_S3_P0&quot;: 6,
+    &quot;train:S6_P0:node_5_S4_P0&quot;: 6,
+    &quot;train:S6_P0:node_6_S5_P0&quot;: 67,
+    &quot;train:S6_P0:node_7_S6_P0&quot;: 5701,
+    &quot;train:S6_P0:node_8_S7_P0&quot;: 1,
+    &quot;train:S6_P0:node_9_S8_P0&quot;: 83,
+    &quot;train:S7_P0:node_1_S0_P0&quot;: 24,
+    &quot;train:S7_P0:node_2_S1_P0&quot;: 50,
+    &quot;train:S7_P0:node_3_S2_P0&quot;: 21,
+    &quot;train:S7_P0:node_4_S3_P0&quot;: 223,
+    &quot;train:S7_P0:node_5_S4_P0&quot;: 401,
+    &quot;train:S7_P0:node_6_S5_P0&quot;: 5,
+    &quot;train:S7_P0:node_7_S6_P0&quot;: 1,
+    &quot;train:S7_P0:node_8_S7_P0&quot;: 4950,
+    &quot;train:S7_P0:node_9_S8_P0&quot;: 325,
+    &quot;train:S8_P0:node_1_S0_P0&quot;: 12,
+    &quot;train:S8_P0:node_2_S1_P0&quot;: 282,
+    &quot;train:S8_P0:node_3_S2_P0&quot;: 24,
+    &quot;train:S8_P0:node_4_S3_P0&quot;: 100,
+    &quot;train:S8_P0:node_5_S4_P0&quot;: 34,
+    &quot;train:S8_P0:node_6_S5_P0&quot;: 39,
+    &quot;train:S8_P0:node_7_S6_P0&quot;: 29,
+    &quot;train:S8_P0:node_8_S7_P0&quot;: 7,
+    &quot;train:S8_P0:node_9_S8_P0&quot;: 5324,
+    &quot;train:S9_P0:node_10_S9_P0&quot;: 9,
+    &quot;train:S9_P0:node_1_S0_P0&quot;: 11,
+    &quot;train:S9_P0:node_2_S1_P0&quot;: 50,
+    &quot;train:S9_P0:node_3_S2_P0&quot;: 9,
+    &quot;train:S9_P0:node_4_S3_P0&quot;: 57,
+    &quot;train:S9_P0:node_5_S4_P0&quot;: 2836,
+    &quot;train:S9_P0:node_6_S5_P0&quot;: 18,
+    &quot;train:S9_P0:node_7_S6_P0&quot;: 2,
+    &quot;train:S9_P0:node_8_S7_P0&quot;: 2332,
+    &quot;train:S9_P0:node_9_S8_P0&quot;: 625
+  },
+  &quot;final_average_accuracy&quot;: {
+    &quot;addressed_memory&quot;: 0.8123108005504891,
+    &quot;memory_oracle&quot;: 0.9167999986474358
+  },
+  &quot;final_stage&quot;: 10,
+  &quot;final_train_average_accuracy&quot;: {
+    &quot;addressed_memory&quot;: 0.827286126047518,
+    &quot;memory_oracle&quot;: 0.9196685070740273
+  },
+  &quot;graph_memory_bytes&quot;: 6856608,
+  &quot;graph_node_count&quot;: 11,
+  &quot;graph_snapshots&quot;: [
+    {
+      &quot;filename&quot;: &quot;memory_graph_stage_1.svg&quot;,
+      &quot;memory_bytes&quot;: 1246656,
+      &quot;node_count&quot;: 2,
+      &quot;stage&quot;: 1
+    },
+    {
+      &quot;filename&quot;: &quot;memory_graph_stage_2.svg&quot;,
+      &quot;memory_bytes&quot;: 1869984,
+      &quot;node_count&quot;: 3,
+      &quot;stage&quot;: 2
+    },
+    {
+      &quot;filename&quot;: &quot;memory_graph_stage_3.svg&quot;,
+      &quot;memory_bytes&quot;: 2493312,
+      &quot;node_count&quot;: 4,
+      &quot;stage&quot;: 3
+    },
+    {
+      &quot;filename&quot;: &quot;memory_graph_stage_4.svg&quot;,
+      &quot;memory_bytes&quot;: 3116640,
+      &quot;node_count&quot;: 5,
+      &quot;stage&quot;: 4
+    },
+    {
+      &quot;filename&quot;: &quot;memory_graph_stage_5.svg&quot;,
+      &quot;memory_bytes&quot;: 3739968,
+      &quot;node_count&quot;: 6,
+      &quot;stage&quot;: 5
+    },
+    {
+      &quot;filename&quot;: &quot;memory_graph_stage_6.svg&quot;,
+      &quot;memory_bytes&quot;: 4363296,
+      &quot;node_count&quot;: 7,
+      &quot;stage&quot;: 6
+    },
+    {
+      &quot;filename&quot;: &quot;memory_graph_stage_7.svg&quot;,
+      &quot;memory_bytes&quot;: 4986624,
+      &quot;node_count&quot;: 8,
+      &quot;stage&quot;: 7
+    },
+    {
+      &quot;filename&quot;: &quot;memory_graph_stage_8.svg&quot;,
+      &quot;memory_bytes&quot;: 5609952,
+      &quot;node_count&quot;: 9,
+      &quot;stage&quot;: 8
+    },
+    {
+      &quot;filename&quot;: &quot;memory_graph_stage_9.svg&quot;,
+      &quot;memory_bytes&quot;: 6233280,
+      &quot;node_count&quot;: 10,
+      &quot;stage&quot;: 9
+    },
+    {
+      &quot;filename&quot;: &quot;memory_graph_stage_10.svg&quot;,
+      &quot;memory_bytes&quot;: 6856608,
+      &quot;node_count&quot;: 11,
+      &quot;stage&quot;: 10
+    }
+  ],
+  &quot;training_runs&quot;: [
+    {
+      &quot;algorithm&quot;: &quot;dense_memory&quot;,
+      &quot;converged&quot;: false,
+      &quot;epochs_run&quot;: 100,
+      &quot;selected_energy&quot;: 1.2009309530258179,
+      &quot;selected_epoch&quot;: 100,
+      &quot;stage&quot;: 1,
+      &quot;stop_reason&quot;: &quot;max_epochs&quot;,
+      &quot;train_task&quot;: &quot;S0_P0&quot;
+    },
+    {
+      &quot;algorithm&quot;: &quot;dense_memory&quot;,
+      &quot;converged&quot;: false,
+      &quot;epochs_run&quot;: 100,
+      &quot;selected_energy&quot;: 0.2634992301464081,
+      &quot;selected_epoch&quot;: 100,
+      &quot;stage&quot;: 2,
+      &quot;stop_reason&quot;: &quot;max_epochs&quot;,
+      &quot;train_task&quot;: &quot;S1_P0&quot;
+    },
+    {
+      &quot;algorithm&quot;: &quot;dense_memory&quot;,
+      &quot;converged&quot;: true,
+      &quot;epochs_run&quot;: 61,
+      &quot;selected_energy&quot;: 1.5765986442565918,
+      &quot;selected_epoch&quot;: 56,
+      &quot;stage&quot;: 3,
+      &quot;stop_reason&quot;: &quot;converged&quot;,
+      &quot;train_task&quot;: &quot;S2_P0&quot;
+    },
+    {
+      &quot;algorithm&quot;: &quot;dense_memory&quot;,
+      &quot;converged&quot;: false,
+      &quot;epochs_run&quot;: 100,
+      &quot;selected_energy&quot;: 1.369852900505066,
+      &quot;selected_epoch&quot;: 100,
+      &quot;stage&quot;: 4,
+      &quot;stop_reason&quot;: &quot;max_epochs&quot;,
+      &quot;train_task&quot;: &quot;S3_P0&quot;
+    },
+    {
+      &quot;algorithm&quot;: &quot;dense_memory&quot;,
+      &quot;converged&quot;: true,
+      &quot;epochs_run&quot;: 81,
+      &quot;selected_energy&quot;: 1.1912974119186401,
+      &quot;selected_epoch&quot;: 76,
+      &quot;stage&quot;: 5,
+      &quot;stop_reason&quot;: &quot;converged&quot;,
+      &quot;train_task&quot;: &quot;S4_P0&quot;
+    },
+    {
+      &quot;algorithm&quot;: &quot;dense_memory&quot;,
+      &quot;converged&quot;: true,
+      &quot;epochs_run&quot;: 72,
+      &quot;selected_energy&quot;: 1.2973341941833496,
+      &quot;selected_epoch&quot;: 68,
+      &quot;stage&quot;: 6,
+      &quot;stop_reason&quot;: &quot;converged&quot;,
+      &quot;train_task&quot;: &quot;S5_P0&quot;
+    },
+    {
+      &quot;algorithm&quot;: &quot;dense_memory&quot;,
+      &quot;converged&quot;: false,
+      &quot;epochs_run&quot;: 100,
+      &quot;selected_energy&quot;: 1.085369348526001,
+      &quot;selected_epoch&quot;: 100,
+      &quot;stage&quot;: 7,
+      &quot;stop_reason&quot;: &quot;max_epochs&quot;,
+      &quot;train_task&quot;: &quot;S6_P0&quot;
+    },
+    {
+      &quot;algorithm&quot;: &quot;dense_memory&quot;,
+      &quot;converged&quot;: true,
+      &quot;epochs_run&quot;: 10,
+      &quot;selected_energy&quot;: 1.9051334857940674,
+      &quot;selected_epoch&quot;: 2,
+      &quot;stage&quot;: 8,
+      &quot;stop_reason&quot;: &quot;converged&quot;,
+      &quot;train_task&quot;: &quot;S7_P0&quot;
+    },
+    {
+      &quot;algorithm&quot;: &quot;dense_memory&quot;,
+      &quot;converged&quot;: true,
+      &quot;epochs_run&quot;: 59,
+      &quot;selected_energy&quot;: 1.3773112297058105,
+      &quot;selected_epoch&quot;: 55,
+      &quot;stage&quot;: 9,
+      &quot;stop_reason&quot;: &quot;converged&quot;,
+      &quot;train_task&quot;: &quot;S8_P0&quot;
+    },
+    {
+      &quot;algorithm&quot;: &quot;dense_memory&quot;,
+      &quot;converged&quot;: true,
+      &quot;epochs_run&quot;: 15,
+      &quot;selected_energy&quot;: 3.5229501724243164,
+      &quot;selected_epoch&quot;: 10,
+      &quot;stage&quot;: 10,
+      &quot;stop_reason&quot;: &quot;converged&quot;,
+      &quot;train_task&quot;: &quot;S9_P0&quot;
+    }
+  ]
+}</pre>
+</section>
+</main>
+<div id="report-lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Image viewer" hidden>
+<figure class="lightbox-figure">
+<div class="lightbox-toolbar">
+<div class="lightbox-zoom-controls">
+<button type="button" class="lightbox-tool" data-lightbox-action="zoom-out" aria-label="Zoom out" title="Zoom out">-</button>
+<output id="report-lightbox-zoom" class="lightbox-zoom" aria-live="polite">Fit</output>
+<button type="button" class="lightbox-tool" data-lightbox-action="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+<button type="button" class="lightbox-tool lightbox-fit" data-lightbox-action="fit" aria-label="Fit to window" title="Fit to window">Fit</button>
+<a id="report-lightbox-open" class="lightbox-tool lightbox-open" target="_blank" rel="noopener" title="Open original image">Open</a>
+</div>
+<button type="button" class="lightbox-tool lightbox-close" aria-label="Close" title="Close">x</button>
+</div>
+<div id="report-lightbox-viewport" class="lightbox-viewport" tabindex="0">
+<img id="report-lightbox-image" alt="" draggable="false">
+</div>
+<figcaption id="report-lightbox-caption"></figcaption>
+</figure>
+</div>
+<script>
+const lightbox = document.getElementById("report-lightbox");
+const lightboxImage = document.getElementById("report-lightbox-image");
+const lightboxCaption = document.getElementById("report-lightbox-caption");
+const lightboxViewport = document.getElementById("report-lightbox-viewport");
+const lightboxZoom = document.getElementById("report-lightbox-zoom");
+const openButton = document.getElementById("report-lightbox-open");
+const closeButton = lightbox.querySelector(".lightbox-close");
+const zoomInButton = lightbox.querySelector('[data-lightbox-action="zoom-in"]');
+const zoomOutButton = lightbox.querySelector('[data-lightbox-action="zoom-out"]');
+const fitButton = lightbox.querySelector('[data-lightbox-action="fit"]');
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 8;
+const ZOOM_STEP = 1.25;
+let zoom = 1;
+let fitScale = 1;
+let dragging = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let dragScrollLeft = 0;
+let dragScrollTop = 0;
+
+function imageSize() {
+  return {
+    width: lightboxImage.naturalWidth || 1,
+    height: lightboxImage.naturalHeight || 1,
+  };
+}
+
+function calculateFitScale() {
+  const size = imageSize();
+  const availableWidth = Math.max(1, lightboxViewport.clientWidth - 32);
+  const availableHeight = Math.max(1, lightboxViewport.clientHeight - 32);
+  fitScale = Math.min(availableWidth / size.width, availableHeight / size.height);
+}
+
+function renderZoom(preserveCenter = true) {
+  const oldWidth = Math.max(1, lightboxViewport.scrollWidth);
+  const oldHeight = Math.max(1, lightboxViewport.scrollHeight);
+  const centerX = (lightboxViewport.scrollLeft + lightboxViewport.clientWidth / 2) / oldWidth;
+  const centerY = (lightboxViewport.scrollTop + lightboxViewport.clientHeight / 2) / oldHeight;
+  const size = imageSize();
+  lightboxImage.style.width = `${Math.max(1, size.width * fitScale * zoom)}px`;
+  lightboxZoom.value = zoom === 1 ? "Fit" : `${Math.round(zoom * 100)}%`;
+  lightboxZoom.textContent = lightboxZoom.value;
+  zoomOutButton.disabled = zoom <= MIN_ZOOM;
+  zoomInButton.disabled = zoom >= MAX_ZOOM;
+  lightboxViewport.classList.toggle("is-zoomed", zoom > 1);
+  if (preserveCenter) {
+    requestAnimationFrame(() => {
+      lightboxViewport.scrollLeft = centerX * lightboxViewport.scrollWidth - lightboxViewport.clientWidth / 2;
+      lightboxViewport.scrollTop = centerY * lightboxViewport.scrollHeight - lightboxViewport.clientHeight / 2;
+    });
+  }
+}
+
+function setZoom(nextZoom, preserveCenter = true) {
+  zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, nextZoom));
+  renderZoom(preserveCenter);
+}
+
+function fitImage() {
+  zoom = 1;
+  calculateFitScale();
+  renderZoom(false);
+  lightboxViewport.scrollLeft = 0;
+  lightboxViewport.scrollTop = 0;
+}
+
+function openLightbox(card) {
+  const src = card.dataset.lightboxSrc;
+  const caption = card.dataset.lightboxCaption || src;
+  lightboxImage.alt = caption;
+  lightboxCaption.textContent = caption;
+  openButton.href = src;
+  lightbox.hidden = false;
+  document.body.classList.add("modal-open");
+  lightboxImage.src = src;
+  if (lightboxImage.complete) {
+    fitImage();
+  }
+  lightboxViewport.focus();
+}
+
+function closeLightbox() {
+  lightbox.hidden = true;
+  document.body.classList.remove("modal-open");
+  lightboxImage.removeAttribute("src");
+  lightboxImage.removeAttribute("style");
+  openButton.removeAttribute("href");
+  dragging = false;
+}
+
+lightboxImage.addEventListener("load", fitImage);
+document.querySelectorAll("[data-lightbox-src]").forEach((card) => {
+  card.addEventListener("click", () => openLightbox(card));
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openLightbox(card);
+    }
+  });
+});
+
+zoomInButton.addEventListener("click", () => setZoom(zoom * ZOOM_STEP));
+zoomOutButton.addEventListener("click", () => setZoom(zoom / ZOOM_STEP));
+fitButton.addEventListener("click", fitImage);
+closeButton.addEventListener("click", closeLightbox);
+lightbox.addEventListener("click", (event) => {
+  if (event.target === lightbox) {
+    closeLightbox();
+  }
+});
+lightboxViewport.addEventListener("wheel", (event) => {
+  if (!event.ctrlKey && !event.metaKey) {
+    return;
+  }
+  event.preventDefault();
+  setZoom(event.deltaY < 0 ? zoom * ZOOM_STEP : zoom / ZOOM_STEP);
+}, { passive: false });
+lightboxViewport.addEventListener("dblclick", () => setZoom(zoom === 1 ? 2 : 1));
+lightboxViewport.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0 || zoom <= 1) {
+    return;
+  }
+  dragging = true;
+  dragStartX = event.clientX;
+  dragStartY = event.clientY;
+  dragScrollLeft = lightboxViewport.scrollLeft;
+  dragScrollTop = lightboxViewport.scrollTop;
+  lightboxViewport.classList.add("is-dragging");
+  lightboxViewport.setPointerCapture(event.pointerId);
+});
+lightboxViewport.addEventListener("pointermove", (event) => {
+  if (!dragging) {
+    return;
+  }
+  lightboxViewport.scrollLeft = dragScrollLeft - (event.clientX - dragStartX);
+  lightboxViewport.scrollTop = dragScrollTop - (event.clientY - dragStartY);
+});
+function finishDrag(event) {
+  dragging = false;
+  lightboxViewport.classList.remove("is-dragging");
+  if (lightboxViewport.hasPointerCapture(event.pointerId)) {
+    lightboxViewport.releasePointerCapture(event.pointerId);
+  }
+}
+lightboxViewport.addEventListener("pointerup", finishDrag);
+lightboxViewport.addEventListener("pointercancel", finishDrag);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !lightbox.hidden) {
+    closeLightbox();
+  } else if (!lightbox.hidden && (event.key === "+" || event.key === "=")) {
+    event.preventDefault();
+    setZoom(zoom * ZOOM_STEP);
+  } else if (!lightbox.hidden && event.key === "-") {
+    event.preventDefault();
+    setZoom(zoom / ZOOM_STEP);
+  } else if (!lightbox.hidden && event.key === "0") {
+    event.preventDefault();
+    fitImage();
+  }
+});
+</script>
+</body></html>
