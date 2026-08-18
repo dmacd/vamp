@@ -11,6 +11,162 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Active Outcome — TinyWorlds Nouns-v2 Log-t Temporal Consolidation
+
+The fixed temporal-consolidation experiment is implemented under the
+content-addressed contract
+`3f4ef4a10fd471b418a32a8f7b45431602c1f6abc080c19a7822ea2c2dd839b4`.
+It selects eight immutable 512-story shards for every noun (192 arrivals),
+evaluates blocked and round-robin orders, performs the prescribed capacity-two
+oldest-first carry schedule, and finishes each order with 183 merges and nine
+live chunks. Four finite epochs, standalone base-relative LoRAs, sequential
+LoRA, the independent noun bank, and IID LoRA/full-model controls are all
+encoded in the immutable contract. Canonical authentication currently covers
+all 4,440 validation cases, all 900 root/task probes, the selected base, all 24
+VAMP stages, every existing result ledger, and 168 protected nouns-v1/v2 files.
+
+The implementation includes exact optimizer/RNG/update resume, finite
+story-bounded padded batches, prefix-isolated exhaustive routing, evaluator-only
+suffix oracles, bounded per-stage evaluation ledgers, merge/source/sentinel
+distortion and lineage telescoping, shape-bucket timing, the 12 GiB allocator
+gate, and canonical-artifact before/after hashes. The no-options GPU-zero runner
+prints phased progress and ETAs, starts a GET-only loopback dashboard, and
+publishes Markdown, self-contained HTML, a frozen dashboard, CSVs, accessible
+Matplotlib SVGs, and compact/full Graphviz lineage diagrams. Raw resumable
+ledgers remain in the contract's persistent `.work-v1` tree.
+
+The focused CPU suite passes, including exact LoRA and full-model interruption
+parity, schedule/coverage/isolation, malformed and cross-contract ledger
+rejection, dashboard/report structure, timing validation, and byte-identical
+plot/report generation. Read-only authentication against the real artifacts has
+also passed and reproduced the contract above without changing the protected
+hash set. The loopback-only HTTP gate and clean default suite pass. The bounded
+real-data GPU smoke compiled the production 32-by-256 training and routing
+kernels, produced byte-identical adapter tensors across direct and interrupted/
+resumed trajectories, evaluated an isolated midpoint case, and measured a
+6,664,041,728-byte peak under the 12 GiB gate. Equivalent short training jobs
+now reuse one pure compiled executable per model architecture; after the single
+18.46-second cold path, the interrupted/resumed eight-update trajectory took
+0.41 seconds.
+
+The complete no-options run has atomically published all shared, independent,
+IID, sequential, and merge training artifacts for both orders: all 366 merge
+jobs and both final nine-chunk live stacks are complete. Its first timing pass
+stopped safely after 89 of 208 shapes when the process retained every distinct
+JIT executable and exhausted the GPU allocator. Compile-cache eviction alone
+did not release the default allocator's retained blocks, so production timing
+now launches each pending shape in a fresh process from a deterministic,
+content-hashed 102.89 MiB input bundle. Every worker verifies the bundle and
+base, records one cold call, five synchronized warm calls, and its allocator
+peak, appends exactly one chained row, and exits to release the device pool.
+The resume path also treats callbacks replayed while strict-loading already
+published sub-jobs as idempotent without weakening the recorder's default
+fail-closed monotonicity check.
+
+Eight rows by eight nodes at prefix width 512 does not fit the frozen 12 GiB
+gate even in a fresh process. Exhaustive routing therefore selects physical
+rows from `{8, 4, 2, 1}` using a fixed 20,736 row-node-token work budget; this
+execution-only microbatching preserves every logical prefix score and suffix
+result and reports physical rows explicitly. The formerly failing width-512
+shape completed with four rows and a 6,887,178,240-byte peak. Isolated shapes
+102–104 also completed, including an eight-row width-480 shape at
+12,651,053,056 bytes under the gate. The focused CPU suite now passes 22 tests
+with one loopback-dependent skip.
+
+The first isolated resume reached timing shape 114 before the eight-row,
+nine-node, width-320 shape crossed the same transient-autotuning boundary. The
+work budget was consequently tightened from 24,576 to 20,736: the immediately
+preceding eight-row shape has product 20,736 and a measured 8,889,827,328-byte
+peak. The exact previously failing width-320 shape now completes with four rows
+and a 4,931,577,856-byte peak. The focused CPU suite still passes 22 tests with
+one loopback-dependent skip. The corrected no-options run resumes from the same
+persistent `.work-v1` contract directory and serves its verified loopback
+dashboard at `http://127.0.0.1:8765/`; after restart it advanced through shape
+117 of 208. The run subsequently completed all 208 timing shapes, both
+distortion audits, both sentinel/macro evaluations, final controls,
+publication/regeneration, and the final immutability gate.
+
+The foreground runner was subsequently reaped with its tool-managed terminal,
+which also removed the in-process HTTP server while timing shape 120 was in
+flight. A no-options, read-only dashboard entry point now serves the existing
+authenticated disk projection independently of the GPU runner. Both processes
+are launched as restartable user services, keeping port 8765 available across
+runner exits without giving the dashboard ownership of experiment state.
+
+The independent service exposed a previously unexecuted live-HTML defect: a
+Python string escape emitted a literal newline inside the JavaScript event-log
+separator, causing the browser to stop before rendering the first authenticated
+snapshot even though the API returned in under two milliseconds. The escape is
+now emitted as valid JavaScript and covered by the dashboard surface test. The
+runner had meanwhile advanced into blocked evaluation, but its single parent
+process retained a 16.9 GiB GPU pool. That device footprint is larger than the
+12 GiB operational target, although it is not interchangeable with JAX's
+active-allocation peak used by the formal gate. It was stopped at a resumable
+ledger boundary; the evaluation-memory isolation described below resolved the
+issue before compute resumed.
+
+The bounded resume now selects JAX's telemetry-preserving CUDA asynchronous
+allocator for the parent process while leaving isolated timing workers on the
+default allocator. Distortion and evaluation callbacks enforce the 12 GiB peak
+at every streamed progress boundary rather than waiting until publication. The
+production resume crossed the prior macro-blocked high-water mark from 102,168
+to at least 102,933 rows while remaining active. Its process footprint rose to
+2.74 GiB during the first cold resumed batches and then fell to 1.58 GiB while
+sustaining evaluation, rather than retaining the prior 16.9 GiB
+default-allocator pool.
+
+The live client now labels snapshots as live or paused/stale from their latest
+authenticated event time, so an externally stopped runner cannot look active
+indefinitely. Initial event hydration is bounded to the newest 500 rows instead
+of downloading the full 34,000-row progress history. The separate ResNet tuning
+process released GPU 0, and the restartable temporal service is active again;
+the dashboard health endpoint reports `blocked evaluation` and its snapshot is
+current. The manual pause did reveal that no GPU-availability watcher had been
+installed, so transitions out of an intentional resource pause currently still
+require an explicit service start.
+
+Resume callbacks at an unchanged running high-water mark are also idempotent
+now. This prevents strict replay from appending hundreds of duplicate progress
+events or temporarily erasing the last real metrics before it reaches pending
+work; failed-to-running and genuinely advancing transitions remain visible.
+
+The experiment completed at 2026-08-17 14:53 PDT. Every dashboard job is
+complete, the runner exited cleanly, and the independent read-only dashboard
+continues to serve the frozen state. The published manifest is
+`15f3ee2a5a2c5054b158ba62d7a0d1b9fcaa22e40634a73c9cbffceca5888bcb`;
+an independent check reproduces that identity and all 32 artifact hashes. The
+run took 42.21 hours end to end and peaked at 11.78 GiB of JAX allocator use
+under the fixed 12 GiB gate. The focused suite passes 22 tests with one expected
+loopback skip, and the clean default suite passes 699 tests with 275 registered
+resource skips and 20 marker deselections.
+
+At arrival 192 on all 4,440 validation stories, routed log-t improves frozen-
+base story NLL from 1.63759 to 1.57980 in blocked order and 1.58858 in
+round-robin order. Token NLL is 1.61432/1.62206 versus 1.66357 for base, while
+token accuracy moves only from 60.63% to 60.89%/60.79%. Sequential LoRA is
+worse than base in both orders at 1.73303/1.69788 story NLL. Mean final
+forgetting is 0.00606/0.00270 for log-t versus 0.14980/0.05978 for sequential
+LoRA. This supports the retention hypothesis under both stream structures.
+
+Round-robin minus blocked routed log-t is +0.008785 story NLL with a
+deterministic noun-stratified 95% interval of [+0.006776, +0.010677]; token
+accuracy changes by -0.122 percentage points. The final suffix oracles remain
+close at 1.53113 blocked and 1.53345 round robin, so most order sensitivity lies
+in prefix addressing rather than destroyed bank quality. Prefix/oracle
+agreement is 38.6% blocked and 17.6% round robin, and prefix entropy remains
+near the ten-way maximum. Routing captures 54.3% and 47.1% of the respective
+base-to-oracle gains. Frozen midpoint-prefix NLL is therefore the clear
+bottleneck.
+
+The nine-adapter deployed log-t bank is effectively tied with the practical
+24-adapter independent-noun bank: its story NLL is 0.00458 better in blocked
+order and 0.00421 worse in round-robin order. It remains behind joint IID LoRA
+(1.55432 story NLL) and substantially behind the offline IID full model
+(1.39903). The final result is a positive bounded-memory/retention result, not
+an absolute-quality win over offline replay: temporal consolidation preserves
+useful specialization with logarithmic live state, but improved content
+addressing is needed to realize the stored quality.
+
 ## Active Outcome — TinyWorlds Nouns-v2 Disjoint Benchmark
 
 The isolated `tinyworlds-nouns-v2` contracts, partitioner, shared-engine

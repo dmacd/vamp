@@ -1,0 +1,24 @@
+digraph temporal_compact {
+graph [rankdir="LR", bgcolor="transparent", label="Deployed bank", labelloc="t"];
+node [shape="box", style="rounded,filled", fontname="DejaVu Sans", fontsize="11", color="#24425f"];
+edge [color="#516579"];
+deployment [shape="ellipse", label="Base + 9 live adapters", fillcolor="#E6F2FF"];
+"chunk_fe4993b31dc57fa1890d9789ef1318353677c9c54299c1c8ba8055053f3f0af9" [label="L6 · 1–64\nmouse:3, rabbit:3, boat:3, +21", fillcolor="#EEB49C", penwidth="2"];
+"chunk_fe4993b31dc57fa1890d9789ef1318353677c9c54299c1c8ba8055053f3f0af9" -> deployment;
+"chunk_b43c1a7855e57eb06c33d9d994763de082eb444604f7915bb128924ba43593a1" [label="L6 · 65–128\nmouse:3, rabbit:3, boat:3, +21", fillcolor="#EEB49C", penwidth="2"];
+"chunk_b43c1a7855e57eb06c33d9d994763de082eb444604f7915bb128924ba43593a1" -> deployment;
+"chunk_2385590c2516a9c479e5ed4c9d9d428261c2d60ff1c71d88a2df8baf63daa955" [label="L5 · 129–160\nmouse:1, rabbit:1, boat:1, +21", fillcolor="#EEB59D", penwidth="2"];
+"chunk_2385590c2516a9c479e5ed4c9d9d428261c2d60ff1c71d88a2df8baf63daa955" -> deployment;
+"chunk_73eb99b976457da3e301a081f48f7a607cafaf8f3705686faa3a660d1096b528" [label="L4 · 161–176\nmouse:1, rabbit:1, boat:1, +13", fillcolor="#EDBCA8", penwidth="2"];
+"chunk_73eb99b976457da3e301a081f48f7a607cafaf8f3705686faa3a660d1096b528" -> deployment;
+"chunk_57c675e5175933292421e8895a0e0032427a3e4c287d6e33efae94e64e8e3014" [label="L3 · 177–184\nbicycle:1, grandma:1, lion:1, +5", fillcolor="#EBC9BE", penwidth="2"];
+"chunk_57c675e5175933292421e8895a0e0032427a3e4c287d6e33efae94e64e8e3014" -> deployment;
+"chunk_d50a22bf4fe8ff8c97af3a05dec48fdeeeea3775cafc0d08dd4a9fd28a423ae9" [label="L2 · 185–188\nprincess:1, plane:1, elephant:1, +1", fillcolor="#E9D7D3", penwidth="2"];
+"chunk_d50a22bf4fe8ff8c97af3a05dec48fdeeeea3775cafc0d08dd4a9fd28a423ae9" -> deployment;
+"chunk_1f076945dfaa70e89c0dce4efa16d975fe4e41a405029da9784f6bad54cecc90" [label="L1 · 189–190\ndragon:1, queen:1", fillcolor="#E8E4E9", penwidth="2"];
+"chunk_1f076945dfaa70e89c0dce4efa16d975fe4e41a405029da9784f6bad54cecc90" -> deployment;
+"chunk_2f8353705f21c1f0e718ab7fded8fb67160777b38d1edd0022b5a7db0464d1cf" [label="L0 · 191–191\nhorse:1", fillcolor="#E6F2FF", penwidth="2"];
+"chunk_2f8353705f21c1f0e718ab7fded8fb67160777b38d1edd0022b5a7db0464d1cf" -> deployment;
+"chunk_51cf6a3e1711c4bf4e4043181cbd43293ffc48a65d0db49c62870d1b44ae1b15" [label="L0 · 192–192\nbus:1", fillcolor="#E6F2FF", penwidth="2"];
+"chunk_51cf6a3e1711c4bf4e4043181cbd43293ffc48a65d0db49c62870d1b44ae1b15" -> deployment;
+}

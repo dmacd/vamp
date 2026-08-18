@@ -202,6 +202,82 @@ stagewise audits, and comparative standalone Markdown/HTML report as success.
 OpenRouter is available only via `--judge`; it consumes the persisted
 generation and stagewise ledgers and regenerates the report without model work.
 
+### Log-t temporal consolidation
+
+The nouns-v2 temporal-consolidation study treats arrival structure as an
+independent experimental variable rather than inheriting the canonical
+one-task-per-stage factoring. It deterministically selects 4,096 eligible
+whole stories for each of the 24 nouns and divides each noun into eight
+immutable 512-story shards. The blocked and round-robin streams are two orders
+over those same 192 shard identities; probes, official validation stories, and
+stories outside the selected source set never enter a training chunk.
+
+Temporal memory is an interval hierarchy with capacity two at every level. A
+new shard creates a level-zero chunk. When a level would acquire a third chunk,
+the two oldest equal-level intervals are synchronously replaced by a parent and
+the carry repeats upward. Each parent is a fresh rank-eight LoRA trained from
+the authenticated frozen base on the exact union of its children's source
+stories. It does not average parameters, inherit optimizer state, or initialize
+from either child. Children remain immutable archival evidence but leave the
+live address set. After 192 arrivals this rule has made 183 merges and leaves
+nine live intervals, so exhaustive live addressing grows logarithmically even
+though retained audit storage grows with the complete history.
+
+Every level-zero and merged LoRA is a standalone base-relative root adapter.
+The deployed temporal bank therefore contains the frozen base plus the active
+interval adapters, not compositional paths through the merge tree. Addressing
+uses only the exact midpoint prefix and stable minimum prefix NLL; suffix tokens
+and noun identity are evaluator-only. Because mixed chunks have no single task
+label, their routing statistic is noun-support hit. Exact noun-route accuracy is
+reserved for the independent per-noun bank.
+
+The merge-distortion audit compares every parent with each direct child on the
+child's exact source distribution and noun sentinel. Signed increments are
+retained along each original shard lineage. The direct level-zero-to-active-
+ancestor drift must telescope to those signed increments and cannot exceed the
+sum of their positive parts. Consolidation is measurement-only: distortion is
+reported but never used to veto a scheduled merge.
+
+Temporal artifacts have a separate content-addressed v1 contract and live only
+under temporal-consolidation checkpoint, result, and persistent work trees.
+Training resume binds optimizer state, parameters, RNG, exact update cursor,
+loss-ledger position, and source identity. Evaluation, distortion, timing, and
+progress are chained canonical JSONL prefixes that reject reordering, duplicate
+keys, cross-contract rows, and tampering while repairing only a torn final
+line. The loopback dashboard is a read-only projection of those disk records;
+it never owns model or optimizer state and is frozen into the final standalone
+report bundle.
+
+Temporal exhaustive-prefix routing uses a deterministic power-of-two physical
+row capacity in `{8, 4, 2, 1}`. The largest capacity whose
+`rows × (adapter candidates + base) × prefix-width bucket` product is at most
+20,736 is selected. This is an execution-only microbatch boundary: all logical
+cases retain the same prefix scores, stable tie order, routes, and suffix
+evaluation, while physical rows and forward-equivalent tokens are reported
+explicitly. It also bounds the 25-node independent-noun control rather than
+assuming the eight-row temporal-bank shape fits it.
+
+The 208-shape timing sweep runs each pending shape in a fresh child process.
+The parent publishes one deterministic, content-hashed safetensors bundle of
+the authenticated packed banks and representative batches; each child verifies
+that bundle and the selected base, records one cold compile and five
+synchronized warm calls, appends exactly one chained timing row, and exits.
+Process exit—not compile-cache eviction—is the allocator boundary. This keeps
+different cold shapes from accumulating retained GPU allocations while leaving
+the default allocator and measured kernel path unchanged within every shape.
+The read-only dashboard can also run as an independent local service over the
+same authenticated status and progress ledgers. This serving process owns no
+experimental state, so it can remain reachable while the resumable GPU runner
+restarts or performs its pre-dashboard authentication gate.
+
+The parent training/evaluation process uses JAX's CUDA asynchronous allocator
+with preallocation disabled. Unlike the default retaining pool, it preserves
+JAX peak-memory telemetry while returning unused device allocations during the
+many-shape evaluation sweep. Every distortion and evaluation progress boundary
+checks the cumulative live allocator peak and stops immediately above 12 GiB;
+the isolated timing workers deliberately remove this setting so their recorded
+cold/warm default-allocator measurements remain comparable.
+
 ## TinyWorlds Noun-Overlap v1
 
 `tinyworlds-nouns-v1` is an isolated, descriptive continual-learning

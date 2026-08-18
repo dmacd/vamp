@@ -11,6 +11,8 @@ from apm.data.text.tinyworlds_nouns_v1.experiment import (
     NounGpuPreflight,
     NounSelectedBase,
     StoryIndexEntry,
+    load_noun_gpu_preflight,
+    load_noun_selected_base,
     load_noun_vamp_stages,
     load_story_index,
     noun_model_config,
@@ -42,6 +44,25 @@ def run_or_load_nouns_v2_gpu_preflight(
 ) -> NounGpuPreflight:
     """Run or strict-load the GPU preflight under v2 formats and paths."""
     return run_or_load_noun_gpu_preflight(partition, preset, checkpoint_root)
+
+
+def load_nouns_v2_gpu_preflight(
+    partition: NounsV2PartitionArtifact,
+    preset: NounsV2ExperimentPreset,
+    path: str | Path,
+) -> NounGpuPreflight:
+    """Strict-load a published v2 GPU preflight without measuring or writing."""
+    return load_noun_gpu_preflight(partition, preset, path)
+
+
+def load_nouns_v2_selected_base(
+    partition: NounsV2PartitionArtifact,
+    preset: NounsV2ExperimentPreset,
+    preflight: NounGpuPreflight,
+    root: str | Path,
+) -> NounSelectedBase:
+    """Strict-load a published v2 selected base without training or resuming."""
+    return load_noun_selected_base(root, partition, preset, preflight)
 
 
 def run_or_resume_nouns_v2_base(
@@ -102,6 +123,8 @@ __all__ = [
     "NounSelectedBase",
     "StoryIndexEntry",
     "FullFinetuneStage",
+    "load_nouns_v2_gpu_preflight",
+    "load_nouns_v2_selected_base",
     "load_story_index",
     "load_nouns_v2_vamp_stages",
     "load_nouns_v2_baseline_stages",
