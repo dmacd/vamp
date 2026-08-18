@@ -167,6 +167,59 @@ an absolute-quality win over offline replay: temporal consolidation preserves
 useful specialization with logarithmic live state, but improved content
 addressing is needed to realize the stored quality.
 
+### Completed addendum — full-story final-bank routing
+
+The read-only full-story routing diagnostic is complete under independent
+contract
+`67657f3a6baf0e529b6ac668e3e2876269ce18c53023c4f31682627c4fb1b253`.
+It authenticates the temporal parent manifest and all 32 parent artifact
+hashes, strict-loads the two final nine-interval log-t banks and the 24-adapter
+independent-noun bank, and joins their exact 13,320 final validation rows. No
+training or merge was rerun, and the parent report, analysis, manifest, and all
+canonical nouns artifacts retained their prior hashes.
+
+Using the entire story raises blocked log-t noun-support accuracy from 71.71%
+to 84.03% (+12.32 pp, paired noun-stratified 95% interval +11.08 to +13.56 pp)
+and lowers story-weighted suffix NLL from 1.57980 to 1.54457 (-0.03523,
+95% interval -0.03767 to -0.03286). Round-robin support rises from 81.76% to
+94.39% (+12.64 pp, +11.51 to +13.78 pp), while suffix NLL falls from 1.58858
+to 1.54588 (-0.04270, -0.04490 to -0.04063). Independent-bank exact noun
+routing rises from 70.68% to 79.75% (+9.08 pp, +7.82 to +10.34 pp), while
+suffix NLL falls from 1.58438 to 1.54004 (-0.04434, -0.04713 to -0.04163).
+
+These full-story selections recover 72.4%, 77.4%, and 66.5% of the respective
+midpoint-to-suffix-oracle story-NLL gaps. Their self-selected whole-story NLLs
+are 1.49926, 1.50921, and 1.48287; selecting the same candidates from only the
+midpoint yields 1.51297, 1.52478, and 1.49939. The evidence therefore supports
+the proposed explanation: weak midpoint routing cues account for a large,
+statistically clear portion of apparent suffix loss. This is diagnostic rather
+than deployable quality because full-story selection reads the suffix whose
+loss is reported; it remains above the evaluator-only suffix oracle and does
+not show that the held-out routing problem is solved.
+
+All 111 stories whose midpoint prefix crosses the canonical 256-transition
+window boundary were directly rescored. The deterministic audit added near
+ties and one minimum-margin short story per noun, for 190 unique stories and
+570 bank/story rows. Direct and reconstructed short scores differ by at most
+`4.01e-7`, with zero route mismatches; the smallest unaudited top-two margin is
+`0.000200103`, above twice the fixed `1e-4` tolerance. The direct and derived
+ledger hashes are
+`dfcfb669efb87cb04f65c7ff549a22cd3e80cb38c19addb55ee2c5e37481a5c4`
+and
+`68f8f6f127593071f03220b9b6efc6bb7686d90f93092b8a76b056e39f84c1df`.
+Peak JAX allocator use was 3.35 GiB under the 12 GiB gate. The no-options
+GPU-zero runner resumed its evidence after a deliberately failed deterministic
+publication check, then regenerated the corrected Markdown/HTML/SVG bundle
+byte-identically. The publication manifest identity is
+`3fa2931e448812d72f8c118065f030b46385121736db3f1cb5cb9f83b89c469d`;
+the Markdown, HTML, and SVG file hashes are respectively
+`74ee79e34896dc126a747c2159cd322595e46a07ba79990e16f2c9dd1402a0b0`,
+`ebde5ba62a6c010a0fdb161090b15ed65112857ae02c19639d81634f27f2556b`,
+and `abfe6e3a2094a6929d8dc757592b7588ce15c50eeb55aa121d7f8bb70d66ce04`.
+The final exact-resume replay passed without changing the publication snapshot,
+the opt-in real-source GPU parity/allocator test passed, and the clean default
+suite passes 704 tests with 275 resource skips and 21 marker deselections.
+
 ## Active Outcome — TinyWorlds Nouns-v2 Disjoint Benchmark
 
 The isolated `tinyworlds-nouns-v2` contracts, partitioner, shared-engine

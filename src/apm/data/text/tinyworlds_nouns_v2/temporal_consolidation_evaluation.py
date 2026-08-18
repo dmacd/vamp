@@ -336,7 +336,7 @@ def build_midpoint_case(
         np.asarray(prefix_tokens[1:], dtype=np.int32).reshape(1, width),
         np.ones((1, width), dtype=np.bool_),
     )
-    suffix = _story_windows(
+    suffix = build_story_windows(
         tokens,
         context_length,
         int(getattr(partition, "pad_token_id")),
@@ -391,6 +391,35 @@ def score_token_batches_by_candidate(
             int(correct[position]),
         )
         for position, node_index in enumerate(indices)
+    )
+
+
+def score_token_windows_by_candidate(
+    windows: TokenBatch,
+    *,
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    bank: AdapterBank,
+    candidate_indices: Sequence[int],
+    evaluation_batch_size: int = EVALUATION_BATCH_SIZE,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return per-window total NLL and correct-token matrices for candidates."""
+    indices = tuple(candidate_indices)
+    if (
+        windows.input_ids.shape[0] <= 0
+        or not np.any(windows.loss_mask)
+        or not indices
+        or len(set(indices)) != len(indices)
+        or any(not 0 <= index < len(bank.candidate_ids) for index in indices)
+    ):
+        raise ValueError("candidate window scoring requires valid data and indices")
+    return _score_nodes_per_window(
+        base_params,
+        model_config,
+        bank.packed,
+        windows,
+        evaluation_batch_size,
+        node_indices=indices,
     )
 
 
@@ -550,7 +579,7 @@ def evaluate_to_ledger(
     """Evaluate pending cases in bounded batches and fsync each result batch."""
     if ledger.row_format != EVALUATION_ROW_FORMAT:
         raise ValueError("temporal evaluation requires its independent row format")
-    _validate_existing_evaluation_rows(ledger.rows, contract_sha256)
+    validate_evaluation_rows(ledger.rows, contract_sha256)
     ledger.require_unique_keys(
         ("evaluation_id", "method", "order", "stage", "task_id", "story_id")
     )
@@ -988,13 +1017,20 @@ def _stack_prefixes(
     return RouterBatch(inputs, attention, targets, attention)
 
 
-def _story_windows(
+def build_story_windows(
     token_ids: tuple[int, ...],
     context_length: int,
     pad_token_id: int,
     *,
     first_target_index: int,
 ) -> TokenBatch:
+    """Build canonical reset-at-context-boundary windows for one story."""
+    if (
+        len(token_ids) < 2
+        or context_length <= 0
+        or not 1 <= first_target_index < len(token_ids)
+    ):
+        raise ValueError("story window arguments are invalid")
     starts = tuple(range(0, len(token_ids) - 1, context_length))
     shape = (len(starts), context_length)
     inputs = np.full(shape, pad_token_id, dtype=np.int32)
@@ -1046,7 +1082,7 @@ def _padded_slice(
     )
 
 
-def _validate_existing_evaluation_rows(
+def validate_evaluation_rows(
     rows: Sequence[dict[str, object]],
     contract_sha256: str,
 ) -> None:
@@ -1157,6 +1193,7 @@ __all__ = [
     "MidpointCase",
     "build_adapter_bank",
     "build_midpoint_case",
+    "build_story_windows",
     "evaluate_case_batch",
     "evaluate_to_ledger",
     "prepare_prefix_kernel_batch",
@@ -1168,4 +1205,6 @@ __all__ = [
     "run_suffix_kernel",
     "score_midpoint_cases_by_candidate",
     "score_token_batches_by_candidate",
+    "score_token_windows_by_candidate",
+    "validate_evaluation_rows",
 ]

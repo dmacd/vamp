@@ -278,6 +278,37 @@ checks the cumulative live allocator peak and stops immediately above 12 GiB;
 the isolated timing workers deliberately remove this setting so their recorded
 cold/warm default-allocator measurements remain comparable.
 
+#### Full-story routing diagnostic
+
+The final-bank full-story diagnostic is an immutable addendum to the temporal
+study, not a revision of its prefix-isolated result. It joins the blocked log-t,
+round-robin log-t, and independent-noun ledgers on their exact 4,440-story
+order. Candidate `j` is selected by mean NLL over every causal transition in
+the story, with the inherited base-first candidate order and stable first
+minimum. Mixed temporal candidates retain noun-support accuracy; independent
+noun candidates use exact-noun accuracy. Base is a miss for both definitions.
+
+For midpoint prefixes of at most 256 transitions, the complete score is the
+token-weighted sum of the stored prefix and suffix candidate totals. This is
+identical to canonical reset-at-256 story-window scoring because the two masks
+partition the same causal transitions. Longer router prefixes are not
+reconstructible this way because their original attention context crossed the
+canonical window boundary, so they are always directly rescored. A deterministic
+direct GPU audit also includes all reconstructed margins at most `2e-4` and the
+minimum-margin short story for every noun. Short direct/reconstructed scores
+must agree within `1e-4`, select the same stable candidate, and leave every
+unaudited margin above twice that tolerance; otherwise publication fails.
+
+Suffix NLL after full-story selection is explicitly selection-leaking: the
+router reads the suffix whose competence is subsequently reported. It is a
+diagnostic of whether complete stories contain addressing evidence, not a
+held-out deployment estimate. Whole-story NLL is reported separately and
+labeled self-selected. The addendum binds the parent manifest and all parent
+artifact hashes, the three source ledgers, final adapter artifacts, audit set,
+window rule, and bootstrap settings in an independent v1 contract. Its direct
+and derived ledgers are resumable chained JSONL streams, and its nested result
+directory is excluded from the immutable parent publication manifest.
+
 ## TinyWorlds Noun-Overlap v1
 
 `tinyworlds-nouns-v1` is an isolated, descriptive continual-learning
