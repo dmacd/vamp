@@ -1,0 +1,349 @@
+<svg width="1161pt" height="705pt"
+ viewBox="0.00 0.00 1160.80 704.80" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-labelledby="graph-top-4-title graph-top-4-description"><title id="graph-top-4-title">VAMP dependency graph under compact top-4 retrieval</title><desc id="graph-top-4-description">Nodes are colored by candidate-inclusion frequency and edges by union-path activation frequency.</desc>
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(14.4 690.4)">
+<title>addressing_top_4</title>
+<!-- root -->
+<g id="node1" class="node">
+<title>root</title>
+<path fill="#51586d" stroke="black" d="M109,-182C109,-182 12,-182 12,-182 6,-182 0,-176 0,-170 0,-170 0,-156 0,-156 0,-150 6,-144 12,-144 12,-144 109,-144 109,-144 115,-144 121,-150 121,-156 121,-156 121,-170 121,-170 121,-176 115,-182 109,-182"/>
+<text text-anchor="middle" x="60.5" y="-166.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">00 · root</text>
+<text text-anchor="middle" x="60.5" y="-153.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 22.4%</text>
+</g>
+<!-- mouse -->
+<g id="node2" class="node">
+<title>mouse</title>
+<path fill="#414d6c" stroke="black" d="M316,-182C316,-182 219,-182 219,-182 213,-182 207,-176 207,-170 207,-170 207,-156 207,-156 207,-150 213,-144 219,-144 219,-144 316,-144 316,-144 322,-144 328,-150 328,-156 328,-156 328,-170 328,-170 328,-176 322,-182 316,-182"/>
+<text text-anchor="middle" x="267.5" y="-166.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">01 · mouse</text>
+<text text-anchor="middle" x="267.5" y="-153.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 15.1%</text>
+</g>
+<!-- root&#45;&gt;mouse -->
+<g id="edge1" class="edge">
+<title>root&#45;&gt;mouse</title>
+<path fill="none" stroke="#f3db42" stroke-width="6.2" d="M121.07,-163C145.5,-163 173.89,-163 199.08,-163"/>
+<polygon fill="#f3db42" stroke="#f3db42" stroke-width="6.2" points="199.28,-167.07 206.78,-163 199.28,-158.93 199.28,-167.07"/>
+<text text-anchor="middle" x="164" y="-165.8" font-family="DejaVu Sans" font-size="9.00">100.0%</text>
+</g>
+<!-- rabbit -->
+<g id="node3" class="node">
+<title>rabbit</title>
+<path fill="#49536c" stroke="black" d="M517,-589C517,-589 420,-589 420,-589 414,-589 408,-583 408,-577 408,-577 408,-563 408,-563 408,-557 414,-551 420,-551 420,-551 517,-551 517,-551 523,-551 529,-557 529,-563 529,-563 529,-577 529,-577 529,-583 523,-589 517,-589"/>
+<text text-anchor="middle" x="468.5" y="-573.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">02 · rabbit</text>
+<text text-anchor="middle" x="468.5" y="-560.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 18.7%</text>
+</g>
+<!-- mouse&#45;&gt;rabbit -->
+<g id="edge2" class="edge">
+<title>mouse&#45;&gt;rabbit</title>
+<path fill="none" stroke="#807f78" stroke-width="3.6" d="M277.83,-182.08C310.21,-248.31 417.78,-468.31 454.83,-544.08"/>
+<polygon fill="#807f78" stroke="#807f78" stroke-width="3.6" points="452.54,-545.37 458.19,-550.96 457.25,-543.07 452.54,-545.37"/>
+<text text-anchor="middle" x="368" y="-392.8" font-family="DejaVu Sans" font-size="9.00">48.0%</text>
+</g>
+<!-- boat -->
+<g id="node4" class="node">
+<title>boat</title>
+<path fill="#434e6c" stroke="black" d="M517,-386C517,-386 420,-386 420,-386 414,-386 408,-380 408,-374 408,-374 408,-360 408,-360 408,-354 414,-348 420,-348 420,-348 517,-348 517,-348 523,-348 529,-354 529,-360 529,-360 529,-374 529,-374 529,-380 523,-386 517,-386"/>
+<text text-anchor="middle" x="468.5" y="-370.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">03 · boat</text>
+<text text-anchor="middle" x="468.5" y="-357.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 15.9%</text>
+</g>
+<!-- mouse&#45;&gt;boat -->
+<g id="edge3" class="edge">
+<title>mouse&#45;&gt;boat</title>
+<path fill="none" stroke="#9e9676" stroke-width="4.32" d="M287.22,-182.19C323.45,-219.33 403.09,-300.97 443.28,-342.17"/>
+<polygon fill="#9e9676" stroke="#9e9676" stroke-width="4.32" points="441.42,-344.32 448.68,-347.71 445.48,-340.36 441.42,-344.32"/>
+<text text-anchor="middle" x="368" y="-279.8" font-family="DejaVu Sans" font-size="9.00">62.4%</text>
+</g>
+<!-- brother -->
+<g id="node5" class="node">
+<title>brother</title>
+<path fill="#47516c" stroke="black" d="M517,-212C517,-212 420,-212 420,-212 414,-212 408,-206 408,-200 408,-200 408,-186 408,-186 408,-180 414,-174 420,-174 420,-174 517,-174 517,-174 523,-174 529,-180 529,-186 529,-186 529,-200 529,-200 529,-206 523,-212 517,-212"/>
+<text text-anchor="middle" x="468.5" y="-196.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">04 · brother</text>
+<text text-anchor="middle" x="468.5" y="-183.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 17.9%</text>
+</g>
+<!-- mouse&#45;&gt;brother -->
+<g id="edge4" class="edge">
+<title>mouse&#45;&gt;brother</title>
+<path fill="none" stroke="#928d78" stroke-width="4.05" d="M328.21,-172C350.93,-175.43 376.98,-179.35 400.35,-182.88"/>
+<polygon fill="#928d78" stroke="#928d78" stroke-width="4.05" points="400.02,-185.51 407.84,-184.01 400.82,-180.26 400.02,-185.51"/>
+<text text-anchor="middle" x="368" y="-181.8" font-family="DejaVu Sans" font-size="9.00">57.0%</text>
+</g>
+<!-- fairy -->
+<g id="node13" class="node">
+<title>fairy</title>
+<path fill="#35456c" stroke="black" d="M513.5,-154C513.5,-154 423.5,-154 423.5,-154 417.5,-154 411.5,-148 411.5,-142 411.5,-142 411.5,-128 411.5,-128 411.5,-122 417.5,-116 423.5,-116 423.5,-116 513.5,-116 513.5,-116 519.5,-116 525.5,-122 525.5,-128 525.5,-128 525.5,-142 525.5,-142 525.5,-148 519.5,-154 513.5,-154"/>
+<text text-anchor="middle" x="468.5" y="-138.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">12 · fairy</text>
+<text text-anchor="middle" x="468.5" y="-125.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 9.9%</text>
+</g>
+<!-- mouse&#45;&gt;fairy -->
+<g id="edge12" class="edge">
+<title>mouse&#45;&gt;fairy</title>
+<path fill="none" stroke="#5e636f" stroke-width="2.67" d="M328.21,-154.6C351.97,-151.26 379.35,-147.4 403.52,-144"/>
+<polygon fill="#5e636f" stroke="#5e636f" stroke-width="2.67" points="404.18,-146.56 411.24,-142.92 403.45,-141.36 404.18,-146.56"/>
+<text text-anchor="middle" x="368" y="-152.8" font-family="DejaVu Sans" font-size="9.00">29.4%</text>
+</g>
+<!-- monkey -->
+<g id="node17" class="node">
+<title>monkey</title>
+<path fill="#444f6c" stroke="black" d="M517,-96C517,-96 420,-96 420,-96 414,-96 408,-90 408,-84 408,-84 408,-70 408,-70 408,-64 414,-58 420,-58 420,-58 517,-58 517,-58 523,-58 529,-64 529,-70 529,-70 529,-84 529,-84 529,-90 523,-96 517,-96"/>
+<text text-anchor="middle" x="468.5" y="-80.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">16 · monkey</text>
+<text text-anchor="middle" x="468.5" y="-67.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 16.2%</text>
+</g>
+<!-- mouse&#45;&gt;monkey -->
+<g id="edge16" class="edge">
+<title>mouse&#45;&gt;monkey</title>
+<path fill="none" stroke="#444f6c" stroke-width="2.01" d="M312.66,-143.91C343.32,-130.66 384.26,-112.97 416.34,-99.11"/>
+<polygon fill="#444f6c" stroke="#444f6c" stroke-width="2.01" points="417.62,-101.42 423.46,-96.03 415.53,-96.6 417.62,-101.42"/>
+<text text-anchor="middle" x="368" y="-127.8" font-family="DejaVu Sans" font-size="9.00">16.2%</text>
+</g>
+<!-- horse -->
+<g id="node24" class="node">
+<title>horse</title>
+<path fill="#4f576c" stroke="black" d="M517,-38C517,-38 420,-38 420,-38 414,-38 408,-32 408,-26 408,-26 408,-12 408,-12 408,-6 414,0 420,0 420,0 517,0 517,0 523,0 529,-6 529,-12 529,-12 529,-26 529,-26 529,-32 523,-38 517,-38"/>
+<text text-anchor="middle" x="468.5" y="-22.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">23 · horse</text>
+<text text-anchor="middle" x="468.5" y="-9.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 21.6%</text>
+</g>
+<!-- mouse&#45;&gt;horse -->
+<g id="edge23" class="edge">
+<title>mouse&#45;&gt;horse</title>
+<path fill="none" stroke="#4f576c" stroke-width="2.28" d="M288.58,-143.83C314.68,-119.56 362.33,-77.37 408,-48 411.38,-45.82 414.95,-43.7 418.6,-41.66"/>
+<polygon fill="#4f576c" stroke="#4f576c" stroke-width="2.28" points="419.87,-43.96 425.21,-38.07 417.36,-39.34 419.87,-43.96"/>
+<text text-anchor="middle" x="368" y="-87.8" font-family="DejaVu Sans" font-size="9.00">21.6%</text>
+</g>
+<!-- lion -->
+<g id="node12" class="node">
+<title>lion</title>
+<path fill="#4f576c" stroke="black" d="M718,-676C718,-676 621,-676 621,-676 615,-676 609,-670 609,-664 609,-664 609,-650 609,-650 609,-644 615,-638 621,-638 621,-638 718,-638 718,-638 724,-638 730,-644 730,-650 730,-650 730,-664 730,-664 730,-670 724,-676 718,-676"/>
+<text text-anchor="middle" x="669.5" y="-660.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">11 · lion</text>
+<text text-anchor="middle" x="669.5" y="-647.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 21.4%</text>
+</g>
+<!-- rabbit&#45;&gt;lion -->
+<g id="edge11" class="edge">
+<title>rabbit&#45;&gt;lion</title>
+<path fill="none" stroke="#4f576c" stroke-width="2.27" d="M513.17,-589.09C544.02,-602.58 585.45,-620.69 617.76,-634.82"/>
+<polygon fill="#4f576c" stroke="#4f576c" stroke-width="2.27" points="617.01,-637.35 624.93,-637.95 619.11,-632.54 617.01,-637.35"/>
+<text text-anchor="middle" x="569" y="-620.8" font-family="DejaVu Sans" font-size="9.00">21.4%</text>
+</g>
+<!-- elephant -->
+<g id="node20" class="node">
+<title>elephant</title>
+<path fill="#434e6c" stroke="black" d="M718,-618C718,-618 621,-618 621,-618 615,-618 609,-612 609,-606 609,-606 609,-592 609,-592 609,-586 615,-580 621,-580 621,-580 718,-580 718,-580 724,-580 730,-586 730,-592 730,-592 730,-606 730,-606 730,-612 724,-618 718,-618"/>
+<text text-anchor="middle" x="669.5" y="-602.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">19 · elephant</text>
+<text text-anchor="middle" x="669.5" y="-589.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 16.0%</text>
+</g>
+<!-- rabbit&#45;&gt;elephant -->
+<g id="edge19" class="edge">
+<title>rabbit&#45;&gt;elephant</title>
+<path fill="none" stroke="#434e6c" stroke-width="2" d="M529.21,-578.7C551.93,-582.01 577.98,-585.81 601.35,-589.21"/>
+<polygon fill="#434e6c" stroke="#434e6c" stroke-width="2" points="601.04,-591.82 608.84,-590.31 601.79,-586.63 601.04,-591.82"/>
+<text text-anchor="middle" x="569" y="-588.8" font-family="DejaVu Sans" font-size="9.00">16.0%</text>
+</g>
+<!-- dragon -->
+<g id="node22" class="node">
+<title>dragon</title>
+<path fill="#3c4a6c" stroke="black" d="M718,-560C718,-560 621,-560 621,-560 615,-560 609,-554 609,-548 609,-548 609,-534 609,-534 609,-528 615,-522 621,-522 621,-522 718,-522 718,-522 724,-522 730,-528 730,-534 730,-534 730,-548 730,-548 730,-554 724,-560 718,-560"/>
+<text text-anchor="middle" x="669.5" y="-544.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">21 · dragon</text>
+<text text-anchor="middle" x="669.5" y="-531.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 12.8%</text>
+</g>
+<!-- rabbit&#45;&gt;dragon -->
+<g id="edge21" class="edge">
+<title>rabbit&#45;&gt;dragon</title>
+<path fill="none" stroke="#3c4a6c" stroke-width="1.84" d="M529.21,-561.3C551.93,-557.99 577.98,-554.19 601.35,-550.79"/>
+<polygon fill="#3c4a6c" stroke="#3c4a6c" stroke-width="1.84" points="601.79,-553.37 608.84,-549.69 601.04,-548.18 601.79,-553.37"/>
+<text text-anchor="middle" x="569" y="-559.8" font-family="DejaVu Sans" font-size="9.00">12.8%</text>
+</g>
+<!-- duck -->
+<g id="node7" class="node">
+<title>duck</title>
+<path fill="#3b496c" stroke="black" d="M718,-502C718,-502 621,-502 621,-502 615,-502 609,-496 609,-490 609,-490 609,-476 609,-476 609,-470 615,-464 621,-464 621,-464 718,-464 718,-464 724,-464 730,-470 730,-476 730,-476 730,-490 730,-490 730,-496 724,-502 718,-502"/>
+<text text-anchor="middle" x="669.5" y="-486.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">06 · duck</text>
+<text text-anchor="middle" x="669.5" y="-473.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 12.1%</text>
+</g>
+<!-- boat&#45;&gt;duck -->
+<g id="edge6" class="edge">
+<title>boat&#45;&gt;duck</title>
+<path fill="none" stroke="#6b6d72" stroke-width="3.02" d="M498.1,-386.06C525.93,-404.32 569.67,-432.23 609,-454 612.86,-456.14 616.91,-458.29 620.99,-460.4"/>
+<polygon fill="#6b6d72" stroke="#6b6d72" stroke-width="3.02" points="620.01,-462.84 627.88,-463.9 622.39,-458.16 620.01,-462.84"/>
+<text text-anchor="middle" x="569" y="-440.8" font-family="DejaVu Sans" font-size="9.00">36.3%</text>
+</g>
+<!-- bicycle -->
+<g id="node10" class="node">
+<title>bicycle</title>
+<path fill="#48526c" stroke="black" d="M718,-444C718,-444 621,-444 621,-444 615,-444 609,-438 609,-432 609,-432 609,-418 609,-418 609,-412 615,-406 621,-406 621,-406 718,-406 718,-406 724,-406 730,-412 730,-418 730,-418 730,-432 730,-432 730,-438 724,-444 718,-444"/>
+<text text-anchor="middle" x="669.5" y="-428.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">09 · bicycle</text>
+<text text-anchor="middle" x="669.5" y="-415.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 18.0%</text>
+</g>
+<!-- boat&#45;&gt;bicycle -->
+<g id="edge9" class="edge">
+<title>boat&#45;&gt;bicycle</title>
+<path fill="none" stroke="#48526c" stroke-width="2.1" d="M529.21,-384.4C551.93,-391.03 577.98,-398.62 601.35,-405.43"/>
+<polygon fill="#48526c" stroke="#48526c" stroke-width="2.1" points="600.9,-408.03 608.84,-407.61 602.37,-402.99 600.9,-408.03"/>
+<text text-anchor="middle" x="569" y="-401.8" font-family="DejaVu Sans" font-size="9.00">18.0%</text>
+</g>
+<!-- train -->
+<g id="node14" class="node">
+<title>train</title>
+<path fill="#48526c" stroke="black" d="M718,-386C718,-386 621,-386 621,-386 615,-386 609,-380 609,-374 609,-374 609,-360 609,-360 609,-354 615,-348 621,-348 621,-348 718,-348 718,-348 724,-348 730,-354 730,-360 730,-360 730,-374 730,-374 730,-380 724,-386 718,-386"/>
+<text text-anchor="middle" x="669.5" y="-370.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">13 · train</text>
+<text text-anchor="middle" x="669.5" y="-357.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 18.2%</text>
+</g>
+<!-- boat&#45;&gt;train -->
+<g id="edge13" class="edge">
+<title>boat&#45;&gt;train</title>
+<path fill="none" stroke="#48526c" stroke-width="2.11" d="M529.21,-367C551.84,-367 577.75,-367 601.05,-367"/>
+<polygon fill="#48526c" stroke="#48526c" stroke-width="2.11" points="601.34,-369.63 608.84,-367 601.34,-364.38 601.34,-369.63"/>
+<text text-anchor="middle" x="569" y="-369.8" font-family="DejaVu Sans" font-size="9.00">18.2%</text>
+</g>
+<!-- plane -->
+<g id="node19" class="node">
+<title>plane</title>
+<path fill="#404c6c" stroke="black" d="M718,-328C718,-328 621,-328 621,-328 615,-328 609,-322 609,-316 609,-316 609,-302 609,-302 609,-296 615,-290 621,-290 621,-290 718,-290 718,-290 724,-290 730,-296 730,-302 730,-302 730,-316 730,-316 730,-322 724,-328 718,-328"/>
+<text text-anchor="middle" x="669.5" y="-312.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">18 · plane</text>
+<text text-anchor="middle" x="669.5" y="-299.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 14.6%</text>
+</g>
+<!-- boat&#45;&gt;plane -->
+<g id="edge18" class="edge">
+<title>boat&#45;&gt;plane</title>
+<path fill="none" stroke="#404c6c" stroke-width="1.93" d="M529.21,-349.6C551.93,-342.97 577.98,-335.38 601.35,-328.57"/>
+<polygon fill="#404c6c" stroke="#404c6c" stroke-width="1.93" points="602.37,-331.01 608.84,-326.39 600.9,-325.97 602.37,-331.01"/>
+<text text-anchor="middle" x="569" y="-343.8" font-family="DejaVu Sans" font-size="9.00">14.6%</text>
+</g>
+<!-- parent -->
+<g id="node6" class="node">
+<title>parent</title>
+<path fill="#48526c" stroke="black" d="M718,-270C718,-270 621,-270 621,-270 615,-270 609,-264 609,-258 609,-258 609,-244 609,-244 609,-238 615,-232 621,-232 621,-232 718,-232 718,-232 724,-232 730,-238 730,-244 730,-244 730,-258 730,-258 730,-264 724,-270 718,-270"/>
+<text text-anchor="middle" x="669.5" y="-254.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">05 · parent</text>
+<text text-anchor="middle" x="669.5" y="-241.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 18.3%</text>
+</g>
+<!-- brother&#45;&gt;parent -->
+<g id="edge5" class="edge">
+<title>brother&#45;&gt;parent</title>
+<path fill="none" stroke="#5b606e" stroke-width="2.57" d="M529.21,-210.4C551.93,-217.03 577.98,-224.62 601.35,-231.43"/>
+<polygon fill="#5b606e" stroke="#5b606e" stroke-width="2.57" points="600.9,-234.03 608.84,-233.61 602.37,-228.99 600.9,-234.03"/>
+<text text-anchor="middle" x="569" y="-227.8" font-family="DejaVu Sans" font-size="9.00">27.4%</text>
+</g>
+<!-- sister -->
+<g id="node8" class="node">
+<title>sister</title>
+<path fill="#4a536c" stroke="black" d="M718,-212C718,-212 621,-212 621,-212 615,-212 609,-206 609,-200 609,-200 609,-186 609,-186 609,-180 615,-174 621,-174 621,-174 718,-174 718,-174 724,-174 730,-180 730,-186 730,-186 730,-200 730,-200 730,-206 724,-212 718,-212"/>
+<text text-anchor="middle" x="669.5" y="-196.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">07 · sister</text>
+<text text-anchor="middle" x="669.5" y="-183.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 19.2%</text>
+</g>
+<!-- brother&#45;&gt;sister -->
+<g id="edge7" class="edge">
+<title>brother&#45;&gt;sister</title>
+<path fill="none" stroke="#4a536c" stroke-width="2.16" d="M529.21,-193C551.84,-193 577.75,-193 601.05,-193"/>
+<polygon fill="#4a536c" stroke="#4a536c" stroke-width="2.16" points="601.34,-195.63 608.84,-193 601.34,-190.38 601.34,-195.63"/>
+<text text-anchor="middle" x="569" y="-195.8" font-family="DejaVu Sans" font-size="9.00">19.2%</text>
+</g>
+<!-- pet -->
+<g id="node9" class="node">
+<title>pet</title>
+<path fill="#424e6c" stroke="black" d="M718,-154C718,-154 621,-154 621,-154 615,-154 609,-148 609,-142 609,-142 609,-128 609,-128 609,-122 615,-116 621,-116 621,-116 718,-116 718,-116 724,-116 730,-122 730,-128 730,-128 730,-142 730,-142 730,-148 724,-154 718,-154"/>
+<text text-anchor="middle" x="669.5" y="-138.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">08 · pet</text>
+<text text-anchor="middle" x="669.5" y="-125.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 15.5%</text>
+</g>
+<!-- brother&#45;&gt;pet -->
+<g id="edge8" class="edge">
+<title>brother&#45;&gt;pet</title>
+<path fill="none" stroke="#424e6c" stroke-width="1.97" d="M529.21,-175.6C551.93,-168.97 577.98,-161.38 601.35,-154.57"/>
+<polygon fill="#424e6c" stroke="#424e6c" stroke-width="1.97" points="602.37,-157.01 608.84,-152.39 600.9,-151.97 602.37,-157.01"/>
+<text text-anchor="middle" x="569" y="-169.8" font-family="DejaVu Sans" font-size="9.00">15.5%</text>
+</g>
+<!-- neighbor -->
+<g id="node21" class="node">
+<title>neighbor</title>
+<path fill="#4b546c" stroke="black" d="M718,-96C718,-96 621,-96 621,-96 615,-96 609,-90 609,-84 609,-84 609,-70 609,-70 609,-64 615,-58 621,-58 621,-58 718,-58 718,-58 724,-58 730,-64 730,-70 730,-70 730,-84 730,-84 730,-90 724,-96 718,-96"/>
+<text text-anchor="middle" x="669.5" y="-80.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">20 · neighbor</text>
+<text text-anchor="middle" x="669.5" y="-67.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 19.4%</text>
+</g>
+<!-- brother&#45;&gt;neighbor -->
+<g id="edge20" class="edge">
+<title>brother&#45;&gt;neighbor</title>
+<path fill="none" stroke="#4b546c" stroke-width="2.17" d="M511.35,-173.9C517.38,-170.78 523.42,-167.43 529,-164 540.89,-156.69 542.75,-153.26 554,-145 578.15,-127.26 583.22,-121.28 609,-106 612.58,-103.88 616.34,-101.77 620.16,-99.72"/>
+<polygon fill="#4b546c" stroke="#4b546c" stroke-width="2.17" points="621.64,-101.91 627.07,-96.11 619.21,-97.26 621.64,-101.91"/>
+<text text-anchor="middle" x="569" y="-147.8" font-family="DejaVu Sans" font-size="9.00">19.4%</text>
+</g>
+<!-- grandma -->
+<g id="node11" class="node">
+<title>grandma</title>
+<path fill="#3c4a6c" stroke="black" d="M919,-270C919,-270 822,-270 822,-270 816,-270 810,-264 810,-258 810,-258 810,-244 810,-244 810,-238 816,-232 822,-232 822,-232 919,-232 919,-232 925,-232 931,-238 931,-244 931,-244 931,-258 931,-258 931,-264 925,-270 919,-270"/>
+<text text-anchor="middle" x="870.5" y="-254.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">10 · grandma</text>
+<text text-anchor="middle" x="870.5" y="-241.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 12.6%</text>
+</g>
+<!-- parent&#45;&gt;grandma -->
+<g id="edge10" class="edge">
+<title>parent&#45;&gt;grandma</title>
+<path fill="none" stroke="#3c4a6c" stroke-width="1.83" d="M730.21,-251C752.84,-251 778.75,-251 802.05,-251"/>
+<polygon fill="#3c4a6c" stroke="#3c4a6c" stroke-width="1.83" points="802.34,-253.63 809.84,-251 802.34,-248.38 802.34,-253.63"/>
+<text text-anchor="middle" x="770" y="-253.8" font-family="DejaVu Sans" font-size="9.00">12.6%</text>
+</g>
+<!-- cow -->
+<g id="node15" class="node">
+<title>cow</title>
+<path fill="#3b496c" stroke="black" d="M919,-525C919,-525 822,-525 822,-525 816,-525 810,-519 810,-513 810,-513 810,-499 810,-499 810,-493 816,-487 822,-487 822,-487 919,-487 919,-487 925,-487 931,-493 931,-499 931,-499 931,-513 931,-513 931,-519 925,-525 919,-525"/>
+<text text-anchor="middle" x="870.5" y="-509.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">14 · cow</text>
+<text text-anchor="middle" x="870.5" y="-496.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 11.9%</text>
+</g>
+<!-- duck&#45;&gt;cow -->
+<g id="edge14" class="edge">
+<title>duck&#45;&gt;cow</title>
+<path fill="none" stroke="#3b496c" stroke-width="1.8" d="M730.21,-489.9C752.93,-492.53 778.98,-495.54 802.35,-498.24"/>
+<polygon fill="#3b496c" stroke="#3b496c" stroke-width="1.8" points="802.08,-500.85 809.84,-499.1 802.69,-495.64 802.08,-500.85"/>
+<text text-anchor="middle" x="770" y="-497.8" font-family="DejaVu Sans" font-size="9.00">11.9%</text>
+</g>
+<!-- wheel -->
+<g id="node16" class="node">
+<title>wheel</title>
+<path fill="#3e4b6c" stroke="black" d="M919,-467C919,-467 822,-467 822,-467 816,-467 810,-461 810,-455 810,-455 810,-441 810,-441 810,-435 816,-429 822,-429 822,-429 919,-429 919,-429 925,-429 931,-435 931,-441 931,-441 931,-455 931,-455 931,-461 925,-467 919,-467"/>
+<text text-anchor="middle" x="870.5" y="-451.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">15 · wheel</text>
+<text text-anchor="middle" x="870.5" y="-438.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 13.6%</text>
+</g>
+<!-- duck&#45;&gt;wheel -->
+<g id="edge15" class="edge">
+<title>duck&#45;&gt;wheel</title>
+<path fill="none" stroke="#4b546c" stroke-width="2.19" d="M730.21,-472.5C752.93,-468.5 778.98,-463.92 802.35,-459.81"/>
+<polygon fill="#4b546c" stroke="#4b546c" stroke-width="2.19" points="802.9,-462.38 809.84,-458.49 801.99,-457.21 802.9,-462.38"/>
+<text text-anchor="middle" x="770" y="-469.8" font-family="DejaVu Sans" font-size="9.00">19.7%</text>
+</g>
+<!-- princess -->
+<g id="node18" class="node">
+<title>princess</title>
+<path fill="#434e6c" stroke="black" d="M718,-38C718,-38 621,-38 621,-38 615,-38 609,-32 609,-26 609,-26 609,-12 609,-12 609,-6 615,0 621,0 621,0 718,0 718,0 724,0 730,-6 730,-12 730,-12 730,-26 730,-26 730,-32 724,-38 718,-38"/>
+<text text-anchor="middle" x="669.5" y="-22.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">17 · princess</text>
+<text text-anchor="middle" x="669.5" y="-9.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 15.9%</text>
+</g>
+<!-- fairy&#45;&gt;princess -->
+<g id="edge17" class="edge">
+<title>fairy&#45;&gt;princess</title>
+<path fill="none" stroke="#535a6d" stroke-width="2.38" d="M517.28,-115.92C521.57,-113.01 525.57,-109.72 529,-106 549.7,-83.55 530.61,-61.63 554,-42 567.2,-30.92 584.25,-24.66 601.15,-21.25"/>
+<polygon fill="#535a6d" stroke="#535a6d" stroke-width="2.38" points="601.96,-23.77 608.88,-19.87 601.04,-18.6 601.96,-23.77"/>
+<text text-anchor="middle" x="569" y="-44.8" font-family="DejaVu Sans" font-size="9.00">23.7%</text>
+</g>
+<!-- bus -->
+<g id="node25" class="node">
+<title>bus</title>
+<path fill="#36466c" stroke="black" d="M1120,-467C1120,-467 1023,-467 1023,-467 1017,-467 1011,-461 1011,-455 1011,-455 1011,-441 1011,-441 1011,-435 1017,-429 1023,-429 1023,-429 1120,-429 1120,-429 1126,-429 1132,-435 1132,-441 1132,-441 1132,-455 1132,-455 1132,-461 1126,-467 1120,-467"/>
+<text text-anchor="middle" x="1071.5" y="-451.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">24 · bus</text>
+<text text-anchor="middle" x="1071.5" y="-438.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 10.5%</text>
+</g>
+<!-- wheel&#45;&gt;bus -->
+<g id="edge24" class="edge">
+<title>wheel&#45;&gt;bus</title>
+<path fill="none" stroke="#36466c" stroke-width="1.72" d="M931.21,-448C953.84,-448 979.75,-448 1003.05,-448"/>
+<polygon fill="#36466c" stroke="#36466c" stroke-width="1.72" points="1003.34,-450.63 1010.84,-448 1003.34,-445.38 1003.34,-450.63"/>
+<text text-anchor="middle" x="971" y="-450.8" font-family="DejaVu Sans" font-size="9.00">10.5%</text>
+</g>
+<!-- queen -->
+<g id="node23" class="node">
+<title>queen</title>
+<path fill="#3b496c" stroke="black" d="M919,-38C919,-38 822,-38 822,-38 816,-38 810,-32 810,-26 810,-26 810,-12 810,-12 810,-6 816,0 822,0 822,0 919,0 919,0 925,0 931,-6 931,-12 931,-12 931,-26 931,-26 931,-32 925,-38 919,-38"/>
+<text text-anchor="middle" x="870.5" y="-22.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">22 · queen</text>
+<text text-anchor="middle" x="870.5" y="-9.4" font-family="DejaVu Sans" font-size="12.00" fill="#ffffff">candidate 12.2%</text>
+</g>
+<!-- princess&#45;&gt;queen -->
+<g id="edge22" class="edge">
+<title>princess&#45;&gt;queen</title>
+<path fill="none" stroke="#3b496c" stroke-width="1.81" d="M730.21,-19C752.84,-19 778.75,-19 802.05,-19"/>
+<polygon fill="#3b496c" stroke="#3b496c" stroke-width="1.81" points="802.34,-21.63 809.84,-19 802.34,-16.38 802.34,-21.63"/>
+<text text-anchor="middle" x="770" y="-21.8" font-family="DejaVu Sans" font-size="9.00">12.2%</text>
+</g>
+</g>
+</svg>

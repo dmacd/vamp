@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 import apm.data.text.tinyworlds_nouns_v1.evaluation as shared_evaluation
@@ -35,6 +36,11 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
 )
 from apm.data.text.tinyworlds_nouns_v2.baseline_stagewise import (
     summarize_baseline_stagewise_rows,
+)
+from apm.data.text.tinyworlds_nouns_v2.compact_stagewise import (
+    COMPACT_STAGEWISE_ROW_FORMAT,
+    REPORT_STAGEWISE_CONDITIONS,
+    validate_compact_stagewise_ledger,
 )
 from apm.data.text.tinyworlds_nouns_v2.full_finetune_stagewise import (
     summarize_full_finetune_stagewise_rows,
@@ -368,6 +374,8 @@ def test_report_rendering_is_byte_stable_after_resume(tmp_path: Path) -> None:
     assert html == render_report_html(data)
     assert "sequential full fine-tune" in markdown
     assert "Sequential full fine-tune" in html
+    assert "compact top-eight EBT-H" in markdown
+    assert "compact top-eight EBT-H" in html
     v2_report._publish_full_finetune_stagewise_csvs(tmp_path, data)
     published = (tmp_path / "full-finetune-stagewise-summary.csv").read_bytes()
     v2_report._publish_full_finetune_stagewise_csvs(tmp_path, data)
@@ -489,6 +497,88 @@ def test_stagewise_ledger_resume_and_tamper_rejection(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="route metadata"):
         stagewise.validate_stagewise_ledger(
             ledger,
+            partition,
+            (adaptation,),
+            require_complete=True,
+            entries_by_task=entries,
+        )
+
+
+def test_compact_stagewise_ledger_resume_and_tamper_rejection(
+    tmp_path: Path,
+) -> None:
+    story_id = sha256(b"compact-stagewise-ledger-story").hexdigest()
+    contract_sha256 = "3" * 64
+    checksum = "4" * 64
+    graph = add_memory_node(
+        init_memory_graph(NodeId("root")),
+        NodeId("mouse"),
+        NodeId("root"),
+        TaskId("mouse"),
+        1,
+        1,
+    )
+    adaptation = SimpleNamespace(
+        address_book=SimpleNamespace(
+            keys=np.asarray(((1.0, 0.0), (0.0, 1.0)), dtype=np.float32)
+        ),
+        task_order=("mouse",),
+        tensor_checksum=checksum,
+        vamp_graph=graph,
+    )
+    partition = SimpleNamespace(task_ids=("mouse",))
+    entries = {
+        "mouse": (
+            StoryIndexEntry(story_id, 0, 0, 1, 0, 2),
+        )
+    }
+    core = {
+        "candidate_node_indices": [0, 1],
+        "candidate_width": 2,
+        "compact_stagewise_contract_sha256": contract_sha256,
+        "format": COMPACT_STAGEWISE_ROW_FORMAT,
+        "gathered_edge_count": 1,
+        "introduced_task": "mouse",
+        "oracle_match": True,
+        "oracle_node_index": 1,
+        "oracle_suffix_mean_nll": 1.0,
+        "physical_edge_capacity": 4,
+        "prefix_token_count": 2,
+        "prefix_width_bucket": 32,
+        "regret_vs_oracle": 0.0,
+        "selected_node": "mouse",
+        "selected_node_index": 1,
+        "selected_path": ["root", "mouse"],
+        "stage_index": 1,
+        "stage_tensor_checksum": checksum,
+        "story_id": story_id,
+        "suffix_mean_nll": 1.0,
+        "suffix_token_count": 2,
+        "suffix_total_nll": 2.0,
+        "task_noun": "mouse",
+    }
+    record = {**core, "result_sha256": record_sha256(core)}
+    ledger = tmp_path / "compact-stagewise.jsonl"
+    ledger.write_bytes(canonical_json_bytes(record))
+    assert validate_compact_stagewise_ledger(
+        ledger,
+        contract_sha256,
+        partition,
+        (adaptation,),
+        require_complete=True,
+        entries_by_task=entries,
+    ) == {("1", "mouse", story_id)}
+
+    tampered = {**record, "selected_path": ["root"]}
+    tampered_core = {
+        key: value for key, value in tampered.items() if key != "result_sha256"
+    }
+    tampered["result_sha256"] = record_sha256(tampered_core)
+    ledger.write_bytes(canonical_json_bytes(tampered))
+    with pytest.raises(ValueError, match="route metadata"):
+        validate_compact_stagewise_ledger(
+            ledger,
+            contract_sha256,
             partition,
             (adaptation,),
             require_complete=True,
@@ -675,14 +765,7 @@ def _stagewise_fixture_summary() -> dict[str, object]:
         exhaustive_match: bool,
     ) -> dict[str, object]:
         results = {}
-        for condition in (
-            "base",
-            "oracle",
-            "vamp_exhaustive",
-            "vamp_hopfield",
-            "vamp_ebt_uniform",
-            "vamp_ebt_hopfield",
-        ):
+        for condition in REPORT_STAGEWISE_CONDITIONS:
             mean_nll = (
                 oracle_nll + 0.5
                 if condition == "base"
@@ -713,6 +796,7 @@ def _stagewise_fixture_summary() -> dict[str, object]:
             row(2, "boat", 2.0, 2.2, True),
         ),
         task_ids,
+        conditions=REPORT_STAGEWISE_CONDITIONS,
     )
 
 

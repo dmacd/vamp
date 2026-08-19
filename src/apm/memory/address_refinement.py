@@ -13,6 +13,11 @@ import numpy as np
 import optax
 
 from apm.continual.language_tasks import RouterBatch
+from apm.lm.compact_lora_memory import (
+    CompactLoraMemory,
+    compact_node_weights_to_edge_coefficients,
+    validate_compact_lora_memory,
+)
 from apm.lm.config import GptNeoConfig
 from apm.lm.gpt_neo import apply_gpt_neo
 from apm.lm.lora import LoraConfig
@@ -91,11 +96,26 @@ class EbtAddressResult(NamedTuple):
     edge_coefficient_trace: jax.Array
 
 
+class CompactEbtAddressResult(NamedTuple):
+    """EBT results in candidate and physically gathered edge coordinates."""
+
+    final_candidate_logits: jax.Array
+    candidate_probabilities: jax.Array
+    compact_edge_coefficients: jax.Array
+    selected_candidate_indices: jax.Array
+    selected_node_indices: jax.Array
+    soft_mixture_nll: jax.Array
+    hard_node_nll: jax.Array
+    objective_trace: jax.Array
+    candidate_probability_trace: jax.Array
+    compact_edge_coefficient_trace: jax.Array
+
+
 _PrefixNllFunction = Callable[
     [
         GptNeoParams,
         GptNeoConfig,
-        PackedLoraMemory,
+        PackedLoraMemory | CompactLoraMemory,
         LoraConfig,
         RouterBatch,
         jax.Array,
@@ -162,6 +182,36 @@ def soft_mixture_prefix_nll(
     )
 
 
+def compact_soft_mixture_prefix_nll(
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    compact_memory: CompactLoraMemory,
+    lora_config: LoraConfig,
+    prefix_batch: RouterBatch,
+    candidate_probabilities: jax.Array,
+) -> jax.Array:
+    """Return prefix NLL while executing only per-row gathered edge factors."""
+    probabilities = jnp.asarray(candidate_probabilities, dtype=jnp.float32)
+    if probabilities.shape != compact_memory.candidate_node_indices.shape:
+        raise ValueError(
+            "candidate_probabilities must match compact candidate nodes"
+        )
+    frozen_base = jax.tree_util.tree_map(jax.lax.stop_gradient, base_params)
+    frozen_memory = jax.tree_util.tree_map(jax.lax.stop_gradient, compact_memory)
+    edge_coefficients = compact_node_weights_to_edge_coefficients(
+        probabilities,
+        frozen_memory,
+    )
+    return _prefix_nll_for_edge_coefficients(
+        frozen_base,
+        model_config,
+        frozen_memory,
+        lora_config,
+        prefix_batch,
+        edge_coefficients,
+    )
+
+
 @partial(
     jax.jit,
     static_argnames=(
@@ -175,7 +225,7 @@ def _optimize_node_logits(
     starting_logits: jax.Array,
     candidate_mask: jax.Array,
     current_base: GptNeoParams,
-    current_memory: PackedLoraMemory,
+    current_memory: PackedLoraMemory | CompactLoraMemory,
     current_batch: RouterBatch,
     *,
     model_config: GptNeoConfig,
@@ -343,10 +393,135 @@ def refine_ebt_address(
     )
 
 
+def refine_compact_ebt_address(
+    base_params: GptNeoParams,
+    model_config: GptNeoConfig,
+    compact_memory: CompactLoraMemory,
+    lora_config: LoraConfig,
+    prefix_batch: RouterBatch,
+    hopfield_result: HopfieldAddressResult,
+    config: EbtConfig = EbtConfig(initialization="hopfield_top_k"),
+) -> CompactEbtAddressResult:
+    """Optimize only retrieved candidate logits over physically gathered edges."""
+    if not isinstance(prefix_batch, RouterBatch):
+        raise TypeError("prefix_batch must be a RouterBatch")
+    if not isinstance(config, EbtConfig):
+        raise TypeError("config must be an EbtConfig")
+    if config.initialization != "hopfield_top_k":
+        raise ValueError("compact EBT requires Hopfield top-k initialization")
+    validate_compact_lora_memory(compact_memory)
+    batch_size, candidate_count = compact_memory.candidate_node_indices.shape
+    if prefix_batch.input_ids.shape[0] != batch_size:
+        raise ValueError("compact memory and prefix batch must share a batch size")
+    if np.any(np.sum(prefix_batch.loss_mask, axis=-1) == 0):
+        raise ValueError("every prefix row must enable at least one loss token")
+    full_probabilities = np.asarray(
+        hopfield_result.node_probabilities,
+        dtype=np.float32,
+    )
+    top_k_indices = np.asarray(hopfield_result.top_k_indices)
+    candidates = np.asarray(compact_memory.candidate_node_indices, dtype=np.int32)
+    if (
+        full_probabilities.ndim != 2
+        or full_probabilities.shape[0] != batch_size
+        or top_k_indices.ndim != 2
+        or top_k_indices.shape[0] != batch_size
+        or top_k_indices.shape[1] < candidate_count
+        or not np.array_equal(top_k_indices[:, :candidate_count], candidates)
+    ):
+        raise ValueError("compact candidates must be the stable Hopfield top-k prefix")
+    if (
+        np.any(~np.isfinite(full_probabilities))
+        or np.any(full_probabilities < 0.0)
+        or not np.allclose(np.sum(full_probabilities, axis=-1), 1.0, atol=1e-6)
+    ):
+        raise ValueError("Hopfield probabilities must be finite and normalized")
+    candidate_probabilities = np.take_along_axis(
+        full_probabilities,
+        candidates,
+        axis=1,
+    )
+    starting_logits = np.log(
+        np.maximum(candidate_probabilities, np.finfo(np.float32).tiny)
+    ).astype(np.float32)
+    candidate_mask = jnp.asarray(
+        compact_memory.valid_candidate_mask,
+        dtype=jnp.bool_,
+    )
+    frozen_base = jax.tree_util.tree_map(jax.lax.stop_gradient, base_params)
+    frozen_memory = jax.tree_util.tree_map(jax.lax.stop_gradient, compact_memory)
+    optimized_logits, objective_trace, candidate_logit_trace = _optimize_node_logits(
+        jnp.asarray(starting_logits, dtype=jnp.float32),
+        candidate_mask,
+        frozen_base,
+        frozen_memory,
+        prefix_batch,
+        model_config=model_config,
+        lora_config=lora_config,
+        config=config,
+        objective_dependencies=(compact_soft_mixture_prefix_nll, apply_gpt_neo),
+    )
+    final_logits = jnp.where(
+        candidate_mask,
+        optimized_logits,
+        jnp.asarray(-jnp.inf, dtype=jnp.float32),
+    ).astype(jnp.float32)
+    probability_trace = jax.vmap(
+        lambda logits: masked_node_probabilities(logits, candidate_mask, config.tau)
+    )(candidate_logit_trace).astype(jnp.float32)
+    edge_trace = jax.vmap(
+        lambda weights: compact_node_weights_to_edge_coefficients(
+            weights,
+            frozen_memory,
+        )
+    )(probability_trace).astype(jnp.float32)
+    final_probabilities = probability_trace[-1]
+    final_edge_coefficients = edge_trace[-1]
+    selected_candidates = jnp.argmax(final_probabilities, axis=-1).astype(jnp.int32)
+    rows = jnp.arange(batch_size, dtype=jnp.int32)
+    selected_nodes = compact_memory.candidate_node_indices[
+        rows,
+        selected_candidates,
+    ].astype(jnp.int32)
+    soft_nll = compact_soft_mixture_prefix_nll(
+        frozen_base,
+        model_config,
+        frozen_memory,
+        lora_config,
+        prefix_batch,
+        final_probabilities,
+    ).astype(jnp.float32)
+    hard_probabilities = jax.nn.one_hot(
+        selected_candidates,
+        candidate_count,
+        dtype=jnp.float32,
+    )
+    hard_nll = compact_soft_mixture_prefix_nll(
+        frozen_base,
+        model_config,
+        frozen_memory,
+        lora_config,
+        prefix_batch,
+        hard_probabilities,
+    ).astype(jnp.float32)
+    return CompactEbtAddressResult(
+        final_candidate_logits=final_logits,
+        candidate_probabilities=final_probabilities,
+        compact_edge_coefficients=final_edge_coefficients,
+        selected_candidate_indices=selected_candidates,
+        selected_node_indices=selected_nodes,
+        soft_mixture_nll=soft_nll,
+        hard_node_nll=hard_nll,
+        objective_trace=objective_trace.astype(jnp.float32),
+        candidate_probability_trace=probability_trace,
+        compact_edge_coefficient_trace=edge_trace,
+    )
+
+
 def _prefix_nll_for_edge_coefficients(
     base_params: GptNeoParams,
     model_config: GptNeoConfig,
-    packed_memory: PackedLoraMemory,
+    packed_memory: PackedLoraMemory | CompactLoraMemory,
     lora_config: LoraConfig,
     prefix_batch: RouterBatch,
     edge_coefficients: jax.Array,

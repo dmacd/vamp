@@ -70,7 +70,7 @@ class LoraEdge(NamedTuple):
 
 
 class LoraProjectionBank(NamedTuple):
-    """Corresponding projection factors stacked on a leading edge axis."""
+    """Projection factors on shared `[edge]` or compact `[batch, edge]` axes."""
 
     left: jax.Array
     right: jax.Array
@@ -171,14 +171,28 @@ def apply_lora_linear(
     if not target_enabled:
         return base_output
     _validate_apply_shapes(inputs, projection_bank, edge_coefficients)
-    edge_hidden = jnp.einsum(
-        "...i,eir->...er",
-        inputs.astype(jnp.float32),
-        projection_bank.left,
-    )
+    if projection_bank.left.ndim == 3:
+        edge_hidden = jnp.einsum(
+            "...i,eir->...er",
+            inputs.astype(jnp.float32),
+            projection_bank.left,
+        )
+    else:
+        edge_hidden = jnp.einsum(
+            "b...i,beir->b...er",
+            inputs.astype(jnp.float32),
+            projection_bank.left,
+        )
     if edge_coefficients.ndim == 1:
         update = jnp.einsum(
             "...er,ero,e->...o",
+            edge_hidden,
+            projection_bank.right,
+            edge_coefficients,
+        )
+    elif projection_bank.right.ndim == 4:
+        update = jnp.einsum(
+            "b...er,bero,be->b...o",
             edge_hidden,
             projection_bank.right,
             edge_coefficients,
@@ -387,10 +401,26 @@ def _validate_apply_shapes(
     projection_bank: LoraProjectionBank,
     edge_coefficients: jax.Array,
 ) -> None:
-    if projection_bank.left.ndim != 3 or projection_bank.right.ndim != 3:
-        raise ValueError("LoRA projection bank factors must each have rank three")
-    edge_count, input_size, rank = projection_bank.left.shape
-    right_edge_count, right_rank, _ = projection_bank.right.shape
+    if projection_bank.left.ndim not in (3, 4) or (
+        projection_bank.right.ndim != projection_bank.left.ndim
+    ):
+        raise ValueError(
+            "LoRA projection bank factors must share rank three or four"
+        )
+    if projection_bank.left.ndim == 3:
+        edge_count, input_size, rank = projection_bank.left.shape
+        right_edge_count, right_rank, _ = projection_bank.right.shape
+    else:
+        batch_count, edge_count, input_size, rank = projection_bank.left.shape
+        right_batch_count, right_edge_count, right_rank, _ = (
+            projection_bank.right.shape
+        )
+        if batch_count != right_batch_count:
+            raise ValueError("batched LoRA factor banks must share a batch size")
+        if inputs.ndim < 2 or inputs.shape[0] != batch_count:
+            raise ValueError("batched LoRA factors must match the input batch")
+        if edge_coefficients.ndim != 2 or edge_coefficients.shape[0] != batch_count:
+            raise ValueError("batched LoRA factors require per-row edge coefficients")
     if (edge_count, rank) != (right_edge_count, right_rank):
         raise ValueError("LoRA projection bank factor shapes are incompatible")
     if inputs.shape[-1] != input_size:

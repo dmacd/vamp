@@ -41,6 +41,13 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
 from apm.data.text.tinyworlds_nouns_v2.baseline_stagewise import (
     summarize_baseline_stagewise_ledger,
 )
+from apm.data.text.tinyworlds_nouns_v2.compact_stagewise import (
+    COMPACT_STAGEWISE_CONDITION,
+    COMPACT_STAGEWISE_LABEL,
+    REPORT_ROUTED_CONDITIONS,
+    REPORT_STAGEWISE_CONDITIONS,
+    summarize_stagewise_with_compact_ledger,
+)
 from apm.data.text.tinyworlds_nouns_v2.full_finetune import FullFinetuneStage
 from apm.data.text.tinyworlds_nouns_v2.full_finetune_stagewise import (
     summarize_full_finetune_stagewise_ledger,
@@ -49,7 +56,6 @@ from apm.data.text.tinyworlds_nouns_v2.report_plots import (
     render_dependency_graph_svg,
     render_line_chart_svg,
 )
-from apm.data.text.tinyworlds_nouns_v2.stagewise import summarize_stagewise_ledger
 
 
 def publish_nouns_v2_report(
@@ -61,6 +67,7 @@ def publish_nouns_v2_report(
     whole_story_path: str | Path,
     generation_path: str | Path,
     stagewise_path: str | Path,
+    compact_stagewise_path: str | Path,
     baseline_stagewise_path: str | Path,
     full_finetune_stagewise_path: str | Path,
     result_root: str | Path,
@@ -79,8 +86,9 @@ def publish_nouns_v2_report(
         raise ValueError("nouns-v2 reporting requires every VAMP stage")
     adaptation = adaptations[-1]
     _validate_coverage(partition, whole_rows, generation_rows, judge_rows)
-    continual_learning = summarize_stagewise_ledger(
+    continual_learning = summarize_stagewise_with_compact_ledger(
         stagewise_path,
+        compact_stagewise_path,
         partition,
         adaptations,
     )
@@ -355,8 +363,11 @@ def render_report_markdown(data: dict[str, object]) -> str:
         f"The audit contains {int(continual['row_count']):,} midpoint-prefix "
         "task/story/stage cases. Every task is measured when introduced and after "
         "every later stage. The stored oracle follows that task's immutable VAMP "
-        "node; exhaustive, Hopfield, and both EBT variants are task-free routers "
-        "over the graph available at that stage.",
+        "node; exhaustive, Hopfield, dense EBT, and compact top-eight EBT-H are "
+        "task-free routers over the graph available at that stage. The compact "
+        "router scores every canonical stored full-probe centroid, retains at "
+        "most eight node paths, and physically executes only their gathered "
+        "LoRA edges. Through stage seven it retains every available node.",
         "",
         f"The largest absolute stored-oracle NLL drift is "
         f"{float(continual['oracle_max_absolute_drift']):.6g}. Forgetting below is "
@@ -369,14 +380,14 @@ def render_report_markdown(data: dict[str, object]) -> str:
         "|---|---:|---:|---:|---:|---:|---:|---:|",
         *(
             _continual_markdown_row(condition, continual)
-            for condition in CONDITIONS
+            for condition in REPORT_STAGEWISE_CONDITIONS
         ),
         "",
         "<details>",
         "<summary>All 24 VAMP stage aggregates</summary>",
         "",
-        "| stage | new task | retained stories | exhaustive | Hopfield | EBT uniform | EBT Hopfield | oracle NLL |",
-        "|---:|---|---:|---:|---:|---:|---:|---:|",
+        "| stage | new task | retained stories | exhaustive | Hopfield | EBT uniform | EBT Hopfield | compact top-8 EBT-H | oracle NLL |",
+        "|---:|---|---:|---:|---:|---:|---:|---:|---:|",
         *(
             _stagewise_markdown_row(_object(raw, "stage summary"))
             for raw in _list(continual["stages"], "stage summaries")
@@ -389,7 +400,9 @@ def render_report_markdown(data: dict[str, object]) -> str:
         "`full-finetune-stagewise-task-metrics.csv`; "
         "the complete stage curves are in `stagewise-summary.csv` and "
         "`baseline-stagewise-summary.csv`, and "
-        "`full-finetune-stagewise-summary.csv`.",
+        "`full-finetune-stagewise-summary.csv`. The compact rows and their "
+        "immutable source contract are in `compact-stagewise-cl.jsonl` and "
+        "`compact-stagewise-contract.json`.",
         "",
         "## Whole-story NLL and routing",
         "",
@@ -503,7 +516,7 @@ def render_report_html(data: dict[str, object]) -> str:
             condition,
             _object(continual_conditions[condition], condition),
         )
-        for condition in CONDITIONS
+        for condition in REPORT_STAGEWISE_CONDITIONS
     )
     stage_rows = "".join(
         _stagewise_html_row(_object(raw, "stage summary"))
@@ -534,7 +547,7 @@ def render_report_html(data: dict[str, object]) -> str:
 <details class="card" open><summary>Disjoint construction</summary><p>Zero selected concepts → base; exactly one → its sole task; two or more → permanent exclusion. The base universe covers {float(base['universe_share']):.2%} of original training; its optimizer-visible share after the internal holdout is {float(base['optimizer_share']):.2%}.</p></details>
 <details class="card" open><summary>Learned 24-stage VAMP dependency graph</summary><div class="visual">{graph_svg}</div><details><summary>Edge list</summary><ul>{graph_list}</ul></details></details>
 <details class="card" open><summary>Sequential controls, independent adapters, and VAMP</summary><p>One sequential control continually overwrites a rank-eight LoRA; the other fine-tunes every GPT-Neo parameter. Neither receives task identity. The independent control uses a fresh task-matched root LoRA and is a task-aware ceiling. Every row uses the same base, task order, 2,000-update budget, validation stories, midpoint split, and true suffix. Adapter methods use learning rate 1e-3; full fine-tuning uses 5e-5.</p><p>Largest absolute independent-adapter NLL drift: {float(baseline_continual['independent_max_absolute_drift']):.6g}.</p><div class="visual">{comparison_chart}</div><div class="scroll"><table><thead><tr><th>System</th><th>Task identity</th><th>Final story NLL</th><th>Final token NLL</th><th>Final route accuracy</th><th>Mean forgetting</th><th>Max forgetting</th><th>Backward transfer</th></tr></thead><tbody>{comparison_rows}</tbody></table></div><details><summary>All 24 stored-baseline stages</summary><div class="scroll"><table><thead><tr><th>Stage</th><th>New task</th><th>Stories</th><th>Sequential LoRA</th><th>Full fine-tune</th><th>Independent</th><th>LoRA deficit</th><th>Full deficit</th></tr></thead><tbody>{baseline_stage_rows}</tbody></table></div></details></details>
-<details class="card" open><summary>VAMP routing across all 24 stages</summary><p>{int(continual['row_count']):,} task/story/stage cases measure every learned task after every later stage. Stored-oracle drift isolates parameter retention; router curves show interference from adding candidate nodes. Largest absolute oracle NLL drift: {float(continual['oracle_max_absolute_drift']):.6g}.</p><div class="visual">{route_chart}</div><div class="scroll"><table><thead><tr><th>Condition</th><th>Final story NLL</th><th>Final token NLL</th><th>Final accuracy</th><th>Mean forgetting</th><th>Max forgetting</th><th>Backward transfer</th><th>Accuracy change</th></tr></thead><tbody>{continual_rows}</tbody></table></div><details><summary>All 24 VAMP stage aggregates</summary><div class="scroll"><table><thead><tr><th>Stage</th><th>New task</th><th>Stories</th><th>Exhaustive</th><th>Hopfield</th><th>EBT-U</th><th>EBT-H</th><th>Oracle NLL</th></tr></thead><tbody>{stage_rows}</tbody></table></div></details></details>
+<details class="card" open><summary>VAMP routing across all 24 stages</summary><p>{int(continual['row_count']):,} task/story/stage cases measure every learned task after every later stage. Stored-oracle drift isolates parameter retention; router curves show interference from adding candidate nodes. The compact top-eight EBT-H curve scores all canonical stored full-probe centroids, retains at most eight paths, and physically executes only their gathered LoRA edges. Largest absolute oracle NLL drift: {float(continual['oracle_max_absolute_drift']):.6g}.</p><div class="visual">{route_chart}</div><div class="scroll"><table><thead><tr><th>Condition</th><th>Final story NLL</th><th>Final token NLL</th><th>Final accuracy</th><th>Mean forgetting</th><th>Max forgetting</th><th>Backward transfer</th><th>Accuracy change</th></tr></thead><tbody>{continual_rows}</tbody></table></div><details><summary>All 24 VAMP stage aggregates</summary><div class="scroll"><table><thead><tr><th>Stage</th><th>New task</th><th>Stories</th><th>Exhaustive</th><th>Hopfield</th><th>EBT-U</th><th>EBT-H</th><th>Compact top-8 EBT-H</th><th>Oracle NLL</th></tr></thead><tbody>{stage_rows}</tbody></table></div></details></details>
 <details class="card"><summary>Whole-story loss and routing</summary><div class="scroll"><table><thead><tr><th>Condition</th><th>Story NLL</th><th>Token NLL</th><th>Accuracy</th><th>Regret</th></tr></thead><tbody>{overall_rows}</tbody></table></div><details><summary>Per-task whole-story results</summary><div class="scroll"><table><thead><tr><th>Task</th><th>Train</th><th>Validation</th><th>Base</th><th>Oracle</th><th>Gain</th><th>Exhaustive</th><th>Hopfield</th><th>EBT-U</th><th>EBT-H</th></tr></thead><tbody>{task_rows}</tbody></table></div></details></details>
 <details class="card"><summary>Explore midpoint completions</summary><p>Each router received only the first half. All conditions had the same deterministic token budget.</p><label>Task: <select id="filter"><option value="all">all</option>{task_options}</select></label><div id="examples">{cards}</div></details>
 <details class="card"><summary>Exact report data and identities</summary><pre>{embedded}</pre></details><script>const f=document.getElementById('filter');f.addEventListener('change',()=>document.querySelectorAll('[data-task]').forEach(x=>x.classList.toggle('hidden',f.value!=='all'&&x.dataset.task!==f.value)));</script></main></body></html>"""
@@ -561,7 +574,7 @@ def render_stagewise_route_chart_svg(continual: dict[str, object]) -> str:
                         condition,
                     )["routing_accuracy"]
                 )
-                for condition in CONDITIONS[2:]
+                for condition in REPORT_ROUTED_CONDITIONS
             },
         }
         for stage in stages
@@ -573,6 +586,7 @@ def render_stagewise_route_chart_svg(continual: dict[str, object]) -> str:
             ("vamp_hopfield", "VAMP Hopfield"),
             ("vamp_ebt_uniform", "VAMP EBT uniform"),
             ("vamp_ebt_hopfield", "VAMP EBT Hopfield"),
+            (COMPACT_STAGEWISE_CONDITION, COMPACT_STAGEWISE_LABEL),
         ),
         title="Task-free routing as the VAMP graph grows",
         y_label="routing accuracy",
@@ -617,6 +631,10 @@ def render_comparative_nll_chart_svg(
             "vamp_oracle": _stage_condition_nll(vamp_stage, "oracle"),
             "vamp_exhaustive": _stage_condition_nll(vamp_stage, "vamp_exhaustive"),
             "vamp_ebt_uniform": _stage_condition_nll(vamp_stage, "vamp_ebt_uniform"),
+            COMPACT_STAGEWISE_CONDITION: _stage_condition_nll(
+                vamp_stage,
+                COMPACT_STAGEWISE_CONDITION,
+            ),
         }
         for vamp_stage, baseline_stage, full_stage in zip(
             vamp_stages,
@@ -634,6 +652,7 @@ def render_comparative_nll_chart_svg(
             ("vamp_oracle", "VAMP stored oracle"),
             ("vamp_exhaustive", "VAMP exhaustive"),
             ("vamp_ebt_uniform", "VAMP EBT uniform"),
+            (COMPACT_STAGEWISE_CONDITION, COMPACT_STAGEWISE_LABEL),
         ),
         title="Continual-learning suffix loss under matched budgets",
         y_label="story-weighted true-suffix NLL",
@@ -863,6 +882,11 @@ def _comparison_values(
             ("vamp_hopfield", "VAMP Hopfield", "no"),
             ("vamp_ebt_uniform", "VAMP EBT uniform", "no"),
             ("vamp_ebt_hopfield", "VAMP EBT Hopfield", "no"),
+            (
+                COMPACT_STAGEWISE_CONDITION,
+                COMPACT_STAGEWISE_LABEL,
+                "no",
+            ),
         )
         for summary in (_object(vamp_summaries[condition], condition),)
     )
@@ -999,7 +1023,7 @@ def _stagewise_markdown_row(stage: dict[str, object]) -> str:
     conditions = _object(stage["conditions"], "stage conditions")
     accuracies = tuple(
         float(_object(conditions[condition], condition)["routing_accuracy"])
-        for condition in CONDITIONS[2:]
+        for condition in REPORT_ROUTED_CONDITIONS
     )
     oracle = _object(conditions["oracle"], "oracle")
     return (

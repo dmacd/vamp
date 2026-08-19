@@ -202,6 +202,70 @@ stagewise audits, and comparative standalone Markdown/HTML report as success.
 OpenRouter is available only via `--judge`; it consumes the persisted
 generation and stagewise ledgers and regenerates the report without model work.
 
+The canonical-centroid compact stagewise extension is an independent v1 ledger,
+not a rewrite of the canonical six-condition stagewise ledger. At each stage it
+scores all currently available stored full-probe centroids, keeps at most eight
+node paths in stable Hopfield order, gathers their insertion-ordered edge union,
+and runs the fixed 20-step EBT-H refinement with eight-row microbatches. Thus
+stages one through seven retain every available node; later stages impose a
+top-eight logical shortlist and physical edge compaction. Report construction
+strictly joins the extension on stage, task, story, suffix token count, and
+stored-oracle NLL before adding it to the suffix-loss and graph-growth curves.
+The original stagewise ledger and all VAMP checkpoints remain immutable.
+
+### Final-checkpoint bounded addressing
+
+The nouns-v2 addressing study is a read-only projection of the final committed
+base and 25-node VAMP graph. Its authentication surface uses load-only
+preflight/base/stage APIs and snapshots the canonical nouns-v1/v2 checkpoint,
+ledger, report, manifest, and partition hashes. Study contracts and ledgers have
+independent v1 format identities under
+`results/language_cl/tinyworlds-nouns-v2/addressing-study/`; they cannot be
+substituted for or promoted into the canonical benchmark run.
+
+Compact LoRA memory is a per-example device representation, not a new graph.
+Hopfield scores every valid node key, after which the top-four or top-eight node
+indices retain their stable score order. For each row, the compact builder walks
+the dense path-incidence matrix in edge insertion order and gathers the union of
+edges used by those candidate paths. It copies only those factor tensors into a
+batched bank, padding the physical edge dimension to the smallest sufficient
+member of `4, 8, 12, 16, 20, 24`. Candidate-to-edge projection and transformer
+execution occur entirely in these local coordinates. Expanding compact edge
+coefficients back into the 24-edge coordinate system is a parity/debug operation
+only. Dense logical masking remains the reference semantics and is not the
+compact execution path.
+
+Compact EBT-H initializes from the corresponding stable Hopfield shortlist and
+optimizes exactly one logit per retained candidate. It uses the same temperature,
+entropy term, Adam rule, prefix NLL, and hard-node decision as dense masked EBT-H.
+The frozen base, dense memory, compact memory, and input batch are stopped before
+differentiation; gradients flow only through candidate logits. Batched compact
+projection factors have leading `[example, gathered edge]` axes, which prevents
+one row from executing or observing another row's edge union. Prefix width and
+physical edge capacity are independent compilation axes.
+
+Frozen residual addressing uses the tied-output analytic cross-entropy gradient
+with respect to each final hidden state:
+`softmax(logits_t) @ token_embedding - token_embedding[target_t]`. Only active
+prefix transitions contribute to its masked mean, which is L2-normalized. The
+content/error representation concatenates unit content and residual components,
+each scaled by `1/sqrt(2)`. Centroid schemes normalize the mean of all 36
+registered encodings for a node; prototype schemes retain all 36 and reduce a
+query by maximum cosine. Root probes follow the same midpoint encoding rule as
+task probes. Validation stories, suffix tokens, and task labels are outside both
+key construction and router-query objects.
+
+Retrieval and EBT ledgers are append-only canonical JSONL streams bound to
+separate content-addressed contracts. Resume truncates only a non-newline final
+fragment and then accepts only the exact canonical prefix of preregistered keys;
+format drift, contract drift, duplicate keys, self-hash failure, unexpected
+keys, and incomplete final coverage are errors. Shape timing records one cold
+compile and five synchronized warm executions, while report operation counts
+keep model-forward-equivalent prefix tokens, Hopfield dot products, and active
+LoRA-edge evaluations in separate units. Persisted timing, allocator, parity,
+and execution-time records make report regeneration deterministic rather than
+remeasuring mutable wall-clock state.
+
 ### Log-t temporal consolidation
 
 The nouns-v2 temporal-consolidation study treats arrival structure as an

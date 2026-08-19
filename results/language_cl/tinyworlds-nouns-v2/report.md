@@ -61,6 +61,7 @@ The largest absolute independent-adapter NLL drift is 0. All systems use the sam
 | VAMP Hopfield | no | 1.615 | 1.648 | 37.4% | +0.0160 | +0.0586 | -0.0157 |
 | VAMP EBT uniform | no | 1.581 | 1.618 | 70.4% | +0.0128 | +0.0373 | -0.0123 |
 | VAMP EBT Hopfield | no | 1.582 | 1.618 | 64.5% | +0.0118 | +0.0278 | -0.0113 |
+| VAMP compact top-8 EBT-H | no | 1.582 | 1.618 | 64.7% | +0.0115 | +0.0272 | -0.0110 |
 
 <details>
 <summary>All 24 sequential and independent stage aggregates</summary>
@@ -96,7 +97,7 @@ The largest absolute independent-adapter NLL drift is 0. All systems use the sam
 
 ## Stagewise continual-learning audit
 
-The audit contains 72,256 midpoint-prefix task/story/stage cases. Every task is measured when introduced and after every later stage. The stored oracle follows that task's immutable VAMP node; exhaustive, Hopfield, and both EBT variants are task-free routers over the graph available at that stage.
+The audit contains 72,256 midpoint-prefix task/story/stage cases. Every task is measured when introduced and after every later stage. The stored oracle follows that task's immutable VAMP node; exhaustive, Hopfield, dense EBT, and compact top-eight EBT-H are task-free routers over the graph available at that stage. The compact router scores every canonical stored full-probe centroid, retains at most eight node paths, and physically executes only their gathered LoRA edges. Through stage seven it retains every available node.
 
 The largest absolute stored-oracle NLL drift is 0. Forgetting below is final task NLL minus its best earlier NLL (higher is worse); backward transfer is introduction NLL minus final NLL (higher is better).
 
@@ -110,40 +111,41 @@ The largest absolute stored-oracle NLL drift is 0. Forgetting below is final tas
 | vamp_hopfield | 1.615 | 1.648 | 37.4% | +0.0160 | +0.0586 | -0.0157 | -9.4% |
 | vamp_ebt_uniform | 1.581 | 1.618 | 70.4% | +0.0128 | +0.0373 | -0.0123 | -7.4% |
 | vamp_ebt_hopfield | 1.582 | 1.618 | 64.5% | +0.0118 | +0.0278 | -0.0113 | -10.8% |
+| vamp_ebt_hopfield_compact_top8 | 1.582 | 1.618 | 64.7% | +0.0115 | +0.0272 | -0.0110 | -10.3% |
 
 <details>
 <summary>All 24 VAMP stage aggregates</summary>
 
-| stage | new task | retained stories | exhaustive | Hopfield | EBT uniform | EBT Hopfield | oracle NLL |
-|---:|---|---:|---:|---:|---:|---:|---:|
-| 1 | mouse | 404 | 86.9% | 76.0% | 88.1% | 88.4% | 1.460 |
-| 2 | rabbit | 817 | 79.9% | 62.2% | 80.7% | 80.4% | 1.533 |
-| 3 | boat | 1,160 | 82.8% | 63.2% | 83.7% | 83.1% | 1.557 |
-| 4 | brother | 1,489 | 81.8% | 62.5% | 83.1% | 82.1% | 1.536 |
-| 5 | parent | 1,776 | 78.1% | 54.7% | 79.7% | 77.2% | 1.592 |
-| 6 | duck | 2,048 | 79.1% | 55.1% | 80.1% | 78.2% | 1.559 |
-| 7 | sister | 2,325 | 77.7% | 50.6% | 77.6% | 75.5% | 1.534 |
-| 8 | pet | 2,587 | 77.5% | 49.6% | 77.5% | 75.3% | 1.525 |
-| 9 | bicycle | 2,759 | 77.6% | 49.0% | 77.6% | 75.1% | 1.527 |
-| 10 | grandma | 2,928 | 77.4% | 47.3% | 77.6% | 74.5% | 1.536 |
-| 11 | lion | 3,088 | 77.0% | 44.8% | 76.0% | 73.8% | 1.541 |
-| 12 | fairy | 3,257 | 75.6% | 43.0% | 74.5% | 72.1% | 1.543 |
-| 13 | train | 3,398 | 75.7% | 42.1% | 74.2% | 71.8% | 1.549 |
-| 14 | cow | 3,515 | 76.1% | 41.5% | 74.8% | 72.2% | 1.541 |
-| 15 | wheel | 3,653 | 76.0% | 41.9% | 74.8% | 71.9% | 1.536 |
-| 16 | monkey | 3,768 | 75.8% | 41.2% | 74.0% | 71.2% | 1.533 |
-| 17 | princess | 3,850 | 75.6% | 40.5% | 73.8% | 70.1% | 1.538 |
-| 18 | plane | 3,944 | 75.5% | 40.5% | 73.4% | 69.8% | 1.542 |
-| 19 | elephant | 4,041 | 74.9% | 39.7% | 71.7% | 68.5% | 1.540 |
-| 20 | neighbor | 4,129 | 74.2% | 38.8% | 71.0% | 67.0% | 1.540 |
-| 21 | dragon | 4,213 | 74.2% | 38.7% | 70.9% | 66.2% | 1.540 |
-| 22 | queen | 4,294 | 73.8% | 38.1% | 70.2% | 65.3% | 1.541 |
-| 23 | horse | 4,373 | 73.7% | 37.5% | 70.1% | 64.5% | 1.540 |
-| 24 | bus | 4,440 | 73.9% | 37.4% | 70.4% | 64.5% | 1.539 |
+| stage | new task | retained stories | exhaustive | Hopfield | EBT uniform | EBT Hopfield | compact top-8 EBT-H | oracle NLL |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 | mouse | 404 | 86.9% | 76.0% | 88.1% | 88.4% | 88.4% | 1.460 |
+| 2 | rabbit | 817 | 79.9% | 62.2% | 80.7% | 80.4% | 80.3% | 1.533 |
+| 3 | boat | 1,160 | 82.8% | 63.2% | 83.7% | 83.1% | 83.1% | 1.557 |
+| 4 | brother | 1,489 | 81.8% | 62.5% | 83.1% | 82.1% | 82.1% | 1.536 |
+| 5 | parent | 1,776 | 78.1% | 54.7% | 79.7% | 77.2% | 77.2% | 1.592 |
+| 6 | duck | 2,048 | 79.1% | 55.1% | 80.1% | 78.2% | 78.2% | 1.559 |
+| 7 | sister | 2,325 | 77.7% | 50.6% | 77.6% | 75.5% | 75.5% | 1.534 |
+| 8 | pet | 2,587 | 77.5% | 49.6% | 77.5% | 75.3% | 75.3% | 1.525 |
+| 9 | bicycle | 2,759 | 77.6% | 49.0% | 77.6% | 75.1% | 74.7% | 1.527 |
+| 10 | grandma | 2,928 | 77.4% | 47.3% | 77.6% | 74.5% | 73.9% | 1.536 |
+| 11 | lion | 3,088 | 77.0% | 44.8% | 76.0% | 73.8% | 73.2% | 1.541 |
+| 12 | fairy | 3,257 | 75.6% | 43.0% | 74.5% | 72.1% | 71.7% | 1.543 |
+| 13 | train | 3,398 | 75.7% | 42.1% | 74.2% | 71.8% | 71.7% | 1.549 |
+| 14 | cow | 3,515 | 76.1% | 41.5% | 74.8% | 72.2% | 71.7% | 1.541 |
+| 15 | wheel | 3,653 | 76.0% | 41.9% | 74.8% | 71.9% | 71.2% | 1.536 |
+| 16 | monkey | 3,768 | 75.8% | 41.2% | 74.0% | 71.2% | 70.5% | 1.533 |
+| 17 | princess | 3,850 | 75.6% | 40.5% | 73.8% | 70.1% | 69.7% | 1.538 |
+| 18 | plane | 3,944 | 75.5% | 40.5% | 73.4% | 69.8% | 69.5% | 1.542 |
+| 19 | elephant | 4,041 | 74.9% | 39.7% | 71.7% | 68.5% | 68.4% | 1.540 |
+| 20 | neighbor | 4,129 | 74.2% | 38.8% | 71.0% | 67.0% | 66.7% | 1.540 |
+| 21 | dragon | 4,213 | 74.2% | 38.7% | 70.9% | 66.2% | 66.0% | 1.540 |
+| 22 | queen | 4,294 | 73.8% | 38.1% | 70.2% | 65.3% | 65.4% | 1.541 |
+| 23 | horse | 4,373 | 73.7% | 37.5% | 70.1% | 64.5% | 64.6% | 1.540 |
+| 24 | bus | 4,440 | 73.9% | 37.4% | 70.4% | 64.5% | 64.7% | 1.539 |
 
 </details>
 
-Detailed task-level introduction, best, and final measurements are in `stagewise-task-metrics.csv`, `baseline-stagewise-task-metrics.csv`, and `full-finetune-stagewise-task-metrics.csv`; the complete stage curves are in `stagewise-summary.csv` and `baseline-stagewise-summary.csv`, and `full-finetune-stagewise-summary.csv`.
+Detailed task-level introduction, best, and final measurements are in `stagewise-task-metrics.csv`, `baseline-stagewise-task-metrics.csv`, and `full-finetune-stagewise-task-metrics.csv`; the complete stage curves are in `stagewise-summary.csv` and `baseline-stagewise-summary.csv`, and `full-finetune-stagewise-summary.csv`. The compact rows and their immutable source contract are in `compact-stagewise-cl.jsonl` and `compact-stagewise-contract.json`.
 
 ## Whole-story NLL and routing
 
@@ -209,4 +211,4 @@ The standalone HTML report contains folding successful, weak, correctly routed, 
 
 No external judgment is attached. All local model work and reporting are complete; `--judge` can add judgments without repeating them.
 
-Report identity: `f15725c35bc459d55f87c8078c4a99829de207d16aafb5c08291418b704c8be7`
+Report identity: `a31171a87a1cdbd354e9b83db35dd8485524ee700b0544690800646e62741bf5`

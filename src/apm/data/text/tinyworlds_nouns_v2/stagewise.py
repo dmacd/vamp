@@ -341,8 +341,17 @@ def summarize_stagewise_ledger(
 def summarize_stagewise_rows(
     rows: Iterable[dict[str, object]],
     task_ids: tuple[str, ...] = TASK_IDS,
+    *,
+    conditions: tuple[str, ...] = CONDITIONS,
+    oracle_condition: str = "oracle",
 ) -> dict[str, object]:
     """Compute stage curves, forgetting, and backward transfer from rows."""
+    if (
+        not conditions
+        or len(set(conditions)) != len(conditions)
+        or oracle_condition not in conditions
+    ):
+        raise ValueError("stagewise summary conditions require one unique oracle")
     task_position = {task_id: index for index, task_id in enumerate(task_ids, start=1)}
     values: dict[tuple[int, str, str], list[float]] = defaultdict(
         lambda: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -355,11 +364,11 @@ def summarize_stagewise_rows(
         if task not in task_position or not task_position[task] <= stage <= len(task_ids):
             raise ValueError("stagewise summary row is outside the learned-task triangle")
         results = _object(row["results"], "stagewise results")
-        if set(results) != set(CONDITIONS):
+        if set(results) != set(conditions):
             raise ValueError("stagewise summary conditions changed")
         row_count += 1
         stage_story_counts[stage] += 1
-        for condition in CONDITIONS:
+        for condition in conditions:
             result = _object(results[condition], condition)
             bucket = values[(stage, task, condition)]
             bucket[0] += 1.0
@@ -386,14 +395,14 @@ def summarize_stagewise_rows(
 
     stage_summaries = []
     for stage in range(1, len(task_ids) + 1):
-        conditions = {}
-        for condition in CONDITIONS:
+        stage_conditions = {}
+        for condition in conditions:
             cells = tuple(
                 task_stage(stage, task, condition) for task in task_ids[:stage]
             )
             stories = sum(int(cell["story_count"]) for cell in cells)
             tokens = sum(int(cell["token_count"]) for cell in cells)
-            conditions[condition] = {
+            stage_conditions[condition] = {
                 "mean_regret": sum(
                     float(cell["mean_regret"]) * int(cell["story_count"])
                     for cell in cells
@@ -417,11 +426,13 @@ def summarize_stagewise_rows(
                 )
                 / tokens,
             }
-        if stage_story_counts[stage] != int(conditions["oracle"]["story_count"]):
+        if stage_story_counts[stage] != int(
+            stage_conditions[oracle_condition]["story_count"]
+        ):
             raise ValueError("stagewise summary stage coverage is inconsistent")
         stage_summaries.append(
             {
-                "conditions": conditions,
+                "conditions": stage_conditions,
                 "introduced_task": task_ids[stage - 1],
                 "learned_task_count": stage,
                 "stage_index": stage,
@@ -433,7 +444,7 @@ def summarize_stagewise_rows(
     for task in task_ids:
         introduction = task_position[task]
         condition_metrics = {}
-        for condition in CONDITIONS:
+        for condition in conditions:
             series = tuple(
                 (stage, task_stage(stage, task, condition))
                 for stage in range(introduction, len(task_ids) + 1)
@@ -471,7 +482,7 @@ def summarize_stagewise_rows(
         )
 
     condition_summaries = {}
-    for condition in CONDITIONS:
+    for condition in conditions:
         task_values = tuple(
             _object(_object(row["conditions"], "task conditions")[condition], condition)
             for row in per_task
@@ -503,9 +514,9 @@ def summarize_stagewise_rows(
         }
     oracle_drifts = tuple(
         abs(
-            float(task_stage(stage, task, "oracle")["story_mean_nll"])
+            float(task_stage(stage, task, oracle_condition)["story_mean_nll"])
             - float(
-                task_stage(task_position[task], task, "oracle")[
+                task_stage(task_position[task], task, oracle_condition)[
                     "story_mean_nll"
                 ]
             )

@@ -15,6 +15,7 @@ from apm.lm.attention import (
     apply_linear,
     dropout,
 )
+from apm.lm.compact_lora_memory import CompactLoraMemory
 from apm.lm.config import GptNeoConfig
 from apm.lm.lora import LoraBlockBank, LoraConfig, apply_lora_linear
 from apm.lm.lora_memory import PackedLoraMemory
@@ -82,7 +83,7 @@ def apply_gpt_neo_embeddings(
     input_embeddings: jax.Array,
     attention_mask: jax.Array,
     *,
-    lora_memory: PackedLoraMemory | None = None,
+    lora_memory: PackedLoraMemory | CompactLoraMemory | None = None,
     edge_coefficients: jax.Array | None = None,
     lora_config: LoraConfig | None = None,
     capture: CaptureSpec = CaptureSpec(),
@@ -209,7 +210,7 @@ def apply_gpt_neo(
     attention_mask: jax.Array,
     *,
     position_ids: jax.Array | None = None,
-    lora_memory: PackedLoraMemory | None = None,
+    lora_memory: PackedLoraMemory | CompactLoraMemory | None = None,
     edge_coefficients: jax.Array | None = None,
     lora_config: LoraConfig | None = None,
     capture: CaptureSpec = CaptureSpec(),
@@ -247,7 +248,7 @@ def prefill_gpt_neo_cache(
     attention_mask: jax.Array,
     cache_width: int,
     *,
-    lora_memory: PackedLoraMemory | None = None,
+    lora_memory: PackedLoraMemory | CompactLoraMemory | None = None,
     edge_coefficients: jax.Array | None = None,
     lora_config: LoraConfig | None = None,
 ) -> CachedForwardResult:
@@ -350,7 +351,7 @@ def apply_gpt_neo_cached_token(
     active_mask: jax.Array,
     cache: GptNeoKvCache,
     *,
-    lora_memory: PackedLoraMemory | None = None,
+    lora_memory: PackedLoraMemory | CompactLoraMemory | None = None,
     edge_coefficients: jax.Array | None = None,
     lora_config: LoraConfig | None = None,
 ) -> CachedForwardResult:
@@ -475,7 +476,7 @@ def gelu_new(inputs: jax.Array) -> jax.Array:
 
 
 def _resolve_lora_coefficients(
-    lora_memory: PackedLoraMemory | None,
+    lora_memory: PackedLoraMemory | CompactLoraMemory | None,
     edge_coefficients: jax.Array | None,
     lora_config: LoraConfig | None,
     model_config: GptNeoConfig,
@@ -495,13 +496,22 @@ def _resolve_lora_coefficients(
     assert lora_config is not None
     if len(lora_memory.edge_bank.blocks) != model_config.num_layers:
         raise ValueError("LoRA bank block count does not match num_layers")
-    if lora_memory.node_path_matrix.ndim != 2:
-        raise ValueError("LoRA node path matrix must have rank two")
-    max_nodes, max_edges = lora_memory.node_path_matrix.shape
-    if lora_memory.valid_node_mask.shape != (max_nodes,):
-        raise ValueError("LoRA valid-node mask does not match node capacity")
-    if lora_memory.valid_edge_mask.shape != (max_edges,):
-        raise ValueError("LoRA valid-edge mask does not match edge capacity")
+    if isinstance(lora_memory, PackedLoraMemory):
+        if lora_memory.node_path_matrix.ndim != 2:
+            raise ValueError("LoRA node path matrix must have rank two")
+        max_nodes, max_edges = lora_memory.node_path_matrix.shape
+        if lora_memory.valid_node_mask.shape != (max_nodes,):
+            raise ValueError("LoRA valid-node mask does not match node capacity")
+        if lora_memory.valid_edge_mask.shape != (max_edges,):
+            raise ValueError("LoRA valid-edge mask does not match edge capacity")
+        bank_rank = 3
+    elif isinstance(lora_memory, CompactLoraMemory):
+        batch_count, max_edges = lora_memory.valid_edge_mask.shape
+        if batch_count != batch_size:
+            raise ValueError("compact LoRA memory must match the input batch")
+        bank_rank = 4
+    else:
+        raise TypeError("lora_memory must be packed or compact LoRA memory")
     coefficients = jnp.asarray(edge_coefficients, dtype=jnp.float32)
     if coefficients.ndim not in (1, 2) or coefficients.shape[-1] != max_edges:
         raise ValueError(
@@ -509,13 +519,29 @@ def _resolve_lora_coefficients(
         )
     if coefficients.ndim == 2 and coefficients.shape[0] != batch_size:
         raise ValueError("batched edge coefficients must match the input batch")
+    if bank_rank == 4 and coefficients.ndim != 2:
+        raise ValueError("compact LoRA memory requires batched edge coefficients")
     for lora_block in lora_memory.edge_bank.blocks:
         for projection_bank in lora_block:
-            if projection_bank.left.ndim != 3 or projection_bank.right.ndim != 3:
-                raise ValueError("LoRA projection banks must contain rank-three factors")
-            if projection_bank.left.shape[0] != max_edges or projection_bank.right.shape[0] != max_edges:
-                raise ValueError("LoRA projection edge capacity does not match packed memory")
-            if projection_bank.left.shape[2] != lora_config.rank or projection_bank.right.shape[1] != lora_config.rank:
+            if (
+                projection_bank.left.ndim != bank_rank
+                or projection_bank.right.ndim != bank_rank
+            ):
+                raise ValueError("LoRA projection-bank rank does not match memory kind")
+            edge_axis = bank_rank - 3
+            rank_axis = bank_rank - 1
+            right_rank_axis = bank_rank - 2
+            if (
+                projection_bank.left.shape[edge_axis] != max_edges
+                or projection_bank.right.shape[edge_axis] != max_edges
+            ):
+                raise ValueError("LoRA projection edge capacity does not match memory")
+            if bank_rank == 4 and (
+                projection_bank.left.shape[0] != batch_size
+                or projection_bank.right.shape[0] != batch_size
+            ):
+                raise ValueError("compact LoRA factor bank must match input batch")
+            if projection_bank.left.shape[rank_axis] != lora_config.rank or projection_bank.right.shape[right_rank_axis] != lora_config.rank:
                 raise ValueError("LoRA projection rank does not match lora_config")
     return coefficients * lora_memory.valid_edge_mask.astype(jnp.float32)
 

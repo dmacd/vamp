@@ -88,6 +88,10 @@ def test_all_real_v2_vamp_stages_strict_load_as_one_immutable_prefix() -> None:
     assert partition is not None
 
     from apm.data.text.tinyworlds_nouns_v2.contracts import NounsV2ExperimentPreset
+    from apm.data.text.tinyworlds_nouns_v2.compact_stagewise import (
+        load_compact_stagewise_contract,
+        validate_compact_stagewise_ledger,
+    )
     from apm.data.text.tinyworlds_nouns_v2.experiment import (
         load_nouns_v2_vamp_stages,
         run_or_load_nouns_v2_gpu_preflight,
@@ -119,6 +123,23 @@ def test_all_real_v2_vamp_stages_strict_load_as_one_immutable_prefix() -> None:
     assert stages[-1].tensor_checksum == (
         "97414ac3d8656ab083b2e570a4162dc69b024f90cf819b80b1cab94213553e63"
     )
+    compact_contract = load_compact_stagewise_contract(
+        V2_RESULT_ROOT / "compact-stagewise-contract.json"
+    )
+    compact_ledger = V2_RESULT_ROOT / "compact-stagewise-cl.jsonl"
+    assert len(
+        validate_compact_stagewise_ledger(
+            compact_ledger,
+            str(compact_contract["contract_sha256"]),
+            partition,
+            stages,
+            require_complete=True,
+        )
+    ) == STAGEWISE_CASE_COUNT
+    run = json.loads((V2_RESULT_ROOT / "run-manifest.json").read_bytes())
+    assert sha256(compact_ledger.read_bytes()).hexdigest() == run[
+        "compact_stagewise_sha256"
+    ]
 
 
 def test_real_v2_baselines_and_comparison_ledger_strict_load() -> None:
@@ -248,6 +269,82 @@ def test_real_v2_full_finetune_and_stagewise_ledger_strict_load() -> None:
     assert sha256(ledger.read_bytes()).hexdigest() == run[
         "full_finetune_stagewise_sha256"
     ]
+
+
+def test_completed_bounded_addressing_study_strict_loads_every_artifact() -> None:
+    from apm.data.text.tinyworlds_nouns_v2.addressing_study import (
+        assert_canonical_hashes_unchanged,
+        authenticate_addressing_study_inputs,
+        build_study_contracts,
+        expected_ebt_keys,
+        expected_retrieval_keys,
+        load_timing_ledger,
+        validate_ebt_ledger,
+        validate_retrieval_ledger,
+    )
+    from apm.data.text.tinyworlds_nouns_v2.addressing_study_contracts import (
+        EBT_CONTRACT_FORMAT,
+        EBT_ROW_COUNT,
+        RETRIEVAL_CONTRACT_FORMAT,
+        RETRIEVAL_ROW_COUNT,
+        load_contract,
+        record_sha256,
+    )
+    from apm.data.text.tinyworlds_nouns_v2.addressing_study_keys import (
+        load_addressing_keys,
+    )
+
+    study = V2_RESULT_ROOT / "addressing-study"
+    inputs = authenticate_addressing_study_inputs(REPOSITORY_ROOT)
+    retrieval_contract = load_contract(
+        study / "retrieval-contract.json",
+        RETRIEVAL_CONTRACT_FORMAT,
+    )
+    ebt_contract = load_contract(study / "ebt-contract.json", EBT_CONTRACT_FORMAT)
+    keys = load_addressing_keys(study / "keys")
+    assert len(keys.node_ids) == 25
+    assert tuple(map(len, keys.probe_story_ids)) == (36,) * 25
+    replayed_retrieval, replayed_ebt = build_study_contracts(inputs, keys, study)
+    assert replayed_retrieval == retrieval_contract
+    assert replayed_ebt == ebt_contract
+    assert len(
+        validate_retrieval_ledger(
+            study / "retrieval.jsonl",
+            str(retrieval_contract["contract_sha256"]),
+            expected_retrieval_keys(inputs),
+            require_complete=True,
+        )
+    ) == RETRIEVAL_ROW_COUNT
+    assert len(
+        validate_ebt_ledger(
+            study / "ebt.jsonl",
+            str(ebt_contract["contract_sha256"]),
+            expected_ebt_keys(inputs),
+            require_complete=True,
+        )
+    ) == EBT_ROW_COUNT
+    assert load_timing_ledger(
+        study / "timing.jsonl",
+        str(ebt_contract["contract_sha256"]),
+    )
+    manifest = json.loads((study / "manifest.json").read_bytes())
+    manifest_core = {
+        key: value for key, value in manifest.items() if key != "manifest_sha256"
+    }
+    assert manifest["manifest_sha256"] == record_sha256(manifest_core)
+    assert all(
+        sha256((study / relative).read_bytes()).hexdigest() == digest
+        for relative, digest in manifest["artifacts"].items()
+    )
+    for width in (4, 8):
+        dot = (study / f"vamp-graph-top{width}.dot").read_text(encoding="utf-8")
+        assert sum(" -> " in line for line in dot.splitlines()) == 24
+    html = (study / "report.html").read_text(encoding="utf-8")
+    assert html.startswith("<!doctype html>")
+    assert html.count("<details>") >= 5
+    assert html.count('role="img"') >= 4
+    assert "<script src=" not in html and "<link " not in html
+    assert_canonical_hashes_unchanged(REPOSITORY_ROOT, inputs.canonical_hashes)
 
 
 def test_temporal_consolidation_real_sources_authenticate_without_mutation() -> None:

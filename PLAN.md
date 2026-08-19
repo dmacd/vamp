@@ -11,6 +11,120 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Outcome — TinyWorlds Nouns-v2 Bounded Addressing
+
+The frozen final-checkpoint addressing study is implemented and complete. Its
+no-options GPU-0 runner, independent v1 contracts, load-only canonical
+authentication, five frozen key schemes, physically compact batched LoRA edge
+banks, compact EBT-H, strict resumable ledgers, deterministic analysis, CSV/SVG
+exports, Graphviz renders, and separate Markdown/self-contained HTML reports
+live under `results/language_cl/tinyworlds-nouns-v2/addressing-study/`. The
+preregistered method and release gates are documented in
+`docs/TINYWORLDS_NOUNS_V2_ADDRESSING_EXPERIMENT_PLAN.md`; durable compact and
+residual semantics are recorded in `DESIGN.md`.
+
+The study authenticated partition
+`210c4e2d067077fe774782024a594ade7e7472a986d554f186453549cf910f1b`,
+base parameters
+`fff309bfbfcee8d59c5c3fc04152cc37be2142201f3bf9116b7b024e81a24f3c`,
+final VAMP tensors
+`97414ac3d8656ab083b2e570a4162dc69b024f90cf819b80b1cab94213553e63`,
+all 900 registered probes, all 4,440 official validation cases, and every
+canonical nouns-v2 result ledger before model work. Frozen key artifact
+`9036d673332303a6f949b853b3f4e4d90e89b2340901b27db9a8c4d90e53ce43`
+binds tensor
+`d7d63d097e70471452b72d89b96ccf031c979701e18ec72de6f1d3d33ec4b51f`.
+Retrieval and EBT contracts are respectively
+`0b9481d422175fd5492bd2d0098237e4ab0b544d04da2eba387931c6c8201cdb`
+and
+`040eff168d2e6a9b02d359ed7eca43107ea3a075bcaec972bcb09d102213a4bc`.
+The final ledgers contain exactly 22,200 retrieval, 48,840 EBT, and 69
+shape-timing rows; their file hashes are respectively
+`ae63beed46a02f361f00c1e5d35e27ac30bbb899914b213a9b001895dda7bf08`,
+`d15b51d4c83fddb49d54c51fa540a7e5e9374e6ce284ea92494a929b81ecb9dd`,
+and
+`ee10f1f977f1d41130cf1a1a6524a5735b85896ce4aa77fc235acf80302715d6`.
+
+Compact top-8 passed both preregistered non-inferiority gates. Versus dense
+all-node EBT-H, its suffix story NLL was 1.58215 versus 1.58184 (+0.00030,
+within the +0.02 margin) and route accuracy was 64.64% versus 64.50% (+0.14
+percentage point rather than a loss). Top-4 reached 1.58965 NLL and 56.76%
+accuracy. Canonical retrieval recall@4/@8 was 64.08%/78.09%. Mean gathered edge
+counts were 6.19 for top-4 and 10.47 for top-8 versus 24 dense edges; mean active
+LoRA-edge evaluations fell from 58,350 dense to 15,114/25,531. This operation
+reduction did not translate into a material kernel-speed win: synchronized warm
+latency per eight rows was 0.3304 s dense, 0.3269 s top-4, and 0.3382 s top-8
+(24.21, 24.47, and 23.65 examples/s).
+
+Among frozen keys, midpoint content centroids ranked first on recall@8 at
+79.55%, a paired +1.46 percentage-point improvement over canonical keys (seed-0
+10,000-bootstrap 95% interval [+0.81, +2.12]); midpoint content/residual
+centroids reached 79.32% ([+0.11, +2.36]). Content prototypes fell to 75.07%
+and fused residual prototypes to 73.65%. At compact top-8, the corresponding
+story NLL values were 1.58161, 1.58204, 1.58296, and 1.58417 versus 1.58215
+canonical; every paired NLL interval included zero. The report therefore shows
+that midpoint matching helps centroid retrieval, while nearest-prototype and
+residual fusion do not provide a reliable suffix-quality improvement here.
+
+The clean evaluation took 4,308.3 seconds end to end inside the evaluation
+phase and 4,429.7 seconds for the complete runner. Allocator peak was 5.23 GiB
+under the frozen 12 GiB gate. Real-checkpoint compact/dense parity had maximum
+absolute drift 0.000513 under the 0.001 FP32 tolerance with identical selected
+nodes. All 69 observed prefix/capacity shapes have one cold compile and five
+synchronized warm samples. The visually audited plots have readable labels,
+separate incomparable cost units, accessible SVG metadata, and complete
+25-node/24-edge top-4/top-8 graphs.
+
+Publication manifest identity is
+`aab391c9cb1612018a551c5b097dcf98d9cdbe9a53430c086f187a652f63660c`;
+Markdown and HTML file hashes are
+`8a0638d4e9f517f84954294b4c45f942747adefbccbd296d2ec91d0906e602e5`
+and
+`4843053f40c97a1beb80f676e1d67436273e40627d56adacb7245236c5116bd4`.
+After the authorized canonical stagewise-report extension, a current-source
+no-compute replay strict-loaded every row, preserved both immutable contracts
+and every raw ledger hash, reproduced the refreshed report tree twice
+byte-for-byte, rechecked the protected nouns-v1/v2 hashes, and completed in
+122.6 seconds. The derived analysis/report/manifest identities changed only to
+record the new canonical report and run-manifest provenance. The focused CPU
+suite passes 9 tests, the real-GPU parity/allocator smoke passes, all 6 opt-in
+real-source tests pass, and the clean default suite passes 676 tests with 274
+resource skips and 18 marker deselections. At original study publication, no
+canonical nouns-v1/v2 artifact changed.
+
+## Completed Outcome — Canonical-Centroid Compact Stagewise Curve
+
+The nouns-v2 report now includes physically compact top-eight EBT-H using the
+canonical stored full-probe centroids in both the true-suffix-loss comparison
+and task-free accuracy-versus-graph-growth plot. Only this added router was
+evaluated: no base, adapter, or VAMP checkpoint was retrained, and the original
+`stagewise-cl.jsonl` remains unchanged. Its independent v1 contract is
+`b24ba9f6189c5dc7d87948e7385e43fefbeb41e8e6a1b0f0a6fea2d9b01a564b`;
+the complete 72,256-row ledger hash is
+`a6aefd8b1c0ff82b01515e50f92fb3197fc18de28257cca77937a8474dc0f584`.
+
+At the final 25-node stage, compact top-eight reached 1.58212 story-weighted
+suffix NLL, 1.61788 token-weighted suffix NLL, and 64.66% route accuracy. Dense
+all-node EBT-H reached 1.58179, 1.61845, and 64.55%, respectively. The compact
+curve's mean/max routing forgetting is +0.0115/+0.0272, versus
++0.0118/+0.0278 dense. Across all stages it gathered 8.80 edges per case on
+average and used only the 4/8/12/16 physical-capacity buckets; the final-stage
+mean was 10.47 gathered edges. The regenerated Markdown/HTML report and both
+SVGs passed visual inspection. Their hashes are respectively
+`b88fcbb1c6720c690dca36823c9766ba907db82be379b8f1abd9a66516551daf`,
+`2c504cb698ae47509fa075fa06a895c14f5d81c4530aa55f992d67672a54a76d`,
+`5a38e2191577dabc5268a0009363ea987884f6dac6812b82e0176ab70fd4680a`,
+and `d34faf08e3e8ad3598f9f453361ceb71676b76364db2d6526731807a0c6bbd8d`.
+A cross-run audit against the separately batched final-checkpoint study
+preserved oracle NLL exactly; 3 of 4,440 hard routes differed at FP32
+near-boundary decisions, so exact row equality across different padding and
+compact-capacity batch shapes is not claimed. The no-compute exact-resume run
+strict-loaded every checkpoint and ledger, enforced a 1.60 GiB live allocator
+peak against the 12 GiB limit, and regenerated the report successfully. All 27
+focused CPU tests pass, the updated opt-in real-artifact replay passes, and the
+clean default suite passes 677 tests with 274 resource skips and 18 marker
+deselections.
+
 ## Active Outcome — TinyWorlds Nouns-v2 Log-t Temporal Consolidation
 
 The fixed temporal-consolidation experiment is implemented under the
