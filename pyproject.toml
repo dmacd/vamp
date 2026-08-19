@@ -20,6 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
+    "pytest-xdist>=3.6",
 ]
 pc = [
     "fabricpc @ git+ssh://git@github.com/matthewbehrend/FabricPC.git@main",
@@ -57,7 +58,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q -m 'not integration and not benchmark'"
+addopts = "-q -n 4 --dist worksteal -m 'not integration and not benchmark'"
 markers = [
     "integration: tests that require prepared datasets, checkpoints, or extended training",
     "benchmark: resource-intensive end-to-end, accelerator, memory, or timing tests",

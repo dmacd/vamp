@@ -119,6 +119,10 @@ class TrainingJob:
     start_arrival: int | None = None
     end_arrival: int | None = None
     initial_adapter_sha256: str | None = None
+    lora_rank: int | None = None
+    lora_alpha: float | None = None
+    batch_namespace_sha256: str | None = None
+    random_namespace_sha256: str | None = None
 
     def __post_init__(self) -> None:
         require_sha256(self.contract_sha256, "temporal training contract")
@@ -143,6 +147,21 @@ class TrainingJob:
             require_sha256(digest, "temporal training source or lineage")
         if self.initial_adapter_sha256 is not None:
             require_sha256(self.initial_adapter_sha256, "initial adapter")
+        if (self.lora_rank is None) != (self.lora_alpha is None):
+            raise ValueError("LoRA rank and alpha overrides must be declared together")
+        if self.lora_rank is not None and (
+            self.lora_rank <= 0
+            or self.lora_alpha is None
+            or not math.isfinite(self.lora_alpha)
+            or self.lora_alpha <= 0.0
+        ):
+            raise ValueError("training job LoRA configuration is invalid")
+        for namespace in (
+            self.batch_namespace_sha256,
+            self.random_namespace_sha256,
+        ):
+            if namespace is not None:
+                require_sha256(namespace, "training namespace")
         interval_values = (self.level, self.start_arrival, self.end_arrival)
         if any(value is not None for value in interval_values) and any(
             type(value) is not int or value < 0 for value in interval_values
@@ -156,7 +175,7 @@ class TrainingJob:
 
     def as_record(self) -> dict[str, object]:
         """Return the canonical job payload without its derived hash."""
-        return {
+        record = {
             "contract_sha256": self.contract_sha256,
             "end_arrival": self.end_arrival,
             "epochs": FIXED_EPOCHS,
@@ -172,6 +191,16 @@ class TrainingJob:
             "source_story_count": len(self.source_story_ids),
             "start_arrival": self.start_arrival,
         }
+        if self.lora_rank is not None:
+            record.update(
+                {
+                    "batch_namespace_sha256": self.batch_namespace_sha256,
+                    "lora_alpha": self.lora_alpha,
+                    "lora_rank": self.lora_rank,
+                    "random_namespace_sha256": self.random_namespace_sha256,
+                }
+            )
+        return record
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,10 +362,22 @@ class StoryEpochBatches(Sequence[TokenBatch]):
         return len(self._epoch_entries)
 
 
+def _compiled_lora_train_step(
+    model_config: GptNeoConfig,
+    lora_config: LoraConfig | None = None,
+) -> LoraCompiledStep:
+    """Cache one fixed-setting LoRA executable per architecture and rank."""
+    return _compiled_lora_train_step_for_config(
+        model_config,
+        lora_config or LoraConfig(rank=LORA_RANK, alpha=LORA_ALPHA),
+    )
+
+
 @lru_cache(maxsize=None)
-def _compiled_lora_train_step(model_config: GptNeoConfig) -> LoraCompiledStep:
-    """Cache one fixed-setting LoRA executable per model architecture."""
-    lora_config = LoraConfig(rank=LORA_RANK, alpha=LORA_ALPHA)
+def _compiled_lora_train_step_for_config(
+    model_config: GptNeoConfig,
+    lora_config: LoraConfig,
+) -> LoraCompiledStep:
     step_config = LmTrainConfig(
         learning_rate=LORA_LEARNING_RATE,
         steps=1,
@@ -400,6 +441,7 @@ def train_or_load_lora(
     work_directory: str | Path,
     *,
     initial_adapter: LoraEdge | None = None,
+    lora_config: LoraConfig | None = None,
     progress: TrainingProgress | None = None,
     stop_after_update: int | None = None,
 ) -> AdapterArtifact:
@@ -408,10 +450,31 @@ def train_or_load_lora(
         raise ValueError("full-model jobs require train_or_load_full_model")
     if not batches:
         raise ValueError("LoRA training requires finite epoch batches")
-    lora_config = LoraConfig(rank=LORA_RANK, alpha=LORA_ALPHA)
+    resolved_lora_config = lora_config or LoraConfig(
+        rank=LORA_RANK,
+        alpha=LORA_ALPHA,
+    )
+    declared_lora_config = (
+        None
+        if job.lora_rank is None
+        else LoraConfig(rank=job.lora_rank, alpha=float(job.lora_alpha))
+    )
+    if (
+        declared_lora_config is not None
+        and declared_lora_config != resolved_lora_config
+    ) or (
+        declared_lora_config is None
+        and resolved_lora_config != LoraConfig(rank=LORA_RANK, alpha=LORA_ALPHA)
+    ):
+        raise ValueError("LoRA configuration is not bound to the training job")
     target = Path(output_directory) / job.identity_sha256
     if target.is_dir():
-        return load_adapter_artifact(target, job, model_config, lora_config)
+        return load_adapter_artifact(
+            target,
+            job,
+            model_config,
+            resolved_lora_config,
+        )
     work = Path(work_directory) / job.identity_sha256
     work.mkdir(parents=True, exist_ok=True)
     loss_ledger = ChainedJsonlLedger(work / "losses.jsonl", TRAINING_ROW_FORMAT)
@@ -422,14 +485,15 @@ def train_or_load_lora(
         weight_decay=WEIGHT_DECAY,
         gradient_clip_norm=GRADIENT_CLIP_NORM,
     )
-    initialization_key, training_key = jax.random.split(_job_key(job.identity_sha256))
+    random_namespace = job.random_namespace_sha256 or job.identity_sha256
+    initialization_key, training_key = jax.random.split(_job_key(random_namespace))
     starting_adapter = initial_adapter or init_lora_edge(
         initialization_key,
         model_config,
-        lora_config,
+        resolved_lora_config,
     )
     if job.initial_adapter_sha256 is not None and (
-        adapter_checksum(starting_adapter, model_config, lora_config)
+        adapter_checksum(starting_adapter, model_config, resolved_lora_config)
         != job.initial_adapter_sha256
     ):
         raise ValueError("sequential job initial adapter checksum changed")
@@ -446,11 +510,11 @@ def train_or_load_lora(
     empty_memory = pack_lora_memory(
         init_memory_graph(NodeId("root")),
         model_config,
-        lora_config,
+        resolved_lora_config,
         max_nodes=2,
         max_edges=1,
     )
-    compiled_step = _compiled_lora_train_step(model_config)
+    compiled_step = _compiled_lora_train_step(model_config, resolved_lora_config)
     prior_elapsed = _load_elapsed(work / "runtime.json", job.identity_sha256)
     started = monotonic()
     last_checkpoint = monotonic()
@@ -507,7 +571,7 @@ def train_or_load_lora(
         job,
         current.trainable,
         model_config,
-        lora_config,
+        resolved_lora_config,
         work / "losses.jsonl",
         train_config.steps,
         _load_elapsed(work / "runtime.json", job.identity_sha256),

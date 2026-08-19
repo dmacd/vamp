@@ -95,6 +95,7 @@ class AdapterBank:
     candidates: tuple[AdapterCandidate, ...]
     packed: PackedLoraMemory
     candidate_ids: tuple[str, ...]
+    lora_config: LoraConfig
 
     def __post_init__(self) -> None:
         if self.candidate_ids != ("base",) + tuple(
@@ -285,9 +286,14 @@ class CandidateScore:
 def build_adapter_bank(
     candidates: Sequence[AdapterCandidate],
     model_config: GptNeoConfig,
+    lora_config: LoraConfig | None = None,
 ) -> AdapterBank:
     """Pack standalone candidates as root children in their exact tie order."""
     resolved = tuple(candidates)
+    resolved_lora_config = lora_config or LoraConfig(
+        rank=LORA_RANK,
+        alpha=LORA_ALPHA,
+    )
     graph = init_memory_graph(NodeId("base"))
     for index, candidate in enumerate(resolved, start=1):
         graph = add_memory_node(
@@ -298,19 +304,19 @@ def build_adapter_bank(
             index,
             candidate.adapter,
         )
-    lora_config = LoraConfig(rank=LORA_RANK, alpha=LORA_ALPHA)
     return AdapterBank(
         candidates=resolved,
         packed=pack_lora_memory(
             graph,
             model_config,
-            lora_config,
+            resolved_lora_config,
             max_nodes=len(resolved) + 1,
             max_edges=len(resolved),
         ),
         candidate_ids=("base",) + tuple(
             candidate.candidate_id for candidate in resolved
         ),
+        lora_config=resolved_lora_config,
     )
 
 
@@ -374,6 +380,7 @@ def score_token_batches_by_candidate(
             base_params,
             model_config,
             bank.packed,
+            bank.lora_config,
             batch,
             evaluation_batch_size,
             node_indices=indices,
@@ -417,6 +424,7 @@ def score_token_windows_by_candidate(
         base_params,
         model_config,
         bank.packed,
+        bank.lora_config,
         windows,
         evaluation_batch_size,
         node_indices=indices,
@@ -532,6 +540,7 @@ def run_suffix_kernel(
         bank.packed,
         batch,
         node_index=node_index,
+        lora_config=bank.lora_config,
     )
 
 
@@ -542,14 +551,19 @@ def run_packed_suffix_kernel(
     batch: TokenBatch,
     *,
     node_index: int = 0,
+    lora_config: LoraConfig | None = None,
 ) -> tuple[jax.Array, jax.Array]:
     """Run the evaluation suffix kernel from an authenticated packed bank."""
+    resolved_lora_config = lora_config or LoraConfig(
+        rank=LORA_RANK,
+        alpha=LORA_ALPHA,
+    )
     coefficients = edge_coefficients_for_node(packed, node_index)
     return _compiled_window_scores(
         base_params,
         model_config,
         packed,
-        LoraConfig(rank=LORA_RANK, alpha=LORA_ALPHA),
+        resolved_lora_config,
         jnp.asarray(batch.input_ids),
         jnp.asarray(batch.attention_mask),
         jnp.asarray(batch.target_ids),
@@ -728,7 +742,7 @@ def evaluate_case_batch(
             base_params,
             model_config,
             bank.packed,
-            LoraConfig(rank=LORA_RANK, alpha=LORA_ALPHA),
+            bank.lora_config,
             jnp.asarray(prefix_batch.input_ids),
             jnp.asarray(prefix_batch.attention_mask),
             jnp.asarray(prefix_batch.target_ids),
@@ -752,6 +766,7 @@ def evaluate_case_batch(
         base_params,
         model_config,
         bank.packed,
+        bank.lora_config,
         windows,
         evaluation_batch_size,
     )
@@ -922,6 +937,7 @@ def _score_nodes_per_window(
     base_params: GptNeoParams,
     model_config: GptNeoConfig,
     packed: PackedLoraMemory,
+    lora_config: LoraConfig,
     windows: TokenBatch,
     batch_size: int,
     *,
@@ -938,8 +954,6 @@ def _score_nodes_per_window(
         raise ValueError("window scoring node indices are invalid")
     totals = np.empty((len(selected), window_count), dtype=np.float64)
     correct = np.empty((len(selected), window_count), dtype=np.int64)
-    lora_config = LoraConfig(rank=LORA_RANK, alpha=LORA_ALPHA)
-
     for output_index, node in enumerate(selected):
         coefficients = edge_coefficients_for_node(packed, node)
         for start in range(0, window_count, batch_size):

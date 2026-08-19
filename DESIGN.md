@@ -309,6 +309,54 @@ window rule, and bootstrap settings in an independent v1 contract. Its direct
 and derived ledgers are resumable chained JSONL streams, and its nested result
 directory is excluded from the immutable parent publication manifest.
 
+#### Joint-IID LoRA rank sweep
+
+The joint-IID rank sweep is another immutable temporal-study addendum. It
+strict-loads the original rank-8 adapter/evaluation ledger and full-model
+evaluation ledger as reference evidence, while ranks 4, 16, and 32 receive
+independent contract-addressed artifacts. Every swept adapter uses the original
+rank-8 job identity as both its finite-epoch permutation namespace and random
+namespace. The sweep job identity still binds its actual rank, alpha, source
+population, and both inherited namespaces, so resume states cannot cross ranks.
+
+Alpha equals rank, keeping `alpha / rank = 1` and isolating low-rank capacity
+from update scale. Evaluation forces the sole adapter and reuses the exact
+parent final midpoint/suffix case protocol; this is a model-quality comparison,
+not an addressing comparison. Publication requires exact story order and suffix
+token masks across ranks, plus a rank-shaped zero-edge base-path parity check.
+Story-weighted and token-weighted suffix NLL retain the parent report's distinct
+aggregation semantics. Paired uncertainty resamples stories within noun strata.
+
+#### Joint-IID LoRA with a trainable tied token embedding
+
+The trainable-embedding study is an immutable addendum to the joint-IID rank
+sweep. Ranks eight and 32 inherit the canonical rank-eight story batches,
+four-epoch schedule, dropout/random namespace, and evaluation cases. Alpha
+equals rank, so both adapters retain unit LoRA scale. The only additional
+trainable value is one complete token-embedding matrix. GPT-Neo uses that same
+matrix for input lookup and the output language-model head, so it is trained
+once as a genuinely tied parameter rather than as two independently drifting
+copies. Position embeddings, layer norms, biases, and the original attention
+and MLP kernels remain frozen; every supported attention and MLP projection is
+adapted through LoRA.
+
+One joint loss and one global norm-one clip cover the adapter factors and tied
+matrix. AdamW then applies the inherited `1e-3` learning rate to LoRA and the
+full-model control's `5e-5` learning rate to the tied matrix, with weight decay
+`0.01` for both groups. The artifact stores adapter factors and the tied matrix
+together, independently hashes each component and their complete trainable
+payload, and binds optimizer/RNG/update resume to a separate v1 contract.
+
+Evaluation forces the trained adapter on the exact 4,440 canonical suffix
+cases and preserves the rank-sweep story order and target masks. The learned
+embedding with a zero adapter is also scored as a candidate-zero diagnostic;
+it is not the primary condition. Primary comparisons use story- and
+token-weighted suffix NLL for matched ranks, the projection-only controls, and
+the joint-IID full model, with paired seed-zero noun-stratified bootstrap
+intervals. This isolates whether the previously frozen tied lexical interface,
+rather than insufficient LoRA rank alone, accounts for the joint-IID quality
+gap.
+
 ## TinyWorlds Noun-Overlap v1
 
 `tinyworlds-nouns-v1` is an isolated, descriptive continual-learning

@@ -80,6 +80,9 @@ ve/bin/python -m pip install -e '.[dev]'
 ve/bin/python -m pytest
 ```
 
+The default CPU suite uses four `pytest-xdist` workers with work stealing.
+Integration and benchmark tests remain opt-in through their pytest markers.
+
 The language-model experiments additionally require the `lm` extra. CUDA hosts
 can request the JAX CUDA 12 runtime through the `gpu` extra:
 

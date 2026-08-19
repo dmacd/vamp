@@ -220,6 +220,86 @@ The final exact-resume replay passed without changing the publication snapshot,
 the opt-in real-source GPU parity/allocator test passed, and the clean default
 suite passes 704 tests with 275 resource skips and 21 marker deselections.
 
+### Completed addendum — joint-IID LoRA rank sweep
+
+The fixed rank-4/8/16/32 joint-IID sweep completed under independent contract
+`e87a835334a64c22b634a5e51f300cf5ad5fd529bd9fdcdf2268842fbd3df301`.
+It strict-loaded the original rank-8 adapter and 4,440-row ledger plus the
+original joint-IID full-model ledger, then trained only ranks 4, 16, and 32.
+Every new adapter inherited the canonical rank-8 batch and random namespaces,
+four-epoch 15,024-update schedule, and unit LoRA scale (`alpha = rank`). Exact
+story order, suffix masks, and all 476,035 suffix targets match the parent
+evaluation; rank-shaped base-path NLL drift is zero.
+
+The full model remains substantially better: its story/token NLL is
+`1.399026/1.452044`, versus `1.553880/1.590484` at rank 4,
+`1.554322/1.590877` at rank 8, `1.559201/1.595611` at rank 16, and
+`1.569790/1.605972` at rank 32. Rank 4 differs from rank 8 by only
+`-0.000443` story NLL (95% paired noun-stratified bootstrap interval
+`[-0.001118, +0.000225]`), while ranks 16 and 32 are significantly worse by
+`+0.004878 [+0.004174, +0.005592]` and
+`+0.015467 [+0.014554, +0.016380]`. Thus extra rank does not explain or close
+the full-model gap; quality degrades above rank 8 under the matched schedule.
+
+The three new 4,440-row ledgers and the reused rank-8 ledger total 17,760 exact
+evaluation rows. Peak allocation was 7.78 GiB under the 12 GiB gate, and the
+authenticated end-to-end run took 201.1 minutes. Exact-resume replay,
+byte-identical report regeneration, and parent immutability checks passed. The
+publication manifest is
+`bf8b74cdb996679adf501234aaf4f540ba92cf599ac44590960d47ffc83676bb`;
+the result identity is
+`df775fed77517fc3002c1f215758729c52393a72903e201c3ac5e1a7057fc121`.
+The final focused suite passes 34 tests with one resource skip, the opt-in
+real-GPU rank/parity/allocator gate passes, and the clean default suite passes
+711 tests with 275 resource skips and 21 marker deselections.
+
+### Completed addendum — joint-IID LoRA with a trainable tied embedding
+
+The fixed rank-8/rank-32 projection-LoRA plus tied-embedding study completed
+under independent contract
+`b5e1d49866bcaa06fd840fd055cf6d658ace1bacb4433b04333549ac543372ae`.
+It uses the rank-sweep's exact 98,304-story population, batch/random namespace,
+four-epoch schedule, and 4,440-story/476,035-target suffix evaluation. All six
+LoRA projections in every transformer block and the single tied token
+input/output matrix are trainable; position embeddings, layer norms, biases,
+and original attention/MLP kernels remain frozen. The joint globally clipped
+loss uses AdamW at `1e-3` for LoRA and `5e-5` for the embedding.
+
+Training the tied embedding removes the projection-only LoRA gap. Rank 8
+achieves story/token NLL `1.382183/1.438839`, versus
+`1.554322/1.590877` for projection-only rank 8 and
+`1.399026/1.452044` for the joint-IID full model. Its story-NLL improvement
+over projection-only LoRA is `-0.172139` (paired noun-stratified 95% bootstrap
+interval `[-0.177414, -0.166913]`), and it beats the full model by `-0.016843`
+`[-0.018336, -0.015400]`. Rank 32 achieves
+`1.399205/1.455794`, improving over projection-only rank 32 by `-0.170585`
+`[-0.175792, -0.165459]`; its story NLL is statistically tied with the full
+model at `+0.000179 [-0.001360, +0.001672]`, although its token NLL is worse by
+`+0.003750 [+0.002214, +0.005266]`. Rank 32 remains worse than rank 8 by
+`+0.017022 [+0.016220, +0.017826]` story NLL. The jointly learned embedding
+without its LoRA scores `1.470652` and `1.472401` story NLL for the rank-8 and
+rank-32 runs, so the result is not an embedding-only replacement.
+
+Rank 8 trains 13,160,704 values (66.80% of base parameter count) and rank 32
+trains 14,045,440 (71.29%); the tied embedding alone contributes 12,865,792.
+Both completed 15,024 optimizer updates in 67.8 and 68.3 minutes. Peak
+allocation was 8.16 GiB under the 12 GiB gate, and the authenticated end-to-end
+run took 140.2 minutes. The publication manifest is
+`ecdefc0e61f67e85f49ca8e15e8c50dadf930ab560fd2a6a3b475fd42301b013`.
+
+The first completed-state replay exposed and fixed an analysis-boundary bug:
+replay had included the allocator measurement's authentication envelope where
+the initial run used only its raw payload. Metrics and rendered reports were
+unchanged, but `analysis.json` differed. The runner now normalizes that payload,
+a regression test covers both representations, and two subsequent completed
+runs strict-loaded all checkpoints and ledgers with zero retraining or
+reevaluation; the final replay regenerated the complete publication
+byte-identically. The focused embedding/rank-sweep/temporal CPU suite passes
+with one resource skip, and the real-GPU joint-update/parity/allocator gate
+passes. The clean default CPU suite passes 718 tests with 275 resource skips in
+89.2 seconds using the new four-worker `pytest-xdist` work-stealing default;
+`pytest-xdist>=3.6` is now an explicit development dependency.
+
 ## Active Outcome — TinyWorlds Nouns-v2 Disjoint Benchmark
 
 The isolated `tinyworlds-nouns-v2` contracts, partitioner, shared-engine
