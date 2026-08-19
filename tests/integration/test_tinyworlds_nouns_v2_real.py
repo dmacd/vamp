@@ -248,3 +248,50 @@ def test_real_v2_full_finetune_and_stagewise_ledger_strict_load() -> None:
     assert sha256(ledger.read_bytes()).hexdigest() == run[
         "full_finetune_stagewise_sha256"
     ]
+
+
+def test_temporal_consolidation_real_sources_authenticate_without_mutation() -> None:
+    from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation import (
+        assert_canonical_artifacts_unchanged,
+        authenticate_temporal_study_inputs,
+        study_dashboard_jobs,
+    )
+    from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_contracts import (
+        ARRIVAL_COUNT,
+        CONTRACT_FORMAT,
+        SHARDS_PER_TASK,
+        STORIES_PER_SHARD,
+        TASK_STORY_COUNT,
+        TEMPORAL_ORDERS,
+        expected_final_intervals,
+        simulate_hierarchy,
+    )
+
+    inputs = authenticate_temporal_study_inputs(REPOSITORY_ROOT)
+    assert inputs.contract["format"] == CONTRACT_FORMAT
+    assert inputs.contract_sha256 == (
+        "3f4ef4a10fd471b418a32a8f7b45431602c1f6abc080c19a7822ea2c2dd839b4"
+    )
+    assert len(inputs.shards) == ARRIVAL_COUNT
+    assert all(len(shard.story_ids) == STORIES_PER_SHARD for shard in inputs.shards)
+    assert all(
+        sum(shard.task_id == task_id for shard in inputs.shards) == SHARDS_PER_TASK
+        for task_id in inputs.partition.task_ids
+    )
+    assert len({story for shard in inputs.shards for story in shard.story_ids}) == (
+        len(inputs.partition.task_ids) * TASK_STORY_COUNT
+    )
+    assert sum(len(entries) for _, entries in inputs.validation_entries) == 4_440
+    assert tuple(task for task, _ in inputs.sentinel) == tuple(inputs.partition.task_ids)
+    assert all(len(stories) == 16 for _, stories in inputs.sentinel)
+    for order in TEMPORAL_ORDERS:
+        state, merges = simulate_hierarchy(inputs.shards, order)
+        assert len(merges) == 183
+        assert tuple(
+            (chunk.start_arrival, chunk.end_arrival)
+            for chunk in state.active_chunks
+        ) == expected_final_intervals()
+    jobs = study_dashboard_jobs(inputs)
+    assert len(jobs) == 26
+    assert all(job.total > 0 for job in jobs)
+    assert_canonical_artifacts_unchanged(inputs)

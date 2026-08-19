@@ -553,6 +553,20 @@ def run_or_load_noun_gpu_preflight(
     return _load_gpu_preflight(path, artifact, preset, estimate)
 
 
+def load_noun_gpu_preflight(
+    artifact: NounPartitionArtifact,
+    preset: NounsExperimentPreset,
+    path: str | Path,
+) -> NounGpuPreflight:
+    """Strict-load an existing GPU preflight without running a measurement."""
+    return _load_gpu_preflight(
+        Path(path),
+        artifact,
+        preset,
+        estimate_noun_resources(artifact, preset),
+    )
+
+
 def _load_gpu_preflight(
     path: Path,
     artifact: NounPartitionArtifact,
@@ -627,6 +641,34 @@ def _render_gpu_preflight(preflight: NounGpuPreflight) -> str:
         f"Tasks/nodes: {preflight.estimate.task_count}/{preflight.estimate.max_nodes}\n\n"
         f"Whole-story rows: {preflight.estimate.whole_story_result_rows:,}\n\n"
         f"Generation/judge cases: {preflight.estimate.generation_result_rows:,}\n"
+    )
+
+
+def load_noun_selected_base(
+    root: str | Path,
+    artifact: NounPartitionArtifact,
+    preset: NounsExperimentPreset,
+    preflight: NounGpuPreflight,
+) -> NounSelectedBase:
+    """Strict-load a selected base without creating training or resume state."""
+    directory = Path(root)
+    identity = directory.name
+    require_sha256(identity, "noun base training")
+    authenticated_preflight = load_noun_gpu_preflight(
+        artifact,
+        preset,
+        preflight.artifact_path,
+    )
+    if authenticated_preflight.preflight_sha256 != preflight.preflight_sha256:
+        raise ValueError("selected noun base requires its exact GPU preflight")
+    if not (directory / "selected.json").is_file():
+        raise FileNotFoundError(directory / "selected.json")
+    return _load_selected_base(
+        directory,
+        artifact,
+        preset,
+        authenticated_preflight,
+        identity,
     )
 
 
@@ -1673,6 +1715,8 @@ __all__ = [
     "allocator_peak_bytes",
     "estimate_noun_resources",
     "evaluate_token_weighted_nll",
+    "load_noun_gpu_preflight",
+    "load_noun_selected_base",
     "load_story_index",
     "load_noun_vamp_stages",
     "noun_model_config",

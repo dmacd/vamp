@@ -1,0 +1,24 @@
+digraph temporal_compact {
+graph [rankdir="LR", bgcolor="transparent", label="Deployed bank", labelloc="t"];
+node [shape="box", style="rounded,filled", fontname="DejaVu Sans", fontsize="11", color="#24425f"];
+edge [color="#516579"];
+deployment [shape="ellipse", label="Base + 9 live adapters", fillcolor="#E6F2FF"];
+"chunk_1996a238627d20463748d60e1348eb40137f9df32e2c44d8c8528c733870efd4" [label="L6 · 1–64\nmouse:8, rabbit:8, boat:8, +5", fillcolor="#EBC9BE", penwidth="2"];
+"chunk_1996a238627d20463748d60e1348eb40137f9df32e2c44d8c8528c733870efd4" -> deployment;
+"chunk_5da4d22b46a30c1e2881e0d5bf884a67b7f49521236bd2ff57462e590c080f27" [label="L6 · 65–128\nbicycle:8, grandma:8, lion:8, +5", fillcolor="#EBC9BE", penwidth="2"];
+"chunk_5da4d22b46a30c1e2881e0d5bf884a67b7f49521236bd2ff57462e590c080f27" -> deployment;
+"chunk_09d1701a081730d782278c285c9c1d0c76611fab358349e8361809b45abae9c3" [label="L5 · 129–160\nprincess:8, plane:8, elephant:8, +1", fillcolor="#E9D7D3", penwidth="2"];
+"chunk_09d1701a081730d782278c285c9c1d0c76611fab358349e8361809b45abae9c3" -> deployment;
+"chunk_c506d020a96a4f5b4f6fce5d05bb76547667d58220ba06efe380024a52f2b1f2" [label="L4 · 161–176\ndragon:8, queen:8", fillcolor="#E8E4E9", penwidth="2"];
+"chunk_c506d020a96a4f5b4f6fce5d05bb76547667d58220ba06efe380024a52f2b1f2" -> deployment;
+"chunk_8fad612dd290691c9d3bd26a8ed1893c5f51ce88c995ed065602c9fcee4502e8" [label="L3 · 177–184\nhorse:8", fillcolor="#E6F2FF", penwidth="2"];
+"chunk_8fad612dd290691c9d3bd26a8ed1893c5f51ce88c995ed065602c9fcee4502e8" -> deployment;
+"chunk_23ae0adf76434eea2a2b23da1b790ae5ffcf74fd30ed64d1d09983cb24f661c0" [label="L2 · 185–188\nbus:4", fillcolor="#E6F2FF", penwidth="2"];
+"chunk_23ae0adf76434eea2a2b23da1b790ae5ffcf74fd30ed64d1d09983cb24f661c0" -> deployment;
+"chunk_41bc704803572d4aa3f3e0591a8cef1ca44a5137b18385a1c19f47734c75e142" [label="L1 · 189–190\nbus:2", fillcolor="#E6F2FF", penwidth="2"];
+"chunk_41bc704803572d4aa3f3e0591a8cef1ca44a5137b18385a1c19f47734c75e142" -> deployment;
+"chunk_fc0ef88eab2a14b2126ff5c681ed84fbea28324e8a94c5842af7cef0579d822b" [label="L0 · 191–191\nbus:1", fillcolor="#E6F2FF", penwidth="2"];
+"chunk_fc0ef88eab2a14b2126ff5c681ed84fbea28324e8a94c5842af7cef0579d822b" -> deployment;
+"chunk_51084e6b408b9440e96848ea38c63ae2c80c1698145eaab659e8aa3c135bc93e" [label="L0 · 192–192\nbus:1", fillcolor="#E6F2FF", penwidth="2"];
+"chunk_51084e6b408b9440e96848ea38c63ae2c80c1698145eaab659e8aa3c135bc93e" -> deployment;
+}

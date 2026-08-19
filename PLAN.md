@@ -11,6 +11,295 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Active Outcome — TinyWorlds Nouns-v2 Log-t Temporal Consolidation
+
+The fixed temporal-consolidation experiment is implemented under the
+content-addressed contract
+`3f4ef4a10fd471b418a32a8f7b45431602c1f6abc080c19a7822ea2c2dd839b4`.
+It selects eight immutable 512-story shards for every noun (192 arrivals),
+evaluates blocked and round-robin orders, performs the prescribed capacity-two
+oldest-first carry schedule, and finishes each order with 183 merges and nine
+live chunks. Four finite epochs, standalone base-relative LoRAs, sequential
+LoRA, the independent noun bank, and IID LoRA/full-model controls are all
+encoded in the immutable contract. Canonical authentication currently covers
+all 4,440 validation cases, all 900 root/task probes, the selected base, all 24
+VAMP stages, every existing result ledger, and 168 protected nouns-v1/v2 files.
+
+The implementation includes exact optimizer/RNG/update resume, finite
+story-bounded padded batches, prefix-isolated exhaustive routing, evaluator-only
+suffix oracles, bounded per-stage evaluation ledgers, merge/source/sentinel
+distortion and lineage telescoping, shape-bucket timing, the 12 GiB allocator
+gate, and canonical-artifact before/after hashes. The no-options GPU-zero runner
+prints phased progress and ETAs, starts a GET-only loopback dashboard, and
+publishes Markdown, self-contained HTML, a frozen dashboard, CSVs, accessible
+Matplotlib SVGs, and compact/full Graphviz lineage diagrams. Raw resumable
+ledgers remain in the contract's persistent `.work-v1` tree.
+
+The focused CPU suite passes, including exact LoRA and full-model interruption
+parity, schedule/coverage/isolation, malformed and cross-contract ledger
+rejection, dashboard/report structure, timing validation, and byte-identical
+plot/report generation. Read-only authentication against the real artifacts has
+also passed and reproduced the contract above without changing the protected
+hash set. The loopback-only HTTP gate and clean default suite pass. The bounded
+real-data GPU smoke compiled the production 32-by-256 training and routing
+kernels, produced byte-identical adapter tensors across direct and interrupted/
+resumed trajectories, evaluated an isolated midpoint case, and measured a
+6,664,041,728-byte peak under the 12 GiB gate. Equivalent short training jobs
+now reuse one pure compiled executable per model architecture; after the single
+18.46-second cold path, the interrupted/resumed eight-update trajectory took
+0.41 seconds.
+
+The complete no-options run has atomically published all shared, independent,
+IID, sequential, and merge training artifacts for both orders: all 366 merge
+jobs and both final nine-chunk live stacks are complete. Its first timing pass
+stopped safely after 89 of 208 shapes when the process retained every distinct
+JIT executable and exhausted the GPU allocator. Compile-cache eviction alone
+did not release the default allocator's retained blocks, so production timing
+now launches each pending shape in a fresh process from a deterministic,
+content-hashed 102.89 MiB input bundle. Every worker verifies the bundle and
+base, records one cold call, five synchronized warm calls, and its allocator
+peak, appends exactly one chained row, and exits to release the device pool.
+The resume path also treats callbacks replayed while strict-loading already
+published sub-jobs as idempotent without weakening the recorder's default
+fail-closed monotonicity check.
+
+Eight rows by eight nodes at prefix width 512 does not fit the frozen 12 GiB
+gate even in a fresh process. Exhaustive routing therefore selects physical
+rows from `{8, 4, 2, 1}` using a fixed 20,736 row-node-token work budget; this
+execution-only microbatching preserves every logical prefix score and suffix
+result and reports physical rows explicitly. The formerly failing width-512
+shape completed with four rows and a 6,887,178,240-byte peak. Isolated shapes
+102–104 also completed, including an eight-row width-480 shape at
+12,651,053,056 bytes under the gate. The focused CPU suite now passes 22 tests
+with one loopback-dependent skip.
+
+The first isolated resume reached timing shape 114 before the eight-row,
+nine-node, width-320 shape crossed the same transient-autotuning boundary. The
+work budget was consequently tightened from 24,576 to 20,736: the immediately
+preceding eight-row shape has product 20,736 and a measured 8,889,827,328-byte
+peak. The exact previously failing width-320 shape now completes with four rows
+and a 4,931,577,856-byte peak. The focused CPU suite still passes 22 tests with
+one loopback-dependent skip. The corrected no-options run resumes from the same
+persistent `.work-v1` contract directory and serves its verified loopback
+dashboard at `http://127.0.0.1:8765/`; after restart it advanced through shape
+117 of 208. The run subsequently completed all 208 timing shapes, both
+distortion audits, both sentinel/macro evaluations, final controls,
+publication/regeneration, and the final immutability gate.
+
+The foreground runner was subsequently reaped with its tool-managed terminal,
+which also removed the in-process HTTP server while timing shape 120 was in
+flight. A no-options, read-only dashboard entry point now serves the existing
+authenticated disk projection independently of the GPU runner. Both processes
+are launched as restartable user services, keeping port 8765 available across
+runner exits without giving the dashboard ownership of experiment state.
+
+The independent service exposed a previously unexecuted live-HTML defect: a
+Python string escape emitted a literal newline inside the JavaScript event-log
+separator, causing the browser to stop before rendering the first authenticated
+snapshot even though the API returned in under two milliseconds. The escape is
+now emitted as valid JavaScript and covered by the dashboard surface test. The
+runner had meanwhile advanced into blocked evaluation, but its single parent
+process retained a 16.9 GiB GPU pool. That device footprint is larger than the
+12 GiB operational target, although it is not interchangeable with JAX's
+active-allocation peak used by the formal gate. It was stopped at a resumable
+ledger boundary; the evaluation-memory isolation described below resolved the
+issue before compute resumed.
+
+The bounded resume now selects JAX's telemetry-preserving CUDA asynchronous
+allocator for the parent process while leaving isolated timing workers on the
+default allocator. Distortion and evaluation callbacks enforce the 12 GiB peak
+at every streamed progress boundary rather than waiting until publication. The
+production resume crossed the prior macro-blocked high-water mark from 102,168
+to at least 102,933 rows while remaining active. Its process footprint rose to
+2.74 GiB during the first cold resumed batches and then fell to 1.58 GiB while
+sustaining evaluation, rather than retaining the prior 16.9 GiB
+default-allocator pool.
+
+The live client now labels snapshots as live or paused/stale from their latest
+authenticated event time, so an externally stopped runner cannot look active
+indefinitely. Initial event hydration is bounded to the newest 500 rows instead
+of downloading the full 34,000-row progress history. The separate ResNet tuning
+process released GPU 0, and the restartable temporal service is active again;
+the dashboard health endpoint reports `blocked evaluation` and its snapshot is
+current. The manual pause did reveal that no GPU-availability watcher had been
+installed, so transitions out of an intentional resource pause currently still
+require an explicit service start.
+
+Resume callbacks at an unchanged running high-water mark are also idempotent
+now. This prevents strict replay from appending hundreds of duplicate progress
+events or temporarily erasing the last real metrics before it reaches pending
+work; failed-to-running and genuinely advancing transitions remain visible.
+
+The experiment completed at 2026-08-17 14:53 PDT. Every dashboard job is
+complete, the runner exited cleanly, and the independent read-only dashboard
+continues to serve the frozen state. The published manifest is
+`15f3ee2a5a2c5054b158ba62d7a0d1b9fcaa22e40634a73c9cbffceca5888bcb`;
+an independent check reproduces that identity and all 32 artifact hashes. The
+run took 42.21 hours end to end and peaked at 11.78 GiB of JAX allocator use
+under the fixed 12 GiB gate. The focused suite passes 22 tests with one expected
+loopback skip, and the clean default suite passes 699 tests with 275 registered
+resource skips and 20 marker deselections.
+
+At arrival 192 on all 4,440 validation stories, routed log-t improves frozen-
+base story NLL from 1.63759 to 1.57980 in blocked order and 1.58858 in
+round-robin order. Token NLL is 1.61432/1.62206 versus 1.66357 for base, while
+token accuracy moves only from 60.63% to 60.89%/60.79%. Sequential LoRA is
+worse than base in both orders at 1.73303/1.69788 story NLL. Mean final
+forgetting is 0.00606/0.00270 for log-t versus 0.14980/0.05978 for sequential
+LoRA. This supports the retention hypothesis under both stream structures.
+
+Round-robin minus blocked routed log-t is +0.008785 story NLL with a
+deterministic noun-stratified 95% interval of [+0.006776, +0.010677]; token
+accuracy changes by -0.122 percentage points. The final suffix oracles remain
+close at 1.53113 blocked and 1.53345 round robin, so most order sensitivity lies
+in prefix addressing rather than destroyed bank quality. Prefix/oracle
+agreement is 38.6% blocked and 17.6% round robin, and prefix entropy remains
+near the ten-way maximum. Routing captures 54.3% and 47.1% of the respective
+base-to-oracle gains. Frozen midpoint-prefix NLL is therefore the clear
+bottleneck.
+
+The nine-adapter deployed log-t bank is effectively tied with the practical
+24-adapter independent-noun bank: its story NLL is 0.00458 better in blocked
+order and 0.00421 worse in round-robin order. It remains behind joint IID LoRA
+(1.55432 story NLL) and substantially behind the offline IID full model
+(1.39903). The final result is a positive bounded-memory/retention result, not
+an absolute-quality win over offline replay: temporal consolidation preserves
+useful specialization with logarithmic live state, but improved content
+addressing is needed to realize the stored quality.
+
+### Completed addendum — full-story final-bank routing
+
+The read-only full-story routing diagnostic is complete under independent
+contract
+`67657f3a6baf0e529b6ac668e3e2876269ce18c53023c4f31682627c4fb1b253`.
+It authenticates the temporal parent manifest and all 32 parent artifact
+hashes, strict-loads the two final nine-interval log-t banks and the 24-adapter
+independent-noun bank, and joins their exact 13,320 final validation rows. No
+training or merge was rerun, and the parent report, analysis, manifest, and all
+canonical nouns artifacts retained their prior hashes.
+
+Using the entire story raises blocked log-t noun-support accuracy from 71.71%
+to 84.03% (+12.32 pp, paired noun-stratified 95% interval +11.08 to +13.56 pp)
+and lowers story-weighted suffix NLL from 1.57980 to 1.54457 (-0.03523,
+95% interval -0.03767 to -0.03286). Round-robin support rises from 81.76% to
+94.39% (+12.64 pp, +11.51 to +13.78 pp), while suffix NLL falls from 1.58858
+to 1.54588 (-0.04270, -0.04490 to -0.04063). Independent-bank exact noun
+routing rises from 70.68% to 79.75% (+9.08 pp, +7.82 to +10.34 pp), while
+suffix NLL falls from 1.58438 to 1.54004 (-0.04434, -0.04713 to -0.04163).
+
+These full-story selections recover 72.4%, 77.4%, and 66.5% of the respective
+midpoint-to-suffix-oracle story-NLL gaps. Their self-selected whole-story NLLs
+are 1.49926, 1.50921, and 1.48287; selecting the same candidates from only the
+midpoint yields 1.51297, 1.52478, and 1.49939. The evidence therefore supports
+the proposed explanation: weak midpoint routing cues account for a large,
+statistically clear portion of apparent suffix loss. This is diagnostic rather
+than deployable quality because full-story selection reads the suffix whose
+loss is reported; it remains above the evaluator-only suffix oracle and does
+not show that the held-out routing problem is solved.
+
+All 111 stories whose midpoint prefix crosses the canonical 256-transition
+window boundary were directly rescored. The deterministic audit added near
+ties and one minimum-margin short story per noun, for 190 unique stories and
+570 bank/story rows. Direct and reconstructed short scores differ by at most
+`4.01e-7`, with zero route mismatches; the smallest unaudited top-two margin is
+`0.000200103`, above twice the fixed `1e-4` tolerance. The direct and derived
+ledger hashes are
+`dfcfb669efb87cb04f65c7ff549a22cd3e80cb38c19addb55ee2c5e37481a5c4`
+and
+`68f8f6f127593071f03220b9b6efc6bb7686d90f93092b8a76b056e39f84c1df`.
+Peak JAX allocator use was 3.35 GiB under the 12 GiB gate. The no-options
+GPU-zero runner resumed its evidence after a deliberately failed deterministic
+publication check, then regenerated the corrected Markdown/HTML/SVG bundle
+byte-identically. The publication manifest identity is
+`3fa2931e448812d72f8c118065f030b46385121736db3f1cb5cb9f83b89c469d`;
+the Markdown, HTML, and SVG file hashes are respectively
+`74ee79e34896dc126a747c2159cd322595e46a07ba79990e16f2c9dd1402a0b0`,
+`ebde5ba62a6c010a0fdb161090b15ed65112857ae02c19639d81634f27f2556b`,
+and `abfe6e3a2094a6929d8dc757592b7588ce15c50eeb55aa121d7f8bb70d66ce04`.
+The final exact-resume replay passed without changing the publication snapshot,
+the opt-in real-source GPU parity/allocator test passed, and the clean default
+suite passes 704 tests with 275 resource skips and 21 marker deselections.
+
+### Completed addendum — joint-IID LoRA rank sweep
+
+The fixed rank-4/8/16/32 joint-IID sweep completed under independent contract
+`e87a835334a64c22b634a5e51f300cf5ad5fd529bd9fdcdf2268842fbd3df301`.
+It strict-loaded the original rank-8 adapter and 4,440-row ledger plus the
+original joint-IID full-model ledger, then trained only ranks 4, 16, and 32.
+Every new adapter inherited the canonical rank-8 batch and random namespaces,
+four-epoch 15,024-update schedule, and unit LoRA scale (`alpha = rank`). Exact
+story order, suffix masks, and all 476,035 suffix targets match the parent
+evaluation; rank-shaped base-path NLL drift is zero.
+
+The full model remains substantially better: its story/token NLL is
+`1.399026/1.452044`, versus `1.553880/1.590484` at rank 4,
+`1.554322/1.590877` at rank 8, `1.559201/1.595611` at rank 16, and
+`1.569790/1.605972` at rank 32. Rank 4 differs from rank 8 by only
+`-0.000443` story NLL (95% paired noun-stratified bootstrap interval
+`[-0.001118, +0.000225]`), while ranks 16 and 32 are significantly worse by
+`+0.004878 [+0.004174, +0.005592]` and
+`+0.015467 [+0.014554, +0.016380]`. Thus extra rank does not explain or close
+the full-model gap; quality degrades above rank 8 under the matched schedule.
+
+The three new 4,440-row ledgers and the reused rank-8 ledger total 17,760 exact
+evaluation rows. Peak allocation was 7.78 GiB under the 12 GiB gate, and the
+authenticated end-to-end run took 201.1 minutes. Exact-resume replay,
+byte-identical report regeneration, and parent immutability checks passed. The
+publication manifest is
+`bf8b74cdb996679adf501234aaf4f540ba92cf599ac44590960d47ffc83676bb`;
+the result identity is
+`df775fed77517fc3002c1f215758729c52393a72903e201c3ac5e1a7057fc121`.
+The final focused suite passes 34 tests with one resource skip, the opt-in
+real-GPU rank/parity/allocator gate passes, and the clean default suite passes
+711 tests with 275 resource skips and 21 marker deselections.
+
+### Completed addendum — joint-IID LoRA with a trainable tied embedding
+
+The fixed rank-8/rank-32 projection-LoRA plus tied-embedding study completed
+under independent contract
+`b5e1d49866bcaa06fd840fd055cf6d658ace1bacb4433b04333549ac543372ae`.
+It uses the rank-sweep's exact 98,304-story population, batch/random namespace,
+four-epoch schedule, and 4,440-story/476,035-target suffix evaluation. All six
+LoRA projections in every transformer block and the single tied token
+input/output matrix are trainable; position embeddings, layer norms, biases,
+and original attention/MLP kernels remain frozen. The joint globally clipped
+loss uses AdamW at `1e-3` for LoRA and `5e-5` for the embedding.
+
+Training the tied embedding removes the projection-only LoRA gap. Rank 8
+achieves story/token NLL `1.382183/1.438839`, versus
+`1.554322/1.590877` for projection-only rank 8 and
+`1.399026/1.452044` for the joint-IID full model. Its story-NLL improvement
+over projection-only LoRA is `-0.172139` (paired noun-stratified 95% bootstrap
+interval `[-0.177414, -0.166913]`), and it beats the full model by `-0.016843`
+`[-0.018336, -0.015400]`. Rank 32 achieves
+`1.399205/1.455794`, improving over projection-only rank 32 by `-0.170585`
+`[-0.175792, -0.165459]`; its story NLL is statistically tied with the full
+model at `+0.000179 [-0.001360, +0.001672]`, although its token NLL is worse by
+`+0.003750 [+0.002214, +0.005266]`. Rank 32 remains worse than rank 8 by
+`+0.017022 [+0.016220, +0.017826]` story NLL. The jointly learned embedding
+without its LoRA scores `1.470652` and `1.472401` story NLL for the rank-8 and
+rank-32 runs, so the result is not an embedding-only replacement.
+
+Rank 8 trains 13,160,704 values (66.80% of base parameter count) and rank 32
+trains 14,045,440 (71.29%); the tied embedding alone contributes 12,865,792.
+Both completed 15,024 optimizer updates in 67.8 and 68.3 minutes. Peak
+allocation was 8.16 GiB under the 12 GiB gate, and the authenticated end-to-end
+run took 140.2 minutes. The publication manifest is
+`ecdefc0e61f67e85f49ca8e15e8c50dadf930ab560fd2a6a3b475fd42301b013`.
+
+The first completed-state replay exposed and fixed an analysis-boundary bug:
+replay had included the allocator measurement's authentication envelope where
+the initial run used only its raw payload. Metrics and rendered reports were
+unchanged, but `analysis.json` differed. The runner now normalizes that payload,
+a regression test covers both representations, and two subsequent completed
+runs strict-loaded all checkpoints and ledgers with zero retraining or
+reevaluation; the final replay regenerated the complete publication
+byte-identically. The focused embedding/rank-sweep/temporal CPU suite passes
+with one resource skip, and the real-GPU joint-update/parity/allocator gate
+passes. The clean default CPU suite passes 718 tests with 275 resource skips in
+89.2 seconds using the new four-worker `pytest-xdist` work-stealing default;
+`pytest-xdist>=3.6` is now an explicit development dependency.
+
 ## Active Outcome — TinyWorlds Nouns-v2 Disjoint Benchmark
 
 The isolated `tinyworlds-nouns-v2` contracts, partitioner, shared-engine

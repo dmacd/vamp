@@ -220,6 +220,26 @@ def unflatten_lora_edge(
     )
 
 
+def write_safetensors_archive(
+    path: str | Path,
+    tensors: Mapping[str, jax.Array | np.ndarray],
+    metadata: Mapping[str, str],
+) -> None:
+    """Write a deterministic safetensors file using the artifact codec."""
+    _write_safetensors(
+        Path(path),
+        {name: np.asarray(value) for name, value in tensors.items()},
+        metadata,
+    )
+
+
+def read_safetensors_archive(
+    path: str | Path,
+) -> tuple[dict[str, np.ndarray], dict[str, str]]:
+    """Read and strictly validate a deterministic safetensors file."""
+    return _read_safetensors(Path(path))
+
+
 def extract_language_adaptation_artifact(
     adaptations: LanguageAdaptationBaselines,
     model_config: GptNeoConfig,
@@ -1866,6 +1886,8 @@ __all__ = [
     "extract_language_vamp_artifact",
     "flatten_lora_edge",
     "load_language_adaptation_artifact",
+    "read_safetensors_archive",
     "save_language_adaptation_artifact",
     "unflatten_lora_edge",
+    "write_safetensors_archive",
 ]

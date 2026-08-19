@@ -1,0 +1,1 @@
+{"allocator_limit_bytes":12884901888,"contract_sha256":"e87a835334a64c22b634a5e51f300cf5ad5fd529bd9fdcdf2268842fbd3df301","device_kind":["NVIDIA GeForce RTX 4090"],"device_platform":"gpu","format":"tinyworlds-nouns-v2-joint-iid-lora-rank-sweep-allocator-v1","peak_bytes_in_use":8350677351,"result_sha256":"9fb211c470397441d214f3936336a13113a775b1f4ffd53d10fbd4ce899a0535"}

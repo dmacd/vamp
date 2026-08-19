@@ -202,6 +202,161 @@ stagewise audits, and comparative standalone Markdown/HTML report as success.
 OpenRouter is available only via `--judge`; it consumes the persisted
 generation and stagewise ledgers and regenerates the report without model work.
 
+### Log-t temporal consolidation
+
+The nouns-v2 temporal-consolidation study treats arrival structure as an
+independent experimental variable rather than inheriting the canonical
+one-task-per-stage factoring. It deterministically selects 4,096 eligible
+whole stories for each of the 24 nouns and divides each noun into eight
+immutable 512-story shards. The blocked and round-robin streams are two orders
+over those same 192 shard identities; probes, official validation stories, and
+stories outside the selected source set never enter a training chunk.
+
+Temporal memory is an interval hierarchy with capacity two at every level. A
+new shard creates a level-zero chunk. When a level would acquire a third chunk,
+the two oldest equal-level intervals are synchronously replaced by a parent and
+the carry repeats upward. Each parent is a fresh rank-eight LoRA trained from
+the authenticated frozen base on the exact union of its children's source
+stories. It does not average parameters, inherit optimizer state, or initialize
+from either child. Children remain immutable archival evidence but leave the
+live address set. After 192 arrivals this rule has made 183 merges and leaves
+nine live intervals, so exhaustive live addressing grows logarithmically even
+though retained audit storage grows with the complete history.
+
+Every level-zero and merged LoRA is a standalone base-relative root adapter.
+The deployed temporal bank therefore contains the frozen base plus the active
+interval adapters, not compositional paths through the merge tree. Addressing
+uses only the exact midpoint prefix and stable minimum prefix NLL; suffix tokens
+and noun identity are evaluator-only. Because mixed chunks have no single task
+label, their routing statistic is noun-support hit. Exact noun-route accuracy is
+reserved for the independent per-noun bank.
+
+The merge-distortion audit compares every parent with each direct child on the
+child's exact source distribution and noun sentinel. Signed increments are
+retained along each original shard lineage. The direct level-zero-to-active-
+ancestor drift must telescope to those signed increments and cannot exceed the
+sum of their positive parts. Consolidation is measurement-only: distortion is
+reported but never used to veto a scheduled merge.
+
+Temporal artifacts have a separate content-addressed v1 contract and live only
+under temporal-consolidation checkpoint, result, and persistent work trees.
+Training resume binds optimizer state, parameters, RNG, exact update cursor,
+loss-ledger position, and source identity. Evaluation, distortion, timing, and
+progress are chained canonical JSONL prefixes that reject reordering, duplicate
+keys, cross-contract rows, and tampering while repairing only a torn final
+line. The loopback dashboard is a read-only projection of those disk records;
+it never owns model or optimizer state and is frozen into the final standalone
+report bundle.
+
+Temporal exhaustive-prefix routing uses a deterministic power-of-two physical
+row capacity in `{8, 4, 2, 1}`. The largest capacity whose
+`rows × (adapter candidates + base) × prefix-width bucket` product is at most
+20,736 is selected. This is an execution-only microbatch boundary: all logical
+cases retain the same prefix scores, stable tie order, routes, and suffix
+evaluation, while physical rows and forward-equivalent tokens are reported
+explicitly. It also bounds the 25-node independent-noun control rather than
+assuming the eight-row temporal-bank shape fits it.
+
+The 208-shape timing sweep runs each pending shape in a fresh child process.
+The parent publishes one deterministic, content-hashed safetensors bundle of
+the authenticated packed banks and representative batches; each child verifies
+that bundle and the selected base, records one cold compile and five
+synchronized warm calls, appends exactly one chained timing row, and exits.
+Process exit—not compile-cache eviction—is the allocator boundary. This keeps
+different cold shapes from accumulating retained GPU allocations while leaving
+the default allocator and measured kernel path unchanged within every shape.
+The read-only dashboard can also run as an independent local service over the
+same authenticated status and progress ledgers. This serving process owns no
+experimental state, so it can remain reachable while the resumable GPU runner
+restarts or performs its pre-dashboard authentication gate.
+
+The parent training/evaluation process uses JAX's CUDA asynchronous allocator
+with preallocation disabled. Unlike the default retaining pool, it preserves
+JAX peak-memory telemetry while returning unused device allocations during the
+many-shape evaluation sweep. Every distortion and evaluation progress boundary
+checks the cumulative live allocator peak and stops immediately above 12 GiB;
+the isolated timing workers deliberately remove this setting so their recorded
+cold/warm default-allocator measurements remain comparable.
+
+#### Full-story routing diagnostic
+
+The final-bank full-story diagnostic is an immutable addendum to the temporal
+study, not a revision of its prefix-isolated result. It joins the blocked log-t,
+round-robin log-t, and independent-noun ledgers on their exact 4,440-story
+order. Candidate `j` is selected by mean NLL over every causal transition in
+the story, with the inherited base-first candidate order and stable first
+minimum. Mixed temporal candidates retain noun-support accuracy; independent
+noun candidates use exact-noun accuracy. Base is a miss for both definitions.
+
+For midpoint prefixes of at most 256 transitions, the complete score is the
+token-weighted sum of the stored prefix and suffix candidate totals. This is
+identical to canonical reset-at-256 story-window scoring because the two masks
+partition the same causal transitions. Longer router prefixes are not
+reconstructible this way because their original attention context crossed the
+canonical window boundary, so they are always directly rescored. A deterministic
+direct GPU audit also includes all reconstructed margins at most `2e-4` and the
+minimum-margin short story for every noun. Short direct/reconstructed scores
+must agree within `1e-4`, select the same stable candidate, and leave every
+unaudited margin above twice that tolerance; otherwise publication fails.
+
+Suffix NLL after full-story selection is explicitly selection-leaking: the
+router reads the suffix whose competence is subsequently reported. It is a
+diagnostic of whether complete stories contain addressing evidence, not a
+held-out deployment estimate. Whole-story NLL is reported separately and
+labeled self-selected. The addendum binds the parent manifest and all parent
+artifact hashes, the three source ledgers, final adapter artifacts, audit set,
+window rule, and bootstrap settings in an independent v1 contract. Its direct
+and derived ledgers are resumable chained JSONL streams, and its nested result
+directory is excluded from the immutable parent publication manifest.
+
+#### Joint-IID LoRA rank sweep
+
+The joint-IID rank sweep is another immutable temporal-study addendum. It
+strict-loads the original rank-8 adapter/evaluation ledger and full-model
+evaluation ledger as reference evidence, while ranks 4, 16, and 32 receive
+independent contract-addressed artifacts. Every swept adapter uses the original
+rank-8 job identity as both its finite-epoch permutation namespace and random
+namespace. The sweep job identity still binds its actual rank, alpha, source
+population, and both inherited namespaces, so resume states cannot cross ranks.
+
+Alpha equals rank, keeping `alpha / rank = 1` and isolating low-rank capacity
+from update scale. Evaluation forces the sole adapter and reuses the exact
+parent final midpoint/suffix case protocol; this is a model-quality comparison,
+not an addressing comparison. Publication requires exact story order and suffix
+token masks across ranks, plus a rank-shaped zero-edge base-path parity check.
+Story-weighted and token-weighted suffix NLL retain the parent report's distinct
+aggregation semantics. Paired uncertainty resamples stories within noun strata.
+
+#### Joint-IID LoRA with a trainable tied token embedding
+
+The trainable-embedding study is an immutable addendum to the joint-IID rank
+sweep. Ranks eight and 32 inherit the canonical rank-eight story batches,
+four-epoch schedule, dropout/random namespace, and evaluation cases. Alpha
+equals rank, so both adapters retain unit LoRA scale. The only additional
+trainable value is one complete token-embedding matrix. GPT-Neo uses that same
+matrix for input lookup and the output language-model head, so it is trained
+once as a genuinely tied parameter rather than as two independently drifting
+copies. Position embeddings, layer norms, biases, and the original attention
+and MLP kernels remain frozen; every supported attention and MLP projection is
+adapted through LoRA.
+
+One joint loss and one global norm-one clip cover the adapter factors and tied
+matrix. AdamW then applies the inherited `1e-3` learning rate to LoRA and the
+full-model control's `5e-5` learning rate to the tied matrix, with weight decay
+`0.01` for both groups. The artifact stores adapter factors and the tied matrix
+together, independently hashes each component and their complete trainable
+payload, and binds optimizer/RNG/update resume to a separate v1 contract.
+
+Evaluation forces the trained adapter on the exact 4,440 canonical suffix
+cases and preserves the rank-sweep story order and target masks. The learned
+embedding with a zero adapter is also scored as a candidate-zero diagnostic;
+it is not the primary condition. Primary comparisons use story- and
+token-weighted suffix NLL for matched ranks, the projection-only controls, and
+the joint-IID full model, with paired seed-zero noun-stratified bootstrap
+intervals. This isolates whether the previously frozen tied lexical interface,
+rather than insufficient LoRA rank alone, accounts for the joint-IID quality
+gap.
+
 ## TinyWorlds Noun-Overlap v1
 
 `tinyworlds-nouns-v1` is an isolated, descriptive continual-learning
