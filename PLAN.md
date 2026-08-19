@@ -11,6 +11,52 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Outcome — Standalone TinyWorlds Benchmark Repository
+
+TinyWorlds distribution has been extracted into an independent Git repository
+at `../tinyworlds`, root commit `32723b8`. Its public catalog contains only the
+concrete `nouns-v2` contract; the catalog, resource layout, and versioning
+policy support future benchmark families and representation flavors without
+advertising empty configurations.
+
+The repository is now a deterministic recipe over immutable, checksummed
+TinyStories and TinyStories-8M files rather than a second data host. It tracks
+no Parquet, Arrow, or Git-LFS objects. The old 96-shard, 1.17-GiB materialized
+root was amended away, its reflog expired, and all 96 local LFS objects pruned;
+the complete checkout is 2.9 MiB. Consumers use `tinyworlds.load_dataset()` to
+download the pinned upstream bytes once and prepare a content-addressed local
+cache. An optional Hub mirror may later accelerate this without becoming the
+benchmark's authority.
+
+The scientific identity is serialization-independent logical manifest
+`ad690aeca99c87b60b5719c130e18d78b1beb1f2d5c28f5c679a5b8ab77f1ea5`.
+It binds all 2,644,609 rows in six logical splits through canonical story-ID,
+token-boundary, and token-stream hashes. A clean test starting only from the
+pinned upstream corpus and tokenizer processed all 2,745,125 raw documents,
+reproduced the authenticated 2,745,124-story store, token store, and every
+partition index, emitted a fresh 96-file cache, and passed full byte, schema,
+row, assignment, and logical validation. The new cache checksum differed from
+the historical Parquet release as intended while its logical identity matched.
+
+The standalone code covers clean upstream reconstruction and the authenticated
+RPA fast-export path. It preserves source/tokenizer revisions and digests,
+reviewed noun decisions, construction provenance, normalization, deduplication,
+matching, assignment, deterministic holdout/probe selection, tokenization,
+cache materialization, and fail-closed validation. The repository also includes
+a parseable Hugging Face dataset card, zero-issue Croissant dependency metadata,
+benchmark protocol, data card, reproduction/versioning docs, dual licenses,
+citation metadata, CI, and package/CLI APIs. Sixteen lightweight tests, the full
+release/streaming test, Ruff, lock validation, sdist/wheel builds, and a wheel
+import smoke test pass.
+
+The public repository is live at
+[`dmacd/tinyworlds`](https://github.com/dmacd/tinyworlds), with `master` as its
+only and default branch. No Hub mirror, DOI, or package-index entry has been
+created. Existing RPA TinyWorlds research code and authenticated artifacts
+remain in place so the dirty active worktree and completed experiment replays
+are not broken. Once RPA is made to consume the standalone recipe, redundant
+generation-only surfaces can be removed in a separate intentional migration.
+
 ## Completed Outcome — TinyWorlds Nouns-v2 Bounded Addressing
 
 The frozen final-checkpoint addressing study is implemented and complete. Its
