@@ -52,7 +52,7 @@ from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_contracts import (
     TRAINING_ROW_FORMAT,
     WEIGHT_DECAY,
 )
-from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_io import (
+from apm.continual.artifacts import (
     ChainedJsonlLedger,
     atomic_write,
     file_sha256,

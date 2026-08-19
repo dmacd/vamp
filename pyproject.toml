@@ -39,6 +39,27 @@ semantic = [
     "torch>=2",
     "transformers>=4.41,<5",
 ]
+trace = [
+    "accelerate>=1.10,<2",
+    "datasets==2.21.0",
+    "fuzzywuzzy==0.18.0",
+    "huggingface_hub>=0.34,<1",
+    "nltk>=3.9,<4",
+    "numpy>=1.26,<2",
+    "packaging>=25,<26",
+    "pandas>=2.3,<3",
+    "peft>=0.17,<0.18",
+    "pyarrow>=20,<22",
+    "python-Levenshtein>=0.27,<0.28",
+    "pyyaml>=6,<7",
+    "rouge==1.0.1",
+    "sacrebleu>=2.5,<3",
+    "sacremoses>=0.1,<0.2",
+    "safetensors>=0.6,<0.7",
+    "torch>=2.5,<2.9",
+    "tokenizers>=0.21,<0.22",
+    "transformers>=4.55,<4.57",
+]
 notebook = [
     "ipykernel>=6",
     "ipywidgets>=8",

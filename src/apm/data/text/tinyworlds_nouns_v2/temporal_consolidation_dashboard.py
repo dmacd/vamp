@@ -20,7 +20,7 @@ from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_contracts import (
     PROGRESS_ROW_FORMAT,
     STUDY_ID,
 )
-from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_io import (
+from apm.continual.artifacts import (
     ChainedJsonlLedger,
     atomic_write,
     load_canonical_json,

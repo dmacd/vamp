@@ -11,6 +11,188 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Active Outcome — TRACE Log-t VAMP
+
+The Revision-2 TRACE implementation is complete in
+`src/apm/continual/trace/`; the primary remote scientific session is live on
+RunPod against its fully downloaded and authenticated public model snapshot. The
+code pins the TreeLoRA 500-example archive and source revision,
+reproduces manifest
+`19fe258e74f5dba6408e9b498fb1b5e4c4dac16d4840363d142bd89a19e47ba2`,
+retains Meta's immutable Llama model identity, and downloads it from a pinned
+ungated public mirror whose required model, tokenizer, and configuration
+objects match the canonical repository identities. TRACE verifies each
+downloaded byte stream against a pinned size and SHA-256 manifest and
+incorporates that manifest, the dataset, source, canonical model/tokenizer,
+dependency lock, and complete code-tree identity into the run contract. The
+dependency identity also binds the actual material package, Python, PyTorch,
+and CUDA runtime versions. Every DAG job also carries that run-contract hash
+directly.
+
+Implemented experiment surfaces are:
+
+- exact TreeLoRA prompt/answer collation, answer-only loss, fixed task epochs,
+  40 deterministic 100-example arrivals, fresh base-relative rank-eight
+  leaves, matched sequential/reference, sequential-40, joint-IID, and
+  taskwise presentation plans;
+- a pure capacity-two oldest-first hierarchy with 33 historical merges and the
+  exact seven-node final topology; permanent leaf priority records and
+  composable policy-sized repair reservoirs totaling 610 replay presentations
+  at five percent;
+- compact FP32 weighted SVD merging and pinned Core-Space/TSV algebra, direct
+  rank-bounded reconstruction with each child's scale read from its immutable
+  PEFT rank/alpha configuration, reusable
+  replay-independent merge-cache identities, retained spectra/bases/cores,
+  selected rank-up-to-16 precompression diagnostics, validation-NLL
+  post-compression and post-repair diagnostics for every merge, and four
+  fresh-parent calibration intervals;
+- atomic immutable artifact directories, hash-chained work/job/evaluation
+  ledgers, exact optimizer/scheduler/RNG/cursor checkpoints every 50 steps or
+  two minutes, phase snapshots, and idempotent discovery that returns an
+  already-published adapter without loading a model;
+- answer-isolated prompt-NLL and frozen-base centroid routing, validation-only
+  task-aware selection, target-aware diagnostic oracle selection, stable
+  per-example generation seeds, row-local RNG streams inside fixed GPU
+  generation batches, and resumable candidate caches reused by all routers;
+- the 422-job primary DAG, two independent GPU subprocess workers, SVD/Core
+  affinity, retry/restart recovery, measured job-family ETA, the 23h30 soft
+  pause and 24-hour hard boundary, durable interim reporting, nonfatal webhook
+  events, marker-guarded Pod deletion, and an independent marker-aware
+  watchdog that never addresses a Network Volume deletion API;
+- a pinned RunPod image/launcher for two RTX 4090s, a 150-GB persistent volume
+  mounted at `/workspace`, a 50-GB container disk, persistent Hugging Face
+  caches, a build-time zero-LoRA/PEFT round-trip smoke test, and public `run`,
+  `resume`, `status`, `report`, and leaf-reusing `rebuild-policy` commands; and
+- deterministic Markdown and self-contained HTML reports, score CSV/Parquet,
+  the six registered merge-diagnostic comparisons, authenticated lineage SVG,
+  primary cost/memory and sequential/joint-IID gap tables, archive-versus-live
+  accounting, runtime/throughput/ETA state, a validation-only final-policy
+  comparison that never reads test scores, and the required leaf-reuse
+  acceptance record.
+
+Verification currently passes 39 focused default tests, including mirror
+identity and drift rejection, and the complete repository regression gate
+passes 757 tests with 275 resource skips. It also passes the real pinned-data
+integration test
+(4,000 train, 741 validation, 781 test examples), exact
+interrupted/uninterrupted adapter parity, dense/compact merge parity, Core/TSV
+reference algebra, artifact and ledger recovery, report determinism, and the
+focused legacy TinyWorlds regressions affected by the shared artifact-module
+migration. Policy-only rebuilds use the same 24-hour lifecycle as the primary
+run and publish leaf-reuse acceptance only after their added DAG is complete.
+The remaining work is operational rather than an omitted condition: finish the
+live complete two-4090 DAG, run the registered non-default Core-scale/repair
+reuse acceptance, inspect the generated plots, rerun the complete local
+regression gate after any further implementation changes, and record the
+measured scientific results. No result or completion claim should be made
+before those remote jobs and final report are complete.
+
+Deployment on 2026-08-18 uses direct SSH setup on secure-cloud Pod
+`yyqmyhmzei2k0z`: two RTX 4090s in `EU-RO-1` at $1.48/hour total, the public
+RunPod PyTorch 2.8/CUDA 12.8 image, a 50-GB container disk, and persistent
+150-GB Network Volume `oybty7q8vt` mounted at `/workspace`. No custom registry,
+saved template, or Hugging Face token is required. Pod deletion is exclusively
+authorized by the durable safe-to-terminate marker; an independent wall-clock
+deletion is not part of the launcher.
+
+The initial Pod `mwog19gmdsbtox` authenticated the public snapshot, created run
+contract `0b5c71f9623f757e3198a7b0b70a02269fb9df4853c7a2e353fe8cdc819a6388`,
+and reached 13 complete jobs with no failures. It was intentionally terminated
+after the full regression gate exposed a creation-time wall-clock deletion flag
+that violated the marker-only cleanup contract. RunPod does not expose an
+in-place cancellation operation for that field. Its durable diagnostic state
+remains on the volume, but that superseded run must not supply scientific
+results. The corrected, fully tested source on the replacement Pod passed its
+real PyTorch/PEFT adapter round-trip, reauthenticated the persistent model
+cache, and created fresh run contract
+`c9743521129b5c35389903eea8e381891a582fe24c54f374395013cf746327e5`.
+Its 422-job ledger remains live and authenticated through the recovery below;
+the marker-aware watchdog is also live. Continuous operations now
+use a ten-minute health cadence covering Pod state, coordinator/watchdog
+liveness, durable ledger progress, GPU utilization/temperature, storage, and
+new errors. The latest scheduled check at 22:07 UTC found 287 complete, 2
+running, 133 pending, and 0 failed jobs after the successful recovery below.
+Both workers were actively evaluating, at stages four and eight, and 11 durable
+files changed during the preceding interval. The GPUs were 62% and 77% utilized
+at 46 and 52 degrees Celsius; the container filesystem retained 37 GB free,
+and the only matching error line remained the already-explained rejected
+preflight from the first restart.
+At 11:35 UTC on 2026-08-19, the first runtime fault exposed that the pinned
+Hugging Face SARI metric loader had not explicitly opted into its required
+custom metric code. One stage-8 job exhausted its three automatic retries at
+the final scoring step and the coordinator exited, while its other worker
+continued from durable candidate state. The metric code has now been loaded
+from the pinned `datasets==2.21.0` source and verified non-interactively; the
+failed job was moved through an authenticated `FAILED -> PAUSED` ledger
+transition so it could receive one operator-authorized retry. The orphaned
+worker was then signaled through TRACE's built-in safe-boundary checkpoint path
+and exited in three seconds; the coordinator resumed with
+`HF_DATASETS_TRUST_REMOTE_CODE=1` and the recorded Pod/API/volume identity, then
+redispatched both jobs from their durable candidate caches. The first launch
+attempt omitted that required deployment identity and was rejected before it
+could mutate scheduler state. The operator-authorized fourth attempt completed
+successfully, its result was committed to the authenticated ledger, and the
+freed GPU immediately began the next pending evaluation. The remote source
+remains byte-identical to its
+run contract, while the durable working-tree source fix passes
+`trust_remote_code=True` at both SARI load sites and has a focused regression
+covering aggregate and per-example scoring; its eight-test evaluation module
+passes locally. The wider focused collection remains deferred in this host
+shell because its optional `safetensors` dependency is absent; the unchanged
+pre-fault remote source had already passed all 39 focused tests and the complete
+757-test regression gate. The 20,000-presentation sequential reference is
+complete, `joint_iid_lora` has published its final adapter, and
+the scheduler has advanced from taskwise-baseline and prompt-embedding work
+into the substantially longer stage-7 evaluations. The growing hash-chained
+ledger takes roughly 38--55 seconds to revalidate, but
+independent process, GPU, and log checks confirmed this is reader cost rather
+than a lock or compute stall. Once the first stage-7 result supplied a measured
+duration for that job class, the remaining estimate initially jumped and is
+still oscillating as heterogeneous stage lengths enter the sample; it is now
+about 4.07 hours (roughly 2.65--5.50 hours) with medium confidence. Both
+evaluators are making durable progress and this range remains affordable at
+the live Pod rate: the latest account check found a $36.90 balance and
+$1.502/hour total spend, so even the current high ETA bound retains substantial
+headroom below the $80 spend limit. Recoverable
+failures are repaired or resumed in place; if a failure becomes irrecoverable,
+durable state is preserved and
+all still-independent registered conditions are prioritized. This establishes
+execution, not a final scientific result. An authenticated interim report over
+70 completed task-stage evaluations and all 132 merge diagnostics shows two
+clear but preliminary signals. First, rank-eight SVD merging retains 93.0% of
+weighted spectral energy and has essentially zero mean validation answer-NLL
+damage versus the best child (-0.001 without repair), while Core-TSV at scale
+0.3 retains 89.0% and adds 0.754 NLL. Five-percent replay reduces Core's mean
+post-repair damage from 0.835 to 0.483 and improves 32 of 33 merges, but does not
+close that gap; four registered precompression probes attribute most of Core's
+damage to the merge itself rather than the final rank-eight compression. A
+direct audit against the pinned upstream Core-Space implementation found no
+obvious algebra or scaling-location defect: five independent FP64 reference
+comparisons matched the compact implementation within 2--7 ppm. The live
+artifacts instead expose recursive coefficient attenuation. Mean Core parent
+norms fall from 0.966 at level one through 0.379, 0.143, and 0.056 at level
+four, versus 1.663, 1.161, 0.821, and 0.634 for SVD; Core retains only
+49--56% of the exact arithmetic-mean norm at each merge while SVD retains
+95--97%. Applying the one-shot `0.3` Core coefficient at every homogeneous
+tree level compounds as `0.3^depth`, rather than the equal-weight mean's
+`0.5^depth`. This is now the leading explanation, especially because the
+upstream Llama TSV-Core result validation-selected 0.5. Keep the preregistered
+0.3 condition unchanged and prioritize a repair-free leaf-reusing 0.5 rebuild
+after primary completion to distinguish protocol scaling from merge algebra;
+then run the registered 0.5/10%-repair reuse acceptance if runtime and funds
+remain. The rebuild command fail-closes until the primary ledger is complete,
+re-hashes all 40 immutable leaves, and records their reuse separately.
+Second, routing is currently the dominant end-to-end bottleneck: across the
+four partially evaluated VAMP policies, frozen-centroid routing beats
+prompt-NLL routing by 5.1--21.6 score points on paired completed cells, and the
+answer oracle beats it by 11.8--33.7 points on every completed cell. These
+cells are unevenly scheduled and no condition yet has the complete 36-cell
+triangular matrix; sequential, joint-IID, and other baseline evaluations are
+also still pending. Therefore OP, forgetting, BWT, VAMP-versus-sequential, and
+VAMP-versus-joint claims remain unavailable. The remaining acceptance points
+are sustained failure-free progress, completion or a safe resumable pause, and
+the authenticated final report.
+
 ## Completed Outcome — Standalone TinyWorlds Benchmark Repository
 
 TinyWorlds distribution has been extracted into an independent Git repository

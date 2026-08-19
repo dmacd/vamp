@@ -10,6 +10,186 @@ artifacts are not part of the public report surface. This keeps published
 evidence readable while preserving the existing content-addressed artifact
 stores as local research state rather than source-controlled deliverables.
 
+## TRACE Log-t VAMP
+
+TRACE is an isolated PyTorch/PEFT experiment package under
+`apm.continual.trace`. Its heavy imports stay behind that package boundary; the
+shared `apm.continual.artifacts` module contains only dependency-light atomic
+and authenticated persistence primitives. TinyWorlds callers use those shared
+primitives directly, with no retained domain-specific compatibility alias.
+
+### Identity, data, and storage boundary
+
+A run is named by a canonical contract over the prepared dataset manifest,
+pinned source archive and source-code revisions, canonical model and tokenizer
+commit, authenticated download-source commit and complete required-file
+manifest, complete installed code-tree identity, dependency-lock digest, seed,
+training configuration, and the realized material package/Python/PyTorch/CUDA
+environment. Every job payload contains the run-contract hash in addition to
+its own semantic inputs and dependency identities. Jobs may be reused only
+inside that authenticated run namespace.
+
+The canonical model identity remains
+`meta-llama/Llama-3.2-1B-Instruct` at Meta revision
+`9213176726f574b556790deb65791e0c5aa438b6`. Runtime downloads use ungated
+public redistribution `alpindale/Llama-3.2-1B-Instruct` at immutable revision
+`f92201d8185818a9d079b3b52efdab4b68bdd17f`. Its required BF16 tensor,
+tokenizer, and configuration objects have the same Git/Xet identities as the
+canonical repository; TRACE additionally pins and verifies each downloaded
+file's byte size and SHA-256 before constructing the run. Distribution source
+therefore changes neither model parameters nor tokenizer semantics and does
+not require a Hugging Face credential.
+
+The source authority is the pinned TreeLoRA
+`LLM-CL-Benchmark_500.tar.xz`. Extraction rejects traversal, links, and device
+entries. Source-file hashes bind prompt and answer bytes; stable example IDs
+bind task, split, source index, content, and archive identity. Only training
+examples receive arrivals. A seed-1234 stable ordering creates five disjoint
+100-example arrivals per fixed TRACE task before any model work, and the
+manifest plus full example cache are immutable thereafter. Training plans and
+repair reservoirs can reference only those registered training identities;
+validation is used for diagnostic selection, and test answers remain confined
+to evaluator metrics.
+
+The persistent authority is `/workspace/vamp-trace/runs/<contract-hash>` on a
+mounted Network Volume. Leaves, derived nodes, baselines, caches, ledgers,
+checkpoints, evaluations, and reports occupy separate subtrees. An artifact
+directory is published by copying completed files into a sibling temporary
+directory, writing a manifest over every file hash and size, fsyncing, and
+renaming once. Discovery of a valid target is an idempotent success and never
+constructs a model or repeats optimizer work. Mutable work state is permitted
+only in checkpoints, authenticated append ledgers, scheduler state, and the
+current termination marker.
+
+### Leaves, hierarchy, and merge cache
+
+Each arrival trains a newly initialized zero-effect rank-eight LoRA against
+the common frozen Llama base. A leaf never inherits another leaf. Its artifact
+retains all 100 permanent SHA-priority entries so any registered repair
+fraction can later derive its reservoir without retraining or rewriting the
+leaf.
+
+The temporal hierarchy is a pure transition. A level accepts a new live node;
+if that produces a third node, the two oldest equal-level nodes merge and the
+parent carries upward. Logical node identity covers its exact arrival IDs,
+interval, level, and child IDs but not a merge policy. Thus every policy shares
+the same topology while storing its own derived adapter. After arrival 40 the
+live partition is level-zero 39 and 40, level-one 37–38, level-two 33–36,
+level-three 17–24 and 25–32, and level-four 1–16.
+
+Parameter merging and repair have separate identities. The reusable merge
+configuration covers method, Core coefficient, output rank, parent alpha, and
+algorithm version; it excludes replay fraction and optimizer. A cache key
+combines the ordered child artifact hashes with that merge identity. The full
+derived policy additionally covers the reservoir rule, replay fraction, and
+repair learning rate. This permits zero- and nonzero-repair policies to share
+the exact first parameter merge when their child tensors are identical.
+
+For SVD mean, each child represents `scale * B @ A`. Example-count weights are
+absorbed symmetrically into stacked factors; reduced QR followed by a compact
+FP32 SVD yields the optimal rank-bounded update without a model-sized dense
+matrix. A child scale is read from that artifact's immutable PEFT rank/alpha
+configuration rather than inferred from the headline rank-eight default.
+Parent factors split singular values symmetrically after dividing by the
+parent's alpha/r scale. Averaging A and B separately is never a supported
+operation.
+
+Core+TSV builds orthonormal reference bases from stacked child A and B factors,
+forms scaled aligned cores, applies the algebra of the pinned official TSV
+implementation, scales by the registered Core coefficient, and SVDs only the
+small merged core. Multiplying the compact singular vectors into the reference
+bases produces the ordinary rank-bounded PEFT parent directly. Selected
+events also retain bases, merged cores, spectra, and a temporary
+rank-up-to-16 precompression adapter used only for validation diagnostics; rank
+never grows recursively in the deployed hierarchy.
+
+Every derived node receives answer-NLL validation diagnostics for both the
+parameter-space merge and its optional repair. The four registered calibration
+intervals additionally retain and score the rank-up-to-16 Core precompression
+adapter; no other node pays that storage cost.
+
+For repair fraction `f`, a child exposes the lowest `ceil(f*n_child)` permanent
+priorities. A merge repairs on their sorted union for one deterministic epoch,
+then retains the lowest `ceil(f*n_parent)` entries as the parent reservoir.
+Because merges are always equal-level, the union has the required parent
+capacity. Zero repair carries an empty reservoir and performs no gradient
+work. The primary five-percent tree presents 610 replay examples across all
+33 merges.
+
+### Training, evaluation, and routing
+
+Training materializes complete finite presentation orders before execution.
+Leaves use their task's reference epoch count; sequential reference has eight
+task phases, sequential-40 has 40 arrival phases, joint IID globally shuffles
+the matched 20,000-presentation multiset, and taskwise uses eight fresh
+adapters. Adam, constant scheduling, answer-only labels, and accumulation by
+eight match the registered protocol. A checkpoint is written at an optimizer
+boundary every 50 steps, every two minutes, at phase/end boundaries, or on a
+pause request. It contains trainable tensors, optimizer and scheduler state,
+CPU/CUDA RNG, exact next-presentation cursor, an explicit zero accumulation
+position, and authenticated ledger length. Checkpoints are written only at
+optimizer boundaries. Resume truncates only work beyond that checkpoint and
+continues from the next presentation; task-boundary snapshots are independently
+immutable.
+
+Candidate evaluation stores exactly one generated continuation and prompt NLL
+per candidate/example/stage. The deterministic order is candidate-major so one
+adapter remains active for bounded batches. Each row nevertheless owns a seed
+derived from run seed, stage, candidate, and example; the production sampler
+uses a separate `torch.Generator` per row while sharing the model KV cache.
+Small batches append and fsync together, and resume accepts only the exact
+expected prefix. Each cached case also carries exact prompt/generated token
+counts and its amortized batch wall time, allowing total and per-task prefill,
+generation, and candidate throughput to survive interruption. All routers
+project from this common cache, so changing a router cannot change adapter
+tensors or generation.
+
+`PromptQuery` structurally carries only example identity and prompt text.
+Prompt-NLL sees observed prompt transitions only. Frozen-centroid routing uses
+mean-pooled final hidden states from the disabled-adapter base; the base and
+node centroids use only training prompts encountered by that stage. The
+task-aware selector chooses one candidate per task using validation metrics.
+The answer oracle alone may inspect targets, and only inside evaluator code.
+Headline test reporting keeps both diagnostics distinct from the two task-free
+routers.
+
+### Scheduling, pause, and reporting
+
+The CPU coordinator is the sole job-state writer and launches one process per
+available GPU. It gives the initial sequential reference job priority on GPU
+zero and leaves on GPU one, then prefers SVD work on zero and Core work on one.
+Workers receive only one visible device. A failed or abandoned job is
+retryable; a complete job cannot transition back to running. Successful and
+failed attempts emit authenticated timing rows, from which status reports a
+measured family-median ETA after at least 15 minutes of representative work,
+while retaining the preregistered static range.
+
+At 23h30 the coordinator dispatches nothing new, marks pending work paused,
+and sends SIGTERM as a safe-boundary request. Training, embedding, and
+generation workers publish their next durable boundary and exit with the
+checkpoint status. After all workers quiesce, the supervisor emits a clearly
+preliminary timestamped report, notification event, session record, and
+`SAFE_TO_TERMINATE.json`. Only then may either the supervisor or independent
+watchdog issue `DELETE /v1/pods/<current-pod>`. Neither code path contains a
+Network Volume deletion operation, and an unguarded timer is not an accepted
+termination authority.
+
+Reports are derived projections, not training authority. They retain raw
+task-stage scores in CSV and Parquet, merge diagnostics in CSV, a deterministic
+lineage SVG, Matplotlib performance and merge plots, Markdown, and a
+self-contained HTML projection. The primary table distinguishes training and
+replay presentations, archive bytes and algorithmically live LoRAs, task-free
+routes and diagnostic routes, signed BWT and clipped negative-only BWT. It also
+reports the registered VAMP-minus-sequential and joint-IID-minus-VAMP gaps and
+the six requested merge comparisons. Final-stage validation matrices are
+stored separately from test matrices and select the best completed policy for
+each router without consulting any test score. A derived-policy rebuild
+registers only new merge/evaluation jobs against the 40 complete leaf jobs and
+enters the same resumable 24-hour session lifecycle. Its terminal report job
+authenticates the pre-rebuild leaf hashes before emitting the acceptance record
+proving identical leaves and 100-percent leaf-step reuse, so a paused rebuild
+cannot claim acceptance prematurely.
+
 ## TinyWorlds Nouns-v2 Disjoint Benchmark
 
 `tinyworlds-nouns-v2` is an isolated 24-task experiment derived from, but not

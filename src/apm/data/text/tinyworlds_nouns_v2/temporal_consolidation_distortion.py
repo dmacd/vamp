@@ -25,7 +25,7 @@ from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_evaluation import 
     score_midpoint_cases_by_candidate,
     score_token_batches_by_candidate,
 )
-from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_io import (
+from apm.continual.artifacts import (
     ChainedJsonlLedger,
 )
 from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_training import (

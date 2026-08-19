@@ -43,7 +43,7 @@ from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_evaluation import 
     run_prefix_kernel,
     run_suffix_kernel,
 )
-from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_io import (
+from apm.continual.artifacts import (
     ChainedJsonlLedger,
     file_sha256,
     load_canonical_json,

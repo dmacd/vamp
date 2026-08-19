@@ -16,7 +16,7 @@ from apm.data.text.tinyworlds_nouns_v2.contracts import (
     canonical_json_bytes,
     record_sha256,
 )
-from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_io import (
+from apm.continual.artifacts import (
     atomic_write,
     file_sha256,
 )

@@ -101,6 +101,67 @@ parent corpus artifacts and uses substantial GPU time. The exact data,
 checkpoint, evaluation, and resume contracts are recorded in the
 [execution report](docs/TINYWORLDS_NOUNS_V2_EXECUTION_REPORT.md).
 
+## TRACE Log-t VAMP Runner
+
+The repository also contains a complete implementation of
+the TRACE/Llama-3.2-1B-Instruct log-t temporal-consolidation experiment. It
+trains 40 immutable LoRA leaves once, builds SVD and Core+TSV capacity-two
+hierarchies with optional deterministic replay repair, evaluates two task-free
+routers and two diagnostics, and runs the required baselines through a
+resumable two-GPU job DAG. No TRACE benchmark result is claimed until the
+remote DAG and final report finish.
+
+The canonical model remains Meta's exact revision
+`9213176726f574b556790deb65791e0c5aa438b6`. Downloading does not require gated
+Hugging Face access: TRACE pins public source
+`alpindale/Llama-3.2-1B-Instruct` at revision
+`f92201d8185818a9d079b3b52efdab4b68bdd17f` and authenticates the model,
+tokenizer, and configuration bytes against Meta's repository metadata before
+training. In particular, the 2.47-GB BF16 safetensor is byte-identical, with
+SHA-256
+`1ff795ff6a07e6a68085d206fb84417da2f083f68391c2843cd2b8ac6df8538f`.
+
+The direct deployment uses RunPod's public PyTorch image; it needs neither a
+custom registry nor a saved template. RunPod supplies the Pod-scoped API key,
+Pod ID, and attached-volume ID to an image entrypoint. For a direct SSH-driven
+deployment, place those three values in the launched process environment. An
+optional `VAMP_NOTIFY_WEBHOOK_URL` enables notifications.
+
+```bash
+export RUNPOD_API_KEY=<runpod-key>
+export TRACE_NETWORK_VOLUME_ID=<network-volume-id>
+scripts/trace/launch_runpod.sh
+```
+
+After copying this checkout to `/workspace/vamp-trace/source/apm`, prepare the
+isolated runtime with `scripts/trace/prepare_direct_runpod.sh`. The Dockerfile
+remains available as an optional prebuilt-image path, not a deployment
+requirement.
+
+All durable state and model/data caches remain below
+`/workspace/vamp-trace/`. A replacement two-4090 Pod resumes without repeating
+completed work:
+
+```bash
+python -m apm.continual.trace.cli status \
+  --run /workspace/vamp-trace/runs/<run-contract-hash>
+python -m apm.continual.trace.cli resume \
+  --run /workspace/vamp-trace/runs/<run-contract-hash>
+```
+
+After the primary DAG completes, a new Core scale or repair fraction reuses all
+leaf adapters and records the reuse acceptance check:
+
+```bash
+python -m apm.continual.trace.cli rebuild-policy \
+  --run /workspace/vamp-trace/runs/<run-contract-hash> \
+  --policy configs/trace/policy_sweep_example.yaml
+```
+
+The source experiment contract is
+`docs/TRACE Log-t VAMP Experiment Specification.pdf`; live implementation
+status and durable semantics are recorded in `PLAN.md` and `DESIGN.md`.
+
 ## Repository Layout
 
 - `src/apm/memory/`: immutable parameter graphs and addressing mechanisms.

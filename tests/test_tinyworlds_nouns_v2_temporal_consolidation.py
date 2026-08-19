@@ -73,7 +73,7 @@ from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_timing import (
 from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_contracts import (
     EVALUATION_ROW_FORMAT,
 )
-from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_io import (
+from apm.continual.artifacts import (
     ChainedJsonlLedger,
     load_canonical_json,
     publish_immutable_json,

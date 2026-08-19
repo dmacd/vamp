@@ -57,7 +57,7 @@ from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_evaluation import 
     evaluate_to_ledger,
     validate_evaluation_rows,
 )
-from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_io import (
+from apm.continual.artifacts import (
     ChainedJsonlLedger,
     atomic_write,
     file_sha256,

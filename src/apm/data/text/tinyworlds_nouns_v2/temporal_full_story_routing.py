@@ -47,7 +47,7 @@ from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_evaluation import 
     score_token_windows_by_candidate,
     validate_evaluation_rows,
 )
-from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_io import (
+from apm.continual.artifacts import (
     ChainedJsonlLedger,
     file_sha256,
     load_canonical_json,

@@ -25,7 +25,7 @@ from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_contracts import (
     LORA_RANK,
     TASK_IDS,
 )
-from apm.data.text.tinyworlds_nouns_v2.temporal_consolidation_io import (
+from apm.continual.artifacts import (
     ChainedJsonlLedger,
 )
 from apm.lm.config import GptNeoConfig

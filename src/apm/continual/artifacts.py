@@ -1,4 +1,4 @@
-"""Tamper-evident ledgers and atomic files for the temporal study."""
+"""Canonical, crash-safe persistence primitives for continual experiments."""
 
 from __future__ import annotations
 
@@ -7,16 +7,38 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 from typing import Final
 
-from apm.data.text.tinyworlds_nouns_v2.contracts import (
-    canonical_json_bytes,
-    record_sha256,
-)
-
 
 _GENESIS_HASH: Final[str] = "0" * 64
+_SHA256: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{64}\Z")
+
+
+def canonical_json_bytes(value: object) -> bytes:
+    """Encode a JSON-compatible value canonically with one trailing newline."""
+    return (
+        json.dumps(
+            value,
+            allow_nan=False,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def record_sha256(value: object) -> str:
+    """Return the SHA-256 digest of one canonical JSON-compatible value."""
+    return sha256(canonical_json_bytes(value)).hexdigest()
+
+
+def require_sha256(value: str, label: str) -> None:
+    """Require a lowercase hexadecimal SHA-256 digest."""
+    if type(value) is not str or _SHA256.fullmatch(value) is None:
+        raise ValueError(f"{label} must be lowercase SHA-256")
 
 
 def file_sha256(path: str | Path) -> str:
@@ -26,6 +48,15 @@ def file_sha256(path: str | Path) -> str:
         while chunk := source.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def fsync_directory(path: str | Path) -> None:
+    """Flush directory metadata for an already-created directory."""
+    descriptor = os.open(Path(path), os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def atomic_write(path: str | Path, payload: bytes) -> Path:
@@ -40,11 +71,7 @@ def atomic_write(path: str | Path, payload: bytes) -> Path:
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary, target)
-        directory_descriptor = os.open(target.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory_descriptor)
-        finally:
-            os.close(directory_descriptor)
+        fsync_directory(target.parent)
     except BaseException:
         if temporary.exists():
             temporary.unlink()
@@ -52,15 +79,25 @@ def atomic_write(path: str | Path, payload: bytes) -> Path:
     return target
 
 
+def publish_immutable_bytes(path: str | Path, payload: bytes) -> Path:
+    """Publish bytes once or require identity with an existing artifact."""
+    target = Path(path)
+    if target.is_file():
+        if target.read_bytes() != payload:
+            raise ValueError(f"immutable artifact changed: {target}")
+        return target
+    if target.exists():
+        raise ValueError(f"immutable artifact path is not a file: {target}")
+    return atomic_write(target, payload)
+
+
 def publish_immutable_json(path: str | Path, record: Mapping[str, object]) -> Path:
     """Publish canonical JSON once or require byte identity with the prior file."""
     target = Path(path)
     payload = canonical_json_bytes(dict(record))
-    if target.is_file():
-        if target.read_bytes() != payload:
-            raise ValueError(f"immutable JSON changed: {target}")
-        return target
-    return atomic_write(target, payload)
+    if target.is_file() and target.read_bytes() != payload:
+        raise ValueError(f"immutable JSON changed: {target}")
+    return publish_immutable_bytes(target, payload)
 
 
 def load_canonical_json(path: str | Path) -> dict[str, object]:
@@ -97,11 +134,7 @@ class ChainedJsonlLedger:
     @property
     def tail_hash(self) -> str:
         """Return the last row hash or the fixed genesis hash."""
-        return (
-            str(self._rows[-1]["result_sha256"])
-            if self._rows
-            else _GENESIS_HASH
-        )
+        return str(self._rows[-1]["result_sha256"]) if self._rows else _GENESIS_HASH
 
     def append(self, values: Mapping[str, object]) -> dict[str, object]:
         """Append, flush, and fsync one canonical chained row."""
@@ -153,16 +186,13 @@ class ChainedJsonlLedger:
             raise ValueError(f"ledger contains duplicate keys for {names}")
 
     def truncate(self, row_count: int) -> None:
-        """Atomically discard an authenticated suffix after a checkpoint rollback."""
+        """Atomically discard an authenticated suffix after checkpoint rollback."""
         if type(row_count) is not int or not 0 <= row_count <= len(self._rows):
             raise ValueError("ledger truncation count is outside validated coverage")
         if row_count == len(self._rows):
             return
         retained = self._rows[:row_count]
-        atomic_write(
-            self.path,
-            b"".join(canonical_json_bytes(row) for row in retained),
-        )
+        atomic_write(self.path, b"".join(canonical_json_bytes(row) for row in retained))
         self._rows = list(retained)
 
     def _load_and_repair(self) -> list[dict[str, object]]:
@@ -200,7 +230,12 @@ class ChainedJsonlLedger:
 __all__ = [
     "ChainedJsonlLedger",
     "atomic_write",
+    "canonical_json_bytes",
     "file_sha256",
+    "fsync_directory",
     "load_canonical_json",
+    "publish_immutable_bytes",
     "publish_immutable_json",
+    "record_sha256",
+    "require_sha256",
 ]
