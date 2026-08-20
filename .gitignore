@@ -7,11 +7,14 @@ __pycache__/
 venv/
 ve/
 ve-semantic/
+.venv-vision/
 build/
 dist/
 /data/
 /results/
 /checkpoints/
+/artifacts/imagenetr50/
+/external/imagenetr50/
 /openrouter-tinyworlds-key.txt
 /openrouter-tinyworlds-no-byok-attestation.json
 /openrouter-tinyworlds-preview-no-byok-attestation.json

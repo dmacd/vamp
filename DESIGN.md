@@ -10,6 +10,55 @@ artifacts are not part of the public report surface. This keeps published
 evidence readable while preserving the existing content-addressed artifact
 stores as local research state rather than source-controlled deliverables.
 
+## ImageNet-R-50 Local Vision Boundary
+
+The ImageNet-R experiment is an isolated PyTorch package under
+`apm.continual.vision.imagenetr`; it does not import from or modify TRACE. Its
+heavy vision dependencies live in the dedicated `vision` extra and
+`.venv-vision`. Dependency-light atomic persistence and low-rank linear algebra
+may be shared, but TRACE is not migrated onto the vision implementation and no
+compatibility alias joins the two experiment surfaces.
+
+The scientific identity is one immutable resolved protocol. It binds a
+per-class largest-remainder 24,000/6,000 split of all 30,000 byte-hashed
+ImageNet-R images, the seed-1993 PyCIL class permutation, the complete resolved
+configuration, material vision/shared-code hashes, installed environment, and
+the exact `timm/vit_base_patch16_224.augreg_in21k` revision and checkpoint
+SHA-256. Prepared images are hard links whose membership and bytes are
+revalidated before work begins. Test identities are structurally excluded from
+training, proxy, repair, calibration, and stopping inputs; published E²-LoRA
+numbers are labeled external context rather than a protocol-equivalent
+threshold.
+
+The frozen ViT base has explicit rank-16, alpha-16, zero-dropout LoRA factors
+on every attention QKV and MLP `fc1` projection. A leaf trains only its four
+affine classifier rows and its fresh adapter. Classifier union is exact;
+retrained and repaired parents may update every represented row. The temporal
+bank has capacity two per level and merges the oldest equal-level nodes first,
+producing exactly 42 merge events and eight live nodes after 50 tasks. Logical
+stage snapshots, permanent source priorities, unrepaired merge identities, and
+repaired-parent identities are immutable and independently content-addressed.
+
+Merge policies consume identical leaf hashes. The supported parent families
+are source-image-weighted exact rank-32 sums followed by optimal rank-16 SVD,
+pinned Core-Space plus TSV, deterministic proxy-output-drift projection, and a
+fresh union-retrained rank-16 parent. Repair is a separate one-epoch operation
+over deterministic training-only reservoirs. Frozen proxy activations and
+node/image/transform evaluation logits are cached by semantic content hash;
+historical stage metrics project from those caches instead of forwarding an
+already-seen node/image pair again.
+
+Task-free evaluation exposes raw affine logits, bias-free cosine scores, and
+per-live-node positive temperature plus offset fitted only on training-derived
+proxies. A frozen-feature centroid router is also task-free. True-node and
+all-leaf true-task routing are diagnostic oracles whose APIs are kept separate
+from task-free evaluators. Reports retain every historical stage/task cell,
+routing regret, merge diagnostics, repair work, live-deployment memory,
+experimental archive cost, and local-versus-published E²-LoRA labels. The
+config-driven `run` command owns preflight, smoke, the complete DAG, official
+comparison, reuse proof, and reporting; `status` and `report` are read-only
+views of durable state.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under

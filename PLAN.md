@@ -11,6 +11,49 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Outcome — ImageNet-R-50 Log-t VAMP Local Experiment
+
+The isolated PyTorch vision experiment under
+`src/apm/continual/vision/imagenetr/` is implemented and complete on the local
+RTX 4090. Its resolved seed-1993 protocol freezes all 30,000 ImageNet-R images
+into a byte-verified, hard-linked 24,000/6,000 train/test split, fixes 50
+four-class tasks, and binds the exact
+`vit_base_patch16_224.augreg_in21k` checkpoint revision and SHA-256. The
+dedicated `.venv-vision` environment, `vision` project extra, resolved primary
+configuration, and local bootstrap/run scripts leave TRACE and its environment
+untouched.
+
+Run contract
+`08d22d66a713f9d3d45454935af6043a716a71888a169946ef5c2244af0809db`
+completed all 90 registered jobs with no failures. It sealed 50 immutable
+rank-16 leaves once, all frozen/sequential/joint controls, the complete
+42-merge union-retrained hierarchy, SVD/Core+TSV/output-drift hierarchies at
+zero and five-percent repair, and all three one-percent repair follow-ups after
+five-percent repair materially helped. Both mandatory rebuild records preserve
+all leaf hashes and report zero new leaf optimizer steps. The final report and
+complete CSV/Parquet/JSON ledgers live under
+`artifacts/imagenetr50/runs/08d22d66a713f9d3d45454935af6043a716a71888a169946ef5c2244af0809db/reports/`.
+
+The paired local results do not support a task-free Log-t VAMP advantage. Joint
+IID reaches 78.867% final affine accuracy; the pinned, unchanged E²-LoRA
+reproduction reaches 78.10% final and 82.9952% incremental-average accuracy.
+Union-retrained Log-t reaches 59.533% task-free affine accuracy but 79.350%
+with the true-node oracle, exposing a 19.817-point addressing/calibration gap.
+The all-leaf bank reaches 93.117% with the true-task oracle but only 52.267%
+affine task-free. Five-percent repair raises the compact trees by roughly five
+points, with Core+TSV best at 47.517% affine and 69.183% true-node oracle, but
+SVD, Core+TSV, and output drift are effectively tied. Published E²-LoRA
+78.58/83.96 values remain external context because its publication split is
+not recoverable; no SOTA claim is made.
+
+Acceptance is complete: real batch-64 BF16 preflight and zero-LoRA parity pass;
+all source, proxy, repair, and calibration identities are training-only; the
+pinned external checkout remains clean; focused vision tests, bytecode
+compilation, and dependency checks pass; and the complete repository suite
+passes 782 tests with 275 resource skips. Any follow-up should start from the
+sealed primary report and isolate the dominant addressing/calibration loss
+before broader proxy/rank/scale or CtM sweeps.
+
 ## Active Outcome — TRACE Log-t VAMP
 
 The Revision-2 TRACE implementation is complete in
