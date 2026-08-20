@@ -1,0 +1,1 @@
+{"records":[{"leaf_hashes_unchanged":true,"leaf_optimizer_steps":0,"new_gradient_work":"repair only","rebuild":"svd 5% -> 1% repair"},{"leaf_hashes_unchanged":true,"leaf_optimizer_steps":0,"new_gradient_work":"none","rebuild":"svd -> output_drift"}],"schema_version":"imagenetr50-artifact-reuse-v1"}

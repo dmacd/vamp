@@ -1,0 +1,56 @@
+artifact_root: /home/daniel/projects/snet/rpa/artifacts/imagenetr50
+checkpoint_steps: 50
+classes: 200
+classes_per_task: 4
+cosine_scale: 16.0
+data_root: /home/daniel/projects/snet/rpa/data/imagenetr50
+input_size: 224
+joint_training:
+  batch_size: 64
+  epochs: 5
+  head_lr: 0.01
+  lora_lr: 0.0005
+  momentum: 0.9
+  weight_decay: 0.0005
+leaf_training:
+  batch_size: 64
+  epochs: 5
+  head_lr: 0.01
+  lora_lr: 0.0005
+  momentum: 0.9
+  weight_decay: 0.0005
+lora_alpha: 16
+lora_dropout: 0.0
+lora_rank: 16
+lora_targets:
+- attention.qkv
+- mlp.fc1
+max_live_nodes_per_level: 2
+merge_scale: 1.0
+model_name: vit_base_patch16_224.augreg_in21k
+name: imagenetr50_logt_vamp
+num_workers: 12
+output_rank: 16
+precision: bfloat16
+primary_repair_fraction: 0.05
+proxy_images_per_node: 16
+repair_fractions:
+- 0.0
+- 0.01
+- 0.05
+repair_material_improvement_points: 0.25
+repair_training:
+  batch_size: 64
+  epochs: 1
+  head_lr: 0.005
+  lora_lr: 0.00025
+  momentum: 0.9
+  weight_decay: 0.0005
+score_modes:
+- raw
+- cosine
+- affine_calibrated
+seed: 1993
+smoke_tasks: 8
+tasks: 50
+train_fraction: 0.8
