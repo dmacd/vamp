@@ -1,0 +1,1 @@
+{"candidate_evaluation":{"test":{"candidate_cases":100,"case_wall_seconds":111.6464421544224,"generated_tokens":32784,"prompt_tokens":7623}},"condition":"frozen_base","format":"trace-evaluation-result-v1","router_scores":{"direct":0.0},"stage":8,"task":"FOMC","task_index":2,"test_examples":100}

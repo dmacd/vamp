@@ -54,11 +54,11 @@ passes 782 tests with 275 resource skips. Any follow-up should start from the
 sealed primary report and isolate the dominant addressing/calibration loss
 before broader proxy/rank/scale or CtM sweeps.
 
-## Active Outcome — TRACE Log-t VAMP
+## Completed Outcome — TRACE Log-t VAMP
 
-The Revision-2 TRACE implementation is complete in
-`src/apm/continual/trace/`; the primary remote scientific session is live on
-RunPod against its fully downloaded and authenticated public model snapshot. The
+The Revision-2 TRACE implementation and remote scientific session are complete.
+The code lives in `src/apm/continual/trace/` and ran on RunPod against its fully
+downloaded and authenticated public model snapshot. The
 code pins the TreeLoRA 500-example archive and source revision,
 reproduces manifest
 `19fe258e74f5dba6408e9b498fb1b5e4c4dac16d4840363d142bd89a19e47ba2`,
@@ -123,14 +123,12 @@ reference algebra, artifact and ledger recovery, report determinism, and the
 focused legacy TinyWorlds regressions affected by the shared artifact-module
 migration. Policy-only rebuilds use the same 24-hour lifecycle as the primary
 run and publish leaf-reuse acceptance only after their added DAG is complete.
-The remaining work is operational rather than an omitted condition: finish the
-live complete two-4090 DAG, run the registered non-default Core-scale/repair
-reuse acceptance, inspect the generated plots, rerun the complete local
-regression gate after any further implementation changes, and record the
-measured scientific results. No result or completion claim should be made
-before those remote jobs and final report are complete.
+Both registered Core-scale controls, their reuse gates, all plots, and the final
+authenticated report are complete. Any new implementation change must rerun the
+appropriate local regression gate; additional science is follow-up replication
+or routing work, not unfinished work in this run.
 
-Deployment on 2026-08-18 uses direct SSH setup on secure-cloud Pod
+Deployment on 2026-08-18 used direct SSH setup on secure-cloud Pod
 `yyqmyhmzei2k0z`: two RTX 4090s in `EU-RO-1` at $1.48/hour total, the public
 RunPod PyTorch 2.8/CUDA 12.8 image, a 50-GB container disk, and persistent
 150-GB Network Volume `oybty7q8vt` mounted at `/workspace`. No custom registry,
@@ -149,92 +147,102 @@ results. The corrected, fully tested source on the replacement Pod passed its
 real PyTorch/PEFT adapter round-trip, reauthenticated the persistent model
 cache, and created fresh run contract
 `c9743521129b5c35389903eea8e381891a582fe24c54f374395013cf746327e5`.
-Its 422-job ledger remains live and authenticated through the recovery below;
-the marker-aware watchdog is also live. Continuous operations now
-use a ten-minute health cadence covering Pod state, coordinator/watchdog
-liveness, durable ledger progress, GPU utilization/temperature, storage, and
-new errors. The latest scheduled check at 22:07 UTC found 287 complete, 2
-running, 133 pending, and 0 failed jobs after the successful recovery below.
-Both workers were actively evaluating, at stages four and eight, and 11 durable
-files changed during the preceding interval. The GPUs were 62% and 77% utilized
-at 46 and 52 degrees Celsius; the container filesystem retained 37 GB free,
-and the only matching error line remained the already-explained rejected
-preflight from the first restart.
-At 11:35 UTC on 2026-08-19, the first runtime fault exposed that the pinned
-Hugging Face SARI metric loader had not explicitly opted into its required
-custom metric code. One stage-8 job exhausted its three automatic retries at
-the final scoring step and the coordinator exited, while its other worker
-continued from durable candidate state. The metric code has now been loaded
-from the pinned `datasets==2.21.0` source and verified non-interactively; the
-failed job was moved through an authenticated `FAILED -> PAUSED` ledger
-transition so it could receive one operator-authorized retry. The orphaned
-worker was then signaled through TRACE's built-in safe-boundary checkpoint path
-and exited in three seconds; the coordinator resumed with
-`HF_DATASETS_TRUST_REMOTE_CODE=1` and the recorded Pod/API/volume identity, then
-redispatched both jobs from their durable candidate caches. The first launch
-attempt omitted that required deployment identity and was rejected before it
-could mutate scheduler state. The operator-authorized fourth attempt completed
-successfully, its result was committed to the authenticated ledger, and the
-freed GPU immediately began the next pending evaluation. The remote source
-remains byte-identical to its
-run contract, while the durable working-tree source fix passes
-`trust_remote_code=True` at both SARI load sites and has a focused regression
-covering aggregate and per-example scoring; its eight-test evaluation module
-passes locally. The wider focused collection remains deferred in this host
-shell because its optional `safetensors` dependency is absent; the unchanged
-pre-fault remote source had already passed all 39 focused tests and the complete
-757-test regression gate. The 20,000-presentation sequential reference is
-complete, `joint_iid_lora` has published its final adapter, and
-the scheduler has advanced from taskwise-baseline and prompt-embedding work
-into the substantially longer stage-7 evaluations. The growing hash-chained
-ledger takes roughly 38--55 seconds to revalidate, but
-independent process, GPU, and log checks confirmed this is reader cost rather
-than a lock or compute stall. Once the first stage-7 result supplied a measured
-duration for that job class, the remaining estimate initially jumped and is
-still oscillating as heterogeneous stage lengths enter the sample; it is now
-about 4.07 hours (roughly 2.65--5.50 hours) with medium confidence. Both
-evaluators are making durable progress and this range remains affordable at
-the live Pod rate: the latest account check found a $36.90 balance and
-$1.502/hour total spend, so even the current high ETA bound retains substantial
-headroom below the $80 spend limit. Recoverable
-failures are repaired or resumed in place; if a failure becomes irrecoverable,
-durable state is preserved and
-all still-independent registered conditions are prioritized. This establishes
-execution, not a final scientific result. An authenticated interim report over
-70 completed task-stage evaluations and all 132 merge diagnostics shows two
-clear but preliminary signals. First, rank-eight SVD merging retains 93.0% of
-weighted spectral energy and has essentially zero mean validation answer-NLL
-damage versus the best child (-0.001 without repair), while Core-TSV at scale
-0.3 retains 89.0% and adds 0.754 NLL. Five-percent replay reduces Core's mean
-post-repair damage from 0.835 to 0.483 and improves 32 of 33 merges, but does not
-close that gap; four registered precompression probes attribute most of Core's
-damage to the merge itself rather than the final rank-eight compression. A
-direct audit against the pinned upstream Core-Space implementation found no
-obvious algebra or scaling-location defect: five independent FP64 reference
-comparisons matched the compact implementation within 2--7 ppm. The live
-artifacts instead expose recursive coefficient attenuation. Mean Core parent
-norms fall from 0.966 at level one through 0.379, 0.143, and 0.056 at level
-four, versus 1.663, 1.161, 0.821, and 0.634 for SVD; Core retains only
-49--56% of the exact arithmetic-mean norm at each merge while SVD retains
-95--97%. Applying the one-shot `0.3` Core coefficient at every homogeneous
-tree level compounds as `0.3^depth`, rather than the equal-weight mean's
-`0.5^depth`. This is now the leading explanation, especially because the
-upstream Llama TSV-Core result validation-selected 0.5. Keep the preregistered
-0.3 condition unchanged and prioritize a repair-free leaf-reusing 0.5 rebuild
-after primary completion to distinguish protocol scaling from merge algebra;
-then run the registered 0.5/10%-repair reuse acceptance if runtime and funds
-remain. The rebuild command fail-closes until the primary ledger is complete,
-re-hashes all 40 immutable leaves, and records their reuse separately.
-Second, routing is currently the dominant end-to-end bottleneck: across the
-four partially evaluated VAMP policies, frozen-centroid routing beats
-prompt-NLL routing by 5.1--21.6 score points on paired completed cells, and the
-answer oracle beats it by 11.8--33.7 points on every completed cell. These
-cells are unevenly scheduled and no condition yet has the complete 36-cell
-triangular matrix; sequential, joint-IID, and other baseline evaluations are
-also still pending. Therefore OP, forgetting, BWT, VAMP-versus-sequential, and
-VAMP-versus-joint claims remain unavailable. The remaining acceptance points
-are sustained failure-free progress, completion or a safe resumable pause, and
-the authenticated final report.
+Its primary 422-job ledger completed with no remaining failures, pauses, or
+pending work. The original Pod then published its authoritative termination
+marker and deleted itself; after attaching the same Network Volume to secure
+replacement Pod `csujshwtro5i0f`, an authenticated status check and independent
+SHA-256 verification confirmed the complete ledger and both durable primary
+reports. During the controls, fifteen-minute health checks covered
+Pod/coordinator liveness, durable ledger progress, GPU utilization/temperature,
+storage, and new errors. No marker-aware watchdog was used while new jobs were
+being registered because the preceding marker became stale as soon as the
+ledger expanded; each coordinator overwrote it only after its expanded ledger
+quiesced and then performed marker-authorized self-termination.
+The repair-free Core scale-0.5 control completed all 70 jobs without failure.
+Its fresh marker records 492 complete jobs and zero jobs in every other state;
+the marker-bound Markdown and HTML report hashes independently match the
+durable files. Pod `csujshwtro5i0f` then disappeared from RunPod exactly as its
+marker-authorized self-termination contract required. That marker is archived
+as `state/sessions/core05-repair000-SAFE_TO_TERMINATE.json`. Secure replacement
+Pod `zsopdi1mcogokw` then completed the preregistered Core scale-0.5/10%-repair
+control without a failure. The final marker records 562 complete jobs and zero
+jobs in every other state; its SHA-256 is
+`934d9f4d9f9b3b5269194c4c58f98d8527e1c01ea1facde9099c6b4633396357`.
+The marker-bound Markdown and HTML reports independently match hashes
+`f43d35570993e5c40773165ca16147014343581777ce38d5555e26e765dcc3c3`
+and `526aab21c7d39f7cc9da9d2ff23ce4004d0801c041b139fc19e7b940e1ba5589`.
+Both experiment Pods self-terminated after publishing their reports. A
+short-lived L4 verifier rechecked and retrieved the final bundle and was then
+deleted; no RunPod compute remains. The 150-GB evidence volume is retained at
+$0.015/hour, and the account balance after cleanup was $9.40. A hash-verified,
+ignored 1.7-MB copy of the report bundle and all safety markers is preserved at
+`results/trace-logt-vamp/c9743521129b5c35389903eea8e381891a582fe24c54f374395013cf746327e5/final/`.
+The only recovered runtime fault was the pinned `datasets==2.21.0` SARI loader's
+need for explicit custom-code trust. One exhausted evaluation was moved through
+an authenticated `FAILED -> PAUSED` transition for a single operator-authorized
+retry; the orphaned worker checkpointed at a safe boundary, and the coordinator
+resumed from durable candidate state with
+`HF_DATASETS_TRUST_REMOTE_CODE=1`. The retry and every subsequent job completed.
+The working-tree fix now passes `trust_remote_code=True` at both SARI load sites
+and has focused coverage for aggregate and per-example scoring.
+
+The final science resolves the earlier Core-scale question without evidence of
+an implementation bug. Five independent FP64 comparisons against the pinned
+upstream Core-Space algebra already matched within 2--7 ppm. The repair-free
+scale-0.5 control now supplies the causal protocol check: relative to scale 0.3,
+mean merge damage fell from 0.754 to 0.267 answer-NLL, prompt-NLL OP rose from
+19.355 to 19.906, forgetting fell from 5.726 to 1.276, and negative-only BWT
+improved from -6.101 to -2.151. Thus recursive `0.3^depth` attenuation was a
+real source of damage, but not the whole SVD/Core gap. Both controls reused 100%
+of leaf training steps with unchanged leaf hashes, so this comparison changes
+only consolidation policy.
+
+Rank-eight SVD remains intrinsically gentler. Without repair it retains 93.0%
+mean weighted spectral energy versus Core's 89.0%, has -0.001 mean merge damage
+versus scale-0.5 Core's 0.267, and reaches 21.236 prompt-NLL OP versus 19.906.
+It beats scale-0.5 Core on five of eight final tasks, ties two, and loses one;
+its answer-oracle advantage is much larger (41.410 versus 29.227). The deepest
+unrepaired Core node still adds 2.707 NLL while the corresponding SVD level is
+slightly beneficial on average. SVD's result is therefore mathematically and
+empirically coherent: its rank-eight reconstruction preserves the weighted
+mean far better than recursively scaled Core parents.
+
+Core scale-0.5/10%-repair demonstrates that replay can repair the merge itself.
+Across 33 merges, 1,220 replay examples and 162 optimizer steps reduce mean
+post-repair damage to -0.010 NLL, including negative mean damage at levels three
+and four. Relative to repair-free scale 0.5, answer-oracle OP rises by 8.799,
+task-aware OP by 8.780, and frozen-centroid OP by 8.150. Prompt-NLL OP rises only
+0.736 to 20.642, however, and forgetting worsens from 1.276 to 1.918. Repair is
+creating usable competence that the primary router largely fails to select.
+
+Routing is the dominant deployment bottleneck. For scale-0.5/10%-repair, the
+final answer oracle exceeds prompt NLL by 17.384 OP; the corresponding gaps are
+20.174 for repair-free SVD and 23.110 for repaired SVD. Under the registered
+primary prompt-NLL router, the best VAMP condition is scale-0.3/5%-repair at
+23.430 OP, still below sequential LoRA at 34.096 and joint-IID at 47.253. The
+secondary but task-free frozen-centroid router reaches 34.217 with repaired SVD,
+0.120 above the sequential reference. This makes router calibration and route
+selection, rather than further merge tuning alone, the highest-value next line
+of work.
+
+These are one-seed, one-order results across eight heterogeneous tasks. The
+leaf-reuse controls isolate merge policy cleanly, but they are not independent
+stochastic replications, and the repair budgets are unmatched (Core 10% versus
+SVD 5%). Next work should instrument route selections and confusion, test a
+calibrated/frozen-centroid deployment policy, replicate scale 0.3 versus 0.5 and
+SVD across multiple seeds/orders, and compare Core and SVD at matched repair
+budgets before promoting a new default.
+
+The scientific handoff is versioned under
+`docs/experiments/trace-logt-vamp/`. It contains the hash-verified final report
+bundle, run contract and job ledger, all readable coordinator/job logs, state,
+non-embedding manifests, registered control policies, and every raw candidate
+generation. A deterministic index, one-record-per-file sample, sampling helper,
+and independent-review prompt make the evidence navigable without scanning the
+entire corpus. The 532 raw generation JSONL files are stored through Git LFS;
+checkpoints, adapter/merge tensors, embedding caches, package/model caches,
+source copies, and the superseded run remain only on the retained evidence
+volume because they are resumability inputs rather than reviewer evidence.
 
 ## Completed Outcome — Standalone TinyWorlds Benchmark Repository
 

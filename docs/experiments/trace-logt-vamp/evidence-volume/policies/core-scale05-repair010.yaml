@@ -1,0 +1,5 @@
+method: core_tsv_r8
+output_rank: 8
+parent_alpha: 32
+core_scale: 0.5
+repair_fraction: 0.10

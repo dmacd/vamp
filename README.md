@@ -12,11 +12,12 @@ The repository explores dense parameter memories, predictive-coding networks,
 and pathwise LoRA memories for language models.
 
 > [!IMPORTANT]
-> **TinyWorlds Nouns-v2 is the only experiment currently in usable shape.**
-> The MNIST/predictive-coding work, TinyShakespeare work, TinyStories work, and
-> all other TinyWorlds variants are notional designs, negative results, or
-> deprecated prototypes. They remain in the repository for research provenance
-> and should not be treated as supported benchmarks.
+> **TinyWorlds Nouns-v2 is the only supported benchmark.** TRACE Log-t VAMP is
+> a completed, sealed research run with published reviewer evidence, but its
+> one-seed/one-order result is not a supported benchmark claim. The
+> MNIST/predictive-coding work, TinyShakespeare work, TinyStories work, and all
+> other TinyWorlds variants are notional designs, negative results, or
+> deprecated prototypes retained for research provenance.
 
 ## TinyWorlds Nouns-v2
 
@@ -50,6 +51,7 @@ specific benchmark, not a claim of general continual-learning performance.
 | Experiment family | Current status | Scope and retained evidence |
 |---|---|---|
 | **TinyWorlds Nouns-v2** | **Usable** | Completed 24-task disjoint language benchmark with immutable VAMP stages, matched controls, routing audits, and a published [report](results/language_cl/tinyworlds-nouns-v2/report.md). |
+| **TRACE Log-t VAMP** | **Completed research run** | Eight-task Llama-3.2-1B continual-learning study with SVD/Core controls, replay repair, four routers, matched baselines, and a complete [reviewer bundle](docs/experiments/trace-logt-vamp/README.md). |
 | TinyShakespeare | Deprecated prototype | Four-task character-level language-model experiments used to establish the pathwise LoRA and routing machinery. A selected [character-permutation report](results/language_cl/tinyshakespeare/character-permutation/standard-seed0-a7bd7d1479ba/report.html) is retained as historical evidence. |
 | MNIST and predictive coding | Deprecated prototype | Early label-canvas VAE and FabricPC predictive-coding experiments established dense-delta graphs, energy-based addressing, and report tooling. The selected [digit-incremental FabricPC report](results/stage1_apm/digit_mnist_dense_delta_fabricpc_energy_converged/report.html) is not a current benchmark result. |
 | Other TinyWorlds and TinyStories variants | Notional, failed, or deprecated | Dataset constructions, semantic partition attempts, pilots, and negative results are retained under `docs/`, `scripts/`, and versioned source packages for provenance. |
@@ -108,8 +110,10 @@ the TRACE/Llama-3.2-1B-Instruct log-t temporal-consolidation experiment. It
 trains 40 immutable LoRA leaves once, builds SVD and Core+TSV capacity-two
 hierarchies with optional deterministic replay repair, evaluates two task-free
 routers and two diagnostics, and runs the required baselines through a
-resumable two-GPU job DAG. No TRACE benchmark result is claimed until the
-remote DAG and final report finish.
+resumable two-GPU job DAG. The primary run and two leaf-reusing Core-scale
+controls completed all 562 jobs. The sealed report, raw candidate generations,
+logs, ledgers, manifests, integrity records, and review guide are published in
+the [TRACE reviewer bundle](docs/experiments/trace-logt-vamp/README.md).
 
 The canonical model remains Meta's exact revision
 `9213176726f574b556790deb65791e0c5aa438b6`. Downloading does not require gated
@@ -159,7 +163,7 @@ python -m apm.continual.trace.cli rebuild-policy \
 ```
 
 The source experiment contract is
-`docs/TRACE Log-t VAMP Experiment Specification.pdf`; live implementation
+`docs/TRACE Log-t VAMP Experiment Specification.pdf`; completed implementation
 status and durable semantics are recorded in `PLAN.md` and `DESIGN.md`.
 
 ## Repository Layout
@@ -173,7 +177,8 @@ status and durable semantics are recorded in `PLAN.md` and `DESIGN.md`.
 - `results/`: selected presentation reports and only their direct media
   dependencies.
 
-Raw corpora, checkpoints, optimizer state, large JSONL evaluation ledgers, and
-intermediate run artifacts are intentionally excluded from Git. Published
-result directories contain only the human-readable report surface and the
-SVG/PNG or small text files directly required to render it.
+Raw corpora, checkpoints, optimizer state, and intermediate run artifacts are
+normally excluded from Git. The sealed TRACE reviewer bundle is the deliberate
+exception: its raw candidate-generation JSONL files are stored with Git LFS,
+while caches, checkpoints, adapter tensors, and prompt embeddings remain on the
+retained evidence volume.

@@ -1,0 +1,1 @@
+{"bf16_supported":true,"container_disk_gb":50,"format":"trace-runpod-preflight-v1","gpu_names":["NVIDIA GeForce RTX 4090","NVIDIA GeForce RTX 4090"],"network_volume_gb":150,"network_volume_id":"oybty7q8vt","runpod_pod_id_present":true,"self_terminate":true,"store_root":"/workspace/vamp-trace","workspace_is_mount":true}

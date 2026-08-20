@@ -1,0 +1,1 @@
+{"candidate_evaluation":{"test":{"candidate_cases":100,"case_wall_seconds":6.902606807649136,"generated_tokens":1115,"prompt_tokens":40694}},"condition":"joint_iid_lora","format":"trace-evaluation-result-v1","router_scores":{"direct":53.74},"stage":8,"task":"Py150","task_index":4,"test_examples":100}

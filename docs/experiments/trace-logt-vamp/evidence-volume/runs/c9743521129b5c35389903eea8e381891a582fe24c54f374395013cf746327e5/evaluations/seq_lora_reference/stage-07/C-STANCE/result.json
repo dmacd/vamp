@@ -1,0 +1,1 @@
+{"candidate_evaluation":{"test":{"candidate_cases":100,"case_wall_seconds":1.2018742021173239,"generated_tokens":199,"prompt_tokens":14744}},"condition":"seq_lora_reference","format":"trace-evaluation-result-v1","router_scores":{"direct":42.0},"stage":7,"task":"C-STANCE","task_index":1,"test_examples":100}
