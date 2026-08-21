@@ -8,6 +8,7 @@ venv/
 ve/
 ve-semantic/
 .venv-vision/
+.venv-trace-analysis/
 build/
 dist/
 /data/

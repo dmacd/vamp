@@ -51,7 +51,7 @@ specific benchmark, not a claim of general continual-learning performance.
 | Experiment family | Current status | Scope and retained evidence |
 |---|---|---|
 | **TinyWorlds Nouns-v2** | **Usable** | Completed 24-task disjoint language benchmark with immutable VAMP stages, matched controls, routing audits, and a published [report](results/language_cl/tinyworlds-nouns-v2/report.md). |
-| **TRACE Log-t VAMP** | **Completed research run** | Eight-task Llama-3.2-1B continual-learning study with SVD/Core controls, replay repair, four routers, matched baselines, and a complete [reviewer bundle](docs/experiments/trace-logt-vamp/README.md). |
+| **TRACE Log-t VAMP** | **Completed research run** | Eight-task Llama-3.2-1B continual-learning study with SVD/Core controls, replay repair, four original routers, matched baselines, a CPU-only [task-known provenance follow-up](docs/experiments/trace-logt-vamp/followups/task-known-provenance/report.md), and a complete [reviewer bundle](docs/experiments/trace-logt-vamp/README.md). |
 | TinyShakespeare | Deprecated prototype | Four-task character-level language-model experiments used to establish the pathwise LoRA and routing machinery. A selected [character-permutation report](results/language_cl/tinyshakespeare/character-permutation/standard-seed0-a7bd7d1479ba/report.html) is retained as historical evidence. |
 | MNIST and predictive coding | Deprecated prototype | Early label-canvas VAE and FabricPC predictive-coding experiments established dense-delta graphs, energy-based addressing, and report tooling. The selected [digit-incremental FabricPC report](results/stage1_apm/digit_mnist_dense_delta_fabricpc_energy_converged/report.html) is not a current benchmark result. |
 | Other TinyWorlds and TinyStories variants | Notional, failed, or deprecated | Dataset constructions, semantic partition attempts, pilots, and negative results are retained under `docs/`, `scripts/`, and versioned source packages for provenance. |
@@ -114,6 +114,10 @@ resumable two-GPU job DAG. The primary run and two leaf-reusing Core-scale
 controls completed all 562 jobs. The sealed report, raw candidate generations,
 logs, ledgers, manifests, integrity records, and review guide are published in
 the [TRACE reviewer bundle](docs/experiments/trace-logt-vamp/README.md).
+The bundle also contains a reproducible
+[task-known provenance follow-up](docs/experiments/trace-logt-vamp/followups/task-known-provenance/report.md)
+that re-scores the sealed generations without loading model weights or running
+new inference.
 
 The canonical model remains Meta's exact revision
 `9213176726f574b556790deb65791e0c5aa438b6`. Downloading does not require gated

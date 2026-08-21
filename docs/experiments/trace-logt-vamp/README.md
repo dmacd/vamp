@@ -12,15 +12,18 @@ candidate generations.
 
 1. [`final/reports/primary-report.md`](final/reports/primary-report.md) gives the
    registered aggregate results and interpretation.
-2. [`final/reports/primary-scores.csv`](final/reports/primary-scores.csv) and
+2. [`followups/task-known-provenance/report.md`](followups/task-known-provenance/report.md)
+   gives the fixed task-known provenance control, its comparison with the
+   validation-selected lookup, and the interpretation limits.
+3. [`final/reports/primary-scores.csv`](final/reports/primary-scores.csv) and
    [`final/reports/primary-merge-diagnostics.csv`](final/reports/primary-merge-diagnostics.csv)
    contain the main numeric evidence.
-3. [`candidate-index.csv`](candidate-index.csv) maps all 532 raw generation
+4. [`candidate-index.csv`](candidate-index.csv) maps all 532 raw generation
    files to condition, stage, task, split, row count, byte count, and SHA-256.
-4. [`candidate-sample.jsonl`](candidate-sample.jsonl) contains one
+5. [`candidate-sample.jsonl`](candidate-sample.jsonl) contains one
    deterministically selected record from every raw generation file, stored in
    ordinary Git for lightweight browsing.
-5. `evidence-volume/runs/<run-id>/evaluations/` contains the full example-level
+6. `evidence-volume/runs/<run-id>/evaluations/` contains the full example-level
    results and raw candidate generations. The JSONL generations are Git LFS
    objects.
 
@@ -59,6 +62,34 @@ and `526aab21c7d39f7cc9da9d2ff23ce4004d0801c041b139fc19e7b940e1ba5589`.
 
 The complete hashes and condition names are also present in
 `primary-scores.csv`; do not infer conditions from abbreviated hashes alone.
+
+## Task-known provenance follow-up
+
+The completed CPU-only follow-up applies one fixed rule at every stage: given
+the known task, select the active node containing the most arrivals from that
+task, then break ties by node purity and recency. It uses no score or example
+content to choose a node. Repaired SVD reaches 38.340 final OP, 0.159 points
+above the existing validation-selected task-known lookup, and the two select
+the same final node for six of eight tasks. Its lower forgetting value is not a
+clean retention improvement because its mean diagonal starting score is also
+lower.
+
+The report directory contains CSVs for all 432 new test/validation aggregates,
+all 36 stage/task routes, and all 12 headline summaries, plus plots and a
+hash-bound manifest. Reproduce it after materializing LFS data with Python 3.11
+and the exact `trace-analysis` dependency extra:
+
+```bash
+python3.11 -m venv .venv-trace-analysis
+.venv-trace-analysis/bin/python -m pip install -e '.[trace-analysis]'
+.venv-trace-analysis/bin/python -m apm.continual.trace.task_known_followup \
+  docs/experiments/trace-logt-vamp
+```
+
+The command verifies the entire evidence bundle before scoring, reconstructs
+1,296 existing aggregate cells within `1e-8`, reports progress and temporary
+artifact location, and atomically publishes only a complete deterministic
+result. It requires no model weights, Torch runtime, or GPU.
 
 ## Working with Git LFS data
 

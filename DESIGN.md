@@ -202,6 +202,24 @@ The answer oracle alone may inspect targets, and only inside evaluator code.
 Headline test reporting keeps both diagnostics distinct from the two task-free
 routers.
 
+The sealed-run task-known provenance control is a post-hoc routing surface, not
+a new primary router. For each seen task at each stage, it considers only active
+hierarchy nodes and maximizes the number of that task's arrivals represented by
+the node. Exact ties prefer greater node purity and then greater
+`end_arrival`; the frozen base is ineligible because it represents no arrival.
+The hierarchy and lookup are rebuilt stage-locally from authenticated arrival
+identities. This rule never reads prompts, answers, generated outputs, or
+validation/test scores. Its O(number of tasks) task-to-node lookup is explicitly
+task-known and cannot support the task-free or O(log T) addressing claim.
+
+Follow-up reports call the existing `task_aware` diagnostic
+`task_known_validation` to make its information regime explicit, without
+changing the sealed result keys. Router-to-router comparison emphasizes final
+OP and final per-task scores. Forgetting is diagonal minus final score, so when
+two routers select different nodes at earlier stages, a lower forgetting value
+can come from a lower diagonal starting score and is not by itself evidence of
+better parameter retention.
+
 ### Scheduling, pause, and reporting
 
 The CPU coordinator is the sole job-state writer and launches one process per

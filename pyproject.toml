@@ -60,6 +60,21 @@ trace = [
     "tokenizers>=0.21,<0.22",
     "transformers>=4.55,<4.57",
 ]
+trace-analysis = [
+    "datasets==2.21.0",
+    "fuzzywuzzy==0.18.0",
+    "huggingface_hub==0.34.4",
+    "matplotlib==3.10.6",
+    "nltk==3.9.1",
+    "numpy==1.26.4",
+    "pandas==2.3.2",
+    "pyarrow==21.0.0",
+    "python-Levenshtein==0.27.1",
+    "rouge==1.0.1",
+    "sacrebleu==2.5.1",
+    "sacremoses==0.1.1",
+    "tqdm==4.67.1",
+]
 vision = [
     "huggingface_hub==0.34.4",
     "matplotlib==3.10.5",

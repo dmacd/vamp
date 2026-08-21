@@ -244,6 +244,25 @@ checkpoints, adapter/merge tensors, embedding caches, package/model caches,
 source copies, and the superseded run remain only on the retained evidence
 volume because they are resumability inputs rather than reviewer evidence.
 
+The CPU-only task-known provenance follow-up is also complete. At every stage,
+its fixed lookup selects the active hierarchy node with the greatest coverage
+of the known task's five arrivals, breaking ties by node purity and then
+recency; no prompt, answer, validation metric, or test metric participates in
+the decision. The analysis hash-verifies all 1,798 evidence files and the 432
+relevant candidate files, then exactly reconstructs the existing prompt-NLL,
+task-aware, and answer-oracle aggregates in 1,296 checks with zero maximum
+error. Across all six VAMP conditions, repaired SVD is the strongest provenance
+result at 38.340 OP. It is 0.159 points above the existing validation-selected
+task-aware lookup and selects the same final node for six of eight tasks. Its
+lower 1.878 forgetting value is not evidence of cleaner retention: provenance
+routing also lowers the mean diagonal score by 3.284 points, so cross-router
+comparison should use final OP and per-task final scores. The deterministic
+Markdown, self-contained HTML, plots, complete route audit, score tables, and
+manifest live under
+`docs/experiments/trace-logt-vamp/followups/task-known-provenance/`. This closes
+the simple task-known control; the next high-value science remains calibrated
+task-free routing, matched repair budgets, and multi-seed/order replication.
+
 ## Completed Outcome — Standalone TinyWorlds Benchmark Repository
 
 TinyWorlds distribution has been extracted into an independent Git repository
