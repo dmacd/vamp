@@ -1,0 +1,1 @@
+{"candidate_evaluation":{"test":{"candidate_cases":100,"case_wall_seconds":128.3512313440442,"generated_tokens":29796,"prompt_tokens":80822}},"condition":"seq_lora_reference","format":"trace-evaluation-result-v1","router_scores":{"direct":18.657109598709727},"stage":6,"task":"MeetingBank","task_index":3,"test_examples":100}

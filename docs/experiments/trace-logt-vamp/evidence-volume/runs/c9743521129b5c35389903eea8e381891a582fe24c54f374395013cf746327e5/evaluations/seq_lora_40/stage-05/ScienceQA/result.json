@@ -1,0 +1,1 @@
+{"candidate_evaluation":{"test":{"candidate_cases":100,"case_wall_seconds":88.42316135205328,"generated_tokens":17534,"prompt_tokens":6846}},"condition":"seq_lora_40","format":"trace-evaluation-result-v1","router_scores":{"direct":63.0},"stage":5,"task":"ScienceQA","task_index":5,"test_examples":100}

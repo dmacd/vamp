@@ -1,0 +1,1 @@
+{"candidate_evaluation":{"test":{"candidate_cases":100,"case_wall_seconds":51.79218824766576,"generated_tokens":7059,"prompt_tokens":40694}},"condition":"seq_lora_40","format":"trace-evaluation-result-v1","router_scores":{"direct":41.92},"stage":5,"task":"Py150","task_index":4,"test_examples":100}

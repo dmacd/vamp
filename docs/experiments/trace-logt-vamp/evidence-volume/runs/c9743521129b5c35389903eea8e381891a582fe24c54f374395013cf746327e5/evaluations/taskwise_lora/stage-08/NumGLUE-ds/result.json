@@ -1,0 +1,1 @@
+{"candidate_evaluation":{"test":{"candidate_cases":100,"case_wall_seconds":1.2355439700186253,"generated_tokens":235,"prompt_tokens":3754}},"condition":"taskwise_lora","format":"trace-evaluation-result-v1","router_scores":{"direct":56.0},"stage":8,"task":"NumGLUE-ds","task_index":7,"test_examples":100}

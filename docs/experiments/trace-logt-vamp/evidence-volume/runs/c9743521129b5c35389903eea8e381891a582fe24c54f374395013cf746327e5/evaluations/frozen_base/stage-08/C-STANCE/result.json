@@ -1,0 +1,1 @@
+{"candidate_evaluation":{"test":{"candidate_cases":100,"case_wall_seconds":88.67326240800321,"generated_tokens":20453,"prompt_tokens":14744}},"condition":"frozen_base","format":"trace-evaluation-result-v1","router_scores":{"direct":0.0},"stage":8,"task":"C-STANCE","task_index":1,"test_examples":100}

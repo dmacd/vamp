@@ -1,0 +1,1 @@
+{"candidate_evaluation":{"test":{"candidate_cases":81,"case_wall_seconds":1.0872993934899569,"generated_tokens":192,"prompt_tokens":3873}},"condition":"seq_lora_reference","format":"trace-evaluation-result-v1","router_scores":{"direct":27.160493827160494},"stage":8,"task":"NumGLUE-cm","task_index":6,"test_examples":81}

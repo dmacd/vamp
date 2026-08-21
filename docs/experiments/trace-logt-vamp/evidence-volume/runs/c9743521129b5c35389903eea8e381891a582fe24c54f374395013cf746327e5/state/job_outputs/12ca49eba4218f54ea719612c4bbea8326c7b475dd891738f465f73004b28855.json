@@ -1,0 +1,1 @@
+{"format":"trace-job-output-v1","job_id":"12ca49eba4218f54ea719612c4bbea8326c7b475dd891738f465f73004b28855","kind":"prepare_prompt_embeddings","output_sha256":"d97d2402d0120990138f85d1d4f5d801b20eb35db6dd15d9450067506255b11d","outputs":{"embedding_count":5522,"tensor_sha256":"e3730a97239e83a1218cf34428942112632763c5c6e6aa434a7eb795281701db"}}
