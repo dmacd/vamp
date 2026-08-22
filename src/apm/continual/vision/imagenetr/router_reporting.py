@@ -484,6 +484,28 @@ def write_router_report(
     ] if not metrics.empty else metrics
     if not final.empty:
         final = final.sort_values(["condition_id", "router_seed"])
+    validation = metrics[
+        (metrics.get("split") == "validation") & (metrics.get("stage") == 50)
+    ] if not metrics.empty else metrics
+    if not validation.empty:
+        validation = validation.sort_values(["condition_id", "router_seed"])
+    gate_path = run / "diagnostics" / "capacity_gate.json"
+    gate = load_canonical_json(gate_path) if gate_path.is_file() else None
+    gate_open = bool(gate["gate_open"]) if gate is not None else None
+    if gate_open is False:
+        gate_note = (
+            "The preregistered validation capacity gate closed. Neither R1 nor R3 "
+            "finished within 1.0 percentage point of the I-U100 true-node oracle. "
+            "A4 ran as the declared nonlinear diagnostic; the recursive B/C matrix, "
+            "test split, and additional seeds were not run."
+        )
+    elif gate_open is True:
+        gate_note = (
+            "The preregistered validation capacity gate opened, permitting the paired "
+            "R1/R3 recursive matrix and one sealed test pass."
+        )
+    else:
+        gate_note = "The validation capacity gate has not completed."
     status_text = json.dumps(dict(status or {}), indent=2, sort_keys=True)
     report = (
         f"# {title}\n\n"
@@ -491,7 +513,23 @@ def write_router_report(
         "The sealed inference run is a read-only dependency. Learned-router jobs report "
         "zero leaf and zero inference-parent optimizer steps; R3 is a predeclared main "
         "architecture, paired with R1 rather than activated after seeing test results.\n\n"
-        "## Final test results\n\n"
+        "## Validation capacity gate\n\n"
+        + gate_note
+        + "\n\n"
+        + _markdown_table(
+            validation,
+            (
+                "condition_id",
+                "architecture",
+                "maintenance",
+                "routed_accuracy",
+                "oracle_accuracy",
+                "oracle_gap",
+                "selection_accuracy",
+                "top2_selection_accuracy",
+            ),
+        )
+        + "\n\n## Final test results\n\n"
         + _markdown_table(
             final,
             (
@@ -554,7 +592,15 @@ def write_router_report(
         "th:first-child,td:first-child{text-align:left}h1,h2{color:#173f6b}code,pre{background:#f3f6f9;padding:.2rem}.note{padding:1rem;background:#eef5fb}</style></head><body>"
         f"<h1>{escape(title)}</h1><p class='note'>Protocol <code>{escape(run.name)}</code>. "
         "R3 is a mandatory paired architecture. Test caches are sealed read-only inputs.</p>"
-        "<h2>Final test results</h2>"
+        "<h2>Validation capacity gate</h2><p>"
+        + escape(gate_note)
+        + "</p>"
+        + (
+            validation.to_html(index=False, float_format=lambda value: f"{value:.3f}")
+            if not validation.empty
+            else "<p>No completed validation rows.</p>"
+        )
+        + "<h2>Final test results</h2>"
         + (final.to_html(index=False, float_format=lambda value: f"{value:.3f}") if not final.empty else "<p>No completed test rows.</p>")
         + "<h2>Paired R3 minus R1</h2>"
         + (paired.to_html(index=False, float_format=lambda value: f"{value:.3f}") if not paired.empty else "<p>No complete pairs.</p>")

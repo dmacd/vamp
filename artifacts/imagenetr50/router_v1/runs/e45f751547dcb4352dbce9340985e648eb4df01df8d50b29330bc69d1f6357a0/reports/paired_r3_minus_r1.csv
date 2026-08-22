@@ -1,0 +1,2 @@
+inference_condition,maintenance,router_seed,split,stage,examples,r3_minus_r1_accuracy,paired_ci95_lower,paired_ci95_upper,r1_only_correct,r3_only_correct
+I-U100,flat_full,1993,validation,50,4800,-0.9791666666666667,-1.8124999999999998,-0.16666666666666669,224,177

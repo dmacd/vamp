@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping, Sequence
 import time
 
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 from torch.nn import functional as F
 
 from apm.continual.artifacts import record_sha256
@@ -185,15 +185,18 @@ class RouterNodeScoreProvider:
         return project_scores(self.full(node, split), indices)
 
 
-class CentroidNodeScorer:
+class CentroidNodeScorer(nn.Module):
     """Fixed fit-only class-centroid score collapsed to one live node."""
 
     architecture = "centroid"
     rank = 1
 
     def __init__(self, class_ids: tuple[int, ...], centroids: Tensor) -> None:
+        super().__init__()
         self.class_ids = class_ids
-        self.centroids = F.normalize(centroids.to(torch.float32), dim=-1)
+        self.register_buffer(
+            "centroids", F.normalize(centroids.to(torch.float32), dim=-1)
+        )
 
     def score(self, query: RouterQuery, node_features: object) -> Tensor:
         del node_features

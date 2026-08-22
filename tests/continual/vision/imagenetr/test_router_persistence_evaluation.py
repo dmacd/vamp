@@ -197,4 +197,5 @@ def test_task_free_evaluation_and_report_artifact_round_trip(tmp_path: Path) -> 
     assert len(loaded.per_image) == 4
     report = write_router_report(tmp_path, status={"phase": "synthetic"})
     assert report.is_file()
+    assert "## Validation capacity gate" in report.read_text(encoding="utf-8")
     assert (tmp_path / "reports" / "REPORT.html").is_file()

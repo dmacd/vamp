@@ -125,6 +125,16 @@ forward. The artifact-backed eight-task smoke is a hard matrix gate and covers
 R0, both main architectures, all four parent families, R3 response merging,
 repair, exact mass preservation, and content-addressed reuse.
 
+The flat validation capacity gate is also a terminal scientific boundary, not
+only a scheduler optimization. If neither R1 nor R3 comes within one percentage
+point of its true-node oracle, the workflow runs the predeclared R2 diagnostic,
+seals a capacity-failure outcome, and never opens the test split or launches
+recursive and replication rows. This negative branch still emits the complete
+validation report, compares the sealed inference inventory before and after,
+and reruns paired R1/R3 smoke policies to prove zero-node, zero-optimizer-step
+artifact reuse. A rerun reuses the original measured preflight record rather
+than attempting to republish wall-clock timing as new immutable protocol data.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under

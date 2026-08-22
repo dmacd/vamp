@@ -350,10 +350,8 @@ def _phase0_preflight(
         or set(bootstrap.split.fit_image_ids) & set(bootstrap.split.validation_image_ids)
     ):
         raise RuntimeError("router real-model/data/GPU preflight failed")
-    core: dict[str, object] = {
+    stable: dict[str, object] = {
         "activation_cache_bytes": sum(path.stat().st_size for path in cache_files),
-        "activation_cache_seconds": elapsed,
-        "activation_rows_per_second": len(train.image_ids) / max(elapsed, 1.0e-9),
         "bf16_supported": torch.cuda.is_bf16_supported(),
         "cuda_device": torch.cuda.get_device_name(0),
         "inference_inventory_hash": bootstrap.base.inventory_hash,
@@ -363,10 +361,35 @@ def _phase0_preflight(
         "schema_version": "imagenetr50-router-real-preflight-v1",
         "test_images_used": 0,
     }
+    path = bootstrap.store.run / "protocol" / "router_preflight.json"
+    if path.is_file():
+        record = load_canonical_json(path)
+        prior_core = {key: value for key, value in record.items() if key != "content_hash"}
+        if record.get("content_hash") != record_sha256(prior_core):
+            raise ValueError(f"invalid immutable router preflight hash: {path}")
+        changed = {
+            key: (record.get(key), value)
+            for key, value in stable.items()
+            if record.get(key) != value
+        }
+        if changed:
+            raise ValueError(f"router preflight environment changed: {changed}")
+        if not isinstance(record.get("activation_cache_seconds"), (int, float)) or float(
+            record["activation_cache_seconds"]
+        ) <= 0.0:
+            raise ValueError(f"invalid activation-cache timing in router preflight: {path}")
+        if not isinstance(record.get("activation_rows_per_second"), (int, float)) or float(
+            record["activation_rows_per_second"]
+        ) <= 0.0:
+            raise ValueError(f"invalid activation-cache throughput in router preflight: {path}")
+        return record
+    core: dict[str, object] = {
+        **stable,
+        "activation_cache_seconds": elapsed,
+        "activation_rows_per_second": len(train.image_ids) / max(elapsed, 1.0e-9),
+    }
     record = {**core, "content_hash": record_sha256(core)}
-    publish_immutable_json(
-        bootstrap.store.run / "protocol" / "router_preflight.json", record
-    )
+    publish_immutable_json(path, record)
     return record
 
 
@@ -541,6 +564,69 @@ def _all_stage_test(
     )
 
 
+def _publish_reuse_proof(
+    bootstrap: RouterBootstrap,
+    matrix: Mapping[str, MatrixCondition],
+    matrix_ids: Sequence[str],
+    stage: int,
+    expected_reused_nodes: Mapping[str, int],
+    data: RouterTrainingData,
+    features: NodeFeatureRegistry,
+    device: torch.device,
+    *,
+    replication_triggered: bool,
+) -> dict[str, object]:
+    """Prove router artifact reuse and preserve the sealed inference inventory."""
+    reuse_rows = {}
+    for matrix_id in matrix_ids:
+        policy = matrix[matrix_id].policy
+        assert policy is not None
+        result = run_recursive_policy(
+            bootstrap,
+            policy,
+            _tree(bootstrap, policy.inference_condition),
+            data,
+            features,
+            device,
+            stage,
+        )
+        expected = int(expected_reused_nodes[matrix_id])
+        if result.created_nodes != 0 or result.reused_nodes != expected:
+            raise RuntimeError(
+                f"router reuse demonstration repeated work for {matrix_id}: "
+                f"created={result.created_nodes}, reused={result.reused_nodes}, "
+                f"expected_reused={expected}"
+            )
+        reuse_rows[matrix_id] = {
+            "created_nodes": result.created_nodes,
+            "reused_nodes": result.reused_nodes,
+            "router_optimizer_steps_reexecuted": 0,
+        }
+    after = inference_inventory(bootstrap.base)
+    before = load_canonical_json(
+        bootstrap.store.run / "protocol" / "inference_inventory_before.json"
+    )
+    if after != before:
+        raise RuntimeError("sealed inference inventory changed during router-only execution")
+    publish_immutable_json(
+        bootstrap.store.run / "protocol" / "inference_inventory_after.json", after
+    )
+    core: dict[str, object] = {
+        "inference_inventory_unchanged": True,
+        "inference_parent_optimizer_steps": 0,
+        "leaf_optimizer_steps": 0,
+        "policies": reuse_rows,
+        "replication_triggered": replication_triggered,
+        "schema_version": "imagenetr50-router-reuse-proof-v1",
+        "stage": stage,
+    }
+    record = {**core, "content_hash": record_sha256(core)}
+    publish_immutable_json(
+        bootstrap.store.run / "diagnostics" / "reuse_proof.json", record
+    )
+    return record
+
+
 def run_router_workflow(config_path: str | Path = DEFAULT_ROUTER_CONFIG) -> Path:
     """Run Phase 0, smoke, gated matrix, sealed test evaluation, reuse proof, and report."""
     bootstrap = bootstrap_router_protocol(config_path)
@@ -676,8 +762,33 @@ def run_router_workflow(config_path: str | Path = DEFAULT_ROUTER_CONFIG) -> Path
                 "schema_version": "imagenetr50-router-matrix-seal-v1",
             },
         )
-        write_router_report(run, status=scheduler.summary())
+        smoke_recursive = smoke["recursive"]
+        if not isinstance(smoke_recursive, Mapping):
+            raise ValueError("smoke reuse accounting is malformed")
+        _publish_reuse_proof(
+            bootstrap,
+            matrix,
+            ("B4", "B9"),
+            bootstrap.config.smoke_tasks,
+            {
+                matrix_id: int(smoke_recursive[matrix_id]["created_nodes"])  # type: ignore[index]
+                for matrix_id in ("B4", "B9")
+            },
+            data,
+            features,
+            device,
+            replication_triggered=False,
+        )
         _write_state(run, "COMPLETE_CAPACITY_FAILURE", gate_open=False)
+        write_router_report(
+            run,
+            status={
+                "scheduler": scheduler.summary(),
+                "workflow": load_canonical_json(
+                    run / "state" / "router_workflow_state.json"
+                ),
+            },
+        )
         return run
 
     for matrix_id in ("A5", "A6"):
@@ -908,49 +1019,30 @@ def run_router_workflow(config_path: str | Path = DEFAULT_ROUTER_CONFIG) -> Path
                 )
 
     _write_state(run, "REUSE_PROOF")
-    reuse_rows = {}
-    for matrix_id in ("B4", "B9"):
-        policy = matrix[matrix_id].policy
-        assert policy is not None
-        result = run_recursive_policy(
-            bootstrap,
-            policy,
-            _tree(bootstrap, policy.inference_condition),
-            data,
-            features,
-            device,
-            50,
-        )
-        if result.created_nodes != 0 or result.reused_nodes != 92:
-            raise RuntimeError("router reuse demonstration repeated completed node work")
-        reuse_rows[matrix_id] = {
-            "created_nodes": result.created_nodes,
-            "reused_nodes": result.reused_nodes,
-            "router_optimizer_steps_reexecuted": 0,
-        }
-    after = inference_inventory(bootstrap.base)
-    before = load_canonical_json(run / "protocol" / "inference_inventory_before.json")
-    if after != before:
-        raise RuntimeError("sealed inference inventory changed during router-only execution")
-    publish_immutable_json(run / "protocol" / "inference_inventory_after.json", after)
-    reuse_core: dict[str, object] = {
-        "inference_inventory_unchanged": True,
-        "inference_parent_optimizer_steps": 0,
-        "leaf_optimizer_steps": 0,
-        "policies": reuse_rows,
-        "replication_triggered": triggered,
-        "schema_version": "imagenetr50-router-reuse-proof-v1",
-    }
-    publish_immutable_json(
-        run / "diagnostics" / "reuse_proof.json",
-        {**reuse_core, "content_hash": record_sha256(reuse_core)},
+    _publish_reuse_proof(
+        bootstrap,
+        matrix,
+        ("B4", "B9"),
+        50,
+        {"B4": 92, "B9": 92},
+        data,
+        features,
+        device,
+        replication_triggered=triggered,
     )
-    report = write_router_report(run, status=scheduler.summary())
     _write_state(
         run,
         "COMPLETE",
-        report=str(report),
         replication_triggered=triggered,
+    )
+    report = write_router_report(
+        run,
+        status={
+            "scheduler": scheduler.summary(),
+            "workflow": load_canonical_json(
+                run / "state" / "router_workflow_state.json"
+            ),
+        },
     )
     return run
 

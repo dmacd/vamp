@@ -1,0 +1,1 @@
+{"rows":[{"examples":4800,"inference_condition":"I-U100","maintenance":"flat_full","paired_ci95_lower":-1.8124999999999998,"paired_ci95_upper":-0.16666666666666669,"r1_only_correct":224,"r3_minus_r1_accuracy":-0.9791666666666667,"r3_only_correct":177,"router_seed":1993,"split":"validation","stage":50}],"schema_version":"imagenetr50-router-paired_r3_minus_r1-v1"}

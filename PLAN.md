@@ -54,47 +54,57 @@ passes 782 tests with 275 resource skips. Any follow-up should start from the
 sealed primary report and isolate the dominant addressing/calibration loss
 before broader proxy/rank/scale or CtM sweeps.
 
-## Active Plan — ImageNet-R-50 Recursive Learned Router Oracle Recovery
+## Completed Outcome — ImageNet-R-50 Recursive Learned Router Capacity Failure
 
-Implementation status (2026-08-21): the router-only experiment surface is
-complete and the real pre-matrix gates pass. Protocol
-`392c1e4b4c731768741f95b3b56473b443ce1be71728ceab92b60e5db32bef7c`
-authenticated the sealed inference inventory, froze the exact 19,200/4,800
-router split, and built the eight-hook BF16 R3 training cache on the local RTX
-4090. The cache occupies 294,912,880 bytes and was built in 26.4 seconds at
-about 910 images/second without reading test images. The artifact-backed
-eight-task smoke passed R0 plus paired R1/R3 exact, U100, SVD0, and SVD5
-conditions; exact collapsed-mass error was `1.28e-8`, and an immediate B4/B9
-rerun reused all 12 nodes per policy with zero new optimizer work. The focused
-vision suite passes 38 tests. Non-vision regressions pass in the project
-environment; the vision environment intentionally lacks the unrelated
-TinyWorlds `tokenizers` extra.
+Protocol
+`e45f751547dcb4352dbce9340985e648eb4df01df8d50b29330bc69d1f6357a0`
+completed the preregistered negative branch on 2026-08-21. The A0-A3 validation
+capacity gate closed: the I-U100 true-node oracle reached 97.646%, while the
+centroid baseline reached 64.562%, R0 reached 59.083%, descriptor-only R1
+reached 58.729%, and adapter-response R3 reached 57.750% routed accuracy. R1
+and R3 missed the required at-most-one-point oracle gap by 38.917 and 39.896
+points, respectively. The paired R3-minus-R1 difference was -0.979 percentage
+points on 4,800 router-validation images (paired bootstrap 95% interval
+-1.812 to -0.167); R3 did not recover the addressing gap.
 
-The next execution step is the phase-gated primary run via
-`scripts/vision/imagenetr/run_router_local.sh`. It resumes the completed
-preflight/smoke artifacts, runs A0-A3 and the validation capacity gate, then
-continues through B/C, the sealed test pass, conditional seeds 1994/1995, and
-the reuse proof only when their preregistered gates open. The complete A/B/C
-matrix has not been launched during implementation verification, so there are
-not yet scientific final-test results to interpret.
+The declared nonlinear A4 diagnostic also failed, reaching 59.458% routed
+accuracy with a 38.187-point oracle gap. The outcome is therefore a failure of
+the tested frozen-query/score family at flat full-data capacity, before
+recursive maintenance becomes the limiting mechanism. In accordance with the
+frozen protocol, the B/C recursive matrix, the test split, and seeds 1994/1995
+were not run. There are intentionally no final-test results and no
+test-selected follow-ups.
 
-This is a router-only follow-up to the completed ImageNet-R-50 run. It follows
+The completed run authenticated sealed inference authority
+`08d22d66a713f9d3d45454935af6043a716a71888a169946ef5c2244af0809db`,
+froze 19,200 router-fit and 4,800 router-validation identities, and recorded
+zero test images used. Its eight-hook BF16 R3 cache occupies 294,912,880 bytes
+and was built on the RTX 4090 in 25.8 seconds at about 930 images/second. The
+artifact-backed eight-task smoke passed all paired R1/R3 exact, U100, SVD0,
+and SVD5 policies. The terminal reuse proof recreated zero nodes, reused all
+12 B4 and all 12 B9 smoke nodes, executed zero new router optimizer steps, and
+confirmed byte-identical before/after inference inventories with zero leaf or
+inference-parent optimizer steps.
+
+The Markdown/HTML report and machine-readable ledgers live under
+`artifacts/imagenetr50/router_v1/runs/e45f751547dcb4352dbce9340985e648eb4df01df8d50b29330bc69d1f6357a0/reports/`.
+All 13 scheduled jobs completed with no failures; 40 focused vision tests and
+the broader non-vision regression suite pass. A complete workflow rerun reused
+the same immutable protocol and returned in 2.6 seconds. Any new router work
+should be a separately frozen representation/loss experiment aimed at closing
+the flat capacity gap; broader recursive merge sweeps are not justified by
+this result.
+
+This router-only follow-up used
 `docs/imagenetr50_recursive_router_oracle_recovery_plan.pdf` with one deliberate
-protocol change: R3 adapter-response routing is promoted from a deferred rescue
-condition to a mandatory, paired member of the main experimental matrix. The
-scientific result will compare descriptor-only R1 and adapter-dependent R3 on
-the same images, teachers, inference nodes, optimizer settings, and router
-seeds. R3 will not be introduced later in response to test results.
-
-The inference authority remains sealed run
-`08d22d66a713f9d3d45454935af6043a716a71888a169946ef5c2244af0809db`.
-Its I-U100, I-SVD0, and I-SVD5 node tensors and historical snapshots are
-read-only dependencies. The router experiment must produce zero leaf and zero
-inference-parent optimizer steps and preserve a before/after inventory of all
-referenced inference-node hashes. Because 15 of the 45 material source files
-differ from the sealed run's code manifest at handoff commit `233a615`, the new
-router protocol will link to authenticated artifact bytes rather than claim
-that the current checkout exactly reproduces the old training source.
+protocol change: R3 adapter-response routing was promoted from a deferred
+rescue condition to a mandatory, paired member of the main experimental
+matrix. The result compares R1 and R3 on the same images, teachers, inference
+nodes, optimizer settings, and seed without activating R3 after observing
+results. Because 15 of the 45 material source files differed from the sealed
+run's code manifest at handoff commit `233a615`, the router protocol binds the
+authenticated artifact bytes rather than claiming that the current checkout
+exactly reproduces the old training source.
 
 ### Protocol and data boundary
 
