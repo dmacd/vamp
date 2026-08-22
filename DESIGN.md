@@ -59,6 +59,72 @@ config-driven `run` command owns preflight, smoke, the complete DAG, official
 comparison, reuse proof, and reporting; `status` and `report` are read-only
 views of durable state.
 
+### Recursive learned-router follow-up
+
+Learned router state is a new content-addressed artifact domain linked to, but
+not stored inside, an inference `NodeArtifact`. Its protocol identifies the
+sealed inference run and exact node bytes as read-only dependencies, then binds
+the router config, router-only material source/environment, training-derived
+fit/validation split, feature caches, and seeds. Router experiments cannot
+rewrite or retrain inference leaves or parents. A router node independently
+identifies its inference-node hash, scorer state, descriptor/response-kernel
+hashes, children, creation stage, repair identities, and optimizer work.
+
+The runtime score API accepts only a frozen-base query representation and live
+router nodes. Labels and class membership exist solely behind a generic teacher
+and diagnostic-evaluation boundary. Exact child `logaddexp` defines semantic
+router union; a deployable parent is either freshly distilled into the same
+fixed-size scorer or compactly parameter-merged and optionally repaired. Causal
+leaf insertion freezes all old scorers. Historical views may use only arrived,
+router-fit identities, and test identities never participate in fitting,
+selection, repair, or stopping.
+
+R1 is the fixed descriptor-only reference. R3 is a nested main condition with
+the same R1 score plus a small adapter-response branch. For the QKV and fc1
+inputs in frozen ViT blocks 0, 4, 7, and 11, R3 evaluates the norm of the
+candidate node's scaled low-rank update on the frozen-base CLS activation. The
+update is first put in canonical compact-SVD coordinates, so the response is
+`||diag(s) V^T h|| = ||delta h||` and is invariant to LoRA factor gauge without
+a candidate model forward. Response kernels are derived from each actual
+parent adapter, have fixed layer/rank size, are authenticated and counted as
+live routing state, and require `O(log T)` low-rank projections across the live
+frontier. The full paired R1/R3 recursive matrix, rather than a test-triggered
+R3 fallback, is the experiment's durable protocol choice.
+
+The implementation persists three distinct boundaries. Flat frontiers are
+published atomically as one multi-scorer safetensors artifact so a partially
+published joint fit cannot mix states from two attempts. Recursive leaves and
+parents are immutable node directories, and every arrived stage has a separate
+content-addressed frontier snapshot. Optimizer work also has a mutable,
+authenticated epoch-boundary checkpoint keyed by the exact fit/validation
+identities, training settings, node features, and functional hashes of all
+scorer dependencies. Replaying a completed checkpoint restores the
+validation-selected state without another optimizer step; publishing a node
+then provides the stronger immutable resume boundary.
+
+Exact-LSE parents own a recursive scorer graph rather than copied parameters.
+Device movement therefore traverses every exact descendant explicitly in
+training, smoke, and evaluation. SVD0/SVD5/U100 parents remain fixed-size
+modules. Parent response kernels always come from the matching sealed parent
+inference adapter; exact parents score their authenticated child graph and are
+reported as nondeployable diagnostics.
+
+Router validation logits live in the router run and may be computed only for
+the frozen 4,800-image validation partition. Test logits are loaded exclusively
+from the sealed inference run's semantic cache; the learned-router evaluator's
+test-cache miss callback always raises. The test feature universe is not opened
+until `matrix_sealed.json` exists. Evaluation artifacts contain aggregate JSON
+plus per-image CSV/Parquet evidence, from which task matrices, paired R3-minus-
+R1 bootstrap intervals, oracle gaps, merge regret, and gain recovery are
+projected without new model forwards.
+
+On the local RTX 4090, the realized eight-module BF16 CLS cache for all 24,000
+training images is 294,912,880 bytes (about 281 MiB), below the conservative
+planning estimate. It requires one frozen-base pass and no candidate-adapter
+forward. The artifact-backed eight-task smoke is a hard matrix gate and covers
+R0, both main architectures, all four parent families, R3 response merging,
+repair, exact mass preservation, and content-addressed reuse.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under

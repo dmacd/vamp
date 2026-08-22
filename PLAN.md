@@ -54,6 +54,247 @@ passes 782 tests with 275 resource skips. Any follow-up should start from the
 sealed primary report and isolate the dominant addressing/calibration loss
 before broader proxy/rank/scale or CtM sweeps.
 
+## Active Plan — ImageNet-R-50 Recursive Learned Router Oracle Recovery
+
+Implementation status (2026-08-21): the router-only experiment surface is
+complete and the real pre-matrix gates pass. Protocol
+`392c1e4b4c731768741f95b3b56473b443ce1be71728ceab92b60e5db32bef7c`
+authenticated the sealed inference inventory, froze the exact 19,200/4,800
+router split, and built the eight-hook BF16 R3 training cache on the local RTX
+4090. The cache occupies 294,912,880 bytes and was built in 26.4 seconds at
+about 910 images/second without reading test images. The artifact-backed
+eight-task smoke passed R0 plus paired R1/R3 exact, U100, SVD0, and SVD5
+conditions; exact collapsed-mass error was `1.28e-8`, and an immediate B4/B9
+rerun reused all 12 nodes per policy with zero new optimizer work. The focused
+vision suite passes 38 tests. Non-vision regressions pass in the project
+environment; the vision environment intentionally lacks the unrelated
+TinyWorlds `tokenizers` extra.
+
+The next execution step is the phase-gated primary run via
+`scripts/vision/imagenetr/run_router_local.sh`. It resumes the completed
+preflight/smoke artifacts, runs A0-A3 and the validation capacity gate, then
+continues through B/C, the sealed test pass, conditional seeds 1994/1995, and
+the reuse proof only when their preregistered gates open. The complete A/B/C
+matrix has not been launched during implementation verification, so there are
+not yet scientific final-test results to interpret.
+
+This is a router-only follow-up to the completed ImageNet-R-50 run. It follows
+`docs/imagenetr50_recursive_router_oracle_recovery_plan.pdf` with one deliberate
+protocol change: R3 adapter-response routing is promoted from a deferred rescue
+condition to a mandatory, paired member of the main experimental matrix. The
+scientific result will compare descriptor-only R1 and adapter-dependent R3 on
+the same images, teachers, inference nodes, optimizer settings, and router
+seeds. R3 will not be introduced later in response to test results.
+
+The inference authority remains sealed run
+`08d22d66a713f9d3d45454935af6043a716a71888a169946ef5c2244af0809db`.
+Its I-U100, I-SVD0, and I-SVD5 node tensors and historical snapshots are
+read-only dependencies. The router experiment must produce zero leaf and zero
+inference-parent optimizer steps and preserve a before/after inventory of all
+referenced inference-node hashes. Because 15 of the 45 material source files
+differ from the sealed run's code manifest at handoff commit `233a615`, the new
+router protocol will link to authenticated artifact bytes rather than claim
+that the current checkout exactly reproduces the old training source.
+
+### Protocol and data boundary
+
+- Add a separate content-addressed namespace under
+  `artifacts/imagenetr50/router_v1/runs/<router-protocol-hash>/`. A frozen
+  `protocol_link.json` binds the sealed run hash, the exact required inference
+  policy and node hashes, the original model/dataset/transform identities, the
+  handoff commit and source-drift audit, the current router-only material-code
+  and environment manifests, the resolved router config, and every random
+  seed. Do not call the original bootstrap or rewrite its protocol.
+- Resolve I-U100 as `logt_retrain_union_r16`, I-SVD0 as
+  `logt_svd_r16_repair000`, and I-SVD5 as
+  `logt_svd_r16_repair005`. Phase 0 must authenticate every required artifact
+  and snapshot, record missing inputs, and stop before a long job if any
+  dependency is corrupt or would require inference retraining.
+- Freeze one class-stratified, deterministic hash split of the 24,000 training
+  identities into 19,200 router-fit and 4,800 router-validation images.
+  Historical stage views may expose only arrived tasks. The 6,000 test images
+  remain unavailable to configuration, architecture, epoch, rank, repair, or
+  seed decisions and are evaluated only after the matrix is sealed.
+- Keep label-aware logic inside `RouterTeacher` and diagnostic evaluation.
+  The deployed `RouterQuery` contains image/feature identities only; it cannot
+  accept labels, classes, task IDs, true nodes, or benchmark-specific utility.
+  The ImageNet teacher maps a training label to the unique live node containing
+  that class, while the interface also admits a future utility/NLL teacher.
+- Reuse existing frozen-feature or evaluation-logit caches only when their full
+  semantic key matches. Otherwise create router-specific caches. Cache
+  construction may batch all images, but every training view must enforce its
+  split and stage membership before returning rows.
+
+### Router and promoted R3 design
+
+- Recompute the fixed 128-float candidate descriptor from each actual inference
+  node. Use seeded compact products over all 24 scaled QKV/fc1 LoRA updates,
+  per-matrix energy statistics, and fixed generic level/count/span metadata.
+  Never materialize a model-wide dense update and never concatenate descendant
+  descriptors.
+- Retain R0 as the node-local linear capacity floor. R1 is the PDF's rank-eight
+  bilinear compatibility scorer over the normalized 768-float frozen ViT
+  prelogit and 128-float node descriptor, with its query, descriptor, and bias
+  residuals. R2 remains a conditional nonlinear capacity diagnostic only.
+- Define R3 as a strict extension of R1, not an unrelated larger router. At the
+  QKV and fc1 inputs of zero-based ViT blocks 0, 4, 7, and 11, cache only the
+  frozen-base CLS activation. For each node/module, compact-SVD its scaled LoRA
+  update as `U diag(s) V^T` and compute the normalized response
+  `log1p(||diag(s) V^T h|| / (||h|| + eps))`. This equals the full update-response
+  norm while being invariant to LoRA factor gauge and requiring only a
+  rank-sized projection. The resulting eight-float response vector enters an
+  additional node-local linear branch on top of R1.
+- Bind the selected blocks, pooling rule, normalization, response dimension,
+  and compact-SVD algorithm in the config before any router validation. The
+  compact activation cache is expected to be about 352 MiB in BF16 for all
+  30,000 images, rather than storing full token activations. Record its measured
+  size and throughput in Phase 0.
+- Store the canonical response kernels beside the inference-node descriptor and
+  bind them to the inference adapter hash. Recompute them from the actual parent
+  adapter after every inference merge/repair. Do not merge child response
+  vectors. Count kernel bytes and candidate low-rank response projections as
+  routing cost even though they are not full candidate-adapter forwards.
+- Use the frozen old-frontier insertion rule from the PDF: fit all new-leaf
+  positives against the old frontier log-sum-exp with margin one, plus exactly
+  64 deterministic negative examples per live old node. Old router hashes must
+  remain byte-identical.
+- Implement P-EXACT as a nondeployable `logaddexp` functional oracle; P-U100 as
+  a fresh fixed-size parent fitted on all stage-available router-fit rows with
+  route cross-entropy plus unit-weight LSE distillation; P-SVD0 as compact
+  rank-eight parameter merge with zero examples and optimizer steps; and
+  P-SVD5 as that merge followed by deterministic five-percent positive repair
+  plus balanced negatives. For R3, compact-merge the R1 interaction and
+  source-mass-merge its response/residual vectors, but compute features from
+  the actual parent response kernels.
+- Resolve the PDF's ambiguous `flat causal` label as an explicit
+  `flat_seen_data` control: independently refit the whole current frontier from
+  scratch using only data visible by that stage. It is a causal-data capacity
+  ceiling, not a state-preserving or scaling-compliant algorithm. All recursive
+  P-* conditions use immutable old scorers and causal insertion.
+
+### Main experimental matrix
+
+The matrix is phase-gated rather than a broad Cartesian sweep. R0 has no
+recursive slice, R2 remains conditional, Core+TSV/output-drift inference trees
+remain excluded, and one-percent/fixed-budget repair remains follow-up work.
+R1 and R3 are the two predeclared main architecture slices.
+
+| ID | Inference | Router | Maintenance | Role |
+|---|---|---|---|---|
+| A0 | I-U100 final | centroid | existing | routed baseline |
+| A1 | I-U100 final | R0 | flat full-data | capacity floor and smoke |
+| A2 | I-U100 final | R1 | flat full-data | descriptor-only capacity |
+| A3 | I-U100 final | R3 | flat full-data | mandatory adapter-response capacity |
+| A4 | I-U100 final | R2 | flat full-data | only if neither A2 nor A3 reaches the validation gate |
+| A5 | I-SVD5 final | R1 | flat full-data | cheap-node brittleness control |
+| A6 | I-SVD5 final | R3 | flat full-data | paired adapter-response brittleness control |
+| B0 | I-U100 all stages | R1 | flat_seen_data | non-scaling capacity ceiling |
+| B1 | I-U100 all stages | R1 | P-EXACT | functional arithmetic oracle |
+| B2 | I-U100 all stages | R1 | P-U100 | full-replay parent ceiling |
+| B3 | I-U100 all stages | R1 | P-SVD0 | zero-example merge |
+| B4 | I-U100 all stages | R1 | P-SVD5 | descriptor-only scalable condition |
+| B5 | I-U100 all stages | R3 | flat_seen_data | adapter-response capacity ceiling |
+| B6 | I-U100 all stages | R3 | P-EXACT | adapter-response functional oracle |
+| B7 | I-U100 all stages | R3 | P-U100 | adapter-response parent ceiling |
+| B8 | I-U100 all stages | R3 | P-SVD0 | adapter-response zero-example merge |
+| B9 | I-U100 all stages | R3 | P-SVD5 | adapter-response scalable headline |
+| C1 | I-SVD0 all stages | R1 | P-SVD5 | descriptor-only cheap-inference transfer |
+| C2 | I-SVD5 all stages | R1 | P-SVD5 | descriptor-only repaired-inference transfer |
+| C3 | I-SVD0 all stages | R3 | P-SVD5 | adapter-response cheap-inference transfer |
+| C4 | I-SVD5 all stages | R3 | P-SVD5 | full cheap inference/router condition |
+
+A0-A3 are mandatory. If neither R1 nor R3 comes within 1.0 percentage point of
+the I-U100 validation oracle, run A4, emit the representation/capacity failure
+report, and do not launch the recursive matrix. If either main architecture
+opens the recursive gate, execute both complete R1 and R3 B slices; R3 is not
+skipped merely because R1 passed first. Transfer rows C1-C4 run only after the
+B results are internally coherent. Start with router seed 1993; if either
+scalable condition reaches the preregistered target, repeat the paired R1/R3
+headline and transfer conditions with two more frozen seeds rather than
+replicating only the winner.
+
+### Implementation sequence
+
+1. **Audit and freeze.** Add the strict router config and immutable protocol,
+   policy, node, snapshot, cache, and job records. Implement a read-only sealed
+   run loader, authenticate the three inference hierarchies, freeze the router
+   fit/validation manifest, inventory inference hashes, and emit
+   `phase0_audit.json` plus `PHASE0.md`. Target 10-15 minutes; hard stop at 20.
+2. **Build task-free inputs.** Add the generic teacher, descriptor builder,
+   canonical response-kernel builder, prelogit/CLS cache, and leakage-checked
+   historical data views. Extend shared compact math only where the existing
+   QR/SVD implementation is genuinely reusable.
+3. **Build scorer training and persistence.** Implement R0, R1, R2, and nested
+   R3 behind one scorer interface; deterministic flat fitting; causal leaf
+   insertion; P-EXACT/P-U100/P-SVD0/P-SVD5 parent creation; immutable
+   safetensors state; atomic checkpoints; resume; and a router-only scheduler.
+   Use a dedicated `router_cli` with config-driven `run`, `status`, and `report`
+   commands so the completed primary workflow is not overloaded.
+4. **Verify before real execution.** Run unit tests plus a synthetic eight-task
+   linearly separable fixture, then an eight-task real-artifact smoke containing
+   R0, paired R1/R3, all parent policies, one R3 response merge, and one repair.
+   No matrix job may start until cache identity, causal immutability, exact LSE
+   mass preservation, task-free API structure, finite R3 features, and
+   zero-inference-step reuse all pass.
+5. **Run the capacity gate.** Cache the full deterministic base features once,
+   run A0-A3, use router validation only for capacity decisions, and run A4 only
+   under its declared gate. Freeze selected epochs/settings before one sealed
+   test pass. Then run A5-A6 without architecture retuning.
+6. **Run recursive I-U100.** Execute B0-B9 in paired R1/R3 order with durable
+   checkpoints and partial reports at stages 8, 16, 32, and 50. P-U100 must
+   approach its same-architecture flat ceiling; P-SVD5 must recover at least
+   95% of the P-U100 gain or finish within 1.0 point before transfer proceeds.
+7. **Transfer and replicate.** Run C1-C4 with exactly the frozen architecture,
+   feature, optimizer, and repair settings. If the first seed reaches target,
+   add the two paired seeds. Add one-percent or fixed B=64/128 repair only after
+   the primary matrix is complete and only as explicitly labeled follow-up.
+8. **Report and prove reuse.** Emit the complete router manifests, stage/task
+   metrics, selection and merge diagnostics, resources, lineage, Markdown and
+   self-contained HTML reports, plus before/after inference hashes and zero
+   inference optimizer-step evidence. Rerun one R1 and one R3 policy to prove
+   content-addressed reuse and no duplicate completed stages.
+
+### Tests, metrics, and acceptance
+
+- Unit tests cover deterministic descriptors, no dense model-sized deltas,
+  compact/dense sketch parity, compact SVD parity, R1 rank-16 exact child sums,
+  R3 response parity with direct dense `delta @ h`, gauge invariance, selected
+  module/pooling enforcement, response-zero equivalence to R1, safetensors
+  round trips, and deterministic cache order/content identities.
+- Structural tests prove `RouterQuery` has no label/task/class/oracle surface;
+  only teachers and diagnostic evaluators receive truth; stage views reject
+  future, validation-for-fit, and test identities; parent features come from
+  the actual parent adapter; and R3 routing performs zero candidate adapted
+  model forwards.
+- Recursive tests cover unique class-to-live-node targets at every stage,
+  byte-identical old scorers after leaf insertion, exact pre/post P-EXACT
+  frontier probabilities, P-SVD0 zero examples/steps, exact P-SVD5 repair IDs,
+  P-U100 historical-only replay, retired-node archival, final eight-node
+  parity, resume idempotence, and unchanged inference hashes.
+- Every condition reports routed classification, true-node oracle and gap,
+  centroid and best-existing gain recovery, overall/conditional/top-two node
+  selection, level/count recall, mean/p95 probability-mass error, collapsed
+  frontier KL, LSE MSE, merge regret, paired per-image R3-minus-R1 correctness,
+  and validation/test separation. Confidence intervals use paired image-level
+  resampling; they do not drive configuration choices.
+- Resource accounting separates learned router parameters, R3 response-kernel
+  bytes, activation-cache bytes, examples/presentations, optimizer steps,
+  merge/repair time, score FLOPs, response projections, one frozen-base forward,
+  zero candidate adapted forwards, and the one selected-node adapted forward.
+  Live state and score work must remain `O(log T)` with fixed layer count.
+- The primary I-U100 mechanism pass remains at least 78.5% routed accuracy,
+  at most a 1.0-point oracle gap, and at least 95% recovery from the strongest
+  existing task-free result; a strong pass is at least 78.85%. I-SVD5 targets
+  at least 68.3% and I-SVD0 about 63.85%, each within 1.0 point of its own
+  oracle. Evaluate these thresholds separately for B4 and B9 rather than
+  reporting a test-selected winner.
+- Interpret the paired result explicitly: R3-only success means adapter-state
+  response is necessary; success by both favors R1 unless R3 gives consistent
+  robustness worth its measured cost; R1-only success is a negative result for
+  adapter-dependent routing; failure by both is a query/score-family failure,
+  not evidence against recursive consolidation. The experiment is incomplete
+  without the full R3 slice, even if R1 reaches the oracle first.
+
 ## Completed Outcome — TRACE Log-t VAMP
 
 The Revision-2 TRACE implementation and remote scientific session are complete.

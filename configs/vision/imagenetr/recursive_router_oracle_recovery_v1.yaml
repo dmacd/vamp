@@ -1,0 +1,71 @@
+experiment:
+  name: imagenetr50_recursive_router_oracle_recovery_v1
+  seed: 1993
+  router_seeds:
+    - 1993
+    - 1994
+    - 1995
+
+paths:
+  artifact_root: artifacts/imagenetr50/router_v1
+  inference_artifact_root: artifacts/imagenetr50
+  data_root: data/imagenetr50
+
+sealed_inference:
+  run_hash: 08d22d66a713f9d3d45454935af6043a716a71888a169946ef5c2244af0809db
+  handoff_commit: 233a6150269a7878446dac4479cbaf26cbe0fcbc
+  policies:
+    I-U100: d1950bf4efe9d528b3e842432f56d54882fbaeb313e4505b980784083bf457e1
+    I-SVD0: 97cd43fe664be26e1bf4f2e6343b4a27567cd7eac0605974cf970bb4bc9ea89c
+    I-SVD5: bda535c6ea00ab8bfc625e34bd3b8b16044eb106992d9853782af3a62c54c642
+
+split:
+  fit_fraction: 0.8
+
+descriptor:
+  dim: 128
+  probe_dim: 2
+  seed: 1993
+
+response:
+  blocks:
+    - 0
+    - 4
+    - 7
+    - 11
+  targets:
+    - attn.qkv
+    - mlp.fc1
+  dtype: bfloat16
+
+architecture:
+  query_dim: 768
+  primary_rank: 8
+  fallback_rank: 16
+  mlp_hidden: 64
+
+training:
+  optimizer: adamw
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  batch_size: 512
+  max_epochs: 100
+  patience: 10
+  margin: 1.0
+  negatives_per_live_node: 64
+  lse_weight: 1.0
+
+repair:
+  primary_fraction: 0.05
+  secondary_fraction: 0.01
+
+runtime:
+  feature_batch_size: 64
+  validation_batch_size: 2048
+  num_workers: 12
+  smoke_tasks: 8
+  evaluation_checkpoints:
+    - 8
+    - 16
+    - 32
+    - 50
