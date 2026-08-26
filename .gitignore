@@ -15,6 +15,7 @@ dist/
 /results/
 /checkpoints/
 /artifacts/imagenetr50/
+/artifacts/vamp-af-mnist/
 /external/imagenetr50/
 /openrouter-tinyworlds-key.txt
 /openrouter-tinyworlds-no-byok-attestation.json

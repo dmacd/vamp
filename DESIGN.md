@@ -10,6 +10,50 @@ artifacts are not part of the public report surface. This keeps published
 evidence readable while preserving the existing content-addressed artifact
 stores as local research state rather than source-controlled deliverables.
 
+## VAMP-AF Addressing and Adapter Tree
+
+VAMP-AF is an isolated frozen-feature vision mechanism, not an extension of
+the append-only generic `MemoryGraph`. Its authoritative state is one
+persistent binary tree in which every node owns full-rank parameter deltas for
+the base CNN's top two linear layers, every internal node owns one immutable
+input-only hyperplane, and every current leaf owns exactly one persistent
+vector of stored-example IDs. The frozen example table stores normalized
+128-dimensional base addresses, 3,136-dimensional post-convolution trunk
+features, base logits, labels, diagnostic context IDs, and stream steps once on
+CPU. Labels and context IDs do not occur in the routing, PCA fitting, or
+structural-trigger interfaces.
+
+For a routed leaf, each of the embedding-weight, embedding-bias,
+classifier-weight, and classifier-bias deltas is summed in root-to-leaf order.
+The cumulative embedding layer consumes the frozen trunk feature, applies the
+base ReLU, and feeds the cumulative classifier. Routing always uses the
+original normalized base address, so adapter training cannot move an example
+between regions. Online training routes a complete microbatch against the
+pre-update tree, groups by leaf, and returns a new state after updating only
+each destination leaf with new examples and equal-sized pre-arrival replay.
+Adapter deltas and explicit AdamW moments are immutable committed tensors; an
+update allocates replacements and cannot mutate a sibling or an earlier state.
+Internal-node adapters remain frozen.
+
+A full leaf below the active depth cap installs a CPU float32 PCA-median rule.
+The leading covariance eigenvector has a canonical sign, the complete buffer
+is partitioned by `score <= median` versus `score > median`, and degenerate or
+empty-child partitions fail as invariant violations rather than invoking a
+fallback. Both children start at exact zero, preserving all logits, then train
+for two fixed replay epochs. At the cap, only the triggering leaf's direct
+two-leaf parent may collapse, and only after its represented union doubles
+since that parent's prior collapse. A replacement starts from the parent
+deltas, resets AdamW moments, trains for three epochs relative to ancestors
+above the parent, and atomically replaces both children without weight
+merging.
+
+Logical online/structural complexity is counted independently of cached
+physical feature computation and evaluation-only exhaustive oracle work.
+Counters cover embeddings, hyperplanes, path-suffix evaluations, online
+presentations, split replay, consolidation replay, PCA-fit examples, and
+historical repartitioning. Only these online counters enter the
+`work / [t log2(t+1)]` diagnostic; scheduled test evaluation does not.
+
 ## ImageNet-R-50 Local Vision Boundary
 
 The ImageNet-R experiment is an isolated PyTorch package under

@@ -1,0 +1,74 @@
+experiment:
+  name: vamp-af-mnist
+  protocol_revision: top-two-v3
+
+paths:
+  artifact_root: artifacts/vamp-af-mnist
+  data_root: data/torchvision/MNIST/raw
+
+base:
+  seed: 0
+  batch_size: 128
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  maximum_epochs: 20
+  patience: 3
+  minimum_improvement: 0.0001
+  validation_examples: 10000
+
+data:
+  rotations_deg: [0, 18, 36, 54, 72]
+  label_shifts: [0, 2, 4, 6, 8]
+  main_examples_per_context: 10000
+  smoke_examples_per_context: 1000
+  interpolation: bilinear
+
+adapter:
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  beta1: 0.9
+  beta2: 0.999
+  epsilon: 1.0e-8
+  batch_size: 64
+
+preflight:
+  epochs: 20
+  batch_size: 512
+  context_accuracy_reference: 0.80
+  oracle_accuracy_minimum: 0.90
+  joint_oracle_tolerance: 0.01
+
+structure:
+  leaf_capacity: 512
+  split_fit_samples: 2048
+  split_epochs: 2
+  consolidation_epochs: 3
+
+passes:
+  - name: smoke
+    seeds: [0]
+    examples_per_context: 1000
+    leaf_capacity: 128
+    conditions: [frozen_base, global_replay, af, oracle_context, joint_iid]
+    depth_cap_override: null
+    require_consolidation: false
+  - name: main
+    seeds: [0, 1, 2]
+    examples_per_context: 10000
+    leaf_capacity: 512
+    conditions: [frozen_base, global_replay, af, oracle_context, joint_iid]
+    depth_cap_override: null
+    require_consolidation: false
+  - name: consolidation_stress
+    seeds: [0]
+    examples_per_context: 10000
+    leaf_capacity: 512
+    conditions: [af]
+    depth_cap_override: 3
+    require_consolidation: true
+
+runtime:
+  device: auto
+  evaluation_interval: 2000
+  deterministic_algorithms: true
+  progress: true

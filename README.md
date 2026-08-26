@@ -51,6 +51,7 @@ specific benchmark, not a claim of general continual-learning performance.
 | Experiment family | Current status | Scope and retained evidence |
 |---|---|---|
 | **TinyWorlds Nouns-v2** | **Usable** | Completed 24-task disjoint language benchmark with immutable VAMP stages, matched controls, routing audits, and a published [report](results/language_cl/tinyworlds-nouns-v2/report.md). |
+| VAMP-AF Rotated MNIST | Top-two smoke complete | Full-rank deltas on the CNN's top two layers raised the real oracle-context preflight to 98.36%. The 5,000-example AF smoke completed at 45.88% routed versus 88.01% oracle-leaf accuracy, exposing routing as the remaining gap. |
 | **TRACE Log-t VAMP** | **Completed research run** | Eight-task Llama-3.2-1B continual-learning study with SVD/Core controls, replay repair, four original routers, matched baselines, a CPU-only [task-known provenance follow-up](docs/experiments/trace-logt-vamp/followups/task-known-provenance/report.md), and a complete [reviewer bundle](docs/experiments/trace-logt-vamp/README.md). |
 | TinyShakespeare | Deprecated prototype | Four-task character-level language-model experiments used to establish the pathwise LoRA and routing machinery. A selected [character-permutation report](results/language_cl/tinyshakespeare/character-permutation/standard-seed0-a7bd7d1479ba/report.html) is retained as historical evidence. |
 | MNIST and predictive coding | Deprecated prototype | Early label-canvas VAE and FabricPC predictive-coding experiments established dense-delta graphs, energy-based addressing, and report tooling. The selected [digit-incremental FabricPC report](results/stage1_apm/digit_mnist_dense_delta_fabricpc_energy_converged/report.html) is not a current benchmark result. |
@@ -169,6 +170,25 @@ python -m apm.continual.trace.cli rebuild-policy \
 The source experiment contract is
 `docs/TRACE Log-t VAMP Experiment Specification.pdf`; completed implementation
 status and durable semantics are recorded in `PLAN.md` and `DESIGN.md`.
+
+## VAMP-AF MNIST Runner
+
+The Addressable Rotated MNIST mechanism POC uses the existing `vision` extra
+and local MNIST IDX cache. One command runs or resumes the shared frozen CNN,
+representation preflight, real smoke, three paired main seeds, and forced
+consolidation stress pass:
+
+```bash
+uv run python -m apm.experiments.vamp_af_mnist \
+  --config configs/vamp_af_mnist/poc.yaml
+```
+
+The `top-two-v3` preflight clears its adapter-capacity gate and the real smoke
+pass is complete. The main three-seed and forced-consolidation passes remain
+pending; rerunning the command resumes from authenticated checkpoints. Full
+checkpoints and generated evidence are kept below the ignored
+`artifacts/vamp-af-mnist/` tree; the protocol and output interpretation are summarized in
+[the experiment note](docs/experiments/vamp_af_mnist.md).
 
 ## Repository Layout
 

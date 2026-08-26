@@ -11,6 +11,52 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Milestone — VAMP-AF Top-Two Capacity Gate And Real Smoke
+
+The mechanism POC specified by `docs/VAMP_AF_POC_Codex_Spec.md` is implemented
+under `src/apm/continual/addressing_first.py` and `src/apm/experiments/` with a
+strict protocol at `configs/vamp_af_mnist/poc.yaml`. The implementation uses a
+shared frozen seed-0 CNN, immutable functional AF tree transitions, input-only
+PCA-median routing, leaf-local AdamW replay, zero-child split parity, and
+replay-only two-leaf collapse. Every node now owns full-rank deltas for the
+CNN's `3136→128` embedding and `128→10` classifier. The convolutional trunk and
+normalized base address remain frozen. Frozen-base, global-replay,
+oracle-context, and matched-presentation joint-IID controls use the same
+top-two-layer adapter class and frozen feature tables.
+
+The direct command is:
+
+```bash
+uv run python -m apm.experiments.vamp_af_mnist \
+  --config configs/vamp_af_mnist/poc.yaml
+```
+
+Focused tests cover routing determinism, unique leaf ownership, exact
+zero-child parity with realistic suffix dimensions, sibling isolation, cap
+enforcement, collapse deletion, exact work counters, strict configuration,
+deterministic blocked streams, explicit AdamW parity, and a full synthetic
+artifact-writing/resume smoke. All 16 focused tests pass in the vision
+environment.
+
+The original affine-logit protocol remains recorded under run
+`7e1ef0f3899bb5c4888d91ae28a29d7a328c58b76a446b04ca344f10853b017b`;
+its 78.788% oracle-context mean motivated the declared adapter-capacity change.
+The implemented `top-two-v3` protocol is isolated under run
+`c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af`.
+Its five full-rank oracle adapters reached 98.96%, 98.16%, 98.20%, 98.22%, and
+98.24%, for a 98.356% mean above the 90% gate. The context probe reached
+50.066% and is diagnostic-only. The joint top-two adapter reached 81.426%.
+
+The real 5,000-example smoke completed on the RTX 4090 in 59.96 seconds with
+30 splits, 31 leaves, 61 nodes, and no consolidation event. Final AF routed
+accuracy was 45.878%, compared with 35.016% global replay, 54.584% joint IID,
+60.044% online oracle context, and 24.880% frozen base. The exhaustive
+oracle-leaf diagnostic reached 88.008%, but hard routing agreed with its chosen
+leaf on only 15.560% of test examples. Adapter capacity is therefore repaired;
+the current smoke failure is predominantly routing/address alignment. The
+three-seed main pass and forced-consolidation stress pass remain pending and
+resume from the authenticated top-two-v3 run.
+
 ## Completed Outcome — ImageNet-R-50 Log-t VAMP Local Experiment
 
 The isolated PyTorch vision experiment under
