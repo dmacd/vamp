@@ -11,7 +11,7 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
-## Completed Milestone — VAMP-AF Top-Two Capacity Gate And Real Smoke
+## Completed Outcome — VAMP-AF Top-Two Adapter And Routing Failure
 
 The mechanism POC specified by `docs/VAMP_AF_POC_Codex_Spec.md` is implemented
 under `src/apm/continual/addressing_first.py` and `src/apm/experiments/` with a
@@ -53,9 +53,31 @@ accuracy was 45.878%, compared with 35.016% global replay, 54.584% joint IID,
 60.044% online oracle context, and 24.880% frozen base. The exhaustive
 oracle-leaf diagnostic reached 88.008%, but hard routing agreed with its chosen
 leaf on only 15.560% of test examples. Adapter capacity is therefore repaired;
-the current smoke failure is predominantly routing/address alignment. The
-three-seed main pass and forced-consolidation stress pass remain pending and
-resume from the authenticated top-two-v3 run.
+the smoke failure is predominantly routing/address alignment.
+
+The authenticated main and consolidation passes are also complete. Across the
+three 50,000-example main seeds, AF routed accuracy was 61.170%, 59.132%, and
+60.672% (60.325% mean). The matched means were 62.661% global replay, 76.278%
+joint IID, 97.059% online oracle context, and 24.880% frozen base. Mean
+oracle-leaf accuracy was 99.228%, while mean hard-route/oracle-leaf agreement
+was only 4.973%. The final main trees retained 69--72 leaves at the depth-eight
+cap after 70--73 splits and one or two consolidations per seed. AF therefore
+missed the oracle-context gate by 36.735 points, trailed global replay by 2.336
+points, and missed the oracle-leaf gap gate by 38.903 points. Its measured work
+ratio also rose in every seed, from first-quartile medians of 2.01--2.08 to
+last-quartile medians of 2.86--2.90.
+
+The forced depth-three consolidation stress pass completed 19 splits and 13
+collapses, ending with seven leaves and 69.240% AF accuracy. Its worst immediate
+collapse change was -0.392 points, so the consolidation-drop gate passed. The
+aggregate outcome passes structural invariants, multiple-leaf use, the depth
+cap, and consolidation fidelity; it fails the two comparative accuracy gates,
+the oracle-leaf routing gap, and the flat-work-trend gate. The full result is a
+negative POC for this hard PCA-median address, not an adapter-capacity failure.
+Generated reports and ledgers remain under the ignored authenticated run
+directory. A 7.5-second rerun reused every sealed phase and pass. Any follow-up
+should treat input-address alignment or multi-candidate routing as a new,
+explicit protocol rather than tuning this completed result in place.
 
 ## Completed Outcome — ImageNet-R-50 Log-t VAMP Local Experiment
 
