@@ -52,6 +52,7 @@ specific benchmark, not a claim of general continual-learning performance.
 |---|---|---|
 | **TinyWorlds Nouns-v2** | **Usable** | Completed 24-task disjoint language benchmark with immutable VAMP stages, matched controls, routing audits, and a published [report](results/language_cl/tinyworlds-nouns-v2/report.md). |
 | VAMP-AF Rotated MNIST | Completed negative routing result | Full-rank top-two deltas cleared the 98.36% oracle-context capacity gate, but three-seed AF averaged 60.32% versus 62.66% global replay and 99.23% oracle-leaf accuracy. Hard routing agreed with the oracle leaf only 4.97% of the time. |
+| LogT NCE/TRE Rotated MNIST | Completed negative routing result | The corrected protocol sampled complete images from the authenticated frozen CNN's 60,000-image training distribution. Calibration passed, but all four TRE schedules failed every static routing gate, so the staged protocol correctly stopped before consolidation and online evaluation. |
 | **TRACE Log-t VAMP** | **Completed research run** | Eight-task Llama-3.2-1B continual-learning study with SVD/Core controls, replay repair, four original routers, matched baselines, a CPU-only [task-known provenance follow-up](docs/experiments/trace-logt-vamp/followups/task-known-provenance/report.md), and a complete [reviewer bundle](docs/experiments/trace-logt-vamp/README.md). |
 | TinyShakespeare | Deprecated prototype | Four-task character-level language-model experiments used to establish the pathwise LoRA and routing machinery. A selected [character-permutation report](results/language_cl/tinyshakespeare/character-permutation/standard-seed0-a7bd7d1479ba/report.html) is retained as historical evidence. |
 | MNIST and predictive coding | Deprecated prototype | Early label-canvas VAE and FabricPC predictive-coding experiments established dense-delta graphs, energy-based addressing, and report tooling. The selected [digit-incremental FabricPC report](results/stage1_apm/digit_mnist_dense_delta_fabricpc_energy_converged/report.html) is not a current benchmark result. |
@@ -192,6 +193,41 @@ authenticates and reuses the completed checkpoints. Full checkpoints and
 generated evidence are kept below the ignored `artifacts/vamp-af-mnist/` tree;
 the protocol and output interpretation are summarized in
 [the experiment note](docs/experiments/vamp_af_mnist.md).
+
+## LogT NCE/TRE MNIST Runner
+
+The follow-up runner authenticates the completed VAMP-AF base and data, then
+runs normalized-ratio calibration, a genuine 63-block LogT static routing
+gate, a block-64 consolidation control, and the three-seed 100-block online
+comparison in that order. It stops and writes a report when a required gate
+fails. Evidence models receive raw quantized images only; adapter features,
+labels, and context identifiers are excluded from their API.
+
+```bash
+uv run python -m apm.experiments.vamp_logt_evidence_mnist \
+  --config configs/vamp_logt_evidence_mnist/nce_tre_base_reference.yaml
+```
+
+The first canonical run completed on 2026-08-26 with a controlled stop after
+static selection, but it used independent uniform pixels as the common
+reference. That run remains an immutable negative control at
+`artifacts/vamp-logt-evidence-mnist/runs/2003268ae73e22544cf9801d58b3fa40e724ff58c70bc31c32b120fdebf38b54/`;
+it does not answer the intended base-reference question. The corrected protocol
+uses the uniform empirical distribution over all 60,000 original unrotated
+MNIST training images used by the sealed frozen CNN. It samples one intact donor
+image per adjacent pair, binds the reference tensor hash, and makes complete
+replacement exactly that distribution.
+
+The corrected canonical GPU run is
+`fa2b8bf7d301b0c096d35cdbd6af1ed9b9369ee7e376d96d74e384019417ef49`.
+Calibration passed, but the run stopped at the static gate because none of
+K=2, 4, 8, or 16 passed. Direct NCE averaged 51.49% routed classifier accuracy.
+K=4 had the best TRE mean at 58.51%, but its worst replica remained 41.65
+percentage points behind the label-aware oracle. Across candidates, the most
+separable adjacent bridge had 99.10% to 100% balanced accuracy, above the 90%
+maximum, and the least stable seed's independent-route agreement was only
+6.48% to 67.92%, below the 90% minimum. Consolidation and online evaluation
+were therefore deliberately not run.
 
 ## Repository Layout
 

@@ -1,0 +1,93 @@
+experiment:
+  name: vamp-logt-nce-tre-mnist
+  protocol_revision: nce-tre-base-reference-v2
+
+paths:
+  artifact_root: artifacts/vamp-logt-evidence-mnist
+  data_root: data/torchvision/MNIST/raw
+  baseline_run_root: artifacts/vamp-af-mnist/runs/c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af
+
+baseline:
+  run_id: c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af
+  base_checkpoint_sha256: 45793341113b7a44b397d8781b0590f7dcc54ca05ca2cd7d637b11244033a282
+  feature_cache_sha256: e02f2a2b2535f317d6201fb6d86cf7936eda462e434cb3dd603a119cc1177d4c
+  expected_main_mean_accuracy:
+    af: 0.6032466491063436
+    frozen_base: 0.24879999458789825
+    global_replay: 0.6266066630681356
+    joint_iid: 0.7627799908320109
+    oracle_context: 0.9705933133761088
+  expected_main_mean_oracle_leaf_accuracy: 0.9922800064086914
+
+stream:
+  rotations_deg: [0, 18, 36, 54, 72]
+  label_shifts: [0, 2, 4, 6, 8]
+  interpolation: bilinear
+  examples_per_context: 10000
+  block_size: 500
+  static_snapshot_blocks: 63
+  consolidation_snapshot_blocks: 64
+
+adapter:
+  epochs: 20
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  beta1: 0.9
+  beta2: 0.999
+  epsilon: 1.0e-8
+
+evidence:
+  reference: frozen_base_training_images_uint8
+  direct_bridges: 1
+  candidate_tre_bridges: [2, 4, 8, 16]
+  epochs: 20
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  beta1: 0.9
+  beta2: 0.999
+  epsilon: 1.0e-8
+  initial_replacement_probability: 0.0012755102040816326
+  independent_replicas: 3
+  score_batch_size: 2048
+
+calibration:
+  dimensions: 64
+  component_probabilities: [0.30, 0.70]
+  reference_probability: 0.5
+  tre_bridges: 8
+  training_steps: 2500
+  batch_size: 512
+  evaluation_examples: 8192
+  replicas: 3
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  signed_bias_max_nats: 0.25
+  tre_rmse_max_nats: 1.0
+  interseed_rmse_max_nats: 1.0
+  direct_to_tre_rmse_ratio_min: 1.5
+
+static:
+  stream_seeds: [0, 1, 2]
+  heldout_examples_per_node: 1000
+  adjacent_balanced_accuracy_max: 0.90
+  independent_route_agreement_min: 0.90
+  classifier_oracle_gap_max: 0.10
+
+consolidation:
+  heldout_examples_per_merge: 1024
+  raw_score_difference_max_nats: 0.25
+  route_agreement_min: 0.90
+  classifier_accuracy_gap_max: 0.02
+  nce_loss_relative_difference_max: 0.05
+  level_offset_slope_max_nats: 0.05
+
+online:
+  stream_seeds: [0, 1, 2]
+  evaluation_batch_size: 2048
+
+runtime:
+  device: auto
+  deterministic_algorithms: true
+  progress: true

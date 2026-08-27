@@ -54,6 +54,65 @@ presentations, split replay, consolidation replay, PCA-fit examples, and
 historical repartitioning. Only these online counters enter the
 `work / [t log2(t+1)]` diagnostic; scheduled test evaluation does not.
 
+## LogT NCE/TRE Evidence Routing
+
+The NCE/TRE MNIST follow-up is a separate temporal bank and does not reuse the
+VAMP-AF spatial tree. Its immutable topology is a standard binary counter over
+fixed 500-example blocks. A level-zero insertion repeatedly carries through
+occupied equal levels, so active nodes are disjoint contiguous intervals,
+there is at most one node per level, and the active frontier has at most
+`ceil(log2(t + 1))` nodes after `t` blocks. Every merged parent trains a fresh
+full-rank top-two-layer adapter on the exact child union. A committed parent is
+checkpointed before its child model directories are deleted; retired lineage
+remains in manifests and ledgers rather than as live model state.
+
+Each active node independently owns a full-capacity conditional evidence CNN.
+Its convolutional layers and 3,136-to-128 dense layer have the same dimensions
+as the shared MNIST CNN and all remain trainable. Bridge conditioning modulates
+the 128-dimensional hidden activation, and a scalar replaces the digit head.
+The evidence API accepts only raw 8-bit single-channel images. Labels, context
+IDs, PCA addresses, frozen trunk features, adapter responses, and base logits
+cannot enter evidence training or scoring.
+
+The corrected common normalized reference is the uniform empirical
+distribution over all 60,000 original, unrotated MNIST training images used to
+train the authenticated frozen CNN. The frozen classifier is not itself an
+image density; its exact training-image population defines the reference. The
+protocol binds the source IDX, sealed base and parent protocol, reference count,
+and quantized tensor hash. Reference sampling exposes only raw uint8 images to
+the evidence path.
+
+For every source presentation, one complete reference image is sampled with
+replacement. The near-data endpoint replaces each source pixel with the
+corresponding donor pixel with probability `1/784`; fixed TRE waymarks linearly
+increase coordinate replacement to one. Paired adjacent samples share the
+donor, so final replacement returns that intact reference image and preserves
+one-reference-example accounting. Each update samples one bridge and one
+balanced positive/negative pair. Equal class priors make the optimal adjacent
+logit the normalized log-density ratio without an unknown class-prior offset.
+Node evidence is the sum of its fixed adjacent logits, and task-free routing
+chooses the largest sum across active nodes. The earlier independent-uniform-
+pixel protocol is retained only as an immutable negative control under its own
+run identity.
+
+The protocol is phase-gated. A normalized multimodal implementation test first
+checks offset recovery, independent-fit agreement, direct-NCE saturation, and
+the triangle bound. Static genuine-LogT snapshots then compare direct NCE,
+candidate TRE schedules, and the label-aware minimum-loss node oracle on held-
+out latent temporal sources. The smallest candidate satisfying every seed and
+replica gate is frozen before a block-64 carry test or the 100-block online
+comparison. Consolidation controls retrain an independent twin on the same
+union and compare raw scores, route choices, routed classifier accuracy,
+balanced NCE loss, and score-offset slope by level.
+
+Evidence accounting is logical and exact. Leaf presentations, merge
+presentations, reference examples, route model evaluations, and the live-model
+gauge are distinct counters. Balanced training requires one reference example
+per source presentation. For a fixed number of evidence families, cumulative
+training is asserted not to exceed that fixed multiple of
+`epochs * block_size * t * ceil(log2(t + 1))`; conditional evaluation of all
+fixed bridges preserves `O(log t)` live-model routing.
+
 ## ImageNet-R-50 Local Vision Boundary
 
 The ImageNet-R experiment is an isolated PyTorch package under

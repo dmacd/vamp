@@ -79,6 +79,114 @@ directory. A 7.5-second rerun reused every sealed phase and pass. Any follow-up
 should treat input-address alignment or multi-candidate routing as a new,
 explicit protocol rather than tuning this completed result in place.
 
+## Completed Outcome — LogT NCE/TRE Evidence Routing on MNIST
+
+The phase-gated implementation requested by
+`docs/Codex Handoff_ NCE-TRE Evidence Routing for LogT-VAMP on MNIST.md` is
+complete. It is isolated from the sealed VAMP-AF code and artifacts. The new
+runner authenticates run
+`c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af`,
+reuses its exact frozen CNN and aligned adapter feature table, reconstructs an
+authenticated uint8 raw-image table for evidence only, and never rewrites the
+baseline.
+
+Implemented surfaces include a bridge-conditioned full-capacity evidence CNN,
+balanced coordinate-replacement NCE/TRE training, a pure standard binary
+counter, immutable active-bank state, de-novo top-two adapter replay, atomic
+per-node artifacts, checkpoint-before-child-deletion carries, exact work
+counters and ceilings, held-out latent-source routing metrics, label-aware
+oracle diagnostics, static K selection, consolidation twins, full online
+direct/TRE/oracle evaluation, and complete-sentence Markdown/standalone-HTML
+reports. The strict protocol is
+`configs/vamp_logt_evidence_mnist/nce_tre.yaml`; the only runner command is:
+
+```bash
+uv run python -m apm.experiments.vamp_logt_evidence_mnist \
+  --config configs/vamp_logt_evidence_mnist/nce_tre.yaml
+```
+
+The normalized implementation calibration remains 64-dimensional and
+bimodal. Its fixed Bernoulli components are 0.30 and 0.70, with eight TRE
+bridges and 2,500 optimizer steps per bridge batch. This calibration choice was
+sealed before any MNIST evidence run: the more extreme 0.05/0.95 construction
+also saturated the first TRE bridges and therefore could not test offset
+recovery. On the local RTX 4090, the final three-replica calibration reached
+0.22836-nat TRE RMSE versus 0.66339 for direct NCE, 0.11727-nat maximum
+absolute signed bias, and 0.27302-nat maximum inter-replica disagreement; all
+five implementation gates passed.
+
+Fourteen focused tests pass in the vision environment. They cover the
+normalized ratio and triangle-bound test, exact AddressCNN-width evidence
+backbone, uint8 preservation, deterministic training, disjoint LogT intervals,
+deterministic carries, fixed-multiple work bounds, scoped child deletion,
+strict config rejection, label-isolated routing, complete condition
+definitions, deterministic blocked streams, and a two-block artifact/resume
+smoke. The broader vision-environment suite passed 807 tests and skipped 275
+resource tests; its 23 failures were all missing-`tokenizers` dependency errors
+in unrelated TinyWorlds fixtures. All 32 affected fixture tests pass in the
+semantic environment where that dependency is installed.
+
+The canonical GPU run completed its preregistered calibration and static phases
+on 2026-08-26 under run identity
+`2003268ae73e22544cf9801d58b3fa40e724ff58c70bc31c32b120fdebf38b54`.
+Calibration passed all five gates: TRE reached 0.22836-nat mean ratio RMSE,
+versus 0.66339 nats for direct NCE, with 0.11726-nat maximum absolute signed
+bias and 0.27302-nat maximum disagreement between independent replicas.
+
+The static phase then produced the prescribed controlled stop. None of K=2,
+4, 8, or 16 passed. Every candidate had a maximum held-out adjacent-waymark
+balanced accuracy of 1.0000, above the allowed 0.90, so at least one bridge in
+every schedule remained completely separable. K=8 and K=16 did pass the 0.90
+independent-route-agreement gate, at 0.9998 and 0.9817 respectively, but every
+candidate also failed the routed-classifier gate: the worst seed/replica gap
+from the label-aware oracle was 0.7225 for K=2 and K=4 and 0.7242 for K=8 and
+K=16, rather than at most 0.10. The runner therefore selected no K and correctly
+did not run the block-64 consolidation or 100-block online phases. The readable
+Markdown and standalone-HTML reports are retained under the ignored run
+directory. Any attempt to use more than 16 bridges, alter the waymark schedule,
+or change the shared reference is a new protocol; it must not tune or overwrite
+this completed negative result.
+
+### Completed correction — frozen-base training-image reference
+
+The user clarified on 2026-08-26 that the intended shared reference was the
+frozen CNN's training-image distribution, not independent uniform pixels. The
+versioned correction is implemented without modifying the completed uniform-
+reference artifacts. The new strict config is
+`configs/vamp_logt_evidence_mnist/nce_tre_base_reference.yaml`, and
+`docs/NCE_TRE_BASE_REFERENCE.md` freezes the interpretation.
+
+The corrected \(Q\) samples complete images uniformly with replacement from
+all 60,000 original unrotated MNIST training images used for the sealed base.
+The reference cache binds the parent protocol, base checkpoint, source IDX,
+example count, and quantized tensor hash. Every adjacent pair shares one donor
+image; the final replacement endpoint is exactly that intact donor. Focused
+tests cover the empirical endpoint, deterministic model training, strict
+configuration, raw-only API, and the resumable two-block bank. Fifteen focused
+tests and all 23 affected regression tests pass.
+
+The corrected canonical GPU run completed on 2026-08-26 under run identity
+`fa2b8bf7d301b0c096d35cdbd6af1ed9b9369ee7e376d96d74e384019417ef49`.
+The authenticated reference contains exactly 60,000 images and has content
+hash `c3f355699f910376f8f8376956d367ff5df3883cc339decd2bcd28fb2e61f3a4`.
+The unchanged normalized calibration passed all five gates. The genuine MNIST
+static phase then failed all three routing gates for every candidate K, so no K
+was selected and the runner correctly stopped before consolidation or online
+evaluation.
+
+Direct NCE averaged 51.49% routed classifier accuracy over the three stream
+seeds and three independent replicas, compared with 98.29% for the
+label-aware node oracle. Its mean gap from the oracle was 46.80 percentage
+points and its worst gap was 62.62 points. TRE's best mean routed classifier
+accuracy was 58.51% at K=4. The maximum adjacent-waymark balanced accuracy was
+100.00%, 100.00%, 99.95%, and 99.10% for K=2, 4, 8, and 16 respectively, all
+above the allowed 90%. The minimum agreement between independently trained
+routers was 6.48%, 67.92%, 9.75%, and 8.68% respectively, all below the required
+90%. Their worst oracle gaps were 51.62, 41.65, 49.80, and 47.45 percentage
+points respectively, all above the allowed 10 points. This is the completed
+negative result for the intended reference; any new schedule, training budget,
+or gate is a separate protocol rather than unfinished work here.
+
 ## Completed Outcome — ImageNet-R-50 Log-t VAMP Local Experiment
 
 The isolated PyTorch vision experiment under
