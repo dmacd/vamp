@@ -1,0 +1,82 @@
+experiment:
+  name: vamp-logt-generative-pc-evidence-mnist
+  protocol_revision: generative-pc-gn-v1
+
+evidence:
+  estimator: generalized_gauss_newton
+  primary_score: gn1
+  hessian_diagnostics: exact_hessian_every_query
+  negative_direction_epsilons: [0.01, 0.05, 0.10]
+  curvature_audit_examples: 64
+  float64_audit_examples: 8
+  float64_tolerance_nats: 0.001
+
+paths:
+  artifact_root: artifacts/vamp-logt-pc-mnist
+  source_run_root: artifacts/vamp-logt-evidence-mnist/runs/fa2b8bf7d301b0c096d35cdbd6af1ed9b9369ee7e376d96d74e384019417ef49
+  baseline_run_root: artifacts/vamp-af-mnist/runs/c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af
+  model_source_run_root: artifacts/vamp-logt-pc-mnist/runs/c4643cd904ae9802c6a427868b954e6ff54b960a6c589231ccd9b3ddfb4e06a7
+
+source:
+  nce_run_id: fa2b8bf7d301b0c096d35cdbd6af1ed9b9369ee7e376d96d74e384019417ef49
+  raw_cache_sha256: 039fa5c11141ea1a10feb2d24928a2aa68fd9baef6feb3682891ddf38e7aeddb
+  raw_semantic_sha256: f8ad4aafe1a10613b8e190315ec9f63c1e80dfa34acff8e5a6e95f6390ba063f
+  baseline_run_id: c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af
+  feature_cache_sha256: e02f2a2b2535f317d6201fb6d86cf7936eda462e434cb3dd603a119cc1177d4c
+
+model_source:
+  map_run_id: c4643cd904ae9802c6a427868b954e6ff54b960a6c589231ccd9b3ddfb4e06a7
+  required_tree_sha256: ae124f978a6ca6074567853ace6a6596ee87afaff8525e48bf56a408613b6ae9
+  map_score_tolerance_nats: 0.0001
+
+model:
+  latent_dim: 32
+  hidden_dim: 128
+  image_dim: 784
+  weight_init_std: 0.05
+
+training:
+  epochs: 20
+  batch_size: 128
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  infer_steps: 80
+  score_batch_size: 4
+  classifier_epochs: 50
+  classifier_batch_size: 128
+  classifier_learning_rate: 0.01
+  classifier_weight_decay: 0.0001
+
+preflight:
+  train_examples: 2000
+  heldout_examples: 256
+  image_precisions: [25.0, 100.0]
+  hidden_precisions: [1.0, 4.0]
+  inference_step_sizes: [0.01, 0.05]
+  classifier_accuracy_min: 0.80
+  gradient_reduction_min: 10.0
+
+stream:
+  rotations_deg: [0.0, 18.0, 36.0, 54.0, 72.0]
+  label_shifts: [0, 2, 4, 6, 8]
+  block_size: 250
+  static_blocks: 31
+  minimal_stream_seeds: [0]
+  confirmation_stream_seeds: [1, 2]
+  model_seeds: [0, 1, 2]
+
+evaluation:
+  heldout_per_node: 128
+  focused_examples: 512
+  bootstrap_resamples: 10000
+  route_agreement_min: 0.90
+  classifier_oracle_gap_max: 0.10
+  oracle_accuracy_min: 0.85
+  novel_win_lower_min: 0.80
+  recurrent_win_lower_min: 0.50
+  identical_offset_allowance_nats: 0.25
+  parent_accuracy_gap_max: 0.02
+
+runtime:
+  device: gpu
+  progress: true

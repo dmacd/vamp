@@ -22,6 +22,11 @@ This file is for agent workflow and project-maintenance guidance.
 
 ## Test Discipline
 
+- Run suites that import JAX or PyTorch in one pytest process (`-n 0`) and in
+  explicit slices. Do not use the repository's default xdist fan-out for these
+  suites; multiple accelerator runtimes can exhaust host RAM and swap.
+- Check host and accelerator memory before a real experiment, do not overlap
+  heavy jobs, and keep resumable phase boundaries intact.
 
 ## Git And Workspace
 

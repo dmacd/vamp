@@ -3247,6 +3247,142 @@ train/validation/test boundary. Tail examples and batches are right padded to
 their fixed context and batch capacities; attention and loss masks make those
 slots inert.
 
+## Normalized Generative-PC Evidence
+
+Cross-node predictive-coding evidence is defined by one complete normalized
+image density per temporal node, not by the legacy label-canvas backend's raw
+settled prediction error. The fixed graph is a standard-normal 32-dimensional
+latent, a 128-dimensional tanh Gaussian hidden state, and a sigmoid-mean
+Gaussian image observation. Hidden and image precisions are global protocol
+choices; node-specific variances, score offsets, temperatures, and sample-count
+priors are forbidden.
+
+The three comparable raw scores are the negative hidden-plus-image residual,
+the negative complete joint density at the settled state, and the full
+160-dimensional Laplace approximation. The complete scores include the latent
+prior and every Gaussian normalization constant. The Hessian is taken with
+respect to the settled free states at fixed model parameters, without
+differentiating through iterative inference, and uses one preflight-selected
+regularizer for every node and level.
+
+Each active LogT node is trained de novo from its exact interval replay. Its
+linear digit head consumes a stopped-gradient settled hidden state, so labels
+cannot alter the density or evidence. Evidence APIs accept images only.
+Context identifiers are restricted to controlled-stream construction and
+provenance, while the label-aware node oracle remains a diagnostic upper
+bound. Completed node parameters are stored as authenticated non-pickle array
+trees, and a bank checkpoint is committed before retired child directories
+are deleted.
+
+The canonical implementation bounds accelerator memory independently of the
+scientific protocol. Dense-Hessian scoring uses batches of four, bank building
+reuses one compiled backend per replica instead of constructing one per node,
+and independent preflight candidates and static conditions execute serially.
+JAX compilation caches are released between those independent units. These
+choices change peak memory and compilation frequency, not model parameters,
+training presentations, inference steps, evidence formulas, or gates.
+
+The authorized `generative-pc-v2` successor fixes latent inference at 80 steps
+for both model training and scoring. A four-image diagnostic on the v1 model
+showed that extending its deterministic inference trajectory from 40 to 80
+steps removed the only negative Hessian eigenvalue from each of the four v1
+curvature failures. V2 nevertheless retrains every density model and classifier
+head because inference length affects the states used during learning; it does
+not mix 40-step training with 80-step scoring or reuse v1 model checkpoints.
+The v1 run remains immutable, and the distinct revision plus config hash keeps
+the post-hoc change explicit.
+
+The active `generative-pc-map-v1` successor deliberately narrows the estimator
+instead of weakening the failed Laplace curvature gate. It retains the v2
+80-step training and scoring schedule and the original two-by-two-by-two
+preflight sweep, but it selects a candidate as soon as the preregistered
+learning, reconstruction, classifier, and gradient-reduction checks pass. The
+only task-free routing score is the negative complete normalized joint density
+at the resulting 80-step state. This quantity is called the MAP joint score; it
+is not described as marginal evidence or as a converged mode when its gradient
+is nonzero.
+
+The MAP branch never constructs a latent Hessian, applies a diagonal curvature
+shift, runs importance sampling, or executes a multi-start curvature audit.
+Its persisted Hessian and importance-work counters must remain zero. It retains
+the same three controlled static schedules, independent model replicas,
+label-aware diagnostic oracle, routing gates, and partial-carry lifecycle gate.
+Laplace or another posterior-volume correction may return only as a separately
+versioned protocol with its own preflight; it cannot be silently added to or
+used to reinterpret the MAP artifacts.
+
+### Generalized Gauss–Newton PC evidence
+
+The `generative-pc-gn-v1` successor treats the complete negative log joint as a
+nonlinear least-squares model plus constants. For free state `u=(z,h)` and image
+`x`, its whitened residual is the concatenation of `z`,
+`sqrt(tau_h) * (h - tanh(z W_h + b_h))`, and
+`sqrt(tau_x) * (x - sigmoid(h W_x + b_x))`. Therefore
+`J(u,x)=0.5 ||r(u,x)||^2 + C`, with the same latent prior and Gaussian
+normalization constants as the MAP protocol.
+
+At the one shared 80-step state, `A` is the derivative of the residual vector
+with respect to all 160 free values and `G=A^T A`. The prior residual gives
+direct sensitivity to every latent value and the hidden residual gives direct
+sensitivity to every hidden value, so G has full column rank for this graph.
+The implementation still verifies every raw Cholesky factor rather than relying
+only on that structural argument. It uses no damping, eigenvalue floor,
+absolute determinant, or fallback score.
+
+GN0 is `-J + d/2 log(2*pi) - 0.5 log det(G)`. GN1 is GN0 plus
+`0.5 g^T G^-1 g`, where `g` is the gradient of J at the actual settled state.
+GN1 is primary because fixed-step inference can leave a nonzero gradient. GN0
+is an ablation that may open confirmation, but GN0 alone cannot produce the
+fully supported verdict. MAP remains a paired control. The exact-Hessian
+Laplace value exists only on images for which the unmodified Hessian has a raw
+Cholesky factor, and a Hessian route is reported only when every candidate node
+has such a value for that image. Exact-Hessian coverage never gates G, GN0, or
+GN1.
+
+The minimal GN experiment reuses trained parameters only through an
+authenticated, self-contained import of the sealed MAP model tree. It rebuilds
+the deterministic holdouts and verifies the newly computed MAP values against
+the sealed raw arrays before accepting any GN comparison. Confirmation and
+partial carry, when reached, use newly trained models under the GN run rather
+than adding artifacts to the MAP run.
+
+Dense A, G, and exact-H matrices are appropriate for the current 160-variable
+MNIST graph and are discarded after each score batch. Larger models require a
+separate matrix-free design using Jacobian-vector products, conjugate gradients,
+and a log-determinant estimator; those approximations may not silently replace
+the exact protocol. For transformer predictive coding, a determinant correction
+has probabilistic meaning only when the relaxed variables are declared latent
+random variables in a normalized joint model. Ordinary transformer activations
+used merely as auxiliary optimization state do not become Bayesian latents by
+applying GGN, so their determinant cannot be called marginal evidence without
+an additional generative-model specification.
+
+GN v1 retains native float32 scoring and requires an eight-image agreement
+audit against float64. Its canonical audit missed the absolute 0.001-nat
+tolerance even though every G matrix was positive definite. A future float64
+scoring implementation is a new protocol because numerical precision changes
+the routed scores and exact-Hessian validity decisions.
+
+GN v2 is a separate continuation protocol, not a reinterpretation of GN v1.
+It preserves native float32 scoring and the same eight-image float64 audit, but
+classifies that comparison as diagnostic-only. Source authentication, MAP
+parity, finite GN scores, and raw-G Cholesky success on every audit image remain
+hard prerequisites. This separation permits the experiment to measure route
+sensitivity without claiming that float32 and float64 are numerically
+equivalent. The report conservatively flags a route when its best two GN scores
+are separated by no more than twice the largest observed precision-audit
+difference and states explicitly that this is a sensitivity analysis, not a
+global rounding-error bound.
+
+The v2 minimal result establishes an estimator limitation that should constrain
+successor designs: replacing the exact Hessian by G removes negative-curvature
+failures, but it does not make scores comparable across models trained on
+different history intervals. The identical-regime control still exhibited an
+approximately 721-nat cross-level offset under GN1, far beyond ordinary
+same-level replica variation. A successor must directly normalize or eliminate
+that interval-size dependence before it can reopen confirmation or partial
+carry; additional seeds cannot repair a deterministic score-scale mismatch.
+
 ## Task Training Schedules
 
 Stage 1 accepts either a fixed-epoch schedule or an observed-energy-convergence

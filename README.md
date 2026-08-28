@@ -53,6 +53,7 @@ specific benchmark, not a claim of general continual-learning performance.
 | **TinyWorlds Nouns-v2** | **Usable** | Completed 24-task disjoint language benchmark with immutable VAMP stages, matched controls, routing audits, and a published [report](results/language_cl/tinyworlds-nouns-v2/report.md). |
 | VAMP-AF Rotated MNIST | Completed negative routing result | Full-rank top-two deltas cleared the 98.36% oracle-context capacity gate, but three-seed AF averaged 60.32% versus 62.66% global replay and 99.23% oracle-leaf accuracy. Hard routing agreed with the oracle leaf only 4.97% of the time. |
 | LogT NCE/TRE Rotated MNIST | Completed negative routing result | The corrected protocol sampled complete images from the authenticated frozen CNN's 60,000-image training distribution. Calibration passed, but all four TRE schedules failed every static routing gate, so the staged protocol correctly stopped before consolidation and online evaluation. |
+| Generative-PC LogT MNIST | Completed negative MAP/GN routing result | The 80-step MAP and exact generalized Gauss–Newton protocols failed all three minimal static controls. Both scores consistently favored the larger history model: the new leaf won 0 of 512 focused comparisons in every replica, including when both nodes represented the same image distribution. No confirmation or partial carry was run. |
 | **TRACE Log-t VAMP** | **Completed research run** | Eight-task Llama-3.2-1B continual-learning study with SVD/Core controls, replay repair, four original routers, matched baselines, a CPU-only [task-known provenance follow-up](docs/experiments/trace-logt-vamp/followups/task-known-provenance/report.md), and a complete [reviewer bundle](docs/experiments/trace-logt-vamp/README.md). |
 | TinyShakespeare | Deprecated prototype | Four-task character-level language-model experiments used to establish the pathwise LoRA and routing machinery. A selected [character-permutation report](results/language_cl/tinyshakespeare/character-permutation/standard-seed0-a7bd7d1479ba/report.html) is retained as historical evidence. |
 | MNIST and predictive coding | Deprecated prototype | Early label-canvas VAE and FabricPC predictive-coding experiments established dense-delta graphs, energy-based addressing, and report tooling. The selected [digit-incremental FabricPC report](results/stage1_apm/digit_mnist_dense_delta_fabricpc_energy_converged/report.html) is not a current benchmark result. |
@@ -75,11 +76,11 @@ graph grows.
 
 ## Development Setup
 
-Python 3.10 or newer is required. Create the local environment and run the
+Python 3.11 or newer is required. Create the local environment and run the
 default non-integration test suite with:
 
 ```bash
-python -m venv ve
+python3.11 -m venv ve
 ve/bin/python -m pip install -e '.[dev]'
 ve/bin/python -m pytest
 ```
@@ -228,6 +229,49 @@ separable adjacent bridge had 99.10% to 100% balanced accuracy, above the 90%
 maximum, and the least stable seed's independent-route agreement was only
 6.48% to 67.92%, below the 90% minimum. Consolidation and online evaluation
 were therefore deliberately not run.
+
+## Generative-PC Evidence MNIST Runner
+
+The generative predictive-coding experiment trains one normalized image model
+and one stopped-gradient digit classifier per active LogT node. Its sole
+task-free routing value is the complete log joint of the image and inferred
+state after 80 fixed inference steps; higher values win. This MAP joint score
+includes the latent prior and all Gaussian normalization constants, but it is
+not a marginal likelihood. Labels are available only to train the node-local
+classifier and to calculate the diagnostic oracle.
+
+```bash
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -e '.[pc,gpu]'
+.venv/bin/python -m apm.experiments.vamp_logt_pc_mnist \
+  --config configs/vamp_logt_pc_mnist/minimal.yaml
+```
+
+The completed `generative-pc-map-v1` protocol performs no Hessian, Laplace, or
+importance-sampling calculation. Its one-node model passed preflight, but MAP
+routing failed all three controlled 31-block schedules on the minimal stream
+seed. In every replica, the new leaf lost all 512 focused comparisons to the
+larger history model. The identical-regime control measured a 724.18-nat median
+history advantage even though both compared nodes represented C4; the allowed
+offset was 19.88 nats. Here C4 is the 72-degree-rotated, label-shifted context,
+not the digit 4. The runner therefore stopped before confirmation and partial
+carry. Historical 40-step and 80-step Laplace preflight failures remain
+immutable under their original run IDs.
+
+The exact generalized Gauss–Newton continuation can reproduce the authenticated
+MAP models and score the same 80-step states with GN0 and GN1:
+
+```bash
+.venv/bin/python -m apm.experiments.vamp_logt_pc_gn_mnist \
+  --config configs/vamp_logt_pc_mnist/gauss_newton_v2.yaml
+```
+
+Its raw G matrix factorized successfully for all 38,016 minimal-condition
+states, but neither GN score passed a condition. Only 2 of 11,520 GN route
+decisions were close enough for the measured float32-versus-float64 discrepancy
+to plausibly change their ordering. The decisive failure was the remaining
+approximately 721-nat cross-level bias in the identical-regime control, not
+floating-point precision.
 
 ## Repository Layout
 

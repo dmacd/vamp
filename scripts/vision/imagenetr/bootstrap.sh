@@ -5,7 +5,7 @@ project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 vision_environment="${project_root}/.venv-vision"
 
 echo "Phase 1/3: creating the isolated ImageNet-R vision environment."
-python3.10 -m venv "${vision_environment}"
+python3.11 -m venv "${vision_environment}"
 
 echo "Phase 2/3: installing the pinned CUDA 12.1 PyTorch pair."
 "${vision_environment}/bin/python" -m pip install --upgrade "pip==25.2"

@@ -1,0 +1,113 @@
+{
+  "audit_indices": [
+    21,
+    46,
+    53,
+    58
+  ],
+  "canonical_run_id": "2045bf96a406251ae9fa8825a93c9abe1933df28becfa0032939b5274879626b",
+  "checkpoints": [
+    40,
+    80
+  ],
+  "device": "cuda:0",
+  "inference_step_size": 0.01,
+  "initialization": "all 160 inferred values set to zero",
+  "model_identity": "cd49432a5532ac32ef9f32540d59907fbea2054d62687966f07a178364bd2174",
+  "positive_curvature_count_at_80": 4,
+  "rows": [
+    {
+      "audit_index": 21,
+      "digit_label": 7,
+      "gradient_norm": 16.38041877746582,
+      "inference_steps": 40,
+      "maximum_hessian_eigenvalue": 33.52908706665039,
+      "minimum_hessian_eigenvalue": -0.4102841019630432,
+      "negative_hessian_eigenvalues": 1,
+      "negative_log_joint_nats": -525.541748046875,
+      "source_row": 3055
+    },
+    {
+      "audit_index": 46,
+      "digit_label": 2,
+      "gradient_norm": 13.075900077819824,
+      "inference_steps": 40,
+      "maximum_hessian_eigenvalue": 52.754234313964844,
+      "minimum_hessian_eigenvalue": -0.12923036515712738,
+      "negative_hessian_eigenvalues": 1,
+      "negative_log_joint_nats": -290.3460693359375,
+      "source_row": 8295
+    },
+    {
+      "audit_index": 53,
+      "digit_label": 1,
+      "gradient_norm": 15.234769821166992,
+      "inference_steps": 40,
+      "maximum_hessian_eigenvalue": 39.55182647705078,
+      "minimum_hessian_eigenvalue": -0.7915889620780945,
+      "negative_hessian_eigenvalues": 1,
+      "negative_log_joint_nats": -620.287353515625,
+      "source_row": 9774
+    },
+    {
+      "audit_index": 58,
+      "digit_label": 8,
+      "gradient_norm": 12.07895278930664,
+      "inference_steps": 40,
+      "maximum_hessian_eigenvalue": 41.15342330932617,
+      "minimum_hessian_eigenvalue": -1.5465881824493408,
+      "negative_hessian_eigenvalues": 1,
+      "negative_log_joint_nats": -477.2313232421875,
+      "source_row": 3704
+    },
+    {
+      "audit_index": 21,
+      "digit_label": 7,
+      "gradient_norm": 6.104316234588623,
+      "inference_steps": 80,
+      "maximum_hessian_eigenvalue": 32.430091857910156,
+      "minimum_hessian_eigenvalue": 0.42389288544654846,
+      "negative_hessian_eigenvalues": 0,
+      "negative_log_joint_nats": -566.955078125,
+      "source_row": 3055,
+      "state_change_norm_from_step_40": 3.7966082096099854
+    },
+    {
+      "audit_index": 46,
+      "digit_label": 2,
+      "gradient_norm": 6.198429107666016,
+      "inference_steps": 80,
+      "maximum_hessian_eigenvalue": 51.48884582519531,
+      "minimum_hessian_eigenvalue": 0.06252375990152359,
+      "negative_hessian_eigenvalues": 0,
+      "negative_log_joint_nats": -320.864013671875,
+      "source_row": 8295,
+      "state_change_norm_from_step_40": 3.347656488418579
+    },
+    {
+      "audit_index": 53,
+      "digit_label": 1,
+      "gradient_norm": 4.421916961669922,
+      "inference_steps": 80,
+      "maximum_hessian_eigenvalue": 39.69965362548828,
+      "minimum_hessian_eigenvalue": 0.6452305316925049,
+      "negative_hessian_eigenvalues": 0,
+      "negative_log_joint_nats": -663.2860717773438,
+      "source_row": 9774,
+      "state_change_norm_from_step_40": 3.844651699066162
+    },
+    {
+      "audit_index": 58,
+      "digit_label": 8,
+      "gradient_norm": 6.882262229919434,
+      "inference_steps": 80,
+      "maximum_hessian_eigenvalue": 39.625709533691406,
+      "minimum_hessian_eigenvalue": 0.6968085169792175,
+      "negative_hessian_eigenvalues": 0,
+      "negative_log_joint_nats": -519.4501342773438,
+      "source_row": 3704,
+      "state_change_norm_from_step_40": 3.984354019165039
+    }
+  ],
+  "schema_version": "vamp-logt-pc-settling-diagnostic-v1"
+}

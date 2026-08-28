@@ -187,6 +187,242 @@ points respectively, all above the allowed 10 points. This is the completed
 negative result for the intended reference; any new schedule, training budget,
 or gate is a separate protocol rather than unfinished work here.
 
+### Completed implementation and gated outcome — normalized generative-PC evidence
+
+The implementation handoff for a separate generative predictive-coding
+experiment is preserved verbatim in
+`docs/CODEX_HANDOFF_LOGT_GENERATIVE_PC_EVIDENCE.md`. It proposes node-local
+normalized PC density models, complete MAP and Laplace evidence scores, three
+controlled 31-block LogT schedules, exact analytic score tests, a one-node
+quality preflight, and mandatory static routing gates before any partial carry.
+The repository now targets Python 3.11, JAX/JAXlib 0.7.0, and FabricPC 0.4.0 at
+commit `138941ef5763ab202c7df07879d3f21678e6cc0a`. The new image-only density
+backend, strict protocol, authenticated raw-data boundary, PC-specific LogT
+bank lifecycle, work counters, phase-gated workflow, reporting, and command
+entry point are implemented. Dense-Hessian batches are limited to four, one
+compiled backend is reused per replica during bank construction, and JAX caches
+are released between independent preflight candidates and static conditions.
+All 18 focused backend, protocol, artifact/resume, and legacy FabricPC
+regression tests pass serially in a clean Python 3.11 environment. Heavy JAX or
+PyTorch suites must remain serial because the repository's default four pytest
+workers can exhaust host RAM by loading four independent runtimes.
+
+The canonical GPU workflow completed its analytic and preflight phases on
+2026-08-27 under run identity
+`2045bf96a406251ae9fa8825a93c9abe1933df28becfa0032939b5274879626b`.
+The analytic implementation passed: the maximum linear-Gaussian Laplace error
+was `4.44e-16` nats, and omitting the latent prior caused at least `2.5233` nats
+of error. All eight one-node training candidates passed the learning gates.
+The selected training candidate used image precision 100, hidden precision 1,
+and inference step size 0.01; it reached 83.20% held-out classifier accuracy,
+reduced the median latent-gradient norm by a factor of 236.27, and improved the
+mean complete joint score over the untrained model by 7,344.14 nats.
+
+The preflight nevertheless failed its curvature gate. Each permitted global
+diagonal Hessian shift (`1e-8`, `1e-6`, and `1e-4`) yielded finite regularized
+Laplace scores for 60 of 64 audit images, or 93.75%, below the required 99%.
+The runner therefore selected no global shift and correctly did not execute
+static routing or partial carry. The preregistered verdict is inconclusive: the
+model learned and the fixed 40 inference steps substantially reduced its
+latent-state gradients, but four resulting states were not positive-curvature
+Laplace expansion points. The implementation plan is complete. Any attempt to
+expand the shift range, change the mode-finding rule, or continue with MAP alone
+is a new protocol rather than unfinished work in this run.
+
+A post-hoc audit of the exact 64 images localizes the failure. Images 21, 46,
+53, and 58 each retained exactly one negative-curvature Hessian eigenvector
+after the 40 fixed inference steps. Diagonal Hessian shifts slightly greater
+than 0.4102, 0.1281, 0.7910, and 1.5470 respectively would have been needed to
+make those step-40 Hessians positive definite, compared with the largest
+permitted shift of 0.0001. All four digits were classified correctly, so the
+failure is not explained by digit recognition. The ground-up 64-image visual
+report is `output/pdf/vamp-logt-pc-64-image-curvature-report.pdf`.
+
+A bounded GPU follow-up then reran those same four images from the same zero
+initialization for 80 total inference steps at the unchanged step size of 0.01.
+All four moved from one negative Hessian eigenvalue at step 40 to zero negative
+eigenvalues at step 80. Their minimum eigenvalues became 0.4239, 0.0625, 0.6452,
+and 0.6968; their complete negative log joints fell by 41.41, 30.52, 43.00, and
+42.22 nats; and their gradient norms fell from 12.08–16.38 to 4.42–6.88. Thus
+80 steps repair the observed curvature failures, but the remaining nonzero
+gradients do not establish full stationary-point convergence. The reproducible
+probe is `scripts/diagnose_vamp_logt_pc_80_steps.py`, and its report and raw
+measurements are in `output/vamp-logt-pc-80-step-diagnostic/`. The canonical
+40-step failure remains unchanged. The authorized `generative-pc-v2` successor
+fixes 80 steps consistently for training and scoring, which forced a new config
+identity and new model fits rather than reusing v1 checkpoints.
+
+That v2 workflow completed its analytic and full 64-image preflight on
+2026-08-27 under run identity
+`e9f1d732b04a230cce243b3d70cd336c44bfc4fabf95b1ee2301af45fd85af7b`.
+The analytic check passed, and all eight newly trained candidates passed the
+learning gates. The selected training candidate again used image precision 100,
+hidden precision 1, and inference step size 0.01. It reached 81.25% held-out
+classifier accuracy, reduced the median latent-gradient norm by a factor of
+603.54, improved the mean complete joint score over the untrained model by
+7,351.64 nats, and reached reconstruction MSE 0.005111.
+
+The newly trained 80-step model still failed the curvature gate. Exactly 61 of
+64 audit states had a positive-definite latent Hessian, or 95.3125%; the
+preregistered 99% threshold requires all 64 images at this sample size. The
+permitted global diagonal shifts of `1e-8`, `1e-6`, and `1e-4` did not repair
+any of the three failures. Images 25, 46, and 58 each had exactly one negative
+Hessian eigenvalue, with minimum eigenvalues -0.280943, -0.143258, and
+-0.687548. Their final latent-gradient norms were 5.776, 7.020, and 10.098, so
+the run does not claim that these states reached stationary points. Images 46
+and 58 were classified correctly; image 25, a digit 2, was classified as 1.
+
+The v2 result improves the raw pass count only from 60/64 to 61/64. Because v2
+retrained the density model, the identities also changed: v1 failures 21 and 53
+passed, v1 failures 46 and 58 remained, and image 25 became a new failure.
+The runner therefore selected no complete protocol and correctly stopped before
+static routing or consolidation. This closes the authorized 80-step protocol as
+another negative preflight result, rather than evidence that 80 fixed steps are
+a general solution. A readable visual audit, complete-sentence report, and raw
+measurements are in `output/vamp-logt-pc-v2-curvature-audit/`; the workflow log
+is `output/vamp-logt-pc-v2-run.log`. Any further attempt should be a new protocol
+with a changed mode-finding rule, such as a longer or convergence-controlled
+settling schedule, and must pass the same full preflight before routing.
+
+The separately versioned `generative-pc-map-v1` branch is now implemented and
+complete. It retained v2's 80-step training and scoring schedule but used only
+the complete normalized joint score at the resulting inferred state. It did
+not compute a Hessian, a Laplace correction, importance weights, or a
+multi-start curvature audit. The canonical GPU run completed on 2026-08-27
+under run identity
+`c4643cd904ae9802c6a427868b954e6ff54b960a6c589231ccd9b3ddfb4e06a7`.
+The analytic formula check and all eight one-node learning candidates passed.
+The selected candidate used image precision 100, hidden precision 1, and
+inference step size 0.01. It reached 81.25% held-out classifier accuracy,
+reduced the median latent-gradient norm by a factor of 603.54, improved the
+mean complete joint score by 7,351.64 nats, and reached reconstruction MSE
+0.005111.
+
+Here `C0` means the unrotated MNIST context with unchanged labels, while `C4`
+means the 72-degree-rotated context whose labels are shifted by eight modulo
+ten; `C4` does not mean the digit 4. MAP routing failed every required minimal
+static condition. In the novel leaf condition, the new C4 leaf lost to the
+sixteen-block C0 history on all 512 focused C4 images in each of three
+independently initialized replicas; its median score deficits were 537.78,
+535.20, and 539.97 nats. In the recurrent
+leaf condition, a new C4 leaf also lost all 512 comparisons to a history that
+already contained two C4 blocks, with median deficits of 666.34, 663.02, and
+675.42 nats. In the identical-regime control, both compared nodes represented
+C4, but the one-block leaf again lost all 512 comparisons to the sixteen-block
+history. Its median deficits were 719.95, 724.18, and 730.08 nats. The measured
+cross-level offset was 724.18 nats, versus an allowed 19.88 nats based on
+ordinary replica variation.
+
+The three-replica route agreements of 96.41% to 98.91% show that this was a
+stable preference for the larger history models, not unstable randomness.
+Task-free routed classifier accuracy was 23.75%--30.47% in the two leaf tests
+and 50.63%--51.88% in the identical-regime control, while the diagnostic
+label-aware oracle reached 88.28%--92.66%. Every persisted Hessian and
+importance-sampling counter is exactly zero. Because no MAP score passed the
+minimal seed, the runner correctly skipped confirmation seeds and partial
+carry. The final verdict is `not_supported_by_this_implementation`; this closes
+the MAP-only branch rather than leaving the main experiment unfinished.
+
+Curvature-aware or other posterior-volume estimators are parked for later work.
+They must return under a new protocol and may not reinterpret the completed MAP
+artifacts. The next such protocol should explicitly test whether its score is
+comparable across independently trained nodes with different interval sizes
+before it is allowed to run confirmation or partial carry.
+
+### Implemented gated outcome — exact generalized Gauss–Newton evidence
+
+The separately versioned `generative-pc-gn-v1` workflow is implemented. It
+defines the whitened residual vector explicitly, constructs the dense
+`G=A^T A` matrix over all 160 inferred values, and evaluates MAP,
+raw-Hessian Laplace, GN0, and GN1 at one shared 80-step latent state. GN1 adds
+the nonzero-gradient term `0.5 g^T G^-1 g` and is the primary score. The
+implementation never clips eigenvalues, takes absolute determinants, or adds
+damping. The exact Hessian is retained for every scored query but is only a
+diagnostic; it cannot block or approve a GN route. Negative-Hessian states are
+probed in both directions at distances 0.01, 0.05, and 0.10 using actual
+changes in the negative log joint.
+
+The minimal phase authenticates and copies a 106-file, 19,680,412-byte subset
+of sealed MAP run
+`c4643cd904ae9802c6a427868b954e6ff54b960a6c589231ccd9b3ddfb4e06a7`.
+That subset includes the MAP protocol, selected preflight model, three active
+banks, all 45 active model replicas, and the raw MAP score files. Its tree
+digest is
+`ae124f978a6ca6074567853ace6a6596ee87afaff8525e48bf56a408613b6ae9`.
+The workflow verifies the tree before scoring, copies it into the new run, and
+requires recomputed MAP scores to agree within 0.0001 nats. Static scoring is
+checkpointed after each replica and condition. If a GN score passes minimal,
+the implemented downstream path trains fresh confirmation models for stream
+seeds 1 and 2 and then runs the existing block-27 to block-28 partial-carry
+comparison. One GPU process, batches of four, and an external 8 GiB host-memory
+hard limit bound the canonical execution.
+
+All 26 focused backend, analytic, source-authentication, topology, work-counter,
+conditional-Hessian-routing, resume, and legacy-backend tests pass serially.
+The canonical bounded GPU run used identity
+`6ba7bbc1ed5d0e1c5bbd6f7615b3af1e75c93b92004005c34df6d32bd588eede`.
+The analytic checks passed. In the fixed 64-image real-model audit, raw G
+Cholesky factorization succeeded for all 64 images, with smallest G eigenvalues
+from 0.794221 to 0.990030. The exact Hessian remained indefinite for images 25,
+46, and 58, with smallest eigenvalues -0.280943, -0.143258, and -0.687548;
+their corresponding smallest G eigenvalues were 0.935435, 0.965475, and
+0.951688. Actual negative-direction probes decreased the negative log joint in
+one direction at all three distances for each of those images. This confirms
+the intended structural property: G stays positive definite even when the raw
+Hessian is not.
+
+The workflow nevertheless stopped before static routing because the sealed
+numerical-precision check failed. Recomputed MAP parity was exact, all GN scores
+were finite, and G succeeded 64/64, but none of the fixed eight images met the
+required 0.001-nat float32-versus-float64 GN1 tolerance. Absolute differences
+ranged from 0.004215 to 0.027267 nats, with a median of 0.012236 nats. A
+component audit localized most of the discrepancy to float32 evaluation of the
+784-pixel joint score rather than the 160-by-160 factorization. The gated
+verdict is therefore `inconclusive`; this run says nothing about GN routing
+accuracy because it did not execute the minimal static conditions. Moving GN
+scoring to float64 or changing the tolerance requires a new protocol revision,
+not reinterpretation of this run.
+
+The explicitly authorized `generative-pc-gn-v2` continuation is now complete.
+It preserves every v1 formula, source model, 80-step latent state, route gate,
+and downstream stopping rule. Its only protocol change is to retain the same
+eight-image float32-versus-float64 comparison as a diagnostic instead of a
+prerequisite. The v1 run remains immutable and inconclusive. The v2 identity is
+`9abf13060bfb972d2aec535ff74e9c06d9e28a01668030f2fb907abaac8f3ad5`.
+
+The bounded one-GPU v2 run passed source authentication, exact MAP parity, all
+analytic identities, and every required GN numerical check. Raw G Cholesky
+factorization succeeded for all 38,016 scored states across the three minimal
+conditions, and every GN0 and GN1 score was finite. The exact Hessian remained
+diagnostic and was positive definite for 12,191/12,672 novel, 12,385/12,672
+recurrent, and 12,442/12,672 identical-regime states.
+
+Neither GN score passed any minimal condition. On the focused leaf queries,
+the new leaf won zero of 512 images in every replica under both GN0 and GN1.
+GN1's median leaf-minus-history score was -523.93 to -515.17 nats in the novel
+condition, -658.42 to -644.20 nats in the recurrent condition, and -730.89 to
+-717.07 nats even when leaf and history represented the identical data regime.
+The identical-regime GN1 cross-level offset was 720.95 nats against a 19.84-nat
+allowance. GN1 task-free routed accuracy was 24.06%--25.00% for novel data,
+28.91%--30.63% for recurrent data, and 50.94%--51.88% for the identical regime,
+while the label-aware oracle reached 88.28%--92.66%. Replica route agreement was
+96.25%--98.75%, so the failure is stable rather than random.
+
+The observed precision discrepancy is too small to explain this result. Using
+twice the largest audited float difference, 0.054533 nats, as a conservative
+route-sensitivity threshold flags only 2 of 11,520 GN route decisions: one GN0
+decision and one GN1 decision. This comparison is not a global error bound, but
+it separates the measured precision risk from the hundreds-of-nats score bias
+and 38.59--66.09 percentage-point oracle gaps. The final v2 verdict is
+`not_supported_by_this_implementation`. Because neither GN0 nor GN1 passed the
+minimal seed, fresh confirmation and partial carry were correctly skipped.
+Further work should address the score's strong dependence on model-history
+interval size rather than adjust float tolerance or spend compute on later
+seeds under this estimator. The final Python 3.11/FabricPC 0.4.0 focused suite
+passes all 21 backend, protocol, source, topology, serialization, and resume
+tests serially, and the regenerated Markdown, HTML, JSON, and four PNG plots
+were inspected successfully.
+
 ## Completed Outcome — ImageNet-R-50 Log-t VAMP Local Experiment
 
 The isolated PyTorch vision experiment under
