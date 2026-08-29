@@ -18,6 +18,8 @@ dist/
 /artifacts/vamp-af-mnist/
 /artifacts/vamp-logt-evidence-mnist/
 /artifacts/vamp-logt-pc-mnist/
+/artifacts/vamp-logt-router-mnist/
+/artifacts/vamp-logt-router-rotated-mnist/
 /external/imagenetr50/
 /openrouter-tinyworlds-key.txt
 /openrouter-tinyworlds-no-byok-attestation.json

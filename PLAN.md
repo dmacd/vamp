@@ -5,11 +5,146 @@
 - `README.md` now presents VAMP as a public research project and identifies
   TinyWorlds Nouns-v2 as the only experiment currently in usable shape.
   MNIST/FabricPC, TinyShakespeare, TinyStories, and all other TinyWorlds work is
-  explicitly labeled notional, failed, or deprecated.
+  explicitly labeled as a research proof of concept, negative result,
+  notional design, or deprecated prototype rather than a supported benchmark.
 - Selected nouns-v2, TinyShakespeare, and MNIST/FabricPC reports are published
   with only their directly referenced SVG/PNG and small text dependencies.
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
+
+## Completed Outcome — Integrated LogT Behavioral Router on Permuted-MNIST
+
+The experiment specified by
+`docs/logt_vamp_mnist_integrated_router_plan.md` is implemented as the isolated
+`integrated-router-v4` protocol. The strict configuration is
+`configs/vamp_logt_router_mnist/primary.yaml`; the implementation lives in
+`src/apm/continual/logt_behavioral_router.py` and the
+`src/apm/experiments/vamp_logt_router_*` modules. It authenticates the existing
+frozen MNIST CNN, allocates disjoint model/router/evaluation batches, builds a
+de-novo top-two adapter at every LogT carry, and trains five independent router
+conditions against the same hierarchy trajectory. Router inputs contain only
+detached, normalized hidden states, output log probabilities, and active-level
+bits. Historical hard or soft targets are recomputed against the current
+frontier; example-balanced and range-balanced replay each receive exactly 256
+historical examples at every eligible primary step.
+
+The direct run-or-resume command is:
+
+```bash
+uv run python -m apm.experiments.vamp_logt_router_mnist \
+  --config configs/vamp_logt_router_mnist/primary.yaml
+```
+
+The one-seed 15-step smoke gate and all five 64-step primary seeds completed on
+the local RTX 4090 under protocol identity
+`4b1ed9cf715aa42a951dd71fe2242382ef5f4319d4b10cf0b6e3a4633f7e0b69`.
+At the high-active-node checkpoints 15, 31, and 63, `example_soft` was the best
+learned replay condition. Averaged over 15 seed/checkpoint cells, it reached
+0.42689-nat mean routing regret and 78.877% selected accuracy. The no-replay
+router reached 1.89049 nats and 58.535%; the most-recent-range baseline reached
+3.13208 nats and 26.550%. Thus the replay router reduced regret by 77.42%
+relative to no replay and closed 86.37% of the most-recent baseline's
+cross-entropy gap to the exhaustive oracle. Every seed independently closed
+85.32% to 87.60%, above the preregistered 75% gate.
+
+Replay also satisfies the qualitative retention criterion. On the untouched
+evaluation archive at the same checkpoints, `example_soft` reduced older-range
+regret from the no-replay router's 1.95453 nats to 0.44961 nats while
+current-range accuracy rose from 82.396% to 83.021%. The replay-distribution
+hypotheses are target-dependent rather than universal: with hard targets,
+range-balanced replay lowered macro regret from 0.49788 to 0.48196 nats and
+worst-range regret from 0.66984 to 0.62706; with soft targets,
+example-balanced replay was slightly better on micro, macro, and worst-range
+regret. Soft targets improved both replay samplers relative to their hard-target
+counterparts.
+
+The hierarchy-versus-routing decomposition rules out missing extant-node
+competence as the main limitation. The exhaustive extant-node oracle averaged
+0.32360-nat cross-entropy and 89.742% accuracy, compared with 0.60015 nats and
+83.007% for the matched checkpoint joint-IID adapter. Routing erased that
+hierarchy advantage: `example_soft` remained 0.42689 nats behind the oracle and
+0.15034 nats worse than joint IID. The fixed largest-range policy also retained
+lower primary regret than the best learned router, 0.38445 versus 0.42689 nats,
+although its selected accuracy was 0.272 percentage points lower. The result is
+therefore a successful proof of fixed-budget behavioral routing and replay, not
+evidence that the learned router is already the best task-free policy.
+
+Every seed passed finite-metric, exact-budget, inactive-mask, nonnegative-
+regret, decreasing-loss, and one-candidate parity checks. The measured logical
+and physical counters match fixed-budget `O(T log T)` accounting. Twenty-six
+serial focused/regression tests pass with one sandboxed CUDA skip, and that
+CUDA-specific soft-target device test passes separately on the GPU. A completed
+rerun restored all seeds at 64/64 without changing any metric-ledger hash. The
+aggregate Markdown, standalone HTML, CSV, nine plots, chained ledgers,
+checkpoints, and matched joint-IID references remain under the ignored run
+directory. No required implementation work remains. The plan's capacity,
+feature, and replay-budget studies remain optional follow-ups and have not been
+launched.
+
+## Completed Outcome — Integrated LogT Router on VAMP-AF Rotated-MNIST
+
+The no-retuning successor in
+`docs/logt_vamp_rotated_mnist_integrated_router_protocol.md` is complete. It
+uses the exact five VAMP-AF contexts: rotations of 0, 18, 36, 54, and 72 degrees
+with matching label shifts of 0, 2, 4, 6, and 8 modulo ten. The authenticated
+balanced source identities, blocked context order, frozen CNN, adapter/router
+settings, five primary seeds, and evaluation checkpoints are fixed before the
+run. This is a LogT behavioral-router experiment on VAMP-AF's data contexts;
+it neither loads nor changes the sealed spatial AF tree. Its strict config is
+`configs/vamp_logt_router_rotated_mnist/primary.yaml`, and its isolated runner
+is:
+
+```bash
+uv run python -m apm.experiments.vamp_logt_router_rotated_mnist \
+  --config configs/vamp_logt_router_rotated_mnist/primary.yaml
+```
+
+The smoke gates and all five 64-step primary seeds completed on the local RTX
+4090 under protocol identity
+`97f5f70a91fa3430e244dc4fd91b67b3c8fd28e5bb1eaa0cb3d7d304e3d32896`.
+At checkpoints 15, 31, and 63, `example_soft` was the best learned and best
+fixed-or-learned task-free condition. It averaged 2.41164-nat routing regret
+and 68.787% selected accuracy, compared with 4.35502 nats and 39.852% for no
+replay and 3.64267 nats and 41.691% for the most-recent-range policy. Its
+paired per-seed mean regret was lower than both comparators in all five seeds.
+This is substantial improvement for criterion 1, but it closes only 33.79% of
+the most-recent policy's cross-entropy gap to the exhaustive oracle. Individual
+seed closure ranged from 26.80% to 43.49%, so criterion 2's 75% gate fails
+without a borderline interpretation.
+
+Replay does not meet the qualitative retention criterion on this task.
+`example_soft` reduced older-range regret from 5.47486 to 2.38083 nats, but
+current-range accuracy fell from 91.302% to 80.729% relative to no replay.
+Every seed lost current accuracy, with paired losses from 7.55 to 16.15
+percentage points. The other replay conditions also lost at least 7.9 points
+on the aggregate current-range view, so criterion 3 fails rather than being
+rescued by another replay sampler or target family.
+
+The replay-balance result is consistent across target families. Example
+balancing has lower micro-average regret than range balancing for both hard
+and soft targets. Contrary to the preregistered range-balance hypothesis,
+range balancing is also worse on both macro-average and worst-range regret for
+both target families; the machine-readable hypothesis flag is therefore
+false, and the required target-specific reporting clearly falsifies the
+hypothesis rather than hiding the disagreement.
+
+The hierarchy decomposition locates the remaining error in routing. The
+exhaustive extant-node oracle reaches 95.639% accuracy and 0.13747-nat
+cross-entropy, substantially better than the matched joint-IID adapter at
+78.109% and 0.71308 nats. `example_soft` remains 2.41164 nats behind that
+oracle and 1.83603 nats worse than joint IID. Specialist competence is present
+in the live hierarchy; the current observer and router fail to select it.
+
+All smoke invariants pass, fixed-budget `O(T log T)` accounting holds, and the
+hierarchy/routing fields are complete. The focused serial regression slice has
+31 sandbox passes and one expected CUDA skip; that CUDA-specific test passes
+separately with the local GPU visible. A completed rerun restored every seed at
+64/64 and left all five chained metric ledgers byte-identical. Reports, plots,
+CSV, summaries, checkpoints, and ledgers remain below the ignored
+`artifacts/vamp-logt-router-rotated-mnist/` tree. No implementation work remains
+for this protocol. If another run is authorized, the next bounded test should
+be the preregistered router-capacity sensitivity under a new protocol identity;
+it should not retune or reinterpret this completed result.
 
 ## Completed Outcome — VAMP-AF Top-Two Adapter And Routing Failure
 

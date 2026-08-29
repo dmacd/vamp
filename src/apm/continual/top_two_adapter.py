@@ -182,9 +182,18 @@ def top_two_logits(
     adapter: TopTwoAdapterState,
 ) -> Tensor:
     """Apply frozen base parameters plus one cumulative adapter through the ReLU suffix."""
+    return top_two_hidden_logits(trunk_features, base, adapter)[1]
+
+
+def top_two_hidden_logits(
+    trunk_features: Tensor,
+    base: TopTwoBaseState,
+    adapter: TopTwoAdapterState,
+) -> tuple[Tensor, Tensor]:
+    """Return one adapter's penultimate activation and classifier logits."""
     if trunk_features.ndim != 2 or trunk_features.shape[1] != base.trunk_dim:
         raise ValueError("top-two forward received incompatible trunk features")
-    return _top_two_logits_from_tensors(trunk_features, base, adapter.tensors)
+    return _top_two_hidden_logits_from_tensors(trunk_features, base, adapter.tensors)
 
 
 def train_top_two_adapter_step(
@@ -243,6 +252,16 @@ def _top_two_logits_from_tensors(
     base: TopTwoBaseState,
     adapter_tensors: tuple[Tensor, Tensor, Tensor, Tensor],
 ) -> Tensor:
+    return _top_two_hidden_logits_from_tensors(
+        trunk_features, base, adapter_tensors
+    )[1]
+
+
+def _top_two_hidden_logits_from_tensors(
+    trunk_features: Tensor,
+    base: TopTwoBaseState,
+    adapter_tensors: tuple[Tensor, Tensor, Tensor, Tensor],
+) -> tuple[Tensor, Tensor]:
     embedding_weight, embedding_bias, classifier_weight, classifier_bias = adapter_tensors
     hidden = F.relu(
         F.linear(
@@ -251,10 +270,13 @@ def _top_two_logits_from_tensors(
             base.embedding_bias + embedding_bias,
         )
     )
-    return F.linear(
+    return (
         hidden,
-        base.classifier_weight + classifier_weight,
-        base.classifier_bias + classifier_bias,
+        F.linear(
+            hidden,
+            base.classifier_weight + classifier_weight,
+            base.classifier_bias + classifier_bias,
+        ),
     )
 
 
@@ -265,6 +287,7 @@ __all__ = [
     "TopTwoOptimizerConfig",
     "sum_top_two_adapters",
     "top_two_base_state",
+    "top_two_hidden_logits",
     "top_two_logits",
     "train_top_two_adapter_step",
     "zero_top_two_adapter",

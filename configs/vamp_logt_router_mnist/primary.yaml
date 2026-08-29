@@ -1,0 +1,66 @@
+experiment:
+  name: vamp-logt-behavioral-router-mnist
+  protocol_revision: integrated-router-v4
+
+paths:
+  artifact_root: artifacts/vamp-logt-router-mnist
+  data_root: data/torchvision/MNIST/raw
+  baseline_run_root: artifacts/vamp-af-mnist/runs/c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af
+
+baseline:
+  run_id: c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af
+  checkpoint_sha256: 45793341113b7a44b397d8781b0590f7dcc54ca05ca2cd7d637b11244033a282
+
+benchmark:
+  macro_steps: 64
+  permutation_seeds: [1001, 1002, 1003, 1004, 1005, 1006, 1007]
+  stream_seed: 20260827
+  model_batch_size: 256
+  router_batch_size: 256
+  evaluation_batch_size: 128
+
+adapter:
+  epochs: 20
+  batch_size: 64
+  optimizer: AdamW
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  beta1: 0.9
+  beta2: 0.999
+  epsilon: 1.0e-8
+
+router:
+  maximum_levels: 7
+  hidden_widths: [1024, 512, 256]
+  dropout: 0.1
+  temperature: 0.10
+  optimizer: AdamW
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip_norm: 1.0
+  minibatch_size: 128
+
+phases:
+  smoke:
+    seeds: [0]
+    macro_steps: 15
+    historical_budget: 64
+    router_epochs_per_step: 2
+    conditions: [no_replay_hard, example_hard, range_hard]
+  primary:
+    seeds: [0, 1, 2, 3, 4]
+    macro_steps: 64
+    historical_budget: 256
+    router_epochs_per_step: 4
+    conditions: [no_replay_hard, example_hard, range_hard, example_soft, range_soft]
+
+evaluation:
+  test_subset_per_domain: 1000
+  inference_batch_size: 2048
+  full_checkpoints: [7, 15, 31, 63, 64]
+  near_oracle_thresholds: [0.01, 0.05, 0.10]
+
+runtime:
+  device: auto
+  deterministic_algorithms: true
+  progress: true

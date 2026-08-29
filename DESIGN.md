@@ -113,6 +113,107 @@ training is asserted not to exceed that fixed multiple of
 `epochs * block_size * t * ceil(log2(t + 1))`; conditional evaluation of all
 fixed bridges preserves `O(log t)` live-model routing.
 
+## Integrated Behavioral Routing for LogT MNIST
+
+The integrated behavioral-router experiment is a separate discriminative
+observer of a true LogT adapter bank. It authenticates the frozen VAMP-AF CNN
+and its raw MNIST source but does not reuse either the spatial AF tree or the
+NCE/TRE evidence models. The fallback benchmark contains the identity domain
+and seven pixel-permuted domains with fixed permutation seeds 1001 through
+1007. A fixed seed determines the eight-domain block schedule. Run seeds vary
+sample order, test subsets, model and router initialization, optimizer order,
+dropout, and replay draws without changing domain definitions or the schedule.
+Each macro-step allocates disjoint 256-example model and router batches plus an
+untouched 128-example evaluation batch.
+
+The adapter bank is a standard binary counter over macro-step ranges. Its live
+nodes are disjoint contiguous intervals, it has at most one node per level, and
+every carry trains a new full-rank top-two adapter de novo on the exact union.
+Retired children are removed only after their replacement node and a bank
+checkpoint are durable. The router never changes this transition. For the
+64-step horizon it addresses seven stable level slots rather than ephemeral
+node identities; inactive input slots are zero-filled, inactive output classes
+are masked, and a one-node frontier therefore has exact selection parity.
+
+For each active node, the shared observer extracts the adapter's 128-value
+penultimate hidden state and ten logits. A router slot concatenates layer-
+normalized hidden values, log-softmax output values, and one active bit. All
+node outputs are detached before concatenation. Labels and node losses exist
+only behind the supervision/evaluation boundary; domain IDs, macro-step
+indices, range endpoints, and stored targets cannot enter the router input.
+The node API exposes hidden values and logits together while preserving exact
+parity with its existing logits-only call.
+
+Five router conditions own independent parameters, optimizers, replay draws,
+and random-number streams while observing one shared hierarchy trajectory.
+Hard targets select the current minimum-loss node. Soft targets apply the one
+fixed temperature to each node's excess loss. Because carries replace the
+candidate set, archived labels are never durable: historical examples are run
+through the current frontier and their targets are recomputed before every
+update. Example-balanced replay samples uniformly from archived examples;
+range-balanced replay first balances the current live ranges. Each replay
+condition uses exactly 256 historical examples per eligible primary step, and
+the loss gives current and historical sources equal weight regardless of that
+fixed count.
+
+Evaluation keeps three distinct boundaries. The current/prior evaluation
+archive supplies range, age, retention, macro, and worst-range views. Fixed
+test subsets supply lightweight domain-level measurements, while complete
+domain test sets are opened at steps 7, 15, 31, 63, and 64. A label-aware
+minimum-loss node is an offline routing oracle, not an inference condition. At
+each full checkpoint, a fresh top-two adapter trained on the same cumulative
+presentations supplies the matched joint-IID hierarchy reference. Routing gap
+is selected-node loss minus extant-node oracle loss; hierarchy gap compares the
+extant-node oracle with that joint reference. The two quantities are never
+combined into one unexplained deficit.
+
+Router-supervision accounting separates shared physical node/example forwards
+from condition-specific logical forwards, optimizer steps, adapter work,
+joint-reference work, and evaluation-only oracle work. With fixed new and
+historical example budgets and `K_t = O(log t)` live nodes, measured
+supervision work is checked against `sum K_t` and `t log2(t)`, yielding
+`O(T log T)` total work for a fixed condition matrix. The historical archive is
+intentionally unbounded in this proof of concept and does not change that
+forward-work claim.
+
+The artifact boundary is content addressed by the resolved protocol, baseline
+checkpoint and protocol, raw IDX hashes, PyTorch version, and hashes of every
+material configuration, proposal, and implementation file. Each seed writes a
+SHA-256-chained JSONL ledger before publishing its matching checkpoint. Resume
+validates and truncates any uncommitted ledger suffix, restores the bank,
+routers, optimizers, archive, explicit random generators, and work counters,
+and reuses completed seed summaries without another training update. Reports
+are derived projections: CSV and Markdown accompany nine PNG views, and the
+standalone HTML embeds those images and exposes collapsible sections.
+
+### VAMP-AF Rotated-MNIST successor boundary
+
+The Rotated-MNIST successor reuses these LogT graph, router, replay, evaluation,
+accounting, and persistence semantics without retuning them. “VAMP-AF task” in
+this protocol means only the five authenticated data contexts from that study;
+the spatial AF tree, PCA-median routes, leaf buffers, and AF checkpoints are not
+inputs to the LogT bank. The successor has its own resolved configuration,
+workflow namespace, source manifest, report identity, and artifact root rather
+than a compatibility branch inside the Permuted-MNIST run.
+
+The contexts rotate each raw image by 0, 18, 36, 54, or 72 degrees using
+bilinear interpolation, no canvas expansion, and zero fill, then shift its
+label by 0, 2, 4, 6, or 8 modulo ten. Label shifting changes supervision only;
+it cannot enter the router observation. The source population is the exact
+class-balanced VAMP-AF identity set authenticated by its little-endian int64
+hash. Context-local shuffling is seeded identically to VAMP-AF, while the
+primary stream remains blocked for 13, 13, 13, 13, and 12 macro-steps. Each
+step retains the same disjoint 256/256/128 adapter, router, and evaluation
+allocation as the Permuted-MNIST protocol.
+
+Rotated feature extraction crosses the frozen-CNN boundary only after the
+declared image transform. The frozen checkpoint, raw IDX files, transform
+parameters, source identities, context-step schedule, and successor protocol
+are all part of the run identity. Shared implementation helpers may be imported
+from the behavioral-router package, but rotated data construction and workflow
+entry points remain explicit so that neither task stream can silently inherit
+the other's domain semantics.
+
 ## ImageNet-R-50 Local Vision Boundary
 
 The ImageNet-R experiment is an isolated PyTorch package under

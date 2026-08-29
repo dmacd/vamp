@@ -14,10 +14,11 @@ and pathwise LoRA memories for language models.
 > [!IMPORTANT]
 > **TinyWorlds Nouns-v2 is the only supported benchmark.** TRACE Log-t VAMP is
 > a completed, sealed research run with published reviewer evidence, but its
-> one-seed/one-order result is not a supported benchmark claim. The
-> MNIST/predictive-coding work, TinyShakespeare work, TinyStories work, and all
-> other TinyWorlds variants are notional designs, negative results, or
-> deprecated prototypes retained for research provenance.
+> one-seed/one-order result is not a supported benchmark claim. The MNIST work
+> includes a completed behavioral-router proof of concept alongside negative
+> and deprecated experiments. TinyShakespeare, other TinyStories work, and all
+> other TinyWorlds variants are likewise research evidence rather than
+> supported benchmark claims.
 
 ## TinyWorlds Nouns-v2
 
@@ -53,6 +54,8 @@ specific benchmark, not a claim of general continual-learning performance.
 | **TinyWorlds Nouns-v2** | **Usable** | Completed 24-task disjoint language benchmark with immutable VAMP stages, matched controls, routing audits, and a published [report](results/language_cl/tinyworlds-nouns-v2/report.md). |
 | VAMP-AF Rotated MNIST | Completed negative routing result | Full-rank top-two deltas cleared the 98.36% oracle-context capacity gate, but three-seed AF averaged 60.32% versus 62.66% global replay and 99.23% oracle-leaf accuracy. Hard routing agreed with the oracle leaf only 4.97% of the time. |
 | LogT NCE/TRE Rotated MNIST | Completed negative routing result | The corrected protocol sampled complete images from the authenticated frozen CNN's 60,000-image training distribution. Calibration passed, but all four TRE schedules failed every static routing gate, so the staged protocol correctly stopped before consolidation and online evaluation. |
+| Integrated LogT behavioral router | Completed research POC | Five 64-step Permuted-MNIST seeds tested hard/soft supervision and fixed-budget example/range replay. The best learned router closed 86.37% of the most-recent baseline's cross-entropy gap to the oracle, while a fixed largest-range policy still achieved lower mean regret. |
+| Integrated LogT router on VAMP-AF contexts | Completed negative transfer result | The unchanged router protocol improved substantially over no replay and fixed recent-range routing on five-seed Rotated-MNIST, but closed only 33.79% of the oracle gap and traded a large old-range gain for a 10.57-point current-range accuracy loss. |
 | Generative-PC LogT MNIST | Completed negative MAP/GN routing result | The 80-step MAP and exact generalized Gauss–Newton protocols failed all three minimal static controls. Both scores consistently favored the larger history model: the new leaf won 0 of 512 focused comparisons in every replica, including when both nodes represented the same image distribution. No confirmation or partial carry was run. |
 | **TRACE Log-t VAMP** | **Completed research run** | Eight-task Llama-3.2-1B continual-learning study with SVD/Core controls, replay repair, four original routers, matched baselines, a CPU-only [task-known provenance follow-up](docs/experiments/trace-logt-vamp/followups/task-known-provenance/report.md), and a complete [reviewer bundle](docs/experiments/trace-logt-vamp/README.md). |
 | TinyShakespeare | Deprecated prototype | Four-task character-level language-model experiments used to establish the pathwise LoRA and routing machinery. A selected [character-permutation report](results/language_cl/tinyshakespeare/character-permutation/standard-seed0-a7bd7d1479ba/report.html) is retained as historical evidence. |
@@ -229,6 +232,58 @@ separable adjacent bridge had 99.10% to 100% balanced accuracy, above the 90%
 maximum, and the least stable seed's independent-route agreement was only
 6.48% to 67.92%, below the 90% minimum. Consolidation and online evaluation
 were therefore deliberately not run.
+
+## Integrated Behavioral Router MNIST Runners
+
+This isolated follow-up keeps the LogT adapter hierarchy fixed and asks a
+feed-forward router to select among its live level slots from each node's
+detached hidden state and output probabilities. It uses eight fixed
+Permuted-MNIST domains, disjoint model/router/evaluation batches, five 64-step
+seeds, hard and soft oracle targets, and fixed-budget example-balanced and
+range-balanced replay. A matched joint-IID adapter at every full checkpoint
+separates routing error from hierarchy error.
+
+```bash
+uv run python -m apm.experiments.vamp_logt_router_mnist \
+  --config configs/vamp_logt_router_mnist/primary.yaml
+```
+
+The completed `integrated-router-v4` run has protocol identity
+`4b1ed9cf715aa42a951dd71fe2242382ef5f4319d4b10cf0b6e3a4633f7e0b69`.
+Across checkpoints 15, 31, and 63, the example-balanced soft router averaged
+0.42689-nat regret and 78.877% selected accuracy, compared with 1.89049 nats
+and 58.535% without replay. It closed 86.37% of the most-recent-range
+baseline's cross-entropy gap to the exhaustive oracle, and all five seeds
+individually exceeded the 75% gate. Replay reduced older-range regret from
+1.95453 to 0.44961 nats without reducing current-range accuracy.
+
+The result also exposes the remaining routing problem. The extant-node oracle
+reached 89.742% accuracy and 0.32360-nat cross-entropy, beating the matched
+joint-IID adapter, but the learned router did not recover all of that
+competence. The fixed largest-range policy had lower mean regret than the best
+learned router, 0.38445 versus 0.42689 nats. Generated reports, chained
+ledgers, checkpoints, and plots remain below the ignored
+`artifacts/vamp-logt-router-mnist/` tree; rerunning the command authenticates
+and reuses completed state.
+
+The no-retuning successor applies the same protocol to VAMP-AF's exact five
+Rotated-MNIST contexts without loading or changing the spatial AF tree:
+
+```bash
+uv run python -m apm.experiments.vamp_logt_router_rotated_mnist \
+  --config configs/vamp_logt_router_rotated_mnist/primary.yaml
+```
+
+All five 64-step seeds completed under protocol identity
+`97f5f70a91fa3430e244dc4fd91b67b3c8fd28e5bb1eaa0cb3d7d304e3d32896`.
+The best condition, example-balanced soft replay, reduced routing regret from
+4.35502 nats without replay and 3.64267 nats for the most-recent policy to
+2.41164 nats. It nevertheless closed only 33.79% of the oracle gap, below the
+75% gate. Replay cut older-range regret from 5.47486 to 2.38083 nats while
+reducing current-range accuracy from 91.302% to 80.729%. The extant-node oracle
+reached 95.639% accuracy, showing that the large remaining deficit is routing
+rather than missing specialist competence. The completed reports and durable
+state are under the ignored `artifacts/vamp-logt-router-rotated-mnist/` tree.
 
 ## Generative-PC Evidence MNIST Runner
 
