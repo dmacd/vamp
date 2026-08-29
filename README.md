@@ -56,6 +56,7 @@ specific benchmark, not a claim of general continual-learning performance.
 | LogT NCE/TRE Rotated MNIST | Completed negative routing result | The corrected protocol sampled complete images from the authenticated frozen CNN's 60,000-image training distribution. Calibration passed, but all four TRE schedules failed every static routing gate, so the staged protocol correctly stopped before consolidation and online evaluation. |
 | Integrated LogT behavioral router | Completed research POC | Five 64-step Permuted-MNIST seeds tested hard/soft supervision and fixed-budget example/range replay. The best learned router closed 86.37% of the most-recent baseline's cross-entropy gap to the oracle, while a fixed largest-range policy still achieved lower mean regret. |
 | Integrated LogT router on VAMP-AF contexts | Completed negative transfer result | The unchanged router protocol improved substantially over no replay and fixed recent-range routing on five-seed Rotated-MNIST, but closed only 33.79% of the oracle gap and traded a large old-range gain for a 10.57-point current-range accuracy loss. |
+| Direct LogT prediction integrator on VAMP-AF contexts | Completed mixed negative result | Example-balanced replay over all frozen nodes closed 94.82% of the no-replay-to-offline cross-entropy gap and beat base-only replay, but lost 9.32 points of current-range accuracy and remained 1.35 points below the sealed router's accuracy. Five of seven preregistered criteria passed. |
 | Generative-PC LogT MNIST | Completed negative MAP/GN routing result | The 80-step MAP and exact generalized Gauss–Newton protocols failed all three minimal static controls. Both scores consistently favored the larger history model: the new leaf won 0 of 512 focused comparisons in every replica, including when both nodes represented the same image distribution. No confirmation or partial carry was run. |
 | **TRACE Log-t VAMP** | **Completed research run** | Eight-task Llama-3.2-1B continual-learning study with SVD/Core controls, replay repair, four original routers, matched baselines, a CPU-only [task-known provenance follow-up](docs/experiments/trace-logt-vamp/followups/task-known-provenance/report.md), and a complete [reviewer bundle](docs/experiments/trace-logt-vamp/README.md). |
 | TinyShakespeare | Deprecated prototype | Four-task character-level language-model experiments used to establish the pathwise LoRA and routing machinery. A selected [character-permutation report](results/language_cl/tinyshakespeare/character-permutation/standard-seed0-a7bd7d1479ba/report.html) is retained as historical evidence. |
@@ -284,6 +285,28 @@ reducing current-range accuracy from 91.302% to 80.729%. The extant-node oracle
 reached 95.639% accuracy, showing that the large remaining deficit is routing
 rather than missing specialist competence. The completed reports and durable
 state are under the ignored `artifacts/vamp-logt-router-rotated-mnist/` tree.
+
+The [direct-prediction successor](docs/logt_vamp_rotated_mnist_integrator_plan.md)
+replaces node selection with a residual ten-class MLP over all seven stable
+LogT level slots:
+
+```bash
+uv run python -m apm.experiments.vamp_logt_integrator_rotated_mnist \
+  --config configs/vamp_logt_integrator_rotated_mnist/primary.yaml
+```
+
+All five 64-step seeds completed under protocol identity
+`9b5f70bf484cd19c7624142e80118e32857452d44f45fbb97d0b15df29a6689a`.
+Example-balanced replay was the best online integrator: it reached 0.81866-nat
+cross-entropy and 67.437% accuracy, versus 2.57234 nats and 39.139% without
+replay. It closed 94.82% of the gap to the fresh offline cumulative integrator
+and beat the matched base-only replay control, demonstrating useful information
+in the combined frozen-node behaviors. The preregistered overall hypothesis
+still fails: replay cut older-range cross-entropy from 3.21211 to 0.85531 nats
+while reducing current-range accuracy by 9.323 points, and it remained 1.350
+accuracy points below the sealed soft router despite much lower cross-entropy.
+The completed reports and durable state are under the ignored
+`artifacts/vamp-logt-integrator-rotated-mnist/` tree.
 
 ## Generative-PC Evidence MNIST Runner
 

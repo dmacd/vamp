@@ -146,7 +146,7 @@ for this protocol. If another run is authorized, the next bounded test should
 be the preregistered router-capacity sensitivity under a new protocol identity;
 it should not retune or reinterpret this completed result.
 
-## Active Experiment — LogT Prediction Integrator on VAMP-AF Rotated-MNIST
+## Completed Outcome — LogT Prediction Integrator on VAMP-AF Rotated-MNIST
 
 The direct-prediction successor is frozen in
 `docs/logt_vamp_rotated_mnist_integrator_plan.md`. It keeps the completed
@@ -160,22 +160,45 @@ uv run python -m apm.experiments.vamp_logt_integrator_rotated_mnist \
   --config configs/vamp_logt_integrator_rotated_mnist/primary.yaml
 ```
 
-Implementation and preflight testing are complete. The four learned
-conditions compare no replay, example-balanced replay, range-balanced replay,
-and a matched-capacity frozen-base-only replay control. Fixed controls include
-the mean ensemble and label-aware best single node; full checkpoints add a
-fresh offline cumulative integrator and the existing matched joint-IID
-adapter. Focused tests cover fixed 973-value input positions, label isolation,
-exact inactive zeros, zero-residual parity, direct labels across carries,
-frozen nodes, fixed controls, exact work accounting, reporting, and
-byte-identical checkpoint resume. The integrator slice plus the relevant
-sealed-router regressions currently passes 27 tests with one expected
-sandboxed CUDA skip.
+The smoke gates and all five 64-step primary seeds completed on the local RTX
+4090 under protocol identity
+`9b5f70bf484cd19c7624142e80118e32857452d44f45fbb97d0b15df29a6689a`.
+At high-active-node checkpoints 15, 31, and 63,
+`integrator_example_replay` was the best online replay condition. It averaged
+0.81866-nat cross-entropy and 67.437% accuracy, compared with 2.57234 nats and
+39.139% without replay and 0.99861 nats and 50.448% for the parameter-free mean
+ensemble. It beat both references in every seed. The fresh offline cumulative
+integrator reached 0.72279 nats and 69.118%, so example replay closed 94.82% of
+the positive no-replay-to-offline cross-entropy gap. Full-node replay also beat
+the matched base-only replay control, 0.81866 versus 1.39717 nats and 67.437%
+versus 57.305%, showing that the frozen node-specific behaviors supplied useful
+information.
 
-Next, run the exact five-step GPU smoke. Open the five-seed, 64-step primary
-phase only if every frozen smoke gate passes, then rerun for byte-identical
-ledger verification and record the result here without changing the frozen
-plan or protocol.
+The all-criteria main hypothesis nevertheless fails. Example replay reduced
+older-range cross-entropy from 3.21211 to 0.85531 nats, but current-range
+accuracy fell from 91.458% to 82.135%, a 9.323-point loss against the frozen
+2-point limit. Every seed showed the same tradeoff, with current-range losses
+from 7.29 to 11.98 points. Relative to the sealed `example_soft` router, the
+integrator greatly improved cross-entropy, 0.81866 versus 2.54911 nats, but its
+67.437% accuracy was 1.350 points lower than the router's 68.787%; the criterion
+required improvement on both metrics. Criteria 1, 2, 4, 6, and 7 pass, while
+criteria 3 and 5 fail. The result therefore supports stable fixed-budget
+integration and useful cross-node information, but not the preregistered claim
+that this integrator dominates routing without sacrificing current-range
+plasticity.
+
+All ten smoke and primary structural checks pass in every seed: metrics are
+finite, replay and feature-work budgets are exact, inactive and future slots
+remain zero, initial parity is exact, node parameters remain frozen, and every
+eligible integrator update decreases its loss. The focused integrator and
+sealed-router regression slice passes 27 tests with one expected sandboxed
+CUDA skip. A completed rerun restored all seeds at 64/64 and left all five
+chained metric ledgers and the protocol byte-identical. Reports, plots, CSV,
+summaries, checkpoints, and ledgers remain below the ignored
+`artifacts/vamp-logt-integrator-rotated-mnist/` tree. No required implementation
+work remains for this protocol. A successor, if authorized, should target the
+measured current-versus-older plasticity tradeoff under a new protocol identity
+rather than retuning or reinterpreting this run.
 
 ## Completed Outcome — VAMP-AF Top-Two Adapter And Routing Failure
 
