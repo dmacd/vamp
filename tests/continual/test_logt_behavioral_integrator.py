@@ -4,6 +4,7 @@ from pyrsistent import pmap
 import torch
 
 from apm.continual.logt_behavioral_integrator import (
+    FullReplayConvergenceConfig,
     IntegratorConditionState,
     IntegratorSupervision,
     LevelSlotIntegrator,
@@ -11,6 +12,7 @@ from apm.continual.logt_behavioral_integrator import (
     build_node_observations,
     inactive_slots_are_zero,
     prediction_logits,
+    train_converged_full_replay,
     train_condition,
 )
 from apm.continual.logt_evidence_bank import empty_logt_state, insert_block
@@ -206,6 +208,78 @@ def test_training_states_are_independent_and_node_tensors_remain_frozen() -> Non
             before_nodes[node_id], adapters[node_id].tensors, strict=True
         )
     )
+
+
+def test_full_replay_convergence_uses_every_example_and_restores_the_best() -> None:
+    _topology_state, _base, _adapters, _trunk, observations = _observations(rows=16)
+    training = IntegratorSupervision(
+        observations, torch.arange(16, dtype=torch.int64) % 10
+    )
+    validation = IntegratorSupervision(
+        observations, torch.arange(16, dtype=torch.int64).flip(0) % 10
+    )
+    protocol = load_config("configs/vamp_logt_integrator_rotated_mnist/primary.yaml")
+    training_config = replace(protocol.integrator, dropout=0.0, minibatch_size=8)
+    convergence = FullReplayConvergenceConfig(
+        minimum_epochs=1,
+        maximum_epochs=12,
+        improvement_delta=100.0,
+        learning_rate_patience=1,
+        learning_rate_factor=0.5,
+        minimum_learning_rate=2.5e-4,
+        convergence_patience=2,
+    )
+    torch.manual_seed(41)
+    state = _small_state(observations.features.shape[1], 13)
+    result = train_converged_full_replay(
+        state,
+        training,
+        validation,
+        training_config,
+        convergence,
+        5,
+        3,
+        torch.device("cpu"),
+    )
+    restored_logits = prediction_logits(
+        state.integrator, validation.observations, torch.device("cpu"), 8
+    )
+    restored_loss = torch.nn.functional.cross_entropy(
+        restored_logits, validation.labels
+    ).item()
+    assert result.converged
+    assert result.stop_reason == "minimum_learning_rate_plateau"
+    assert result.epochs_ran == 4
+    assert result.training_example_presentations == 4 * len(training.labels)
+    assert result.validation_example_presentations == 6 * len(validation.labels)
+    assert result.best_validation_loss == min(
+        row.validation_loss for row in result.history
+    )
+    assert abs(restored_loss - result.best_validation_loss) < 1.0e-7
+
+
+def test_full_replay_safety_cap_is_not_reported_as_convergence() -> None:
+    _topology_state, _base, _adapters, _trunk, observations = _observations(rows=8)
+    supervision = IntegratorSupervision(
+        observations, torch.arange(8, dtype=torch.int64) % 10
+    )
+    protocol = load_config("configs/vamp_logt_integrator_rotated_mnist/primary.yaml")
+    training_config = replace(protocol.integrator, dropout=0.0, minibatch_size=4)
+    torch.manual_seed(43)
+    state = _small_state(observations.features.shape[1], 13)
+    result = train_converged_full_replay(
+        state,
+        supervision,
+        supervision,
+        training_config,
+        FullReplayConvergenceConfig(1, 2, 100.0, 1, 0.5, 1.0e-8, 2),
+        7,
+        2,
+        torch.device("cpu"),
+    )
+    assert not result.converged
+    assert result.stop_reason == "maximum_epochs"
+    assert result.epochs_ran == 2
 
 
 def test_fixed_controls_use_stable_level_slots() -> None:

@@ -195,10 +195,101 @@ sealed-router regression slice passes 27 tests with one expected sandboxed
 CUDA skip. A completed rerun restored all seeds at 64/64 and left all five
 chained metric ledgers and the protocol byte-identical. Reports, plots, CSV,
 summaries, checkpoints, and ledgers remain below the ignored
-`artifacts/vamp-logt-integrator-rotated-mnist/` tree. No required implementation
-work remains for this protocol. A successor, if authorized, should target the
-measured current-versus-older plasticity tradeoff under a new protocol identity
-rather than retuning or reinterpreting this run.
+`artifacts/vamp-logt-integrator-rotated-mnist/` tree. A visualization-only
+follow-up assigns every condition a fixed high-contrast color, marker, dash,
+and bar hatch; marks the five blocked context regions; and averages carry
+recovery by macro-step instead of connecting different seeds. The derived PNG
+and standalone HTML reports were regenerated with `--render-only`; protocol,
+summary, and metric-ledger hashes remained unchanged.
+
+The first visible collapse occurs between steps 13 and 14, not at step 13.
+Step 13 is the last C0 presentation and still reaches 99.04% example-replay
+accuracy on the 1,000-example C0 test subset. Step 14 introduces C1, changes
+the labels from `y` to `y + 2 mod 10`, and expands the plotted test subset to
+1,000 C0 plus 1,000 C1 examples. The mean ensemble remains 99.08% accurate on
+C0 but reaches only 0.80% on C1, producing the apparent 49.94% aggregate cliff.
+The largest old range is confidently wrong on C1: 0.60% accuracy and
+18.74762-nat cross-entropy.
+
+The hierarchy transition aggravates that task boundary. Step 14 is also a
+carry: the C0 leaf for step 13 and the first C1 leaf are immediately replaced
+by one mixed range covering steps 13–14. That mixed most-recent node reaches
+69.56% on C1 and 76.48% on C0, while the two larger C0 ranges remain live and
+dominate the equal-probability ensemble on C1. At step 15, a pure C1 leaf raises
+the label-aware best-node diagnostic to 93.10% on C1, but the mean ensemble is
+still only 3.64% there. Specialist competence is therefore present after one
+additional step; unweighted combination remains the immediate failure. The
+no-replay integrator then adapts to C1 at step 15 (89.04%) by forgetting C0
+(12.62%), while example replay keeps a less extreme 66.86%/72.50% C0/C1
+balance. This is the same plasticity-versus-retention conflict measured by the
+preregistered failure.
+
+No required implementation work remains for this protocol. A successor, if
+authorized, should counterbalance whether a context boundary lands on a carry
+and should compare immediate cross-context carry with a boundary-preserving
+leaf. The present schedule confounds carry parity with context difficulty, so
+it cannot quantify how much of the step-14 loss comes from mixed-node creation
+versus the new rotated, relabeled task itself.
+
+## Completed Outcome — Converged Full-Replay Integrator Ceiling
+
+The missing optimization ceiling is frozen in
+`docs/logt_vamp_rotated_mnist_converged_integrator_ceiling_plan.md`. The parent
+`offline_cumulative_integrator` was fresh and cumulative, but it trained for
+only four epochs at checkpoints 7, 15, 31, 63, and 64. The successor uses the
+same frozen hierarchy features and 973-to-1024-to-512-to-256-to-10 residual
+MLP, but initializes three independent fits from scratch at every primary
+macro-step, presents every cumulative integrator-training example once per
+epoch, and trains until a held-out convergence rule is satisfied. Its strict
+config is `configs/vamp_logt_integrator_ceiling_rotated_mnist/primary.yaml`,
+its content identity is
+`b7a55dbe9bbc563e4cc39f2253ba39e56bf90a578bf2a42b6b42f8f0d17dda98`,
+and its runner is:
+
+```bash
+uv run python -m apm.experiments.vamp_logt_integrator_ceiling_rotated_mnist \
+  --config configs/vamp_logt_integrator_ceiling_rotated_mnist/primary.yaml \
+  --phase primary
+```
+
+The real smoke and all five 64-step primary seeds completed on the local RTX
+4090. All 960 primary restarts converged before the 200-epoch failure cap;
+selected fits ran 58.481 epochs on average and at most 97. Every seed passed
+all eight gates for finite metrics, cumulative archives, exact example
+presentations, exact feature work, independent restarts, parent mean-ensemble
+parity, converged selection, and validation/test isolation. The completed
+primary rerun restored all seeds at 64/64 without training and left all five
+metric ledgers plus the aggregate summary byte-identical.
+
+At the preregistered full-test checkpoints 15, 31, and 63, the certified
+`converged_full_replay_integrator` averaged 0.59862-nat cross-entropy and
+77.287% accuracy. The parent's four-epoch offline reference reached 0.72279
+nats and 69.118%, so the realistic ceiling improves cross-entropy by 0.12418
+nats and accuracy by 8.169 points. The best online example-replay integrator
+reached 0.81866 nats and 67.437%, leaving a 0.22004-nat and 9.850-point gap to
+the ceiling. At the final fully merged checkpoint the ceiling averaged 0.59373
+nats and 78.980%, versus 0.71931 nats and 77.120% for the sole frozen node.
+
+This result changes the diagnosis: the fixed features and healthy-sized MLP
+can integrate the temporal nodes substantially better than either the bounded
+online learner or the four-epoch offline reference suggested. Logarithmic,
+fixed-budget replay and sequential optimization are therefore major sources
+of the remaining loss. The result is still only an empirical ceiling for the
+fixed features, architecture, data allocation, AdamW family, and validation
+search; it is not the best function that could exist in an unrestricted
+mathematical sense. No implementation work remains for this protocol. Reports,
+plots, restart histories, checkpoints, summaries, and chained ledgers remain
+under the ignored `artifacts/vamp-logt-integrator-ceiling-rotated-mnist/` tree.
+The parent comparison report now authenticates that ceiling against the exact
+parent protocol, aggregate summary, and all five primary metric ledgers, then
+overlays its five-seed mean at every one of the 64 macro-steps. The accuracy
+and cross-entropy plots use a thick cyan hexagon trace and explicitly identify
+the converged full-replay ceiling in both the title and legend; the
+high-checkpoint control plot includes the same condition. `--render-only`
+auto-discovers the latest matching certified ceiling, so a later rerender does
+not silently remove the trace. The focused integrator/ceiling regression slice
+passes 15 tests, and the derived rerender left the sealed parent protocol,
+summary, and five primary ledgers byte-identical.
 
 ## Completed Outcome — VAMP-AF Top-Two Adapter And Routing Failure
 

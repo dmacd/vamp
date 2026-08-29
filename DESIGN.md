@@ -255,6 +255,41 @@ protocol: immutable source hashes, chained metric ledgers, checkpoint before
 retirement, exact optimizer restoration, and derived CSV, Markdown, standalone
 HTML, and plot reports.
 
+### Converged full-replay integrator ceiling
+
+The four-epoch `offline_cumulative_integrator` in the original prediction-
+integrator protocol is an optimization reference, not a ceiling. Its fixed
+epoch count and sparse checkpoint schedule cannot establish the best predictor
+available from the frozen node behaviors. The separately versioned
+`integrated-prediction-ceiling-v1` protocol therefore rebuilds the authenticated
+hierarchy and requires exact parent mean-ensemble parity before fitting a
+stronger reference.
+
+At every macro-step, each ceiling restart is initialized independently and
+trains on every cumulative integrator-training example with features
+recomputed against the current frontier. It has no warm start and no sampled
+replay distribution. The disjoint cumulative evaluation allocation becomes a
+validation archive: it controls learning-rate reductions, convergence,
+best-epoch restoration, and restart selection, so it is neither used for
+weight updates nor reported as unbiased evaluation. Transformed test subsets
+and full tests remain outside every fitting and selection decision.
+
+Convergence means that validation cross-entropy has stopped improving after
+the learning rate has decayed from 0.001 to 0.00001; a 200-epoch limit is a
+failure cap, not a successful stopping condition. Only converged restarts are
+eligible, and the raw lowest-validation checkpoint is restored. This produces
+an empirical optimization ceiling for the fixed 973-to-1024-to-512-to-256-to-10
+MLP, frozen feature representation, available training allocation, AdamW
+family, and registered validation search. It is not an upper bound over other
+architectures, features, optimizers, or additional data.
+
+The ceiling owns a new content-addressed artifact namespace because the parent
+retired intermediate node checkpoints after durable commits. It authenticates
+all five parent ledgers, rebuilds those frontiers deterministically, records
+every restart history and exact presentation count, retains selected full-
+checkpoint models, and preserves the same checkpoint-before-ledger-retirement
+resume boundary.
+
 ## ImageNet-R-50 Local Vision Boundary
 
 The ImageNet-R experiment is an isolated PyTorch package under

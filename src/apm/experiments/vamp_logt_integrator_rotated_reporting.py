@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 import csv
+from dataclasses import dataclass
 import math
+import os
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
 from apm.continual.artifacts import (
     atomic_write,
     canonical_json_bytes,
+    file_sha256,
     load_canonical_json,
     publish_immutable_json,
 )
@@ -29,6 +32,9 @@ from apm.experiments.vamp_logt_router_reporting import (
 )
 from apm.experiments.vamp_logt_router_state import ActiveAdapterBank
 
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+
 
 PLOT_FILES = (
     "01_prediction_accuracy.png",
@@ -38,6 +44,67 @@ PLOT_FILES = (
     "05_feature_work_scaling.png",
     "06_carry_recovery.png",
 )
+
+CEILING_CONDITION = "converged_full_replay_integrator"
+
+
+@dataclass(frozen=True, slots=True)
+class PlotStyle:
+    """One redundant visual identity that remains legible without color alone."""
+
+    color: str
+    hatch: str
+    linestyle: str
+    marker: str
+    linewidth: float = 2.1
+    markersize: float = 4.5
+    zorder: int = 3
+
+
+CONDITION_PLOT_STYLES: Mapping[str, PlotStyle] = {
+    "integrator_no_replay": PlotStyle("#111111", "xx", "-.", "X"),
+    "integrator_example_replay": PlotStyle("#0072B2", "", "-", "o"),
+    "integrator_range_replay": PlotStyle("#E69F00", "//", "--", "s"),
+    "base_example_replay": PlotStyle("#009E73", "\\\\", ":", "^"),
+    "mean_ensemble": PlotStyle("#CC79A7", "..", "--", "D"),
+    "best_single_node": PlotStyle("#B2182B", "++", "-.", "*"),
+    "offline_cumulative_integrator": PlotStyle("#6F4EAA", "oo", ":", "P"),
+    CEILING_CONDITION: PlotStyle(
+        "#00B8D9", "**", "-", "H", linewidth=3.4, markersize=6.0, zorder=6
+    ),
+}
+
+CONDITION_PLOT_LABELS: Mapping[str, str] = {
+    "integrator_no_replay": "integrator: no replay",
+    "integrator_example_replay": "integrator: example replay",
+    "integrator_range_replay": "integrator: range replay",
+    "base_example_replay": "base-only: example replay",
+    "mean_ensemble": "mean ensemble",
+    "best_single_node": "best node (label-aware oracle)",
+    "offline_cumulative_integrator": "offline cumulative integrator",
+    CEILING_CONDITION: "integrator: converged full replay (ceiling)",
+}
+
+ARCHIVE_PLOT_STYLES: Mapping[tuple[str, str], PlotStyle] = {
+    ("integrator_no_replay", "current_range"): PlotStyle(
+        "#111111", "", "-", "X"
+    ),
+    ("integrator_example_replay", "current_range"): PlotStyle(
+        "#0072B2", "", "-", "o"
+    ),
+    ("integrator_range_replay", "current_range"): PlotStyle(
+        "#E69F00", "", "-", "s"
+    ),
+    ("integrator_no_replay", "older_ranges"): PlotStyle(
+        "#6F4EAA", "", "--", "v"
+    ),
+    ("integrator_example_replay", "older_ranges"): PlotStyle(
+        "#009E73", "", "--", "^"
+    ),
+    ("integrator_range_replay", "older_ranges"): PlotStyle(
+        "#B2182B", "", "--", "D"
+    ),
+}
 
 
 class IntegratorWork(Protocol):
@@ -268,6 +335,183 @@ def write_results(
     return summary
 
 
+def rerender_results(
+    run_root: Path,
+    config: VampLogTIntegratorConfig,
+    ceiling_run_root: Path | None = None,
+) -> Path:
+    """Regenerate derived figures, optionally with an authenticated ceiling overlay."""
+    protocol_path = run_root / "protocol.json"
+    aggregate_summary_path = run_root / "summary.json"
+    if not protocol_path.is_file() or not aggregate_summary_path.is_file():
+        raise ValueError("prediction-integrator run is incomplete")
+    protocol = load_canonical_json(protocol_path)
+    aggregate_summary = load_canonical_json(aggregate_summary_path)
+    if (
+        protocol.get("config_hash") != config.config_hash
+        or aggregate_summary.get("status") != "complete"
+    ):
+        raise ValueError("prediction-integrator report identity does not match config")
+
+    ceiling_rows = (
+        _load_ceiling_overlay_rows(run_root, ceiling_run_root, config)
+        if ceiling_run_root is not None
+        else {}
+    )
+    primary_rows: list[Mapping[str, object]] = []
+    seed_directories = tuple(sorted(run_root.glob("*/seed-*")))
+    if not seed_directories:
+        raise ValueError("prediction-integrator run has no seed reports")
+    for directory in seed_directories:
+        metrics_path = directory / "metrics.jsonl"
+        summary_path = directory / "summary.json"
+        markdown_path = directory / "RESULTS.md"
+        if (
+            not metrics_path.is_file()
+            or not summary_path.is_file()
+            or not markdown_path.is_file()
+        ):
+            raise ValueError(f"incomplete seed report: {directory}")
+        summary = load_canonical_json(summary_path)
+        phase = directory.parent.name
+        if summary.get("phase") != phase:
+            raise ValueError(f"seed report phase mismatch: {directory}")
+        seed = int(summary["run_seed"])
+        rows = tuple(_without_chain(row) for row in _load_jsonl(metrics_path))
+        plotted_rows = (*rows, *ceiling_rows.get((phase, seed), ()))
+        _write_plots(directory / "plots", plotted_rows, config)
+        _rewrite_embedded_html(
+            directory,
+            f"Rotated-MNIST LogT prediction integrator: {phase} {directory.name}",
+        )
+        if phase == "primary":
+            primary_rows.extend(plotted_rows)
+
+    if not primary_rows:
+        raise ValueError("prediction-integrator run has no primary metric rows")
+    _write_plots(run_root / "plots", primary_rows, config)
+    _rewrite_embedded_html(run_root, "Rotated-MNIST LogT prediction integrator")
+    return run_root
+
+
+def _load_ceiling_overlay_rows(
+    parent_run_root: Path,
+    ceiling_run_root: Path,
+    config: VampLogTIntegratorConfig,
+) -> dict[tuple[str, int], tuple[Mapping[str, object], ...]]:
+    """Load every-step ceiling rows only after authenticating both sealed runs."""
+    ceiling_protocol_path = ceiling_run_root / "protocol.json"
+    ceiling_summary_path = ceiling_run_root / "summary.json"
+    parent_protocol_path = parent_run_root / "protocol.json"
+    parent_summary_path = parent_run_root / "summary.json"
+    required = (
+        ceiling_protocol_path,
+        ceiling_summary_path,
+        parent_protocol_path,
+        parent_summary_path,
+    )
+    if any(not path.is_file() for path in required):
+        raise ValueError("ceiling overlay requires complete parent and ceiling reports")
+
+    protocol = load_canonical_json(ceiling_protocol_path)
+    summary = load_canonical_json(ceiling_summary_path)
+    ceiling_config = protocol.get("config")
+    if not isinstance(ceiling_config, Mapping):
+        raise ValueError("ceiling overlay protocol lacks its resolved configuration")
+    parent = ceiling_config.get("parent_integrator")
+    if not isinstance(parent, Mapping):
+        raise ValueError("ceiling overlay protocol lacks its parent binding")
+
+    expected_protocol_sha256 = file_sha256(parent_protocol_path)
+    expected_summary_sha256 = file_sha256(parent_summary_path)
+    if (
+        protocol.get("config_hash") != ceiling_run_root.name
+        or parent.get("run_id") != parent_run_root.name
+        or parent.get("protocol_sha256") != expected_protocol_sha256
+        or parent.get("summary_sha256") != expected_summary_sha256
+        or protocol.get("parent_integrator_protocol_sha256")
+        != expected_protocol_sha256
+        or protocol.get("parent_integrator_summary_sha256")
+        != expected_summary_sha256
+        or summary.get("status") != "complete"
+        or summary.get("ceiling_certified") is not True
+        or summary.get("completed_primary_seeds") != len(config.primary.seeds)
+    ):
+        raise ValueError("ceiling overlay does not authenticate the completed parent run")
+
+    protocol_ledgers = protocol.get("parent_integrator_metric_ledger_sha256")
+    configured_ledgers = parent.get("primary_metric_ledger_sha256")
+    expected_seed_keys = {str(seed) for seed in config.primary.seeds}
+    if (
+        not isinstance(protocol_ledgers, Mapping)
+        or not isinstance(configured_ledgers, Mapping)
+        or dict(protocol_ledgers) != dict(configured_ledgers)
+        or set(protocol_ledgers) != expected_seed_keys
+    ):
+        raise ValueError("ceiling overlay parent-ledger binding is incomplete")
+    for seed in config.primary.seeds:
+        ledger_path = parent_run_root / "primary" / f"seed-{seed}" / "metrics.jsonl"
+        if (
+            not ledger_path.is_file()
+            or protocol_ledgers[str(seed)] != file_sha256(ledger_path)
+        ):
+            raise ValueError("ceiling overlay parent metric ledgers changed")
+
+    overlay: dict[tuple[str, int], tuple[Mapping[str, object], ...]] = {}
+    for phase, phase_config in (("smoke", config.smoke), ("primary", config.primary)):
+        expected_steps = set(range(1, phase_config.macro_steps + 1))
+        for seed in phase_config.seeds:
+            directory = ceiling_run_root / phase / f"seed-{seed}"
+            metrics_path = directory / "metrics.jsonl"
+            seed_summary_path = directory / "summary.json"
+            if not metrics_path.is_file() or not seed_summary_path.is_file():
+                raise ValueError(f"ceiling overlay is missing {phase} seed {seed}")
+            seed_summary = load_canonical_json(seed_summary_path)
+            acceptance = seed_summary.get("acceptance")
+            if (
+                seed_summary.get("phase") != phase
+                or seed_summary.get("run_seed") != seed
+                or seed_summary.get("final_macro_step") != phase_config.macro_steps
+                or not isinstance(acceptance, Mapping)
+                or not acceptance
+                or not all(value is True for value in acceptance.values())
+            ):
+                raise ValueError(f"ceiling overlay seed is not certified: {phase} {seed}")
+            candidates = tuple(
+                _without_chain(row)
+                for row in _load_jsonl(metrics_path)
+                if row.get("row_type") == "evaluation"
+                and row.get("condition") == CEILING_CONDITION
+                and row.get("group") == "micro"
+                and row.get("evaluation_scope") in {"test_subset", "full_test"}
+            )
+            selected = _primary_test_rows(candidates)
+            if (
+                len(selected) != phase_config.macro_steps
+                or {int(row["macro_step"]) for row in selected} != expected_steps
+                or any(int(row["run_seed"]) != seed for row in selected)
+                or any(
+                    not math.isfinite(float(row[field]))
+                    for row in selected
+                    for field in ("accuracy", "mean_cross_entropy")
+                )
+            ):
+                raise ValueError(
+                    f"ceiling overlay lacks one finite test point per step: {phase} {seed}"
+                )
+            overlay[(phase, seed)] = selected
+    return overlay
+
+
+def _rewrite_embedded_html(directory: Path, title: str) -> None:
+    """Refresh standalone HTML after its referenced plots change."""
+    markdown = (directory / "RESULTS.md").read_text(encoding="utf-8")
+    atomic_write(
+        directory / "RESULTS.html",
+        _html(markdown, directory, title).encode("utf-8"),
+    )
+
+
 def _criteria(
     means: Mapping[str, Mapping[str, float]],
     best: str | None,
@@ -480,12 +724,14 @@ def _write_plots(
     rows: Sequence[Mapping[str, object]],
     config: VampLogTIntegratorConfig,
 ) -> None:
+    os.environ.setdefault("MPLCONFIGDIR", "/tmp/vamp-logt-integrator-matplotlib")
     import matplotlib
 
     matplotlib.use("Agg")
     from matplotlib import pyplot as plt
 
     root.mkdir(parents=True, exist_ok=True)
+    context_steps = _context_steps(rows, config)
     evaluation = _primary_test_rows(
         tuple(
             row
@@ -500,21 +746,34 @@ def _write_plots(
             "mean_ensemble",
             "best_single_node",
             "offline_cumulative_integrator",
+            CEILING_CONDITION,
         )
         if any(row.get("condition") == name for row in evaluation)
     )
+    ceiling_overlaid = CEILING_CONDITION in conditions
     for filename, field, title, ylabel in (
         (PLOT_FILES[0], "accuracy", "Prediction accuracy", "Accuracy"),
         (PLOT_FILES[1], "mean_cross_entropy", "Prediction cross-entropy", "Cross-entropy"),
     ):
         figure, axis = plt.subplots(figsize=(9, 5), constrained_layout=True)
+        _add_context_regions(axis, context_steps)
         for condition in conditions:
             points = _mean_points(evaluation, condition, field)
             if points:
-                axis.plot(*zip(*points), marker="o", markersize=3, label=condition)
-        axis.set(title=title, xlabel="Macro-step", ylabel=ylabel)
+                _plot_series(
+                    axis,
+                    points,
+                    CONDITION_PLOT_LABELS[condition],
+                    CONDITION_PLOT_STYLES[condition],
+                )
+        displayed_title = (
+            f"{title} (converged full-replay ceiling overlaid)"
+            if ceiling_overlaid
+            else title
+        )
+        axis.set(title=displayed_title, xlabel="Macro-step", ylabel=ylabel)
         axis.grid(alpha=0.25)
-        axis.legend(fontsize=7, ncol=2)
+        axis.legend(fontsize=7.5, ncol=2)
         figure.savefig(root / filename, dpi=170)
         plt.close(figure)
     archive = tuple(
@@ -525,24 +784,36 @@ def _write_plots(
         and row.get("group") in {"current_range", "older_ranges"}
     )
     figure, axis = plt.subplots(figsize=(9, 5), constrained_layout=True)
+    _add_context_regions(axis, context_steps)
     for condition in config.primary.conditions[:3]:
-        for group, style in (("current_range", "-"), ("older_ranges", "--")):
+        for group in ("current_range", "older_ranges"):
             points = _mean_points(
                 tuple(row for row in archive if row.get("group") == group),
                 condition,
                 "accuracy",
             )
             if points:
-                axis.plot(*zip(*points), linestyle=style, label=f"{condition} {group}")
+                label = f"{CONDITION_PLOT_LABELS[condition]}: {group.replace('_', ' ')}"
+                _plot_series(
+                    axis,
+                    points,
+                    label,
+                    ARCHIVE_PLOT_STYLES[(condition, group)],
+                )
     axis.set(title="Current versus older-range accuracy", xlabel="Macro-step", ylabel="Accuracy")
     axis.grid(alpha=0.25)
-    axis.legend(fontsize=7, ncol=2)
+    axis.legend(fontsize=7.5, ncol=2)
     figure.savefig(root / PLOT_FILES[2], dpi=170)
     plt.close(figure)
     figure, axis = plt.subplots(figsize=(9, 5), constrained_layout=True)
     names = tuple(
         name
-        for name in (*config.primary.conditions, "mean_ensemble", "offline_cumulative_integrator")
+        for name in (
+            *config.primary.conditions,
+            "mean_ensemble",
+            "offline_cumulative_integrator",
+            CEILING_CONDITION,
+        )
         if any(row.get("condition") == name for row in evaluation)
     )
     available_steps = sorted(set(int(row["macro_step"]) for row in evaluation))
@@ -560,7 +831,16 @@ def _write_plots(
         )
         for name in names
     ]
-    axis.bar(names, values)
+    styles = tuple(CONDITION_PLOT_STYLES[name] for name in names)
+    bars = axis.bar(
+        tuple(CONDITION_PLOT_LABELS[name] for name in names),
+        values,
+        color=tuple(style.color for style in styles),
+        edgecolor="#111111",
+        linewidth=0.8,
+    )
+    for bar, style in zip(bars, styles, strict=True):
+        bar.set_hatch(style.hatch)
     axis.set(title="High-checkpoint predictor comparison", ylabel="Cross-entropy")
     axis.tick_params(axis="x", rotation=25)
     axis.grid(axis="y", alpha=0.25)
@@ -568,6 +848,7 @@ def _write_plots(
     plt.close(figure)
     accounting = tuple(row for row in rows if row.get("row_type") == "accounting")
     figure, axis = plt.subplots(figsize=(9, 5), constrained_layout=True)
+    _add_context_regions(axis, context_steps)
     if accounting:
         steps = sorted(set(int(row["macro_step"]) for row in accounting))
         work = [
@@ -584,8 +865,25 @@ def _write_plots(
         reference = np.asarray([step * math.log2(max(step, 2)) for step in steps])
         if reference[-1] > 0:
             reference *= work[-1] / reference[-1]
-        axis.plot(steps, work, label="measured node-feature evaluations")
-        axis.plot(steps, reference, linestyle="--", label="scaled t log2(t)")
+        axis.plot(
+            steps,
+            work,
+            color="#0072B2",
+            linewidth=2.3,
+            marker="o",
+            markevery=max(1, len(steps) // 12),
+            label="measured node-feature evaluations",
+        )
+        axis.plot(
+            steps,
+            reference,
+            color="#B2182B",
+            linewidth=2.3,
+            linestyle="--",
+            marker="s",
+            markevery=max(1, len(steps) // 12),
+            label="scaled t log2(t)",
+        )
     axis.set(
         title="Fixed-budget feature work",
         xlabel="Macro-step",
@@ -601,20 +899,28 @@ def _write_plots(
         if row.get("row_type") == "training" and row.get("is_carry")
     )
     figure, axis = plt.subplots(figsize=(9, 5), constrained_layout=True)
+    _add_context_regions(axis, context_steps)
     for condition in config.primary.conditions:
-        points = tuple(
-            (
-                int(row["macro_step"]),
-                float(row["carry_accuracy_change_from_baseline"]),
-            )
-            for row in training
-            if row.get("condition") == condition
+        points = _mean_points(
+            training,
+            condition,
+            "carry_accuracy_change_from_baseline",
         )
         if points:
-            axis.plot(*zip(*points), marker="o", label=condition)
+            _plot_series(
+                axis,
+                points,
+                CONDITION_PLOT_LABELS[condition],
+                CONDITION_PLOT_STYLES[condition],
+            )
     axis.axhline(0.0, color="black", linewidth=1)
+    seed_count = len({int(row["run_seed"]) for row in training})
     axis.set(
-        title="Integrator recovery on carry steps",
+        title=(
+            "Integrator recovery on carry steps"
+            if seed_count <= 1
+            else f"Mean integrator recovery on carry steps ({seed_count} seeds)"
+        ),
         xlabel="Macro-step",
         ylabel="Post-update accuracy minus mean-ensemble baseline",
     )
@@ -622,6 +928,75 @@ def _write_plots(
     axis.legend(fontsize=7)
     figure.savefig(root / PLOT_FILES[5], dpi=170)
     plt.close(figure)
+
+
+def _plot_series(
+    axis: Axes,
+    points: Sequence[tuple[int, float]],
+    label: str,
+    style: PlotStyle,
+) -> None:
+    """Draw one line with redundant color, dash, and marker encodings."""
+    axis.plot(
+        *zip(*points, strict=True),
+        color=style.color,
+        label=label,
+        linestyle=style.linestyle,
+        linewidth=style.linewidth,
+        marker=style.marker,
+        markeredgecolor="#FFFFFF",
+        markeredgewidth=0.45,
+        markersize=style.markersize,
+        zorder=style.zorder,
+    )
+
+
+def _context_steps(
+    rows: Sequence[Mapping[str, object]],
+    config: VampLogTIntegratorConfig,
+) -> tuple[int, ...]:
+    """Select the phase schedule represented by a seed or aggregate row set."""
+    maximum_step = max(
+        (int(row["macro_step"]) for row in rows if "macro_step" in row),
+        default=0,
+    )
+    return (
+        config.task.smoke_context_steps
+        if maximum_step <= config.smoke.macro_steps
+        else config.task.primary_context_steps
+    )
+
+
+def _add_context_regions(axis: Axes, context_steps: Sequence[int]) -> None:
+    """Mark blocked task contexts and put transitions between integer steps."""
+    start = 0.5
+    for context, count in enumerate(context_steps):
+        if count <= 0:
+            continue
+        stop = start + count
+        if context % 2:
+            axis.axvspan(start, stop, color="#CBD5E1", alpha=0.16, zorder=0)
+        axis.text(
+            (start + stop) / 2.0,
+            0.985,
+            f"C{context}",
+            color="#475569",
+            fontsize=7.5,
+            fontweight="bold",
+            horizontalalignment="center",
+            transform=axis.get_xaxis_transform(),
+            verticalalignment="top",
+            zorder=4,
+        )
+        if context + 1 < len(context_steps):
+            axis.axvline(
+                stop,
+                color="#64748B",
+                linestyle=(0, (2, 2)),
+                linewidth=1.0,
+                zorder=1,
+            )
+        start = stop
 
 
 def _primary_test_rows(
@@ -794,4 +1169,13 @@ The resolved configuration hash is `{config.config_hash}` and the immutable plan
 """
 
 
-__all__ = ["PLOT_FILES", "write_phase_report", "write_results"]
+__all__ = [
+    "ARCHIVE_PLOT_STYLES",
+    "CEILING_CONDITION",
+    "CONDITION_PLOT_STYLES",
+    "PLOT_FILES",
+    "_load_ceiling_overlay_rows",
+    "rerender_results",
+    "write_phase_report",
+    "write_results",
+]

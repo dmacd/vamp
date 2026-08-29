@@ -1,11 +1,19 @@
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 import torch
 
+from apm.continual.artifacts import atomic_write, canonical_json_bytes, file_sha256
 from apm.continual.top_two_adapter import top_two_base_state
 from apm.experiments.vamp_af_data import AddressCNN
 from apm.experiments.vamp_logt_integrator_rotated_config import load_config
+from apm.experiments.vamp_logt_integrator_rotated_reporting import (
+    ARCHIVE_PLOT_STYLES,
+    CEILING_CONDITION,
+    CONDITION_PLOT_STYLES,
+    _load_ceiling_overlay_rows,
+)
 from apm.experiments.vamp_logt_integrator_rotated_workflow import run_phase_seed
 from apm.experiments.vamp_logt_router_data import (
     FrozenClassifierDependency,
@@ -62,6 +70,122 @@ def test_integrator_protocol_is_the_exact_vamp_af_task() -> None:
     assert config.integrator.hidden_widths == (1024, 512, 256)
     assert config.primary.historical_budget == 256
     assert config.primary.seeds == (0, 1, 2, 3, 4)
+
+
+def test_integrator_plot_series_have_redundant_unique_identities() -> None:
+    condition_styles = tuple(CONDITION_PLOT_STYLES.values())
+    archive_styles = tuple(ARCHIVE_PLOT_STYLES.values())
+    assert len({style.color for style in condition_styles}) == len(condition_styles)
+    assert len(
+        {
+            (style.color, style.linestyle, style.marker)
+            for style in condition_styles
+        }
+    ) == len(condition_styles)
+    assert len({style.color for style in archive_styles}) == len(archive_styles)
+    assert len(
+        {(style.color, style.linestyle, style.marker) for style in archive_styles}
+    ) == len(archive_styles)
+
+
+def test_ceiling_overlay_authenticates_parent_and_covers_every_step(
+    tmp_path: Path,
+) -> None:
+    source = load_config(
+        "configs/vamp_logt_integrator_rotated_mnist/primary.yaml"
+    )
+    config = replace(
+        source,
+        task=replace(
+            source.task,
+            smoke_context_steps=(1, 0, 0, 0, 0),
+            primary_context_steps=(1, 0, 0, 0, 0),
+        ),
+        benchmark=replace(source.benchmark, macro_steps=1),
+        smoke=replace(source.smoke, seeds=(0,), macro_steps=1),
+        primary=replace(source.primary, seeds=(0,), macro_steps=1),
+        evaluation=replace(source.evaluation, full_checkpoints=(1,)),
+    )
+    parent_root = tmp_path / ("a" * 64)
+    parent_root.mkdir()
+    atomic_write(parent_root / "protocol.json", canonical_json_bytes({"parent": 1}))
+    atomic_write(parent_root / "summary.json", canonical_json_bytes({"status": "complete"}))
+    ledger_path = parent_root / "primary" / "seed-0" / "metrics.jsonl"
+    atomic_write(ledger_path, b"sealed parent ledger\n")
+    parent_protocol_sha256 = file_sha256(parent_root / "protocol.json")
+    parent_summary_sha256 = file_sha256(parent_root / "summary.json")
+    parent_ledger_sha256 = file_sha256(ledger_path)
+
+    ceiling_root = tmp_path / ("b" * 64)
+    atomic_write(
+        ceiling_root / "protocol.json",
+        canonical_json_bytes(
+            {
+                "config": {
+                    "parent_integrator": {
+                        "primary_metric_ledger_sha256": {
+                            "0": parent_ledger_sha256
+                        },
+                        "protocol_sha256": parent_protocol_sha256,
+                        "run_id": parent_root.name,
+                        "summary_sha256": parent_summary_sha256,
+                    }
+                },
+                "config_hash": ceiling_root.name,
+                "parent_integrator_metric_ledger_sha256": {
+                    "0": parent_ledger_sha256
+                },
+                "parent_integrator_protocol_sha256": parent_protocol_sha256,
+                "parent_integrator_summary_sha256": parent_summary_sha256,
+            }
+        ),
+    )
+    atomic_write(
+        ceiling_root / "summary.json",
+        canonical_json_bytes(
+            {
+                "ceiling_certified": True,
+                "completed_primary_seeds": 1,
+                "status": "complete",
+            }
+        ),
+    )
+    for phase in ("smoke", "primary"):
+        seed_root = ceiling_root / phase / "seed-0"
+        atomic_write(
+            seed_root / "summary.json",
+            canonical_json_bytes(
+                {
+                    "acceptance": {"converged": True},
+                    "final_macro_step": 1,
+                    "phase": phase,
+                    "run_seed": 0,
+                }
+            ),
+        )
+        atomic_write(
+            seed_root / "metrics.jsonl",
+            canonical_json_bytes(
+                {
+                    "accuracy": 0.8,
+                    "condition": CEILING_CONDITION,
+                    "evaluation_scope": "full_test",
+                    "group": "micro",
+                    "macro_step": 1,
+                    "mean_cross_entropy": 0.4,
+                    "row_type": "evaluation",
+                    "run_seed": 0,
+                }
+            ),
+        )
+
+    overlay = _load_ceiling_overlay_rows(parent_root, ceiling_root, config)
+    assert set(overlay) == {("smoke", 0), ("primary", 0)}
+    assert overlay[("primary", 0)][0]["accuracy"] == 0.8
+
+    atomic_write(parent_root / "summary.json", canonical_json_bytes({"changed": True}))
+    with pytest.raises(ValueError, match="does not authenticate"):
+        _load_ceiling_overlay_rows(parent_root, ceiling_root, config)
 
 
 def test_rotated_two_step_integrator_report_and_resume_are_exact(

@@ -57,6 +57,7 @@ specific benchmark, not a claim of general continual-learning performance.
 | Integrated LogT behavioral router | Completed research POC | Five 64-step Permuted-MNIST seeds tested hard/soft supervision and fixed-budget example/range replay. The best learned router closed 86.37% of the most-recent baseline's cross-entropy gap to the oracle, while a fixed largest-range policy still achieved lower mean regret. |
 | Integrated LogT router on VAMP-AF contexts | Completed negative transfer result | The unchanged router protocol improved substantially over no replay and fixed recent-range routing on five-seed Rotated-MNIST, but closed only 33.79% of the oracle gap and traded a large old-range gain for a 10.57-point current-range accuracy loss. |
 | Direct LogT prediction integrator on VAMP-AF contexts | Completed mixed negative result | Example-balanced replay over all frozen nodes closed 94.82% of the no-replay-to-offline cross-entropy gap and beat base-only replay, but lost 9.32 points of current-range accuracy and remained 1.35 points below the sealed router's accuracy. Five of seven preregistered criteria passed. |
+| Converged full-replay integrator ceiling | Completed certified ceiling | A fresh three-restart integrator trained to validation convergence on all cumulative examples at every Rotated-MNIST step reached 0.59862 nats and 77.287% accuracy at the three high checkpoints. It beat the parent's four-epoch offline reference by 0.12418 nats and 8.169 accuracy points, isolating bounded sequential replay and optimization as major limitations. |
 | Generative-PC LogT MNIST | Completed negative MAP/GN routing result | The 80-step MAP and exact generalized Gauss–Newton protocols failed all three minimal static controls. Both scores consistently favored the larger history model: the new leaf won 0 of 512 focused comparisons in every replica, including when both nodes represented the same image distribution. No confirmation or partial carry was run. |
 | **TRACE Log-t VAMP** | **Completed research run** | Eight-task Llama-3.2-1B continual-learning study with SVD/Core controls, replay repair, four original routers, matched baselines, a CPU-only [task-known provenance follow-up](docs/experiments/trace-logt-vamp/followups/task-known-provenance/report.md), and a complete [reviewer bundle](docs/experiments/trace-logt-vamp/README.md). |
 | TinyShakespeare | Deprecated prototype | Four-task character-level language-model experiments used to establish the pathwise LoRA and routing machinery. A selected [character-permutation report](results/language_cl/tinyshakespeare/character-permutation/standard-seed0-a7bd7d1479ba/report.html) is retained as historical evidence. |
@@ -295,6 +296,9 @@ uv run python -m apm.experiments.vamp_logt_integrator_rotated_mnist \
   --config configs/vamp_logt_integrator_rotated_mnist/primary.yaml
 ```
 
+Add `--render-only` to regenerate the derived PNG and standalone HTML reports
+from the sealed metric ledgers without loading models or running training.
+
 All five 64-step seeds completed under protocol identity
 `9b5f70bf484cd19c7624142e80118e32857452d44f45fbb97d0b15df29a6689a`.
 Example-balanced replay was the best online integrator: it reached 0.81866-nat
@@ -307,6 +311,36 @@ while reducing current-range accuracy by 9.323 points, and it remained 1.350
 accuracy points below the sealed soft router despite much lower cross-entropy.
 The completed reports and durable state are under the ignored
 `artifacts/vamp-logt-integrator-rotated-mnist/` tree.
+
+The [converged full-replay ceiling](docs/logt_vamp_rotated_mnist_converged_integrator_ceiling_plan.md)
+corrects an important omission in that comparison. The parent's fresh offline
+integrator saw all cumulative examples, but trained for only four epochs and
+only at five checkpoints; it was an optimization reference, not a realistic
+ceiling. The successor trains a fresh copy of the same MLP from scratch at
+every step on every cumulative integrator-training example, uses the disjoint
+cumulative evaluation allocation for learning-rate, epoch, and restart
+selection, and leaves transformed test data untouched:
+
+```bash
+uv run python -m apm.experiments.vamp_logt_integrator_ceiling_rotated_mnist \
+  --config configs/vamp_logt_integrator_ceiling_rotated_mnist/primary.yaml \
+  --phase primary
+```
+
+All five 64-step seeds completed under config identity
+`b7a55dbe9bbc563e4cc39f2253ba39e56bf90a578bf2a42b6b42f8f0d17dda98`.
+All 960 primary restarts converged before the 200-epoch cap, selected fits ran
+58.5 epochs on average and at most 97, and every isolation, accounting,
+fresh-restart, archive, and parent-parity gate passed. Across full-test
+checkpoints 15, 31, and 63, the ceiling reached 0.59862-nat cross-entropy and
+77.287% accuracy. The parent's four-epoch offline reference reached 0.72279
+nats and 69.118%, while the best online replay integrator reached 0.81866 nats
+and 67.437%. At the final fully merged checkpoint, the ceiling averaged
+0.59373 nats and 78.980% accuracy. This is an empirical ceiling for the fixed
+features, MLP family, data allocation, optimizer, and validation protocol, not
+a mathematical upper bound over all possible integrators. Reports and durable
+state are under the ignored
+`artifacts/vamp-logt-integrator-ceiling-rotated-mnist/` tree.
 
 ## Generative-PC Evidence MNIST Runner
 

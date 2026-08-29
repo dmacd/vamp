@@ -1,0 +1,45 @@
+experiment:
+  name: vamp-logt-converged-integrator-ceiling-rotated-mnist
+  protocol_revision: integrated-prediction-ceiling-v1
+
+paths:
+  artifact_root: artifacts/vamp-logt-integrator-ceiling-rotated-mnist
+  parent_config: configs/vamp_logt_integrator_rotated_mnist/primary.yaml
+  parent_integrator_run_root: artifacts/vamp-logt-integrator-rotated-mnist/runs/9b5f70bf484cd19c7624142e80118e32857452d44f45fbb97d0b15df29a6689a
+
+parent_integrator:
+  run_id: 9b5f70bf484cd19c7624142e80118e32857452d44f45fbb97d0b15df29a6689a
+  protocol_sha256: 4308ac3ffd281656483f3f6db9ed17a7acdb82021cebc232a564664f117ac924
+  summary_sha256: abf2633df5e3409a9b30fef865d3257f8b7589d059d0d675f83e235fdd59e40b
+  implementation_commit: 64a5268
+  parent_config_sha256: 323aea79c5749cea636fcff7cf5aa07d64a39378b6217049fda7a46c7e4de704
+  primary_metric_ledger_sha256:
+    0: 471fb77d7ec3a4528df44cb81a99ff393e12a0f37cd07bee83c7fba66b0b8111
+    1: a09dfb99bd06b12d82fdaaaf6c39e2400e9b414c49bd26bf5e0f43819a2c940d
+    2: 1f7b8d8721b8a8ad852efdf5a2fb4a74dcc61f2059eacc522482d344fee5a25d
+    3: e6ac5abfa226ee6c469400ef6f3d95d22356021dce438b657bb95650cb2b814b
+    4: 53e84b311b3c01e079f94578be69cbfd38b3ad88e108df0a23ab453e26f3505f
+
+convergence:
+  minimum_epochs: 20
+  maximum_epochs: 200
+  improvement_delta: 0.0001
+  learning_rate_patience: 5
+  learning_rate_factor: 0.5
+  minimum_learning_rate: 0.00001
+  convergence_patience: 10
+
+phases:
+  smoke:
+    seeds: [0]
+    macro_steps: 5
+    restarts_per_step: 1
+  primary:
+    seeds: [0, 1, 2, 3, 4]
+    macro_steps: 64
+    restarts_per_step: 3
+
+runtime:
+  device: auto
+  deterministic_algorithms: true
+  progress: true

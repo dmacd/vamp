@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import math
 
 import torch
@@ -125,6 +125,121 @@ class IntegratorTrainingResult:
             or self.optimizer_steps < 1
         ):
             raise ValueError("integrator training did not produce finite bounded evidence")
+
+
+@dataclass(frozen=True, slots=True)
+class FullReplayConvergenceConfig:
+    """Frozen stopping and learning-rate rules for cumulative full replay."""
+
+    minimum_epochs: int
+    maximum_epochs: int
+    improvement_delta: float
+    learning_rate_patience: int
+    learning_rate_factor: float
+    minimum_learning_rate: float
+    convergence_patience: int
+
+    def __post_init__(self) -> None:
+        if (
+            self.minimum_epochs < 1
+            or self.maximum_epochs < self.minimum_epochs
+            or self.improvement_delta <= 0.0
+            or self.learning_rate_patience < 1
+            or not 0.0 < self.learning_rate_factor < 1.0
+            or self.minimum_learning_rate <= 0.0
+            or self.convergence_patience < 1
+        ):
+            raise ValueError("invalid full-replay convergence settings")
+
+
+@dataclass(frozen=True, slots=True)
+class ConvergenceEpochResult:
+    """One complete all-example epoch and its held-out validation evidence."""
+
+    epoch: int
+    learning_rate: float
+    next_learning_rate: float
+    training_loss: float
+    training_accuracy: float
+    validation_loss: float
+    validation_accuracy: float
+    best_validation_loss: float
+    improved_best: bool
+    significant_improvement: bool
+    optimizer_steps: int
+
+    def __post_init__(self) -> None:
+        numeric = (
+            self.learning_rate,
+            self.next_learning_rate,
+            self.training_loss,
+            self.training_accuracy,
+            self.validation_loss,
+            self.validation_accuracy,
+            self.best_validation_loss,
+        )
+        if (
+            self.epoch < 0
+            or self.optimizer_steps < 0
+            or not all(math.isfinite(value) for value in numeric)
+            or min(self.learning_rate, self.next_learning_rate) <= 0.0
+        ):
+            raise ValueError("invalid full-replay epoch evidence")
+
+    def as_record(self) -> dict[str, object]:
+        """Return a JSON-compatible epoch record."""
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class ConvergedFullReplayResult:
+    """Best restored checkpoint and complete convergence accounting."""
+
+    converged: bool
+    stop_reason: str
+    best_epoch: int
+    epochs_ran: int
+    best_training_loss: float
+    best_training_accuracy: float
+    best_validation_loss: float
+    best_validation_accuracy: float
+    final_learning_rate: float
+    optimizer_steps: int
+    training_example_presentations: int
+    validation_example_presentations: int
+    history: tuple[ConvergenceEpochResult, ...]
+
+    def __post_init__(self) -> None:
+        numeric = (
+            self.best_training_loss,
+            self.best_training_accuracy,
+            self.best_validation_loss,
+            self.best_validation_accuracy,
+            self.final_learning_rate,
+        )
+        if (
+            self.stop_reason not in {"minimum_learning_rate_plateau", "maximum_epochs"}
+            or self.converged != (self.stop_reason == "minimum_learning_rate_plateau")
+            or self.epochs_ran < 1
+            or not 0 <= self.best_epoch <= self.epochs_ran
+            or self.optimizer_steps < 1
+            or self.training_example_presentations < 1
+            or self.validation_example_presentations < 1
+            or len(self.history) != self.epochs_ran + 1
+            or not all(math.isfinite(value) for value in numeric)
+        ):
+            raise ValueError("invalid converged full-replay result")
+
+    def as_record(self, *, include_history: bool = True) -> dict[str, object]:
+        """Return a JSON-compatible convergence record."""
+        record = {
+            key: value
+            for key, value in asdict(self).items()
+            if key != "history"
+        }
+        if include_history:
+            record["history"] = [row.as_record() for row in self.history]
+        return record
 
 
 class LevelSlotIntegrator(nn.Module):
@@ -403,6 +518,185 @@ def train_condition(
     )
 
 
+def train_converged_full_replay(
+    state: IntegratorConditionState,
+    training: IntegratorSupervision,
+    validation: IntegratorSupervision,
+    config: IntegratorConfig,
+    convergence: FullReplayConvergenceConfig,
+    seed: int,
+    macro_step: int,
+    device: torch.device,
+    *,
+    progress: bool = False,
+) -> ConvergedFullReplayResult:
+    """Fit on every training row until the frozen validation rule converges."""
+    if min(len(training.labels), len(validation.labels)) < 1:
+        raise ValueError("full replay requires nonempty training and validation archives")
+    if config.learning_rate < convergence.minimum_learning_rate:
+        raise ValueError("initial learning rate is below the convergence floor")
+    if any(
+        abs(float(group["lr"]) - config.learning_rate) > 1.0e-15
+        for group in state.optimizer.param_groups
+    ):
+        raise ValueError("full-replay optimizer did not start at the frozen learning rate")
+
+    initial_training = _source_metrics(
+        state.integrator, training, device, config.minibatch_size
+    )
+    initial_validation = _source_metrics(
+        state.integrator, validation, device, config.minibatch_size
+    )
+    best_parameters = _cpu_parameter_snapshot(state.integrator)
+    best_epoch = 0
+    best_validation_loss = initial_validation[0]
+    significant_reference = initial_validation[0]
+    epochs_without_significant_improvement = 0
+    minimum_rate_plateau_epochs = 0
+    initial_rate = float(state.optimizer.param_groups[0]["lr"])
+    history = [
+        ConvergenceEpochResult(
+            0,
+            initial_rate,
+            initial_rate,
+            initial_training[0],
+            initial_training[1],
+            initial_validation[0],
+            initial_validation[1],
+            initial_validation[0],
+            True,
+            True,
+            state.optimizer_steps,
+        )
+    ]
+    stop_reason = "maximum_epochs"
+    try:
+        from tqdm.auto import tqdm
+    except ImportError as error:  # pragma: no cover - vision environment gate
+        raise RuntimeError("tqdm is required by the vision environment") from error
+    epochs = tqdm(
+        range(1, convergence.maximum_epochs + 1),
+        desc=f"{state.name} convergence",
+        disable=not progress,
+        leave=False,
+        unit="epoch",
+    )
+    device_indices = [device.index or 0] if device.type == "cuda" else []
+    with torch.random.fork_rng(devices=device_indices):
+        torch.manual_seed(named_seed(seed, state.name, macro_step, "dropout"))
+        for epoch in epochs:
+            learning_rate = float(state.optimizer.param_groups[0]["lr"])
+            state.integrator.train()
+            generator = torch.Generator().manual_seed(
+                named_seed(seed, state.name, macro_step, "full-replay", epoch)
+            )
+            order = torch.randperm(len(training.labels), generator=generator)
+            for offset in range(0, len(order), config.minibatch_size):
+                indices = order[offset : offset + config.minibatch_size]
+                loss = _batch_loss(state.integrator, training, indices, device)
+                state.optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    state.integrator.parameters(), config.gradient_clip_norm
+                )
+                state.optimizer.step()
+                state.optimizer_steps += 1
+
+            training_metrics = _source_metrics(
+                state.integrator, training, device, config.minibatch_size
+            )
+            validation_metrics = _source_metrics(
+                state.integrator, validation, device, config.minibatch_size
+            )
+            improved_best = validation_metrics[0] < best_validation_loss
+            if improved_best:
+                best_validation_loss = validation_metrics[0]
+                best_epoch = epoch
+                best_parameters = _cpu_parameter_snapshot(state.integrator)
+            significant_improvement = (
+                validation_metrics[0]
+                <= significant_reference - convergence.improvement_delta
+            )
+            if significant_improvement:
+                significant_reference = validation_metrics[0]
+                epochs_without_significant_improvement = 0
+                minimum_rate_plateau_epochs = 0
+            else:
+                epochs_without_significant_improvement += 1
+
+            next_learning_rate = learning_rate
+            at_minimum_rate = (
+                learning_rate <= convergence.minimum_learning_rate + 1.0e-15
+            )
+            if at_minimum_rate:
+                if not significant_improvement:
+                    minimum_rate_plateau_epochs += 1
+            elif (
+                epochs_without_significant_improvement
+                >= convergence.learning_rate_patience
+            ):
+                next_learning_rate = max(
+                    convergence.minimum_learning_rate,
+                    learning_rate * convergence.learning_rate_factor,
+                )
+                for group in state.optimizer.param_groups:
+                    group["lr"] = next_learning_rate
+                epochs_without_significant_improvement = 0
+                minimum_rate_plateau_epochs = 0
+
+            history.append(
+                ConvergenceEpochResult(
+                    epoch,
+                    learning_rate,
+                    next_learning_rate,
+                    training_metrics[0],
+                    training_metrics[1],
+                    validation_metrics[0],
+                    validation_metrics[1],
+                    best_validation_loss,
+                    improved_best,
+                    significant_improvement,
+                    state.optimizer_steps,
+                )
+            )
+            epochs.set_postfix(
+                best=f"{best_validation_loss:.4f}",
+                lr=f"{next_learning_rate:.1e}",
+                validation=f"{validation_metrics[0]:.4f}",
+            )
+            if (
+                epoch >= convergence.minimum_epochs
+                and at_minimum_rate
+                and minimum_rate_plateau_epochs >= convergence.convergence_patience
+            ):
+                stop_reason = "minimum_learning_rate_plateau"
+                break
+
+    state.integrator.load_state_dict(best_parameters, strict=True)
+    restored_training = _source_metrics(
+        state.integrator, training, device, config.minibatch_size
+    )
+    restored_validation = _source_metrics(
+        state.integrator, validation, device, config.minibatch_size
+    )
+    epochs_ran = history[-1].epoch
+    return ConvergedFullReplayResult(
+        stop_reason == "minimum_learning_rate_plateau",
+        stop_reason,
+        best_epoch,
+        epochs_ran,
+        restored_training[0],
+        restored_training[1],
+        restored_validation[0],
+        restored_validation[1],
+        float(state.optimizer.param_groups[0]["lr"]),
+        state.optimizer_steps,
+        epochs_ran * len(training.labels),
+        (epochs_ran + 2) * len(validation.labels),
+        tuple(history),
+    )
+
+
 def prediction_logits(
     integrator: LevelSlotIntegrator,
     observations: IntegratorObservations,
@@ -476,6 +770,13 @@ def _combined_loss(
     )
 
 
+def _cpu_parameter_snapshot(integrator: LevelSlotIntegrator) -> dict[str, Tensor]:
+    return {
+        name: tensor.detach().cpu().clone()
+        for name, tensor in integrator.state_dict().items()
+    }
+
+
 def _training_chunks(
     current_count: int,
     historical_count: int,
@@ -505,6 +806,9 @@ def _training_chunks(
 
 __all__ = [
     "CLASS_COUNT",
+    "ConvergedFullReplayResult",
+    "ConvergenceEpochResult",
+    "FullReplayConvergenceConfig",
     "IntegratorConditionState",
     "IntegratorObservations",
     "IntegratorSupervision",
@@ -515,5 +819,6 @@ __all__ = [
     "create_condition_state",
     "inactive_slots_are_zero",
     "prediction_logits",
+    "train_converged_full_replay",
     "train_condition",
 ]

@@ -26,8 +26,6 @@ from apm.continual.logt_behavioral_integrator import (
     IntegratorObservations,
     IntegratorSupervision,
     LevelSlotIntegrator,
-    build_base_observations,
-    build_node_observations,
     create_condition_state,
     inactive_slots_are_zero,
     prediction_logits,
@@ -44,6 +42,11 @@ from apm.experiments.vamp_logt_integrator_metrics import (
     FIXED_CONTROLS,
     fixed_control_logits,
     prediction_metric_rows,
+)
+from apm.experiments.vamp_logt_integrator_features import (
+    frozen_integrator_trunk_features as _trunk_features,
+    integrator_supervision as _supervision,
+    integrator_supervision_from_trunk as _supervision_from_trunk,
 )
 from apm.experiments.vamp_logt_integrator_rotated_config import (
     IntegratorPhaseConfig,
@@ -509,79 +512,6 @@ def _historical_condition(
     if condition not in choices:
         raise ValueError(f"unknown integrator condition: {condition}")
     return choices[condition]
-
-
-def _supervision(
-    config: VampLogTIntegratorConfig,
-    dependency: FrozenClassifierDependency,
-    bank: ActiveAdapterBank,
-    examples: ExampleBatch,
-    device: torch.device,
-    *,
-    base_only: bool,
-) -> IntegratorSupervision:
-    trunk = _trunk_features(config, dependency, examples.images, device)
-    return _supervision_from_trunk(
-        config,
-        dependency,
-        bank,
-        examples,
-        trunk,
-        device,
-        base_only=base_only,
-    )
-
-
-def _supervision_from_trunk(
-    config: VampLogTIntegratorConfig,
-    dependency: FrozenClassifierDependency,
-    bank: ActiveAdapterBank,
-    examples: ExampleBatch,
-    trunk: Tensor,
-    device: torch.device,
-    *,
-    base_only: bool,
-) -> IntegratorSupervision:
-    """Build direct-label supervision from one already detached trunk pass."""
-    observations = (
-        build_base_observations(
-            trunk,
-            dependency.base,
-            config.integrator.maximum_levels,
-            device,
-            config.evaluation.inference_batch_size,
-        )
-        if base_only
-        else build_node_observations(
-            bank.topology.active_nodes,
-            bank.adapters,
-            trunk,
-            dependency.base,
-            config.integrator.maximum_levels,
-            device,
-            config.evaluation.inference_batch_size,
-        )
-    )
-    slot_dim = dependency.base.hidden_dim + 10 + 1
-    if not inactive_slots_are_zero(observations, slot_dim):
-        raise RuntimeError("integrator observation contains a nonzero inactive slot")
-    return IntegratorSupervision(observations, examples.labels.detach())
-
-
-def _trunk_features(
-    config: VampLogTIntegratorConfig,
-    dependency: FrozenClassifierDependency,
-    images: Tensor,
-    device: torch.device,
-) -> Tensor:
-    from apm.continual.logt_behavioral_router import frozen_trunk_features
-
-    return frozen_trunk_features(
-        dependency.model,
-        images,
-        device,
-        config.evaluation.inference_batch_size,
-    )
 
 
 def _evaluate_step(
