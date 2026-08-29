@@ -146,6 +146,37 @@ for this protocol. If another run is authorized, the next bounded test should
 be the preregistered router-capacity sensitivity under a new protocol identity;
 it should not retune or reinterpret this completed result.
 
+## Active Experiment — LogT Prediction Integrator on VAMP-AF Rotated-MNIST
+
+The direct-prediction successor is frozen in
+`docs/logt_vamp_rotated_mnist_integrator_plan.md`. It keeps the completed
+Rotated-MNIST hierarchy protocol but replaces single-node routing with a
+residual ten-class MLP over all seven stable level slots. Its strict config is
+`configs/vamp_logt_integrator_rotated_mnist/primary.yaml`, its artifact root is
+`artifacts/vamp-logt-integrator-rotated-mnist/`, and its only runner is:
+
+```bash
+uv run python -m apm.experiments.vamp_logt_integrator_rotated_mnist \
+  --config configs/vamp_logt_integrator_rotated_mnist/primary.yaml
+```
+
+Implementation and preflight testing are complete. The four learned
+conditions compare no replay, example-balanced replay, range-balanced replay,
+and a matched-capacity frozen-base-only replay control. Fixed controls include
+the mean ensemble and label-aware best single node; full checkpoints add a
+fresh offline cumulative integrator and the existing matched joint-IID
+adapter. Focused tests cover fixed 973-value input positions, label isolation,
+exact inactive zeros, zero-residual parity, direct labels across carries,
+frozen nodes, fixed controls, exact work accounting, reporting, and
+byte-identical checkpoint resume. The integrator slice plus the relevant
+sealed-router regressions currently passes 27 tests with one expected
+sandboxed CUDA skip.
+
+Next, run the exact five-step GPU smoke. Open the five-seed, 64-step primary
+phase only if every frozen smoke gate passes, then rerun for byte-identical
+ledger verification and record the result here without changing the frozen
+plan or protocol.
+
 ## Completed Outcome — VAMP-AF Top-Two Adapter And Routing Failure
 
 The mechanism POC specified by `docs/VAMP_AF_POC_Codex_Spec.md` is implemented

@@ -45,7 +45,11 @@ def write_phase_report(
     atomic_write(directory / "RESULTS.md", markdown.encode("utf-8"))
     atomic_write(
         directory / "RESULTS.html",
-        _html(markdown, directory).encode("utf-8"),
+        _html(
+            markdown,
+            directory,
+            "Rotated-MNIST LogT behavioral router",
+        ).encode("utf-8"),
     )
     return summary
 
@@ -61,7 +65,11 @@ def write_results(
     atomic_write(run_root / "RESULTS.md", markdown.encode("utf-8"))
     atomic_write(
         run_root / "RESULTS.html",
-        _html(markdown, run_root).encode("utf-8"),
+        _html(
+            markdown,
+            run_root,
+            "Rotated-MNIST LogT behavioral router",
+        ).encode("utf-8"),
     )
     return summary
 

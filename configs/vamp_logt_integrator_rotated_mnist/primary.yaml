@@ -1,0 +1,86 @@
+experiment:
+  name: vamp-logt-prediction-integrator-rotated-mnist
+  protocol_revision: integrated-prediction-v1
+
+paths:
+  artifact_root: artifacts/vamp-logt-integrator-rotated-mnist
+  data_root: data/torchvision/MNIST/raw
+  baseline_run_root: artifacts/vamp-af-mnist/runs/c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af
+  parent_router_run_root: artifacts/vamp-logt-router-rotated-mnist/runs/97f5f70a91fa3430e244dc4fd91b67b3c8fd28e5bb1eaa0cb3d7d304e3d32896
+
+baseline:
+  run_id: c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af
+  checkpoint_sha256: 45793341113b7a44b397d8781b0590f7dcc54ca05ca2cd7d637b11244033a282
+
+parent_router:
+  run_id: 97f5f70a91fa3430e244dc4fd91b67b3c8fd28e5bb1eaa0cb3d7d304e3d32896
+  protocol_sha256: b088d56ce82908562bfb74b8e6105fd7e26aa0303cbb2da4bfdd4b4dfab3744b
+  summary_sha256: b598047f7cb044978defb872764e55e6e76022fe2dcc24534c986a928ba05535
+  implementation_commit: 2f69f3e
+
+task:
+  vamp_af_config_sha256: 0d74e6bf47656cc8e7835cb246db6108c71d921201dc38675567a87a6ecb97a3
+  rotations_deg: [0, 18, 36, 54, 72]
+  label_shifts: [0, 2, 4, 6, 8]
+  interpolation: bilinear
+  source_selection_seed: 0
+  primary_source_examples_per_context: 10000
+  smoke_source_examples_per_context: 1000
+  source_indices_sha256: 37179656c4e9b9ba6e8ff82b77941196cb6a87bbc5f02160f319f19254e5d908
+  smoke_context_steps: [1, 1, 1, 1, 1]
+  primary_context_steps: [13, 13, 13, 13, 12]
+
+benchmark:
+  macro_steps: 64
+  model_batch_size: 256
+  integrator_batch_size: 256
+  evaluation_batch_size: 128
+
+adapter:
+  epochs: 20
+  batch_size: 64
+  optimizer: AdamW
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  beta1: 0.9
+  beta2: 0.999
+  epsilon: 1.0e-8
+
+integrator:
+  maximum_levels: 7
+  hidden_widths: [1024, 512, 256]
+  dropout: 0.1
+  residual_baseline: mean_probability
+  future_slot_initialization: zero
+  residual_output_initialization: zero
+  optimizer: AdamW
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip_norm: 1.0
+  minibatch_size: 128
+  current_source_weight: 0.5
+  offline_epochs: 4
+
+phases:
+  smoke:
+    seeds: [0]
+    macro_steps: 5
+    historical_budget: 64
+    integrator_epochs_per_step: 2
+    conditions: [integrator_no_replay, integrator_example_replay, integrator_range_replay, base_example_replay]
+  primary:
+    seeds: [0, 1, 2, 3, 4]
+    macro_steps: 64
+    historical_budget: 256
+    integrator_epochs_per_step: 4
+    conditions: [integrator_no_replay, integrator_example_replay, integrator_range_replay, base_example_replay]
+
+evaluation:
+  test_subset_per_domain: 1000
+  inference_batch_size: 2048
+  full_checkpoints: [7, 15, 31, 63, 64]
+
+runtime:
+  device: auto
+  deterministic_algorithms: true
+  progress: true

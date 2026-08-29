@@ -499,7 +499,7 @@ def _evaluate_step(
         joint_logits = (
             None
             if reference is None
-            else _adapter_logits(
+            else adapter_logits(
                 reference,
                 dependency,
                 trunk,
@@ -611,13 +611,14 @@ def _fit_or_load_joint_reference(
     return result.adapter, result.example_updates
 
 
-def _adapter_logits(
+def adapter_logits(
     adapter: TopTwoAdapterState,
     dependency: FrozenClassifierDependency,
     trunk: Tensor,
     device: torch.device,
     batch_size: int,
 ) -> Tensor:
+    """Evaluate one frozen top-two adapter in bounded inference batches."""
     base = top_two_base_state(*dependency.base.tensors, device=device)
     target = TopTwoAdapterState(
         *(tensor.detach().to(device).clone() for tensor in adapter.tensors)
@@ -784,6 +785,7 @@ def _write_protocol(
 __all__ = [
     "RouterWorkCounters",
     "SeedResult",
+    "adapter_logits",
     "run_phase_seed",
     "run_workflow",
 ]

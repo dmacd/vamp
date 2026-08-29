@@ -214,6 +214,47 @@ from the behavioral-router package, but rotated data construction and workflow
 entry points remain explicit so that neither task stream can silently inherit
 the other's domain semantics.
 
+### Direct prediction integration over LogT behaviors
+
+The Rotated-MNIST prediction-integrator successor preserves the same frozen
+classifier, top-two node training, binary-counter frontier, data allocation,
+and replay samplers. It removes the node-selection target and output boundary.
+Each current or historical example is rerun through every live frozen node;
+the detached level-normalized hidden state, ten log probabilities, and active
+bit occupy the same seven stable level slots. Shifted digit labels supervise
+only the final ten-class prediction. They do not occur in the 973-value input,
+and unlike best-node router targets they remain invariant when a carry replaces
+the live frontier.
+
+The learned predictor is a fixed 973-to-1024-to-512-to-256-to-10 residual MLP.
+Its baseline is the logarithm of the equal-probability mixture of live-node
+class probabilities. A zero final layer gives exact initial parity with that
+ensemble and, on a one-node frontier, with the sole node. Input columns for
+levels not yet allocated begin at zero; inactive slots themselves are always
+exactly zero. Level positions remain semantic capacity slots rather than node
+identities, so no network or optimizer expansion occurs after a carry.
+
+Online conditions train only independent integrator parameters. Two replay
+conditions receive the fixed historical budget through the existing example-
+and range-balanced draws, while a no-replay condition and a matched MLP that
+observes only frozen-base behavior separate replay, node information, and
+central-classifier effects. Historical features are recomputed against the
+current frontier, but the direct class label is not recomputed. A fresh
+cumulative integrator at full checkpoints distinguishes representational
+capacity from online fixed-budget optimization. Parameter-free node controls,
+the label-aware best single node, and the matched joint-IID adapter retain the
+hierarchy-versus-integration decomposition.
+
+Training feature work counts shared physical node/example evaluations rather
+than multiplying reused observations by the number of integrator conditions.
+With fixed current and historical budgets and `popcount(t)` live nodes, the
+online total is the exact sum of `popcount(t)` times those budgets and remains
+`O(T log T)`. Evaluation and offline-reference work are recorded separately.
+The artifact and resume boundary otherwise follows the behavioral-router
+protocol: immutable source hashes, chained metric ledgers, checkpoint before
+retirement, exact optimizer restoration, and derived CSV, Markdown, standalone
+HTML, and plot reports.
+
 ## ImageNet-R-50 Local Vision Boundary
 
 The ImageNet-R experiment is an isolated PyTorch package under

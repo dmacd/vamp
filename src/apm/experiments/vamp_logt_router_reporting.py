@@ -144,7 +144,7 @@ def write_phase_report(
     atomic_write(directory / "RESULTS.md", markdown.encode("utf-8"))
     atomic_write(
         directory / "RESULTS.html",
-        _html(markdown, directory).encode("utf-8"),
+        _html(markdown, directory, "LogT behavioral router").encode("utf-8"),
     )
     publish_immutable_json(summary_path, summary)
     required = ("metrics.jsonl", "seed_summary.csv", "RESULTS.md", "RESULTS.html")
@@ -221,7 +221,10 @@ def write_results(
         _write_plots(run_root / "plots", all_rows, config)
     markdown = _aggregate_markdown(summary, config, summaries)
     atomic_write(run_root / "RESULTS.md", markdown.encode("utf-8"))
-    atomic_write(run_root / "RESULTS.html", _html(markdown, run_root).encode("utf-8"))
+    atomic_write(
+        run_root / "RESULTS.html",
+        _html(markdown, run_root, "LogT behavioral router").encode("utf-8"),
+    )
     summary_path = run_root / "summary.json"
     if summary_path.is_file():
         existing = load_canonical_json(summary_path)
@@ -671,7 +674,7 @@ The resolved configuration hash is `{config.config_hash}`. It uses identity plus
 """
 
 
-def _html(markdown: str, asset_root: Path) -> str:
+def _html(markdown: str, asset_root: Path, title: str) -> str:
     rendered = []
     section_open = False
     code_open = False
@@ -715,7 +718,7 @@ def _html(markdown: str, asset_root: Path) -> str:
         rendered.append("</details>")
     paragraphs = "\n".join(rendered)
     return f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>LogT behavioral router</title>
+<html><head><meta charset="utf-8"><title>{escape(title)}</title>
 <style>
 body{{font-family:system-ui;max-width:1100px;margin:2rem auto;line-height:1.5;color:#202124}}
 details{{border-top:1px solid #dadce0;padding:.4rem 0 1rem}}

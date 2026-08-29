@@ -1,0 +1,136 @@
+from dataclasses import replace
+from pathlib import Path
+
+import torch
+
+from apm.continual.top_two_adapter import top_two_base_state
+from apm.experiments.vamp_af_data import AddressCNN
+from apm.experiments.vamp_logt_integrator_rotated_config import load_config
+from apm.experiments.vamp_logt_integrator_rotated_workflow import run_phase_seed
+from apm.experiments.vamp_logt_router_data import (
+    FrozenClassifierDependency,
+    StepAllocation,
+)
+from apm.experiments.vamp_logt_router_rotated_data import RotatedMnistBenchmark
+
+
+def _dependency() -> FrozenClassifierDependency:
+    torch.manual_seed(31)
+    model = AddressCNN()
+    model.eval()
+    for parameter in model.parameters():
+        parameter.requires_grad_(False)
+    return FrozenClassifierDependency(
+        model,
+        top_two_base_state(
+            model.embedding.weight,
+            model.embedding.bias,
+            model.classifier.weight,
+            model.classifier.bias,
+        ),
+        "0" * 64,
+        (),
+    )
+
+
+def _benchmark() -> RotatedMnistBenchmark:
+    generator = torch.Generator().manual_seed(17)
+    train_images = torch.rand((12, 1, 28, 28), generator=generator)
+    test_images = torch.rand((5, 1, 28, 28), generator=generator)
+    return RotatedMnistBenchmark(
+        train_images,
+        torch.arange(12, dtype=torch.int64) % 10,
+        test_images,
+        torch.arange(5, dtype=torch.int64) % 10,
+        (0.0, 18.0, 36.0, 54.0, 72.0),
+        (0, 2, 4, 6, 8),
+        (
+            StepAllocation(1, 0, (0, 1), (2, 3), (4,)),
+            StepAllocation(2, 1, (0, 1), (2, 3), (4,)),
+        ),
+        ((0, 1),) * 5,
+    )
+
+
+def test_integrator_protocol_is_the_exact_vamp_af_task() -> None:
+    config = load_config(
+        "configs/vamp_logt_integrator_rotated_mnist/primary.yaml"
+    )
+    assert config.task.rotations_deg == (0.0, 18.0, 36.0, 54.0, 72.0)
+    assert config.task.label_shifts == (0, 2, 4, 6, 8)
+    assert config.integrator.maximum_levels == 7
+    assert config.integrator.hidden_widths == (1024, 512, 256)
+    assert config.primary.historical_budget == 256
+    assert config.primary.seeds == (0, 1, 2, 3, 4)
+
+
+def test_rotated_two_step_integrator_report_and_resume_are_exact(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source = load_config(
+        "configs/vamp_logt_integrator_rotated_mnist/primary.yaml"
+    )
+    config = replace(
+        source,
+        artifact_root=tmp_path / "artifacts",
+        task=replace(source.task, smoke_context_steps=(1, 1, 0, 0, 0)),
+        benchmark=replace(
+            source.benchmark,
+            model_batch_size=2,
+            integrator_batch_size=2,
+            evaluation_batch_size=1,
+        ),
+        adapter=replace(source.adapter, epochs=1, batch_size=4),
+        integrator=replace(
+            source.integrator,
+            dropout=0.0,
+            minibatch_size=4,
+        ),
+        smoke=replace(
+            source.smoke,
+            macro_steps=2,
+            historical_budget=2,
+            integrator_epochs_per_step=1,
+        ),
+        evaluation=replace(
+            source.evaluation,
+            test_subset_per_domain=2,
+            inference_batch_size=8,
+        ),
+        runtime=replace(source.runtime, device="cpu", progress=False),
+    )
+    benchmark = _benchmark()
+    monkeypatch.setattr(
+        "apm.experiments.vamp_logt_integrator_rotated_workflow.build_benchmark",
+        lambda _config, _phase, _seed: benchmark,
+    )
+    run_root = tmp_path / "run"
+    first = run_phase_seed(
+        config,
+        "smoke",
+        config.smoke,
+        0,
+        _dependency(),
+        run_root,
+        torch.device("cpu"),
+    )
+    metrics_before = (first.directory / "metrics.jsonl").read_bytes()
+    second = run_phase_seed(
+        config,
+        "smoke",
+        config.smoke,
+        0,
+        _dependency(),
+        run_root,
+        torch.device("cpu"),
+    )
+    assert first.summary == second.summary
+    assert (first.directory / "metrics.jsonl").read_bytes() == metrics_before
+    assert first.summary["final_macro_step"] == 2
+    assert first.summary["acceptance"]["exact_historical_budget"]
+    assert first.summary["acceptance"]["fixed_budget_training_work"]
+    assert first.summary["acceptance"]["one_node_initial_parity"]
+    report = (first.directory / "RESULTS.md").read_text(encoding="utf-8")
+    assert "prediction integrator" in report
+    assert "Labels supervise only the final ten-class integrator output" in report
