@@ -1,0 +1,110 @@
+experiment:
+  name: vamp-logt-dense-permuted-mnist
+  protocol_revision: dense-full-model-v1
+
+paths:
+  artifact_root: artifacts/vamp-logt-mlp-permuted-mnist
+  data_root: data/torchvision/MNIST/raw
+
+benchmark:
+  macro_steps: 64
+  permutation_seeds: [1001, 1002, 1003, 1004, 1005, 1006, 1007]
+  stream_seed: 20260827
+  model_batch_size: 256
+  observer_batch_size: 256
+  evaluation_batch_size: 128
+
+calibration:
+  candidate_widths:
+    - [1024, 1024, 512]
+    - [1536, 1536, 768]
+    - [2048, 2048, 1024]
+  seeds: [0, 1, 2]
+  split_seed: 20260831
+  training_source_examples: 50000
+  validation_source_examples: 10000
+  dropout: 0.2
+  optimizer:
+    optimizer: AdamW
+    learning_rate: 0.001
+    weight_decay: 0.0001
+    batch_size: 256
+    gradient_clip_norm: 1.0
+  convergence:
+    minimum_epochs: 20
+    maximum_epochs: 100
+    improvement_delta: 0.0001
+    learning_rate_patience: 5
+    learning_rate_factor: 0.5
+    minimum_learning_rate: 0.00001
+    convergence_patience: 10
+  identity_mean_accuracy_minimum: 0.99
+  identity_seed_zero_accuracy_minimum: 0.99
+  pooled_gap_from_widest_maximum: 0.0025
+
+node:
+  epochs: 20
+  dropout: 0.2
+  optimizer:
+    optimizer: AdamW
+    learning_rate: 0.001
+    weight_decay: 0.0001
+    batch_size: 64
+    gradient_clip_norm: 1.0
+
+observer:
+  maximum_levels: 7
+  inference_batch_size: 2048
+  hidden_normalization: per_example_layer_norm
+
+router:
+  maximum_levels: 7
+  hidden_widths: [1024, 512, 256]
+  dropout: 0.1
+  optimizer: AdamW
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip_norm: 1.0
+  minibatch_size: 128
+  epochs_per_step: 4
+  target_temperature: 0.10
+  conditions: [router_current_hard, router_uniform_hard, router_range_hard, router_uniform_soft, router_range_soft]
+
+integrator:
+  maximum_levels: 7
+  hidden_widths: [1024, 512, 256]
+  dropout: 0.1
+  optimizer: AdamW
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip_norm: 1.0
+  minibatch_size: 128
+  current_source_weight: 0.5
+  epochs_per_step: 4
+  offline_epochs: 4
+  conditions: [integrator_current_only, integrator_uniform_replay, integrator_range_replay, integrator_base_uniform_replay]
+
+online:
+  seeds: [0, 1, 2, 3, 4]
+  historical_budget: 256
+
+ceiling:
+  restarts_per_step: 3
+  convergence:
+    minimum_epochs: 20
+    maximum_epochs: 200
+    improvement_delta: 0.0001
+    learning_rate_patience: 5
+    learning_rate_factor: 0.5
+    minimum_learning_rate: 0.00001
+    convergence_patience: 10
+
+evaluation:
+  test_subset_per_domain: 1000
+  full_checkpoints: [7, 15, 31, 63, 64]
+  headline_checkpoints: [15, 31, 63]
+
+runtime:
+  device: auto
+  deterministic_algorithms: true
+  progress: true

@@ -12,6 +12,102 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Exploratory Outcome — Ungated Dense-base LogT on Permuted-MNIST
+
+The post-hoc ungated successor to the strict calibration stop is complete. Its
+config is `configs/vamp_logt_mlp_permuted_mnist_ungated/primary.yaml`, its
+amendment is recorded in
+`docs/logt_vamp_permuted_mnist_dense_mlp_three_seed_amendment.md`, and its
+source-run identity is
+`d38c612562699eb55c578a48a8ea94639596c4009a539c1092b63b76eb4f26c0`.
+It authenticated the strict run's full 18-fit calibration ledger, selected the
+smallest 1024/1024/512 MLP under an explicit no-gate successor rule, and used
+its seed-zero identity checkpoint as the shared 2,383,370-parameter base. The
+identity test accuracy was 98.24%; the pooled calibration test accuracy was
+98.27%. These test values describe the already-selected successor and did not
+drive width selection.
+
+All hierarchy tapes and bounded online runs completed. The generation config
+originally declared five seeds, and all five online artifacts had completed
+before the user reduced the exploratory analysis to seeds 0, 1, and 2. The
+artifact-local immutable amendment excludes online seeds 3 and 4 from every
+primary number, criterion, and plot. Converged-ceiling seeds 0 through 2 each
+completed all 64 steps with three independent restarts and validation-only
+epoch/restart selection. The runner entered ceiling seed 3 before interruption;
+its two incomplete steps remain recoverable and explicitly excluded. The
+three-seed primary report contains the expected 192 learned-ceiling cells.
+
+At headline macro-steps 15, 31, and 63, uniform-history replay averaged
+87.84% ± 0.18% accuracy and 0.4563 ± 0.0090 cross-entropy across the three
+seed-level means. Current-only integration reached 74.59% ± 1.19% and
+0.8113 ± 0.0312; the equal-probability mean reached 82.82% ± 0.58% and
+0.7816 ± 0.0134; the fresh four-epoch cumulative integrator reached
+89.55% ± 0.25% and 0.3775 ± 0.0083; and the converged full-replay integrator
+reached 89.94% ± 0.27% and 0.3662 ± 0.0056. Replay therefore gained 13.25
+accuracy points over current-only training, closed 81.8% of the
+current-only-to-four-epoch cross-entropy gap, and remained 2.10 accuracy points
+and 0.0901 cross-entropy behind the empirical ceiling. Range-balanced replay
+was 0.10 points more accurate but 0.0084 cross-entropy worse than uniform
+replay, which is a practical tie at n=3 rather than evidence for either
+sampler.
+
+Replay improved rather than sacrificed the current archive: uniform replay
+reached 90.45% on the current range versus 89.76% for current-only training,
+while improving older-range accuracy from 74.55% to 87.50%. The full-node
+integrator beat the base-only replay ablation by 53.86 accuracy points. The
+best replay integrator also beat the cross-entropy-selected soft range router
+on both metrics, though the hard uniform router was 0.26 points more accurate
+and far worse calibrated. All seven frozen decisions and all structural,
+budget, zero-slot, frozen-node, and decreasing-loss checks pass. The focused
+serial regression suite passes all 10 selected tests; its benchmark-marked
+CUDA smoke remains separately deselected in the sandbox, and the explicit RTX
+4090 structural smoke passed before the production run.
+
+This is promising but exploratory evidence. Three seeds do not give a precise
+uncertainty estimate, and the converged fit is an empirical ceiling for the
+fixed features, architecture, and search rather than a mathematical optimum.
+The complete Markdown/HTML report, condition table, machine-readable summary,
+and high-contrast plots are under
+`artifacts/vamp-logt-mlp-permuted-mnist-ungated/runs/d38c612562699eb55c578a48a8ea94639596c4009a539c1092b63b76eb4f26c0/analysis/3-seed-primary/`.
+No required experiment work remains. Completing ceiling seeds 3 and 4 is an
+optional predeclared confirmation extension if tighter uncertainty is later
+wanted.
+
+## Completed Calibration Stop — Dense-base LogT on Permuted-MNIST
+
+The CNN-confound successor is implemented and frozen in
+`docs/logt_vamp_permuted_mnist_dense_mlp_protocol.md`. Its isolated config is
+`configs/vamp_logt_mlp_permuted_mnist/primary.yaml`, and its one resumable CLI
+owns `calibration`, `hierarchy`, `online`, `ceiling`, and `all` phases. The
+implementation includes the three-hidden-layer raw-pixel MLP width sweep,
+validation-only selection, full-affine de-novo node deltas, immutable 127-node
+hierarchy tapes, the complete matched router and integrator matrices, pooled
+MLP and four-epoch cumulative references, an every-step three-restart
+converged ceiling, chained ledgers, exact checkpoint resume, high-contrast
+plots, literal condition descriptions, and the seven frozen decisions.
+
+The focused CPU suite and explicit RTX 4090 structural smoke pass. The complete
+18-fit calibration sweep then finished under config hash
+`067f7dd57bf9501b745fdcee3ceb9e6be39090525bf17f563e7187d2635fce26`.
+Mean identity validation accuracy was 98.130%, 98.053%, and 98.087% for widths
+1024/1024/512, 1536/1536/768, and 2048/2048/1024 respectively; the matching
+seed-zero accuracies were 98.190%, 98.110%, and 98.020%. All six values missed
+their frozen 99.0% gates. Mean pooled validation accuracy was 98.145%, 97.943%,
+and 98.001%; every width satisfied the separate requirement of being within
+0.25 percentage points of the widest model.
+
+The authoritative calibration summary therefore records `status: ineligible`
+and no selected width. Test metrics were not evaluated, no shared base was
+published, and the hierarchy, online, and ceiling phases did not run. This is
+the intended preregistered stop, not a training or infrastructure failure. The
+durable calibration evidence is under
+`artifacts/vamp-logt-mlp-permuted-mnist/runs/067f7dd57bf9501b745fdcee3ceb9e6be39090525bf17f563e7187d2635fce26/`.
+No work remains under this frozen protocol. Any attempt to improve the dense
+base training recipe or change the 99% threshold must be specified as a new
+successor protocol; the completed ungated successor above does exactly that
+without altering this negative result. The old CNN-based Permuted-MNIST
+artifacts remain immutable context and are not a formal paired comparator.
+
 ## Completed Outcome — Integrated LogT Behavioral Router on Permuted-MNIST
 
 The experiment specified by

@@ -186,6 +186,45 @@ and reuses completed seed summaries without another training update. Reports
 are derived projections: CSV and Markdown accompany nine PNG views, and the
 standalone HTML embeds those images and exposes collapsible sections.
 
+### Dense raw-pixel Permuted-MNIST successor
+
+The dense-base successor is a separate protocol rather than a model flag on
+the sealed CNN experiments. Its classifier is exactly three
+`Linear -> ReLU -> Dropout` hidden blocks and one affine digit head; no
+convolution, augmentation, ensemble, or internal normalization is permitted.
+A validation-only sweep chooses the smallest eligible hidden width. Pooled
+eight-permutation calibration weights are disposable selection evidence; the
+selected seed-zero identity checkpoint is the sole shared base.
+
+Every temporal node clones that entire base and trains all four affine weights
+and biases. AdamW, including decoupled weight decay, acts on the effective
+clone rather than on a zero delta. The committed artifact is then the complete
+trained-minus-base delta. Carries restart from the base on the exact child
+union and never inherit child weights. Unlike the earlier live-bank storage,
+all created nodes remain in an immutable hierarchy tape, and every downstream
+router, integrator, pooled reference, and ceiling fit authenticates the same
+per-step frontier manifest and node hashes.
+
+The observer exposes only each active node's per-example-normalized final ReLU
+activation, ten log probabilities, and active bit in seven stable level slots.
+The final hidden width therefore changes observer capacity only through the
+preregistered classifier-width selection. Inactive slots remain exact zeros;
+labels and temporal/task metadata stay behind supervision and evaluation
+boundaries. The matched router preserves single-node selection, while the
+residual integrator consumes all slots and starts at equal-probability mean
+parity.
+
+The converged ceiling is reconstructed at every step from all cumulative
+observer-training rows and disjoint temporal-validation rows. Each of three
+fresh restarts owns independent parameters and optimizer state. Validation
+alone controls learning rate, stopping, best-epoch restoration, and restart
+selection; transformed test rows are opened only after selection. The ceiling
+is an empirical bound for this fixed feature and integrator family, not a
+claim about every possible predictor. Online epoch matching deliberately gives
+current-only integration 8 optimizer updates and replay integration 16 at the
+production sizes, and reports must state that there is no update-matched
+control.
+
 ### VAMP-AF Rotated-MNIST successor boundary
 
 The Rotated-MNIST successor reuses these LogT graph, router, replay, evaluation,

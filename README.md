@@ -57,6 +57,8 @@ specific benchmark, not a claim of general continual-learning performance.
 | Integrated LogT behavioral router | Completed research POC | Five 64-step Permuted-MNIST seeds tested hard/soft supervision and fixed-budget example/range replay. The best learned router closed 86.37% of the most-recent baseline's cross-entropy gap to the oracle, while a fixed largest-range policy still achieved lower mean regret. |
 | Direct LogT prediction integrator on Permuted-MNIST | Completed mixed negative result | Example-balanced replay improved high-checkpoint cross-entropy from 1.09155 nats without replay to 0.78170, but closed only 71.30% of the gap to the four-epoch cumulative reference and did not beat the sealed soft router. Five of seven preregistered criteria passed. |
 | Converged Permuted-MNIST integrator ceiling | Completed certified ceiling | Fresh three-restart full-replay fits trained to validation convergence at every step reached 0.57618 nats and 81.779% accuracy at checkpoints 15, 31, and 63. They beat the four-epoch cumulative reference by 0.08077 nats and 2.594 accuracy points, showing that the fixed frozen-node features support substantially better integration than the bounded online learner found. |
+| Dense-base LogT on Permuted-MNIST | Calibration-complete negative gate | The three preregistered raw-pixel MLP widths averaged 98.053% to 98.130% identity validation accuracy, below the frozen 99.0% requirement. No width was selected, no test metric was evaluated, and the hierarchy/router/integrator phases correctly did not run. |
+| Ungated dense-base LogT on Permuted-MNIST | Completed promising exploratory result | A separately hashed successor accepted the smallest raw-pixel MLP and reports three primary seeds. Uniform-history integration reached 87.84% accuracy and 0.4563 cross-entropy at checkpoints 15, 31, and 63, versus 74.59% and 0.8113 without replay and 89.94% and 0.3662 for the converged full-replay integrator. All seven frozen comparisons passed; n=3 remains exploratory. |
 | Integrated LogT router on VAMP-AF contexts | Completed negative transfer result | The unchanged router protocol improved substantially over no replay and fixed recent-range routing on five-seed Rotated-MNIST, but closed only 33.79% of the oracle gap and traded a large old-range gain for a 10.57-point current-range accuracy loss. |
 | Direct LogT prediction integrator on VAMP-AF contexts | Completed mixed negative result | Example-balanced replay over all frozen nodes closed 94.82% of the no-replay-to-offline cross-entropy gap and beat base-only replay, but lost 9.32 points of current-range accuracy and remained 1.35 points below the sealed router's accuracy. Five of seven preregistered criteria passed. |
 | Converged full-replay integrator ceiling on VAMP-AF contexts | Completed certified ceiling | A fresh three-restart integrator trained to validation convergence on all cumulative examples at every Rotated-MNIST step reached 0.59862 nats and 77.287% accuracy at the three high checkpoints. It beat the parent's four-epoch offline reference by 0.12418 nats and 8.169 accuracy points, isolating bounded sequential replay and optimization as major limitations. |
@@ -309,6 +311,48 @@ reference by 0.08077 nats and 2.594 points. This is an empirical ceiling for
 the fixed features, MLP, data allocation, optimizer family, and validation
 search, not a mathematical upper bound. Reports and durable state remain under
 the two ignored `artifacts/vamp-logt-integrator*-permuted-mnist/` trees.
+
+The [dense-base successor](docs/logt_vamp_permuted_mnist_dense_mlp_protocol.md)
+removes the CNN locality confound. It first selects among three preregistered
+raw-pixel MLP widths using disjoint identity and pooled eight-permutation
+validation views, then trains every temporal node by adapting all four affine
+layers. The matched router, online all-node integrator, pooled single-MLP
+reference, and three-restart converged ceiling all consume the same immutable
+node tape:
+
+```bash
+uv run python -m apm.experiments.vamp_logt_mlp_permuted_mnist \
+  --config configs/vamp_logt_mlp_permuted_mnist/primary.yaml \
+  --phase all
+```
+
+Phases are resumable and may be selected as `calibration`, `hierarchy`,
+`online`, or `ceiling`; prerequisites run or authenticate automatically. The
+accelerator-backed calibration completed all 18 width/seed/fit cells under
+config hash
+`067f7dd57bf9501b745fdcee3ceb9e6be39090525bf17f563e7187d2635fce26`.
+Mean identity validation accuracy was 98.130%, 98.053%, and 98.087% from the
+smallest to largest width, and every seed-zero identity result was also below
+the frozen 99.0% gate. Pooled validation accuracy stayed within the allowed
+0.25 percentage points of the widest model for all three widths, so identity
+accuracy alone caused the preregistered `ineligible` stop. The run did not
+evaluate the test split, publish a shared base, or start the hierarchy,
+router, integrator, or ceiling phases. There is therefore no dense-base online
+result to compare with the sealed CNN runs; changing the training recipe or
+acceptance threshold would require a new protocol.
+
+That new protocol now exists as the explicitly post-hoc
+[ungated successor](docs/logt_vamp_permuted_mnist_dense_mlp_ungated_successor.md).
+It authenticates the strict calibration evidence, selects the smallest
+1024/1024/512 candidate without an accuracy gate, and runs the complete dense
+hierarchy, router, integrator, and converged-ceiling comparison. A
+[three-seed amendment](docs/logt_vamp_permuted_mnist_dense_mlp_three_seed_amendment.md)
+limits the primary exploratory report to seeds 0, 1, and 2. At headline
+checkpoints, uniform-history replay reached 87.84% accuracy and 0.4563
+cross-entropy, compared with 74.59% and 0.8113 for current-only integration and
+89.94% and 0.3662 for the converged full-replay integrator. All seven frozen
+comparisons passed. This is a promising research result, not a supported
+benchmark claim; completing two more ceiling seeds remains optional.
 
 The no-retuning successor applies the same protocol to VAMP-AF's exact five
 Rotated-MNIST contexts without loading or changing the spatial AF tree:
