@@ -22,6 +22,8 @@ dist/
 /artifacts/vamp-logt-router-rotated-mnist/
 /artifacts/vamp-logt-integrator-rotated-mnist/
 /artifacts/vamp-logt-integrator-ceiling-rotated-mnist/
+/artifacts/vamp-logt-integrator-permuted-mnist/
+/artifacts/vamp-logt-integrator-ceiling-permuted-mnist/
 /external/imagenetr50/
 /openrouter-tinyworlds-key.txt
 /openrouter-tinyworlds-no-byok-attestation.json

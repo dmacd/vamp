@@ -1,0 +1,76 @@
+experiment:
+  name: vamp-logt-prediction-integrator-permuted-mnist
+  protocol_revision: integrated-prediction-permuted-v1
+
+paths:
+  artifact_root: artifacts/vamp-logt-integrator-permuted-mnist
+  data_root: data/torchvision/MNIST/raw
+  baseline_run_root: artifacts/vamp-af-mnist/runs/c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af
+  parent_router_run_root: artifacts/vamp-logt-router-mnist/runs/4b1ed9cf715aa42a951dd71fe2242382ef5f4319d4b10cf0b6e3a4633f7e0b69
+
+baseline:
+  run_id: c3ad77df09fde94a75e2464450c21486d632bf4f60afe44c9602c6a86acf61af
+  checkpoint_sha256: 45793341113b7a44b397d8781b0590f7dcc54ca05ca2cd7d637b11244033a282
+
+parent_router:
+  run_id: 4b1ed9cf715aa42a951dd71fe2242382ef5f4319d4b10cf0b6e3a4633f7e0b69
+  protocol_sha256: 022dd22f5f225555187f00fd7dd3c7e24fbc097a458e7fb67c3d4f48c3054ab6
+  summary_sha256: 317ccaa6c23ede41d11b53cd40f46c0971700eed52b89d75f04ede3125c9ecc5
+  implementation_commit: 2f69f3e
+
+benchmark:
+  macro_steps: 64
+  permutation_seeds: [1001, 1002, 1003, 1004, 1005, 1006, 1007]
+  stream_seed: 20260827
+  model_batch_size: 256
+  integrator_batch_size: 256
+  evaluation_batch_size: 128
+
+adapter:
+  epochs: 20
+  batch_size: 64
+  optimizer: AdamW
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  beta1: 0.9
+  beta2: 0.999
+  epsilon: 1.0e-8
+
+integrator:
+  maximum_levels: 7
+  hidden_widths: [1024, 512, 256]
+  dropout: 0.1
+  residual_baseline: mean_probability
+  future_slot_initialization: zero
+  residual_output_initialization: zero
+  optimizer: AdamW
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip_norm: 1.0
+  minibatch_size: 128
+  current_source_weight: 0.5
+  offline_epochs: 4
+
+phases:
+  smoke:
+    seeds: [0]
+    macro_steps: 15
+    historical_budget: 64
+    integrator_epochs_per_step: 2
+    conditions: [integrator_no_replay, integrator_example_replay, integrator_range_replay, base_example_replay]
+  primary:
+    seeds: [0, 1, 2, 3, 4]
+    macro_steps: 64
+    historical_budget: 256
+    integrator_epochs_per_step: 4
+    conditions: [integrator_no_replay, integrator_example_replay, integrator_range_replay, base_example_replay]
+
+evaluation:
+  test_subset_per_domain: 1000
+  inference_batch_size: 2048
+  full_checkpoints: [7, 15, 31, 63, 64]
+
+runtime:
+  device: auto
+  deterministic_algorithms: true
+  progress: true

@@ -291,6 +291,102 @@ not silently remove the trace. The focused integrator/ceiling regression slice
 passes 15 tests, and the derived rerender left the sealed parent protocol,
 summary, and five primary ledgers byte-identical.
 
+## Completed Outcome — LogT Prediction Integrator on Permuted-MNIST
+
+The no-retuning cross-task replication is frozen in
+`docs/logt_vamp_permuted_mnist_integrator_protocol.md`. It uses the completed
+eight-domain Permuted-MNIST hierarchy: the identity ordering plus permutation
+seeds 1001 through 1007, independently shuffled within every eight-step block.
+It keeps the same 973-to-1024-to-512-to-256-to-10 residual MLP, stable level
+slots, fixed replay budgets, disjoint 256/256/128 allocations, five seeds, and
+64-step horizon as the Rotated-MNIST integrator. Its strict config is
+`configs/vamp_logt_integrator_permuted_mnist/primary.yaml`, its protocol
+identity is
+`78215f1a411accb0cf1eb4dfbde89fa05b80fcbcefc415756ae58684f2901bd6`,
+and its runner is:
+
+```bash
+uv run python -m apm.experiments.vamp_logt_integrator_permuted_mnist \
+  --config configs/vamp_logt_integrator_permuted_mnist/primary.yaml
+```
+
+The smoke gate and all five primary seeds completed on the local RTX 4090. At
+checkpoints 15, 31, and 63, `integrator_example_replay` was the best online
+replay condition. It averaged 0.78170-nat cross-entropy and 75.801% accuracy,
+compared with 1.09155 nats and 64.284% without replay and 0.97631 nats and
+75.145% for the parameter-free mean ensemble. Full-node replay also beat the
+matched base-only replay control, 0.78170 versus 1.82054 nats and 75.801%
+versus 38.195%, so the frozen node-specific behaviors supplied useful
+information beyond the base classifier.
+
+The online main hypothesis remains a mixed negative result. Example replay
+closed 71.30% of the positive no-replay-to-four-epoch-offline cross-entropy
+gap, below the frozen 75% gate. It did satisfy the retention criterion:
+older-range cross-entropy fell from 1.12743 to 0.80974 nats while current-range
+accuracy changed from 80.469% to 80.365%, a loss of only 0.104 points. Against
+the sealed Permuted-MNIST `example_soft` router, however, the integrator was
+worse on both required metrics: 0.78170 versus 0.75049 nats and 75.801% versus
+78.877% accuracy. Criteria 1, 3, 4, 6, and 7 pass; criteria 2 and 5 fail.
+
+## Completed Outcome — Converged Permuted-MNIST Integrator Ceiling
+
+The same frozen protocol also specifies a separately authenticated full-replay
+ceiling. Its config is
+`configs/vamp_logt_integrator_ceiling_permuted_mnist/primary.yaml`, its content
+identity is
+`5ba377fef6cdf430f357fb61732f83130b061d0cbebd8fbc9de0cd3621a73ccd`,
+and its runner is:
+
+```bash
+uv run python -m apm.experiments.vamp_logt_integrator_ceiling_permuted_mnist \
+  --config configs/vamp_logt_integrator_ceiling_permuted_mnist/primary.yaml \
+  --phase primary
+```
+
+All five 64-step seeds and all 960 primary restarts completed in 3 hours and 8
+seconds. Every restart converged before the 200-epoch failure cap; selected
+fits ran 59.444 epochs on average and at most 81. Every seed passed all eight
+finite-metric, cumulative-archive, exact-presentation, exact-feature-work,
+fresh-restart, parent-parity, converged-selection, and test/validation-isolation
+gates.
+
+Across checkpoints 15, 31, and 63, the certified ceiling reached 0.57618-nat
+cross-entropy and 81.779% accuracy. It beat online example replay by 0.20552
+nats and 5.979 accuracy points and beat the four-epoch cumulative reference by
+0.08077 nats and 2.594 points. Both improvements held in all five seeds; the
+per-seed ceiling means ranged from 0.55636 to 0.58834 nats and from 81.398% to
+82.425% accuracy. The ceiling also beat the sealed soft router by 0.17431 nats
+and 2.902 points, although it remained 0.25258 nats and 7.963 points behind the
+label-aware best-node oracle.
+
+The comparison separates two material deficits without assigning a unique
+cause to either. Moving from bounded online replay to a fresh four-epoch
+full-replay fit improves accuracy by 3.385 points and cross-entropy by 0.12475
+nats; training that same full cumulative allocation to validation convergence
+with three restarts adds another 2.594 points and 0.08077 nats. Full replay,
+fresh optimization, and additional convergence work are therefore all part of
+the observed gap. This protocol does not isolate replay coverage, warm-start
+path dependence, epoch count, and restart selection into separate causal
+effects.
+
+At final step 64, where the frontier contains only one level-6 node, the
+ceiling still improves the five-seed mean from 86.566% and 0.53658 nats for
+that node to 87.248% and 0.43817 nats. That final gain is recalibration and
+nonlinear remapping of one node's frozen behavior, not cross-node integration.
+At the high-activity checkpoints, by contrast, the larger gains establish that
+the fixed multi-node features and MLP support substantially better task-free
+prediction than the online learner recovered.
+
+Completed reruns restored both online and ceiling seeds at 64/64 without
+changing either protocol, either aggregate summary, or any of the ten primary
+metric-ledger hashes. The focused shared, Rotated, and Permuted integrator
+regression slice passes 21 tests serially. The parent accuracy and
+cross-entropy reports now overlay the certified every-step ceiling as a thick
+cyan hexagon trace with distinct color, marker, and dash encodings for all
+conditions. No required implementation work remains. A causal follow-up would
+hold full replay fixed while separately varying epoch budget, warm start, and
+restart count; the present ceiling should not be relabeled as that ablation.
+
 ## Completed Outcome — VAMP-AF Top-Two Adapter And Routing Failure
 
 The mechanism POC specified by `docs/VAMP_AF_POC_Codex_Spec.md` is implemented

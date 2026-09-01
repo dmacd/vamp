@@ -216,15 +216,15 @@ the other's domain semantics.
 
 ### Direct prediction integration over LogT behaviors
 
-The Rotated-MNIST prediction-integrator successor preserves the same frozen
-classifier, top-two node training, binary-counter frontier, data allocation,
-and replay samplers. It removes the node-selection target and output boundary.
-Each current or historical example is rerun through every live frozen node;
-the detached level-normalized hidden state, ten log probabilities, and active
-bit occupy the same seven stable level slots. Shifted digit labels supervise
-only the final ten-class prediction. They do not occur in the 973-value input,
-and unlike best-node router targets they remain invariant when a carry replaces
-the live frontier.
+The Rotated-MNIST and Permuted-MNIST prediction-integrator successors preserve
+the same frozen classifier, top-two node training, binary-counter frontier,
+data allocation, and replay samplers. They remove the node-selection target
+and output boundary. Each current or historical example is rerun through every
+live frozen node; the detached level-normalized hidden state, ten log
+probabilities, and active bit occupy the same seven stable level slots. The
+ordinary or context-shifted digit label supervises only the final ten-class
+prediction. It does not occur in the 973-value input, and unlike a best-node
+router target it remains invariant when a carry replaces the live frontier.
 
 The learned predictor is a fixed 973-to-1024-to-512-to-256-to-10 residual MLP.
 Its baseline is the logarithm of the equal-probability mixture of live-node
@@ -233,6 +233,15 @@ ensemble and, on a one-node frontier, with the sole node. Input columns for
 levels not yet allocated begin at zero; inactive slots themselves are always
 exactly zero. Level positions remain semantic capacity slots rather than node
 identities, so no network or optimizer expansion occurs after a carry.
+
+The Permuted-MNIST integrator has its own strict configuration, workflow,
+reporting namespace, and artifact root. It reuses the authenticated identity
+ordering plus permutation seeds 1001 through 1007 and the existing stream seed
+that independently shuffles all eight domains inside each eight-step block.
+Neither domain identity, permutation seed, within-block position, nor range
+endpoint enters the integrator. The Rotated-MNIST successor instead retains
+its five blocked transformed contexts. Shared model and accounting helpers do
+not merge these task-specific data or artifact boundaries.
 
 Online conditions train only independent integrator parameters. Two replay
 conditions receive the fixed historical budget through the existing example-
@@ -261,9 +270,10 @@ The four-epoch `offline_cumulative_integrator` in the original prediction-
 integrator protocol is an optimization reference, not a ceiling. Its fixed
 epoch count and sparse checkpoint schedule cannot establish the best predictor
 available from the frozen node behaviors. The separately versioned
-`integrated-prediction-ceiling-v1` protocol therefore rebuilds the authenticated
-hierarchy and requires exact parent mean-ensemble parity before fitting a
-stronger reference.
+`integrated-prediction-ceiling-v1` Rotated protocol and
+`integrated-prediction-ceiling-permuted-v1` Permuted protocol therefore rebuild
+their authenticated hierarchies and require exact parent mean-ensemble parity
+before fitting a stronger reference.
 
 At every macro-step, each ceiling restart is initialized independently and
 trains on every cumulative integrator-training example with features
