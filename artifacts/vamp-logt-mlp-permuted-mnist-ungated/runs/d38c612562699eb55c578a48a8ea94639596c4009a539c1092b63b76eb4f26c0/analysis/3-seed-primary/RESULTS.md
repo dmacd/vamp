@@ -83,6 +83,9 @@ Each cell is accuracy / cross-entropy, averaged across the three seeds and all e
 | Base-only integrator — uniform-history replay | integrator control | persistent | 256 current | 256 history | uniform examples | 4 | no |
 | Fresh cumulative integrator — four epochs | optimization reference | fresh at checkpoint | all cumulative | all cumulative | full replay | 4 | no |
 | Pooled single MLP over cumulative node-training data | model reference | fresh at checkpoint | all cumulative | all cumulative | full replay | 20 | no |
+| Frozen calibrated base MLP | post-hoc model diagnostic | frozen | none | none | none | 0 | seed 0 only |
+| Converged cumulative MLP | post-hoc model diagnostic | fresh at checkpoint | all cumulative node-training rows | all cumulative | full replay | 20–200 | seed 0; validation; 3 restarts |
+| Converged integrator over the frozen base MLP | post-hoc integration diagnostic | fresh at checkpoint | all cumulative observer rows | all cumulative | full replay | 20–200 | seed 0; validation; 3 restarts |
 | Converged full-replay integrator ceiling | optimization ceiling | fresh every step | all cumulative | all cumulative | full replay | 20–200 | yes; 3 restarts |
 | Equal-probability mean of active nodes | fixed control | none | none | none | none | 0 | no |
 | Newest temporal range | fixed control | none | none | none | none | 0 | no |
@@ -90,6 +93,42 @@ Each cell is accuracy / cross-entropy, averaged across the three seeds and all e
 | Uniform random active node | fixed control | none | none | none | none | 0 | no |
 | Best active node (label-aware oracle) | offline oracle | none | none | none | none | 0 | uses labels directly |
 | Best active node (label-aware router oracle) | offline oracle | none | none | none | none | 0 | uses labels directly |
+
+## Seed-0 cumulative baseline extension
+
+These are post-hoc diagnostics from one stream seed, evaluated only at the five existing full checkpoints. They do not have a run-to-run uncertainty estimate and are not included in the main three-seed decision rules. Each metric equally weights the full 10,000-example test set for every domain seen by that checkpoint. Validation cross-entropy selects epochs and restarts; test labels select nothing.
+
+The converged cumulative MLP starts from the calibrated base and trains all four affine layers on every node-training row seen so far. The converged base-only integrator keeps that calibrated base frozen and trains only an integrator on its hidden activation and class probabilities using every observer row seen so far. The converged all-node integrator remains the comparison that can use every frozen temporal node.
+
+Each cell is accuracy / cross-entropy.
+
+| Macro-step | Frozen base | Fixed 20-epoch cumulative MLP | Converged cumulative MLP | Converged frozen-base integrator | Converged all-node integrator |
+|---:|---:|---:|---:|---:|---:|
+| 7 | 22.78% / 3.3523 | 82.67% / 0.9663 | 79.45% / 0.6682 | 38.96% / 1.7680 | 82.83% / 0.6944 |
+| 15 | 21.11% / 3.4086 | 87.01% / 0.6486 | 85.10% / 0.4758 | 42.96% / 1.7146 | 86.48% / 0.5104 |
+| 31 | 21.11% / 3.4086 | 90.92% / 0.5030 | 89.08% / 0.3704 | 51.03% / 1.5055 | 90.84% / 0.3378 |
+| 63 | 21.11% / 3.4086 | 92.42% / 0.4343 | 91.92% / 0.2784 | 55.44% / 1.3328 | 93.26% / 0.2372 |
+| 64 | 21.11% / 3.4086 | 93.06% / 0.3820 | 92.48% / 0.2663 | 57.33% / 1.3124 | 93.41% / 0.2307 |
+
+### Validation-selected convergence
+
+| Macro-step | Cumulative MLP: epochs / selected restart / validation CE | Frozen-base integrator: epochs / selected restart / validation CE |
+|---:|---:|---:|
+| 7 | 48 / 2 / 0.7797 | 55 / 1 / 1.8105 |
+| 15 | 48 / 2 / 0.5362 | 64 / 0 / 1.7448 |
+| 31 | 48 / 2 / 0.3752 | 62 / 1 / 1.5427 |
+| 63 | 49 / 2 / 0.2579 | 63 / 2 / 1.3339 |
+| 64 | 49 / 2 / 0.2718 | 67 / 0 / 1.3234 |
+
+### What this control establishes
+
+- At checkpoint 7, the fixed 20-epoch MLP reached 82.67% accuracy and 0.9663 cross-entropy. The converged MLP reached 79.45% and 0.6682. More training improved cross-entropy but did not recover 98% accuracy. This checkpoint has only 1,792 cumulative node-training examples spread across 7 seen domains.
+
+- At checkpoint 64, the fixed and converged MLPs reached 93.06% / 0.3820 and 92.48% / 0.2663, respectively. The validation-selected converged fit again traded a small amount of top-1 accuracy for substantially lower cross-entropy.
+
+- The frozen base scored 21.11% at checkpoint 64. A converged nonlinear integrator over that base alone reached 57.33%, versus 93.41% for the converged integrator over all temporal nodes. Most of the usable permutation-specific information is in the frozen temporal nodes, not the calibrated base alone.
+
+- At checkpoint 64, the all-node integrator exceeded the converged cumulative MLP by 0.93 accuracy points and reduced cross-entropy by 0.0357. This comparison uses one stream seed and does not establish run-to-run stability.
 
 ## Frozen decisions
 
@@ -106,5 +145,7 @@ Each cell is accuracy / cross-entropy, averaged across the three seeds and all e
 ![02_integrator_cross_entropy.png](plots/02_integrator_cross_entropy.png)
 
 ![03_router_accuracy.png](plots/03_router_accuracy.png)
+
+![04_single_seed_cumulative_baselines.png](plots/04_single_seed_cumulative_baselines.png)
 
 The cyan ceiling trace is a fresh, three-restart, validation-selected full-replay fit at every step. It is not an online condition and test data never selects its epoch or restart.

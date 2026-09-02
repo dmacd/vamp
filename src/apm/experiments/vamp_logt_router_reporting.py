@@ -678,7 +678,18 @@ def _html(markdown: str, asset_root: Path, title: str) -> str:
     rendered = []
     section_open = False
     code_open = False
+    table_lines: list[str] = []
+
+    def flush_table() -> None:
+        if table_lines:
+            rendered.append(_markdown_table_html(table_lines))
+            table_lines.clear()
+
     for line in markdown.splitlines():
+        if not code_open and line.startswith("|"):
+            table_lines.append(line)
+            continue
+        flush_table()
         if line.startswith("```"):
             rendered.append("</code></pre>" if code_open else "<pre><code>")
             code_open = not code_open
@@ -708,10 +719,9 @@ def _html(markdown: str, asset_root: Path, title: str) -> str:
             rendered.append(f"<h1>{escape(line[2:])}</h1>")
         elif line.startswith("### "):
             rendered.append(f"<h3>{escape(line[4:])}</h3>")
-        elif line.startswith("|"):
-            rendered.append(f'<p class="table-row">{escape(line)}</p>')
         elif line:
             rendered.append(f"<p>{escape(line)}</p>")
+    flush_table()
     if code_open:
         rendered.append("</code></pre>")
     if section_open:
@@ -727,7 +737,70 @@ summary h2{{display:inline-block;margin:.4rem 0}}
 img{{max-width:100%;height:auto}}
 pre,.table-row{{font-family:ui-monospace,monospace;white-space:pre;overflow:auto}}
 .table-row{{margin:.1rem 0}}
+.table-scroll{{margin:.75rem 0 1.25rem;overflow-x:auto}}
+table{{border-collapse:collapse;width:100%;font-size:.95rem}}
+th,td{{border:1px solid #dadce0;padding:.5rem .65rem;text-align:left;vertical-align:top}}
+thead th{{background:#eef2f7;font-weight:650}}
+tbody tr:nth-child(even){{background:#f8fafc}}
+.align-right{{font-variant-numeric:tabular-nums;text-align:right}}
+.align-center{{text-align:center}}
 </style></head><body>{paragraphs}</body></html>"""
+
+
+def _markdown_table_html(lines: Sequence[str]) -> str:
+    """Render one well-formed pipe table, preserving a readable fallback."""
+    rows = tuple(_markdown_table_cells(line) for line in lines)
+    if len(rows) < 2 or not rows[0]:
+        return _markdown_table_fallback(lines)
+    alignments = tuple(_markdown_table_alignment(cell) for cell in rows[1])
+    column_count = len(rows[0])
+    if (
+        len(alignments) != column_count
+        or any(alignment is None for alignment in alignments)
+        or any(len(row) != column_count for row in rows[2:])
+    ):
+        return _markdown_table_fallback(lines)
+    resolved_alignments = tuple(str(alignment) for alignment in alignments)
+    header = "".join(
+        f'<th scope="col" class="align-{alignment}">{escape(cell)}</th>'
+        for cell, alignment in zip(rows[0], resolved_alignments, strict=True)
+    )
+    body = "\n".join(
+        "<tr>"
+        + "".join(
+            f'<td class="align-{alignment}">{escape(cell)}</td>'
+            for cell, alignment in zip(row, resolved_alignments, strict=True)
+        )
+        + "</tr>"
+        for row in rows[2:]
+    )
+    return (
+        '<div class="table-scroll"><table><thead><tr>'
+        f"{header}</tr></thead><tbody>{body}</tbody></table></div>"
+    )
+
+
+def _markdown_table_cells(line: str) -> tuple[str, ...]:
+    stripped = line.strip()
+    if not stripped.startswith("|") or not stripped.endswith("|"):
+        return ()
+    return tuple(cell.strip() for cell in stripped[1:-1].split("|"))
+
+
+def _markdown_table_alignment(cell: str) -> str | None:
+    marker = cell.strip()
+    dashes = marker.strip(":")
+    if len(dashes) < 3 or set(dashes) != {"-"}:
+        return None
+    if marker.startswith(":") and marker.endswith(":"):
+        return "center"
+    if marker.endswith(":"):
+        return "right"
+    return "left"
+
+
+def _markdown_table_fallback(lines: Sequence[str]) -> str:
+    return "\n".join(f'<p class="table-row">{escape(line)}</p>' for line in lines)
 
 
 def _without_chain(row: Mapping[str, object]) -> dict[str, object]:

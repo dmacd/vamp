@@ -23,7 +23,7 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument(
         "--phase",
-        choices=("calibration", "hierarchy", "online", "ceiling", "all"),
+        choices=("calibration", "hierarchy", "online", "ceiling", "baselines", "all"),
         default="all",
     )
     arguments = parser.parse_args()

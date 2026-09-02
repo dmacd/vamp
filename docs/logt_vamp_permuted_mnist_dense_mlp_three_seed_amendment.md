@@ -59,3 +59,53 @@ This is promising exploratory evidence, not a precise three-seed population
 estimate. No additional seed is required for the amended report. Extending to
 seeds 3 and 4 remains an optional, predeclared confirmation run; the existing
 conditions and headline cells must not change if that extension is launched.
+
+## Post-hoc cumulative-baseline extension
+
+The primary report did not separate two possible causes of the fixed 20-epoch
+pooled MLP's low early accuracy: limited cumulative training data and incomplete
+optimization. It also lacked a converged control that asks how much label
+information a learned head can recover from the calibrated base MLP alone,
+without any temporal-node features.
+
+A post-hoc diagnostic extension therefore runs the following conditions for
+stream seed 0 at the existing full checkpoints 7, 15, 31, 63, and 64:
+
+- the unchanged calibrated base MLP, with no additional training;
+- a fresh cumulative MLP initialized from that base, trained on every
+  node-training row available by the checkpoint; and
+- a fresh integrator over only the frozen calibrated base MLP's normalized
+  final hidden activation and class log probabilities, trained on every
+  observer row available by the checkpoint.
+
+The two learned conditions use every held-out evaluation row available by the
+checkpoint for validation-driven learning-rate reduction, stopping, and
+restart selection. They use the existing ceiling convergence rule and three
+independent optimizer restarts. Test labels never select an epoch or restart.
+The cumulative MLP and base-only integrator retain their original disjoint data
+roles rather than pooling node-training and observer allocations.
+
+Only seed 0 is run. These measurements are single-stream diagnostics with no
+run-to-run uncertainty estimate. They remain separate from the three-seed
+headline aggregates and seven frozen decisions. Their purpose is to compare
+the fixed 20-epoch pooled MLP with a converged version, and to compare a
+converged frozen-base integrator with the existing converged integrator over all
+active temporal nodes.
+
+The extension completed in 570 seconds on the local RTX 4090. All three
+restarts of both learned conditions converged at every checkpoint, and every
+data-count, presentation-count, validation-selection, seed-scope, and resume
+gate passed. At checkpoints 7/15/31/63/64, the converged cumulative MLP reached
+79.45/85.10/89.08/91.92/92.48% accuracy with cross-entropy
+0.6682/0.4758/0.3704/0.2784/0.2663. The fixed 20-epoch pooled MLP was more
+accurate at those checkpoints (82.67/87.01/90.92/92.42/93.06%) but had worse
+cross-entropy (0.9663/0.6486/0.5030/0.4343/0.3820). More optimization therefore
+did not recover ~98% early accuracy; checkpoint 7 contains only 1,792
+node-training examples distributed across seven domains.
+
+The unchanged calibrated base scored 21.11% once all eight domains were
+present. The converged frozen-base integrator reached only 57.33% at checkpoint
+64, while the converged all-node integrator reached 93.41%. This single-seed
+comparison attributes most of the recoverable permutation-specific information
+to the frozen temporal nodes rather than to a more thoroughly trained nonlinear
+head over the identity-trained base alone.

@@ -11,7 +11,12 @@ from pathlib import Path
 import numpy as np
 
 from apm.continual.artifacts import atomic_write, canonical_json_bytes, load_canonical_json
-from apm.experiments.vamp_logt_mlp_permuted_ceiling import CEILING_CONDITION
+from apm.experiments.vamp_logt_mlp_permuted_ceiling import (
+    CEILING_CONDITION,
+    CONVERGED_BASE_INTEGRATOR_CONDITION,
+    CONVERGED_MLP_CONDITION,
+    FROZEN_BASE_CONDITION,
+)
 from apm.experiments.vamp_logt_mlp_permuted_config import VampLogTDenseConfig
 from apm.experiments.vamp_logt_router_reporting import _html, _load_jsonl, _without_chain
 
@@ -50,6 +55,15 @@ CONDITION_PROTOCOL: Mapping[str, tuple[str, str, str, str, str, str, str, str]] 
     "pooled_single_mlp_reference": (
         "Pooled single MLP over cumulative node-training data", "model reference", "fresh at checkpoint", "all cumulative", "all cumulative", "full replay", "20", "no",
     ),
+    FROZEN_BASE_CONDITION: (
+        "Frozen calibrated base MLP", "post-hoc model diagnostic", "frozen", "none", "none", "none", "0", "seed 0 only",
+    ),
+    CONVERGED_MLP_CONDITION: (
+        "Converged cumulative MLP", "post-hoc model diagnostic", "fresh at checkpoint", "all cumulative node-training rows", "all cumulative", "full replay", "20–200", "seed 0; validation; 3 restarts",
+    ),
+    CONVERGED_BASE_INTEGRATOR_CONDITION: (
+        "Converged integrator over the frozen base MLP", "post-hoc integration diagnostic", "fresh at checkpoint", "all cumulative observer rows", "all cumulative", "full replay", "20–200", "seed 0; validation; 3 restarts",
+    ),
     CEILING_CONDITION: (
         "Converged full-replay integrator ceiling", "optimization ceiling", "fresh every step", "all cumulative", "all cumulative", "full replay", "20–200", "yes; 3 restarts",
     ),
@@ -83,6 +97,9 @@ PLOT_STYLES: Mapping[str, tuple[str, str, str]] = {
     "best_single_node": ("#D00020", "*", "-."),
     "fresh_cumulative_four_epoch_integrator": ("#6A1B9A", "P", ":"),
     "pooled_single_mlp_reference": ("#795548", "v", "-."),
+    FROZEN_BASE_CONDITION: ("#111111", "o", ":"),
+    CONVERGED_MLP_CONDITION: ("#D55E00", "s", "-"),
+    CONVERGED_BASE_INTEGRATOR_CONDITION: ("#0072B2", "^", "--"),
     CEILING_CONDITION: ("#00A6D6", "H", "-"),
     "router_current_hard": ("#111111", "X", "-"),
     "router_uniform_hard": ("#0066CC", "o", "-"),
@@ -104,13 +121,25 @@ def write_results(run_root: Path, config: VampLogTDenseConfig) -> dict[str, obje
         for path in sorted((run_root / "ceiling").glob("seed-*/metrics.jsonl"))
         for row in _load_jsonl(path)
     )
+    baseline_rows = tuple(
+        _without_chain(row)
+        for path in sorted((run_root / "baselines").glob("seed-*/metrics.jsonl"))
+        for row in _load_jsonl(path)
+    )
     criteria = _criteria(run_root, config, online_rows, ceiling_rows)
+    baseline_summary = _single_seed_baseline_summary(
+        online_rows, ceiling_rows, baseline_rows
+    )
     summary = {
+        "baseline_seed_count": len(
+            tuple((run_root / "baselines").glob("seed-*/summary.json"))
+        ),
         "config_hash": config.config_hash,
         "criteria": criteria,
         "online_seed_count": len(tuple((run_root / "online").glob("seed-*/summary.json"))),
         "ceiling_seed_count": len(tuple((run_root / "ceiling").glob("seed-*/summary.json"))),
         "schema_version": "vamp-logt-dense-results-v1",
+        "single_seed_baseline_extension": baseline_summary,
         "status": (
             "complete"
             if len(tuple((run_root / "online").glob("seed-*/summary.json"))) == len(config.online.seeds)
@@ -120,7 +149,9 @@ def write_results(run_root: Path, config: VampLogTDenseConfig) -> dict[str, obje
     }
     atomic_write(run_root / "summary.json", canonical_json_bytes(summary))
     _write_condition_table(run_root / "condition_protocol.csv")
-    plots = _write_plots(run_root / "plots", online_rows, ceiling_rows)
+    plots = _write_plots(
+        run_root / "plots", online_rows, ceiling_rows, baseline_rows
+    )
     markdown = _markdown(run_root, summary, config, plots)
     atomic_write(run_root / "RESULTS.md", markdown.encode("utf-8"))
     atomic_write(
@@ -245,10 +276,117 @@ def _criteria(
     }
 
 
+def _single_seed_baseline_summary(
+    online_rows: Sequence[Mapping[str, object]],
+    ceiling_rows: Sequence[Mapping[str, object]],
+    baseline_rows: Sequence[Mapping[str, object]],
+) -> dict[str, object] | None:
+    evaluation = tuple(
+        row
+        for row in baseline_rows
+        if row.get("row_type") == "baseline_evaluation"
+        and row.get("evaluation_scope") == "full_test"
+        and row.get("group") == "micro"
+        and int(row.get("run_seed", -1)) == 0
+    )
+    if not evaluation:
+        return None
+    checkpoints = tuple(sorted({int(row["macro_step"]) for row in evaluation}))
+    source_rows = {
+        condition: tuple(
+            row for row in evaluation if row.get("condition") == condition
+        )
+        for condition in (
+            FROZEN_BASE_CONDITION,
+            CONVERGED_MLP_CONDITION,
+            CONVERGED_BASE_INTEGRATOR_CONDITION,
+        )
+    }
+    source_rows.update({
+        "pooled_single_mlp_reference": tuple(
+            row
+            for row in online_rows
+            if row.get("row_type") == "integrator_evaluation"
+            and row.get("condition") == "pooled_single_mlp_reference"
+            and row.get("evaluation_scope") == "full_test"
+            and row.get("group") == "micro"
+            and int(row.get("run_seed", -1)) == 0
+        ),
+        CEILING_CONDITION: tuple(
+            row
+            for row in ceiling_rows
+            if row.get("row_type") == "ceiling_evaluation"
+            and row.get("condition") == CEILING_CONDITION
+            and row.get("evaluation_scope") == "full_test"
+            and row.get("group") == "micro"
+            and int(row.get("run_seed", -1)) == 0
+        ),
+    })
+    checkpoint_metrics = {}
+    complete = True
+    for macro_step in checkpoints:
+        condition_metrics = {}
+        for condition, rows in source_rows.items():
+            selected = tuple(
+                row for row in rows if int(row.get("macro_step", -1)) == macro_step
+            )
+            if not selected:
+                complete = False
+                continue
+            condition_metrics[condition] = {
+                "accuracy": float(
+                    np.mean([float(row["accuracy"]) for row in selected])
+                ),
+                "cross_entropy": float(
+                    np.mean([float(row["mean_cross_entropy"]) for row in selected])
+                ),
+                "domain_cells": len(selected),
+            }
+        checkpoint_metrics[str(macro_step)] = condition_metrics
+    selected_convergence = tuple(
+        row
+        for row in baseline_rows
+        if row.get("row_type") == "baseline_convergence" and bool(row.get("selected"))
+    )
+    convergence = {
+        condition: {
+            str(macro_step): {
+                "best_validation_accuracy": float(row["best_validation_accuracy"]),
+                "best_validation_cross_entropy": float(row["best_validation_loss"]),
+                "epochs_ran": int(row["epochs_ran"]),
+                "selected_restart": int(row["restart"]),
+                "stop_reason": str(row["stop_reason"]),
+                "training_examples": int(row["training_examples"]),
+                "validation_examples": int(row["validation_examples"]),
+            }
+            for macro_step in checkpoints
+            for row in selected_convergence
+            if row.get("condition") == condition
+            and int(row.get("macro_step", -1)) == macro_step
+        }
+        for condition in (
+            CONVERGED_MLP_CONDITION,
+            CONVERGED_BASE_INTEGRATOR_CONDITION,
+        )
+    }
+    complete = complete and all(
+        len(convergence[condition]) == len(checkpoints) for condition in convergence
+    )
+    return {
+        "aggregation": "equal-weight mean over full-test seen-domain cells",
+        "checkpoint_metrics": checkpoint_metrics,
+        "convergence": convergence,
+        "evaluation_checkpoints": list(checkpoints),
+        "primary_three_seed_estimates_unchanged": True,
+        "run_seed": 0,
+        "status": "complete" if complete else "partial",
+    }
+
+
 def _write_condition_table(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as output:
-        writer = csv.writer(output)
+        writer = csv.writer(output, lineterminator="\n")
         writer.writerow((
             "condition", "family", "persistence", "current data", "history",
             "history sampler", "epochs per update", "validation/restarts",
@@ -260,8 +398,9 @@ def _write_plots(
     directory: Path,
     online_rows: Sequence[Mapping[str, object]],
     ceiling_rows: Sequence[Mapping[str, object]],
+    baseline_rows: Sequence[Mapping[str, object]],
 ) -> tuple[str, ...]:
-    if not online_rows and not ceiling_rows:
+    if not online_rows and not ceiling_rows and not baseline_rows:
         return ()
     import matplotlib
 
@@ -341,6 +480,99 @@ def _write_plots(
         figure.savefig(directory / filename, dpi=180)
         plt.close(figure)
         written.append(filename)
+    baseline_evaluation = tuple(
+        row
+        for row in baseline_rows
+        if row.get("row_type") == "baseline_evaluation"
+        and row.get("evaluation_scope") == "test_subset"
+        and row.get("group") == "micro"
+        and int(row.get("run_seed", -1)) == 0
+    )
+    if baseline_evaluation:
+        comparison_rows = (
+            *baseline_evaluation,
+            *(
+                row
+                for row in online_rows
+                if row.get("row_type") == "integrator_evaluation"
+                and row.get("condition") == "pooled_single_mlp_reference"
+                and row.get("evaluation_scope") == "test_subset"
+                and row.get("group") == "micro"
+                and int(row.get("run_seed", -1)) == 0
+            ),
+            *(
+                row
+                for row in ceiling_rows
+                if row.get("row_type") == "ceiling_evaluation"
+                and row.get("condition") == CEILING_CONDITION
+                and row.get("evaluation_scope") == "test_subset"
+                and row.get("group") == "micro"
+                and int(row.get("run_seed", -1)) == 0
+            ),
+        )
+        baseline_styles = {
+            FROZEN_BASE_CONDITION: ("#111111", "o", ":"),
+            "pooled_single_mlp_reference": ("#CC79A7", "v", "-."),
+            CONVERGED_MLP_CONDITION: ("#D55E00", "s", "-"),
+            CONVERGED_BASE_INTEGRATOR_CONDITION: ("#0072B2", "^", "--"),
+            CEILING_CONDITION: ("#009E73", "H", "-"),
+        }
+        figure, axes = plt.subplots(1, 2, figsize=(15.5, 6.8))
+        for axis, metric, ylabel in (
+            (axes[0], "accuracy", "Test-subset accuracy"),
+            (axes[1], "mean_cross_entropy", "Test-subset cross-entropy"),
+        ):
+            for condition, (color, marker, linestyle) in baseline_styles.items():
+                values = tuple(
+                    row
+                    for row in comparison_rows
+                    if row.get("condition") == condition and metric in row
+                )
+                if not values:
+                    continue
+                steps = sorted({int(row["macro_step"]) for row in values})
+                means = [
+                    float(
+                        np.mean(
+                            [
+                                float(row[metric])
+                                for row in values
+                                if int(row["macro_step"]) == step
+                            ]
+                        )
+                    )
+                    for step in steps
+                ]
+                axis.plot(
+                    steps,
+                    means,
+                    label=CONDITION_PROTOCOL[condition][0],
+                    color=color,
+                    marker=marker,
+                    linestyle=linestyle,
+                    linewidth=2.6,
+                    markersize=7.0,
+                )
+            axis.set_xlabel("Macro-step")
+            axis.set_ylabel(ylabel)
+            axis.grid(alpha=0.25)
+        handles, labels = axes[0].get_legend_handles_labels()
+        figure.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.99),
+            fontsize=8.5,
+            ncol=3,
+        )
+        figure.suptitle(
+            "Seed-0 post-hoc cumulative baselines (single stream seed)", y=1.06
+        )
+        figure.tight_layout(rect=(0.0, 0.0, 1.0, 0.88))
+        filename = "04_single_seed_cumulative_baselines.png"
+        figure.savefig(directory / filename, dpi=180, bbox_inches="tight")
+        plt.close(figure)
+        written.append(filename)
     return tuple(written)
 
 
@@ -378,6 +610,9 @@ def _markdown(
     lines.extend(
         "| " + " | ".join(values) + " |" for values in CONDITION_PROTOCOL.values()
     )
+    baseline = summary.get("single_seed_baseline_extension")
+    if isinstance(baseline, Mapping):
+        lines.extend(("", *_baseline_markdown(baseline)))
     criteria = summary.get("criteria")
     lines.extend(("", "## Frozen decisions", ""))
     if criteria is None:
@@ -395,6 +630,152 @@ def _markdown(
         "",
     ))
     return "\n".join(lines)
+
+
+def _baseline_markdown(summary: Mapping[str, object]) -> tuple[str, ...]:
+    checkpoints = tuple(int(value) for value in summary["evaluation_checkpoints"])
+    metrics = summary["checkpoint_metrics"]
+    convergence = summary["convergence"]
+    if not isinstance(metrics, Mapping) or not isinstance(convergence, Mapping):
+        raise ValueError("single-seed baseline summary is malformed")
+    conditions = (
+        FROZEN_BASE_CONDITION,
+        "pooled_single_mlp_reference",
+        CONVERGED_MLP_CONDITION,
+        CONVERGED_BASE_INTEGRATOR_CONDITION,
+        CEILING_CONDITION,
+    )
+    lines = [
+        "## Seed-0 cumulative baseline extension",
+        "",
+        (
+            "These are post-hoc diagnostics from one stream seed, evaluated only at the five "
+            "existing full checkpoints. They do not have a run-to-run uncertainty estimate "
+            "and are not included in the main three-seed decision rules. Each metric equally "
+            "weights the full 10,000-example test set for every domain seen by that checkpoint. "
+            "Validation cross-entropy selects epochs and restarts; test labels select nothing."
+        ),
+        "",
+        (
+            "The converged cumulative MLP starts from the calibrated base and trains all four "
+            "affine layers on every node-training row seen so far. The converged base-only "
+            "integrator keeps that calibrated base frozen and trains only an integrator on its "
+            "hidden activation and class probabilities using every observer row seen so far. "
+            "The converged all-node integrator remains the comparison that can use every frozen "
+            "temporal node."
+        ),
+        "",
+        "Each cell is accuracy / cross-entropy.",
+        "",
+        "| Macro-step | Frozen base | Fixed 20-epoch cumulative MLP | Converged cumulative MLP | Converged frozen-base integrator | Converged all-node integrator |",
+        "|---:|---:|---:|---:|---:|---:|",
+    ]
+    for macro_step in checkpoints:
+        checkpoint = metrics[str(macro_step)]
+        if not isinstance(checkpoint, Mapping):
+            raise ValueError("single-seed checkpoint metrics are malformed")
+        cells = []
+        for condition in conditions:
+            value = checkpoint.get(condition)
+            if not isinstance(value, Mapping):
+                cells.append("not available")
+            else:
+                cells.append(
+                    f"{100.0 * float(value['accuracy']):.2f}% / "
+                    f"{float(value['cross_entropy']):.4f}"
+                )
+        lines.append(f"| {macro_step} | " + " | ".join(cells) + " |")
+    lines.extend(
+        (
+            "",
+            "### Validation-selected convergence",
+            "",
+            "| Macro-step | Cumulative MLP: epochs / selected restart / validation CE | Frozen-base integrator: epochs / selected restart / validation CE |",
+            "|---:|---:|---:|",
+        )
+    )
+    for macro_step in checkpoints:
+        cells = []
+        for condition in (
+            CONVERGED_MLP_CONDITION,
+            CONVERGED_BASE_INTEGRATOR_CONDITION,
+        ):
+            condition_rows = convergence.get(condition)
+            value = (
+                condition_rows.get(str(macro_step))
+                if isinstance(condition_rows, Mapping)
+                else None
+            )
+            if not isinstance(value, Mapping):
+                cells.append("not available")
+            else:
+                cells.append(
+                    f"{int(value['epochs_ran'])} / {int(value['selected_restart'])} / "
+                    f"{float(value['best_validation_cross_entropy']):.4f}"
+                )
+        lines.append(f"| {macro_step} | " + " | ".join(cells) + " |")
+    first_step = checkpoints[0]
+    final_step = checkpoints[-1]
+    first_metrics = metrics[str(first_step)]
+    final_metrics = metrics[str(final_step)]
+    mlp_convergence = convergence[CONVERGED_MLP_CONDITION]
+    first_training_examples = int(
+        mlp_convergence[str(first_step)]["training_examples"]
+    )
+    fixed_first = first_metrics["pooled_single_mlp_reference"]
+    converged_first = first_metrics[CONVERGED_MLP_CONDITION]
+    fixed_final = final_metrics["pooled_single_mlp_reference"]
+    converged_final = final_metrics[CONVERGED_MLP_CONDITION]
+    base_final = final_metrics[FROZEN_BASE_CONDITION]
+    base_integrator_final = final_metrics[CONVERGED_BASE_INTEGRATOR_CONDITION]
+    all_node_final = final_metrics[CEILING_CONDITION]
+    lines.extend(
+        (
+            "",
+            "### What this control establishes",
+            "",
+            (
+                f"- At checkpoint {first_step}, the fixed 20-epoch MLP reached "
+                f"{100.0 * float(fixed_first['accuracy']):.2f}% accuracy and "
+                f"{float(fixed_first['cross_entropy']):.4f} cross-entropy. The converged "
+                f"MLP reached {100.0 * float(converged_first['accuracy']):.2f}% and "
+                f"{float(converged_first['cross_entropy']):.4f}. More training improved "
+                "cross-entropy but did not recover 98% accuracy. This checkpoint has only "
+                f"{first_training_examples:,} cumulative node-training examples spread "
+                f"across {int(converged_first['domain_cells'])} seen domains."
+            ),
+            "",
+            (
+                f"- At checkpoint {final_step}, the fixed and converged MLPs reached "
+                f"{100.0 * float(fixed_final['accuracy']):.2f}% / "
+                f"{float(fixed_final['cross_entropy']):.4f} and "
+                f"{100.0 * float(converged_final['accuracy']):.2f}% / "
+                f"{float(converged_final['cross_entropy']):.4f}, respectively. The "
+                "validation-selected converged fit again traded a small amount of top-1 "
+                "accuracy for substantially lower cross-entropy."
+            ),
+            "",
+            (
+                f"- The frozen base scored {100.0 * float(base_final['accuracy']):.2f}% at "
+                f"checkpoint {final_step}. A converged nonlinear integrator over that base "
+                f"alone reached {100.0 * float(base_integrator_final['accuracy']):.2f}%, "
+                f"versus {100.0 * float(all_node_final['accuracy']):.2f}% for the converged "
+                "integrator over all temporal nodes. Most of the usable permutation-specific "
+                "information is in the frozen temporal nodes, not the calibrated base alone."
+            ),
+            "",
+            (
+                f"- At checkpoint {final_step}, the all-node integrator exceeded the "
+                f"converged cumulative MLP by "
+                f"{100.0 * (float(all_node_final['accuracy']) - float(converged_final['accuracy'])):.2f} "
+                "accuracy points and reduced cross-entropy by "
+                f"{float(converged_final['cross_entropy']) - float(all_node_final['cross_entropy']):.4f}. "
+                "This comparison uses one stream seed and does not establish run-to-run "
+                "stability."
+            ),
+        )
+    )
+    return tuple(lines)
 
 
 __all__ = ["CONDITION_PROTOCOL", "PLOT_STYLES", "write_results"]

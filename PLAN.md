@@ -59,9 +59,37 @@ best replay integrator also beat the cross-entropy-selected soft range router
 on both metrics, though the hard uniform router was 0.26 points more accurate
 and far worse calibrated. All seven frozen decisions and all structural,
 budget, zero-slot, frozen-node, and decreasing-loss checks pass. The focused
-serial regression suite passes all 10 selected tests; its benchmark-marked
+serial regression suite passes all 11 selected tests; its benchmark-marked
 CUDA smoke remains separately deselected in the sandbox, and the explicit RTX
 4090 structural smoke passed before the production run.
+
+The post-hoc cumulative-baseline extension is also complete for stream seed 0
+at full checkpoints 7, 15, 31, 63, and 64. It leaves every primary three-seed
+aggregate and decision unchanged. Each learned diagnostic used three fresh
+restarts, cumulative held-out validation selection, and the same converged
+stopping rule as the ceiling; all 30 fits converged. The selected cumulative
+MLP fits ran 48–50 epochs, and the selected frozen-base-integrator fits ran
+55–69 epochs.
+
+At checkpoint 7, after only 1,792 node-training examples spread across seven
+seen permutations, the fixed 20-epoch pooled MLP reached 82.67% accuracy and
+0.9663 cross-entropy. Training that same base-initialized MLP to the validation
+stopping rule reached 79.45% and 0.6682: lower top-1 accuracy but substantially
+better cross-entropy. At checkpoint 64, the fixed fit reached 93.06% and
+0.3820, while the converged fit reached 92.48% and 0.2663. Convergence therefore
+does not explain the missing ~98% early accuracy; the early cumulative learner
+has far less and much more heterogeneous training evidence than the 400,000
+transformed examples per pooled-calibration epoch.
+
+The frozen calibrated MLP itself reached only 21.11% across all eight domains.
+A converged integrator over that base alone improved to 57.33% and 1.3124 at
+checkpoint 64, whereas the converged integrator over all frozen temporal nodes
+reached 93.41% and 0.2307. The node hierarchy supplies most of the usable
+permutation-specific information; a nonlinear head cannot recover it from the
+identity-trained base representation alone. At checkpoint 64 the all-node
+integrator also exceeded the converged cumulative MLP by 0.93 accuracy points
+and reduced cross-entropy by 0.0356, although this comparison has only one
+stream seed.
 
 This is promising but exploratory evidence. Three seeds do not give a precise
 uncertainty estimate, and the converged fit is an empirical ceiling for the
@@ -69,6 +97,8 @@ fixed features, architecture, and search rather than a mathematical optimum.
 The complete Markdown/HTML report, condition table, machine-readable summary,
 and high-contrast plots are under
 `artifacts/vamp-logt-mlp-permuted-mnist-ungated/runs/d38c612562699eb55c578a48a8ea94639596c4009a539c1092b63b76eb4f26c0/analysis/3-seed-primary/`.
+Its HTML now renders all six report tables as semantic, striped tables with
+numeric alignment and horizontal overflow instead of escaped Markdown rows.
 No required experiment work remains. Completing ceiling seeds 3 and 4 is an
 optional predeclared confirmation extension if tighter uncertainty is later
 wanted.

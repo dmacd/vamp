@@ -10,6 +10,9 @@ Integrator — range-balanced replay,integrator,persistent,256 current,256 histo
 Base-only integrator — uniform-history replay,integrator control,persistent,256 current,256 history,uniform examples,4,no
 Fresh cumulative integrator — four epochs,optimization reference,fresh at checkpoint,all cumulative,all cumulative,full replay,4,no
 Pooled single MLP over cumulative node-training data,model reference,fresh at checkpoint,all cumulative,all cumulative,full replay,20,no
+Frozen calibrated base MLP,post-hoc model diagnostic,frozen,none,none,none,0,seed 0 only
+Converged cumulative MLP,post-hoc model diagnostic,fresh at checkpoint,all cumulative node-training rows,all cumulative,full replay,20–200,seed 0; validation; 3 restarts
+Converged integrator over the frozen base MLP,post-hoc integration diagnostic,fresh at checkpoint,all cumulative observer rows,all cumulative,full replay,20–200,seed 0; validation; 3 restarts
 Converged full-replay integrator ceiling,optimization ceiling,fresh every step,all cumulative,all cumulative,full replay,20–200,yes; 3 restarts
 Equal-probability mean of active nodes,fixed control,none,none,none,none,0,no
 Newest temporal range,fixed control,none,none,none,none,0,no

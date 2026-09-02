@@ -525,6 +525,9 @@ def _prepare_analysis_view(
 ) -> None:
     analysis_root.mkdir(parents=True, exist_ok=True)
     _ensure_relative_symlink(run_root / "calibration", analysis_root / "calibration")
+    baseline_root = run_root / "baselines"
+    if (baseline_root / "summary.json").is_file():
+        _ensure_relative_symlink(baseline_root, analysis_root / "baselines")
     for phase in ("online", "ceiling"):
         phase_root = analysis_root / phase
         phase_root.mkdir(parents=True, exist_ok=True)

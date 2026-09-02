@@ -29,7 +29,10 @@ from apm.experiments.vamp_logt_mlp_permuted_calibration import (
     initialize_dense_state,
     select_calibrated_width,
 )
-from apm.experiments.vamp_logt_mlp_permuted_ceiling import run_ceiling
+from apm.experiments.vamp_logt_mlp_permuted_ceiling import (
+    run_baseline_extension,
+    run_ceiling,
+)
 from apm.experiments.vamp_logt_mlp_permuted_config import load_config
 from apm.experiments.vamp_logt_mlp_permuted_data import (
     PermutedMnistBenchmark,
@@ -47,6 +50,7 @@ from apm.experiments.vamp_logt_mlp_permuted_reporting import (
     PLOT_STYLES,
     write_results,
 )
+from apm.experiments.vamp_logt_router_reporting import _html
 
 
 def _benchmark() -> PermutedMnistBenchmark:
@@ -63,6 +67,28 @@ def _benchmark() -> PermutedMnistBenchmark:
         ),
         ((0, 1),) * 8,
     )
+
+
+def test_shared_html_renderer_emits_semantic_tables(tmp_path: Path) -> None:
+    rendered = _html(
+        "\n".join(
+            (
+                "# Report",
+                "",
+                "| Condition | Accuracy |",
+                "|---|---:|",
+                "| A < B | 98.2% |",
+            )
+        ),
+        tmp_path,
+        "Report",
+    )
+
+    assert '<div class="table-scroll"><table>' in rendered
+    assert '<th scope="col" class="align-right">Accuracy</th>' in rendered
+    assert '<td class="align-left">A &lt; B</td>' in rendered
+    assert '<td class="align-right">98.2%</td>' in rendered
+    assert '<p class="table-row">| Condition | Accuracy |</p>' not in rendered
 
 
 def _tiny_config(tmp_path: Path):
@@ -258,6 +284,12 @@ def test_ungated_successor_always_selects_the_smallest_calibrated_width() -> Non
 
 def test_condition_names_are_literal_and_plot_identities_are_distinct() -> None:
     assert CONDITION_PROTOCOL["integrator_uniform_replay"][0] == "Integrator — uniform-history replay"
+    assert CONDITION_PROTOCOL["frozen_base_mlp"][0] == "Frozen calibrated base MLP"
+    assert CONDITION_PROTOCOL["converged_cumulative_mlp"][0] == "Converged cumulative MLP"
+    assert (
+        CONDITION_PROTOCOL["converged_base_only_integrator"][0]
+        == "Converged integrator over the frozen base MLP"
+    )
     integrator_names = (
         "integrator_current_only",
         "integrator_uniform_replay",
@@ -298,6 +330,14 @@ def test_two_step_hierarchy_online_ceiling_and_resume_are_exact(
     config = _tiny_config(tmp_path)
     run_root = config.artifact_root / "runs" / config.config_hash
     base = _publish_base(config, run_root)
+    publish_immutable_json(
+        run_root / "protocol.json",
+        {
+            "config": {"benchmark": {"macro_steps": 2}},
+            "config_hash": config.config_hash,
+            "schema_version": "test-protocol-v1",
+        },
+    )
     benchmark = _benchmark()
     for module in (
         "apm.experiments.vamp_logt_mlp_permuted_hierarchy",
@@ -343,19 +383,28 @@ def test_two_step_hierarchy_online_ceiling_and_resume_are_exact(
     assert all(ceiling[0]["acceptance"].values())
     assert run_ceiling(config, run_root, torch.device("cpu")) == ceiling
     assert ceiling_ledger.read_bytes() == ceiling_before
+    baselines = run_baseline_extension(config, run_root, torch.device("cpu"))
+    baseline_seed = baselines["seed_summaries"][0]
+    baseline_ledger = run_root / "baselines" / "seed-0" / "metrics.jsonl"
+    baseline_before = baseline_ledger.read_bytes()
+    assert baseline_seed["evaluation_checkpoints"] == [2]
+    assert all(baseline_seed["acceptance"].values())
+    assert run_baseline_extension(config, run_root, torch.device("cpu")) == baselines
+    assert baseline_ledger.read_bytes() == baseline_before
     aggregate = write_results(run_root, config)
     assert aggregate["status"] == "complete"
+    assert aggregate["single_seed_baseline_extension"]["status"] == "complete"
+    assert {
+        row["domain_cells"]
+        for row in aggregate["single_seed_baseline_extension"][
+            "checkpoint_metrics"
+        ]["2"].values()
+    } == {2}
     assert (run_root / "RESULTS.md").is_file()
     assert "Converged full-replay integrator ceiling" in (run_root / "RESULTS.md").read_text()
+    assert "Seed-0 cumulative baseline extension" in (run_root / "RESULTS.md").read_text()
     assert (run_root / "plots" / "01_integrator_accuracy.png").is_file()
-    publish_immutable_json(
-        run_root / "protocol.json",
-        {
-            "config": {"benchmark": {"macro_steps": 2}},
-            "config_hash": config.config_hash,
-            "schema_version": "test-protocol-v1",
-        },
-    )
+    assert (run_root / "plots" / "04_single_seed_cumulative_baselines.png").is_file()
     publish_immutable_json(
         run_root / "analysis_amendment.json",
         {
@@ -379,7 +428,9 @@ def test_two_step_hierarchy_online_ceiling_and_resume_are_exact(
     amended_summary = load_canonical_json(analysis_root / "summary.json")
     assert amended_summary["analysis_seeds"] == [0]
     assert amended_summary["criteria"]["ceiling_every_step_cells"] == 2
+    assert amended_summary["single_seed_baseline_extension"]["run_seed"] == 0
     assert "Analysis-set amendment" in (analysis_root / "RESULTS.md").read_text()
+    assert "Seed-0 cumulative baseline extension" in (analysis_root / "RESULTS.md").read_text()
 
 
 def test_new_dense_modules_do_not_define_or_load_a_convolutional_base() -> None:

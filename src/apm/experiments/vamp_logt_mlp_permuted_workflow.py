@@ -16,7 +16,10 @@ from apm.continual.artifacts import (
     publish_immutable_json,
 )
 from apm.experiments.vamp_logt_mlp_permuted_calibration import run_calibration
-from apm.experiments.vamp_logt_mlp_permuted_ceiling import run_ceiling
+from apm.experiments.vamp_logt_mlp_permuted_ceiling import (
+    run_baseline_extension,
+    run_ceiling,
+)
 from apm.experiments.vamp_logt_mlp_permuted_config import VampLogTDenseConfig
 from apm.experiments.vamp_logt_mlp_permuted_data import resolved_device, source_manifest
 from apm.experiments.vamp_logt_mlp_permuted_hierarchy import build_hierarchy_tape
@@ -44,13 +47,32 @@ MATERIAL_SOURCES = (
 
 def run_workflow(config: VampLogTDenseConfig, selected_phase: str = "all") -> Path:
     """Run or resume the requested phase and its data/model prerequisites."""
-    if selected_phase not in {"calibration", "hierarchy", "online", "ceiling", "all"}:
-        raise ValueError("phase must be calibration, hierarchy, online, ceiling, or all")
+    if selected_phase not in {
+        "calibration",
+        "hierarchy",
+        "online",
+        "ceiling",
+        "baselines",
+        "all",
+    }:
+        raise ValueError(
+            "phase must be calibration, hierarchy, online, ceiling, baselines, or all"
+        )
     device = resolved_device(config.runtime.device)
     if config.runtime.deterministic_algorithms:
         torch.use_deterministic_algorithms(True)
     run_root = config.artifact_root / "runs" / config.config_hash
     run_root.mkdir(parents=True, exist_ok=True)
+    if selected_phase == "baselines":
+        print(f"Dense Permuted-MNIST run: {run_root}", flush=True)
+        print("Post-hoc extension — seed-zero cumulative baselines", flush=True)
+        run_baseline_extension(config, run_root, device)
+        from apm.experiments.vamp_logt_mlp_permuted_amended_reporting import (
+            write_amended_results,
+        )
+
+        write_amended_results(run_root, config)
+        return run_root
     _write_protocol(config, run_root)
     print(f"Dense Permuted-MNIST run: {run_root}", flush=True)
     print("Phase 1/4 — architecture calibration", flush=True)
