@@ -180,10 +180,14 @@ def build_hierarchy_tape(
     max_nodes_per_level: int = 1,
     hierarchy_root: Path | None = None,
     training_sample_multiplier: int = 1,
+    stop_after_step: int | None = None,
 ) -> tuple[dict[str, object], ...]:
-    """Run or resume every seed's hierarchy and retain all created nodes."""
+    """Run or resume every seed's hierarchy through a complete or prefix target."""
     base = load_calibrated_base(config, run_root)
     target_root = run_root / "hierarchy" if hierarchy_root is None else hierarchy_root
+    target_step = config.benchmark.macro_steps if stop_after_step is None else stop_after_step
+    if not 1 <= target_step <= config.benchmark.macro_steps:
+        raise ValueError("hierarchy target step is outside the configured stream")
     try:
         from tqdm.auto import tqdm
     except ImportError as error:  # pragma: no cover - environment dependency
@@ -198,6 +202,7 @@ def build_hierarchy_tape(
             device,
             max_nodes_per_level,
             training_sample_multiplier,
+            target_step,
         )
         for seed in tqdm(
             config.online.seeds,
@@ -211,18 +216,28 @@ def build_hierarchy_tape(
     )
     hierarchy_summary = {
             "config_hash": config.config_hash,
+            "final_macro_step": target_step,
             "max_nodes_per_level": max_nodes_per_level,
             "seeds": list(summaries),
-            "status": "complete",
+            "status": (
+                "complete"
+                if target_step == config.benchmark.macro_steps
+                else "prefix_complete"
+            ),
         }
-    if _is_capacity_study(config):
+    if _uses_sample_multiplier(config):
         hierarchy_summary.update({
             "schema_version": "vamp-logt-dense-hierarchy-summary-v2",
             "training_sample_multiplier": training_sample_multiplier,
         })
     else:
         hierarchy_summary["schema_version"] = "vamp-logt-dense-hierarchy-summary-v1"
-    publish_immutable_json(target_root / "summary.json", hierarchy_summary)
+    summary_name = (
+        "summary.json"
+        if target_step == config.benchmark.macro_steps
+        else f"prefix-step-{target_step:03d}-summary.json"
+    )
+    publish_immutable_json(target_root / summary_name, hierarchy_summary)
     return summaries
 
 
@@ -246,7 +261,7 @@ def load_frontier(
         or int(manifest.get("macro_step", -1)) != macro_step
         or int(manifest.get("max_nodes_per_level", -1)) != max_nodes_per_level
         or (
-            _is_capacity_study(config)
+            _uses_sample_multiplier(config)
             and int(manifest.get("training_sample_multiplier", -1))
             != training_sample_multiplier
         )
@@ -265,7 +280,7 @@ def load_frontier(
             payload.get("node_id") != node.node_id
             or payload.get("config_hash") != config.config_hash
             or (
-                _is_capacity_study(config)
+                _uses_sample_multiplier(config)
                 and int(payload.get("training_sample_multiplier", -1))
                 != training_sample_multiplier
             )
@@ -424,6 +439,7 @@ def _build_seed_tape(
     device: torch.device,
     max_nodes_per_level: int,
     training_sample_multiplier: int,
+    target_step: int,
 ) -> dict[str, object]:
     directory = hierarchy_root / f"seed-{seed}"
     summary_path = directory / "summary.json"
@@ -442,7 +458,7 @@ def _build_seed_tape(
         if int(summary.get("max_nodes_per_level", -1)) != max_nodes_per_level:
             raise ValueError("dense hierarchy capacity changed")
         if (
-            _is_capacity_study(config)
+            _uses_sample_multiplier(config)
             and int(summary.get("training_sample_multiplier", -1))
             != training_sample_multiplier
         ):
@@ -475,7 +491,21 @@ def _build_seed_tape(
     node_hashes: dict[str, str] = {}
     example_updates = 0
     created_nodes = 0
-    for macro_step in range(1, config.benchmark.macro_steps + 1):
+    try:
+        from tqdm.auto import tqdm
+    except ImportError as error:  # pragma: no cover - environment dependency
+        raise RuntimeError("tqdm is required by the vision environment") from error
+    macro_steps = tqdm(
+        range(1, target_step + 1),
+        total=target_step,
+        desc=(
+            f"hierarchy seed={seed} samples={training_sample_multiplier}x"
+        ),
+        disable=not config.runtime.progress,
+        leave=False,
+        unit="permutation",
+    )
+    for macro_step in macro_steps:
         model_batches = (*model_batches, benchmark.step(macro_step).model)
         archive = concatenate_batches(model_batches)
         first_example = topology.processed_blocks * block_size
@@ -520,7 +550,7 @@ def _build_seed_tape(
                 "max_nodes_per_level": max_nodes_per_level,
                 "run_seed": seed,
             }
-        if _is_capacity_study(config):
+        if _uses_sample_multiplier(config):
             frontier_record.update({
                 "schema_version": "vamp-logt-dense-frontier-v2",
                 "training_sample_multiplier": training_sample_multiplier,
@@ -531,7 +561,7 @@ def _build_seed_tape(
             directory / "frontiers" / f"step-{macro_step:03d}.json",
             frontier_record,
         )
-    expected_nodes = 2 * config.benchmark.macro_steps - len(topology.active_nodes)
+    expected_nodes = 2 * target_step - len(topology.active_nodes)
     if created_nodes != expected_nodes:
         raise RuntimeError("dense hierarchy did not create the binary-counter node count")
     summary = {
@@ -540,21 +570,31 @@ def _build_seed_tape(
         "created_node_count": created_nodes,
         "final_active_node_count": len(topology.active_nodes),
         "final_frontier_sha256": file_sha256(
-            directory / "frontiers" / f"step-{config.benchmark.macro_steps:03d}.json"
+            directory / "frontiers" / f"step-{target_step:03d}.json"
         ),
+        "final_macro_step": target_step,
         "node_example_updates": example_updates,
         "max_nodes_per_level": max_nodes_per_level,
         "run_seed": seed,
-        "status": "complete",
+        "status": (
+            "complete"
+            if target_step == config.benchmark.macro_steps
+            else "prefix_complete"
+        ),
     }
-    if _is_capacity_study(config):
+    if _uses_sample_multiplier(config):
         summary.update({
             "schema_version": "vamp-logt-dense-hierarchy-seed-v2",
             "training_sample_multiplier": training_sample_multiplier,
         })
     else:
         summary["schema_version"] = "vamp-logt-dense-hierarchy-seed-v1"
-    publish_immutable_json(summary_path, summary)
+    target_summary_path = (
+        summary_path
+        if target_step == config.benchmark.macro_steps
+        else directory / f"prefix-step-{target_step:03d}-summary.json"
+    )
+    publish_immutable_json(target_summary_path, summary)
     return summary
 
 
@@ -569,16 +609,18 @@ def _fit_or_load_node(
     training_sample_multiplier: int,
 ) -> tuple[str, int]:
     path = directory / "nodes" / node.node_id / "delta.pt"
-    capacity_study = _is_capacity_study(config)
+    sample_multiplier_study = _uses_sample_multiplier(config)
     node_seed = named_seed(
         seed,
         "capacity-node",
         node.level,
         node.first_block,
         node.last_block,
-    ) if capacity_study else named_seed(seed, "node", node.node_id)
+    ) if sample_multiplier_study else named_seed(seed, "node", node.node_id)
     schema_version = (
-        "vamp-logt-dense-node-v2" if capacity_study else "vamp-logt-dense-node-v1"
+        "vamp-logt-dense-node-v2"
+        if sample_multiplier_study
+        else "vamp-logt-dense-node-v1"
     )
     if path.is_file():
         payload = torch.load(path, map_location="cpu", weights_only=True)
@@ -588,7 +630,7 @@ def _fit_or_load_node(
             or payload.get("node_id") != node.node_id
             or int(payload.get("seed", -1)) != node_seed
             or (
-                capacity_study
+                sample_multiplier_study
                 and int(payload.get("training_sample_multiplier", -1))
                 != training_sample_multiplier
             )
@@ -622,15 +664,18 @@ def _fit_or_load_node(
             "schema_version": schema_version,
             "seed": node_seed,
         }
-    if capacity_study:
+    if sample_multiplier_study:
         payload["training_sample_multiplier"] = training_sample_multiplier
     atomic_torch_save(path, payload)
     return file_sha256(path), result.training_example_presentations
 
 
-def _is_capacity_study(config: VampLogTDenseConfig) -> bool:
+def _uses_sample_multiplier(config: VampLogTDenseConfig) -> bool:
     """Return whether sample multiplier is an authenticated coordinate."""
-    return config.protocol_revision == "dense-full-model-v5-scaling-capacity"
+    return config.protocol_revision in {
+        "dense-full-model-v5-scaling-capacity",
+        "dense-full-model-v6-sample-calibrated",
+    }
 
 
 def _node_record(node: TemporalNode) -> dict[str, object]:

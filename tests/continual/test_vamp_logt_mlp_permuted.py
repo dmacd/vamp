@@ -22,9 +22,11 @@ from apm.continual.dense_mlp_adapter import (
     zero_dense_delta,
 )
 from apm.continual.logt_behavioral_integrator import (
+    IntegratorConditionState,
     IntegratorObservations,
     IntegratorSupervision,
     create_condition_state,
+    prediction_logits,
     train_condition,
 )
 from apm.continual.vision.imagenetr.checkpoints import atomic_torch_save
@@ -62,11 +64,16 @@ from apm.experiments.vamp_logt_mlp_permuted_reporting import (
     write_results,
 )
 from apm.experiments.vamp_logt_mlp_permuted_scaling import (
+    _DiskFeatureCache,
     _capacity_cumulative_series,
+    _full_replay_model_passes,
     _growth_fits,
+    _persistent_model_passes,
     _run_scaling,
     _run_scaling_seed,
     _shared_hierarchy_work,
+    _select_sample_calibration_epoch,
+    _train_full_replay_feature_cache,
     _timed_state_creation,
 )
 from apm.experiments.vamp_logt_router_reporting import _html
@@ -256,6 +263,158 @@ def test_capacity_protocol_is_one_seed_one_policy_and_two_paired_sample_arms() -
     ) == 17_650_160
 
 
+def test_sample_calibrated_protocol_freezes_selection_and_time_rules() -> None:
+    config = load_config(
+        "configs/vamp_logt_mlp_permuted_100_sample_calibrated.yaml"
+    )
+    assert config.protocol_revision == "dense-full-model-v6-sample-calibrated"
+    assert config.calibration.candidate_widths == ((1024, 1024, 512),)
+    assert config.integrator.hidden_widths == (1024, 512, 256)
+    assert config.online.seeds == (0,)
+    assert config.scaling is not None
+    assert config.scaling.hierarchy_node_capacities == (1,)
+    assert config.sample_calibration is not None
+    assert config.sample_calibration.sample_multiplier_candidates == (
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+    )
+    assert config.sample_calibration.prefix_steps == 10
+    assert config.sample_calibration.target_accuracy == 0.95
+    assert config.sample_calibration.optional_full_checkpoints == (16, 26, 41, 66)
+    assert config.sample_calibration.total_time_budget_seconds == 3600.0
+
+
+def test_sample_calibration_selects_earliest_epoch_that_passes_every_prefix() -> None:
+    rows = tuple(
+        {
+            "epoch_metrics": [
+                {"accuracy": first},
+                {"accuracy": second},
+                {"accuracy": third},
+            ]
+        }
+        for first, second, third in (
+            (0.94, 0.95, 0.97),
+            (0.96, 0.951, 0.96),
+            (0.93, 0.952, 0.955),
+        )
+    )
+    selected, accuracies, best_epoch, best_minimum = _select_sample_calibration_epoch(
+        rows,
+        3,
+        0.95,
+    )
+    assert selected == 2
+    assert accuracies == pytest.approx((0.95, 0.951, 0.952))
+    assert best_epoch == 3
+    assert best_minimum == pytest.approx(0.955)
+
+
+def test_calibrated_work_formulas_count_frozen_forward_and_optimizer_passes() -> None:
+    config = load_config(
+        "configs/vamp_logt_mlp_permuted_100_sample_calibrated.yaml"
+    )
+    assert _full_replay_model_passes(config, 10, 4, 7) == (
+        256 * 4 * 10 * ((10).bit_count() + 2 * 7)
+    )
+    manual_persistent = sum(
+        (256 * 4 if step == 1 else 2 * 256 * 4)
+        * (step.bit_count() + 2 * 4)
+        for step in range(1, 101)
+    )
+    assert _persistent_model_passes(config, 4) == manual_persistent
+
+
+def test_disk_cached_full_replay_preserves_exact_optimizer_updates(
+    tmp_path: Path,
+) -> None:
+    config = load_config(
+        "configs/vamp_logt_mlp_permuted_100_sample_calibrated.yaml"
+    )
+    config = replace(
+        config,
+        runtime=replace(config.runtime, device="cpu", progress=False),
+    )
+    rows, input_dim, slot_dim = 130, 14, 2
+    generator = torch.Generator().manual_seed(91)
+    features = torch.randn((rows, input_dim), generator=generator)
+    baseline = torch.log_softmax(
+        torch.randn((rows, 10), generator=generator),
+        dim=1,
+    )
+    labels = torch.arange(rows, dtype=torch.int64) % 10
+    observations = IntegratorObservations(
+        features,
+        torch.zeros((rows, 7, 10)),
+        torch.tensor((True, False, False, False, False, False, False)),
+        baseline,
+    )
+    name = "disk-cache-equivalence"
+    materialized = create_condition_state(
+        name,
+        input_dim,
+        slot_dim,
+        config.integrator,
+        0,
+        torch.device("cpu"),
+    )
+    streamed = create_condition_state(
+        name,
+        input_dim,
+        slot_dim,
+        config.integrator,
+        0,
+        torch.device("cpu"),
+    )
+    train_condition(
+        materialized,
+        IntegratorSupervision(observations, labels),
+        None,
+        2,
+        config.integrator,
+        0,
+        3,
+        torch.device("cpu"),
+    )
+    cache_path = tmp_path / "features.f32"
+    cache_rows = torch.cat((features, baseline, labels[:, None].float()), dim=1)
+    cache_rows.numpy().tofile(cache_path)
+    cache = _DiskFeatureCache(
+        cache_path,
+        rows,
+        input_dim,
+        input_dim + 11,
+        0.0,
+        0.0,
+        0,
+        0,
+        rows,
+        cache_path.stat().st_size,
+    )
+    _, _, chunk_count = _train_full_replay_feature_cache(
+        streamed,
+        cache,
+        2,
+        config,
+        0,
+        3,
+        torch.device("cpu"),
+    )
+    assert chunk_count == 2
+    assert streamed.optimizer_steps == materialized.optimizer_steps == 4
+    for name, expected in materialized.integrator.state_dict().items():
+        torch.testing.assert_close(
+            streamed.integrator.state_dict()[name],
+            expected,
+            rtol=0.0,
+            atol=0.0,
+        )
+
+
 def test_doubled_training_allocations_retain_standard_roles_and_evaluation() -> None:
     config = load_config("configs/vamp_logt_mlp_permuted_100_capacity.yaml")
     standard = build_stream_allocations(config, 0)
@@ -267,6 +426,26 @@ def test_doubled_training_allocations_retain_standard_roles_and_evaluation() -> 
         assert expanded.observer_indices[:256] == base.observer_indices
         assert expanded.evaluation_indices == base.evaluation_indices
         assert len(expanded.model_indices) == len(expanded.observer_indices) == 512
+        combined = (
+            expanded.model_indices
+            + expanded.observer_indices
+            + expanded.evaluation_indices
+        )
+        assert len(combined) == len(set(combined))
+
+
+def test_sample_calibration_largest_allocation_is_nested_and_disjoint() -> None:
+    config = load_config(
+        "configs/vamp_logt_mlp_permuted_100_sample_calibrated.yaml"
+    )
+    standard = build_stream_allocations(config, 0)
+    largest = build_stream_allocations(config, 0, training_sample_multiplier=32)
+    for base, expanded in zip(standard, largest, strict=True):
+        assert expanded.domain_id == base.domain_id
+        assert expanded.model_indices[:256] == base.model_indices
+        assert expanded.observer_indices[:256] == base.observer_indices
+        assert expanded.evaluation_indices == base.evaluation_indices
+        assert len(expanded.model_indices) == len(expanded.observer_indices) == 8192
         combined = (
             expanded.model_indices
             + expanded.observer_indices
@@ -356,6 +535,75 @@ def test_integrator_training_reports_only_optimizer_model_passes(tmp_path: Path)
     assert result.training_forward_calls == 16
     assert result.training_backward_calls == 8
     assert result.training_wall_seconds >= 0.0
+
+
+def test_epoch_callback_does_not_change_fixed_epoch_training(tmp_path: Path) -> None:
+    config = _tiny_config(tmp_path)
+    integrator_config = replace(config.integrator, dropout=0.2)
+    active_mask = torch.tensor((True, False))
+    observations = IntegratorObservations(
+        torch.randn((8, 30), generator=torch.Generator().manual_seed(73)),
+        torch.zeros((8, 2, 10)),
+        active_mask,
+        torch.zeros((8, 10)),
+    )
+    supervision = IntegratorSupervision(
+        observations,
+        torch.arange(8, dtype=torch.int64),
+    )
+    states = tuple(
+        create_condition_state(
+            "callback-parity",
+            30,
+            15,
+            integrator_config,
+            41,
+            torch.device("cpu"),
+        )
+        for _ in range(2)
+    )
+    train_condition(
+        states[0],
+        supervision,
+        None,
+        3,
+        integrator_config,
+        41,
+        2,
+        torch.device("cpu"),
+    )
+    observed_epochs: tuple[int, ...] = ()
+
+    def inspect_epoch(epoch: int, state: IntegratorConditionState) -> None:
+        nonlocal observed_epochs
+        prediction_logits(
+            state.integrator,
+            observations,
+            torch.device("cpu"),
+            2,
+        )
+        observed_epochs = (*observed_epochs, epoch)
+
+    train_condition(
+        states[1],
+        supervision,
+        None,
+        3,
+        integrator_config,
+        41,
+        2,
+        torch.device("cpu"),
+        epoch_callback=inspect_epoch,
+    )
+    assert observed_epochs == (1, 2, 3)
+    assert all(
+        torch.equal(left, right)
+        for left, right in zip(
+            states[0].integrator.parameters(),
+            states[1].integrator.parameters(),
+            strict=True,
+        )
+    )
 
 
 def test_shared_hierarchy_work_counts_leaf_and_binary_carries() -> None:

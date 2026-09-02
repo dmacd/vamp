@@ -12,6 +12,80 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Outcome — Sample-calibrated 100-permutation Integrators
+
+- **Checkpoint complete (2026-09-02).** Commit `dcb7951` records the existing
+  100-task scaling, five-seed consolidation, and capacity/sample-count studies,
+  including the corrected runtime figures and the user's updated `STYLE.md`.
+- **Calibration and hierarchy complete (2026-09-02).** The reference model
+  first passes the validation rule at 32x samples: 8,192 model and 8,192
+  disjoint observer examples per task, with the earliest common passing
+  full-replay epoch equal to 3. Prefix validation accuracies at that epoch are
+  95.14%--96.35%. The selected hierarchy is complete through task 100 and is
+  authenticated on resume.
+- **Production run complete (2026-09-02).** The reference-sized
+  784-1024-1024-512-10 base and 3661-1024-512-256-10 integrator met the strict
+  validation-only rule at 8,192 model plus 8,192 disjoint observer examples
+  per task. The earliest common passing fresh-full-replay budget was three
+  epochs. All ten prefix accuracies at that epoch were 95.14%--96.35%; every
+  smaller tested allocation failed. No final test examples informed selection.
+- At task 100, the persistent uniform-replay integrator reached 94.26% test
+  accuracy and the fresh three-epoch full-replay integrator reached 95.05%.
+  The 0.79-point difference is a single fixed-order, single-seed observation,
+  not a variance estimate. Full replay was also measured at tasks 1, 2, 4, 8,
+  and 10. The endpoint-first projection was 4,448 seconds for required work and
+  4,619 seconds with the optional task-16/26/41/66 checkpoints, so those four
+  checkpoints were omitted under the frozen one-hour rule.
+- **OOM correction verified.** Two unpublished task-100 attempts died because
+  the original implementation simultaneously retained the 819,200-image
+  archive and its roughly 12 GB feature matrix. The corrected implementation
+  streams one 8,192-row task block into a temporary 11.2 GiB float32 memory map
+  and holds only that block plus one optimizer minibatch in anonymous memory.
+  Peak observed process RSS stayed near 4 GiB, host availability remained
+  healthy, and the cache was deleted after publication. A deterministic unit
+  fixture proves bit-exact optimizer equivalence with the in-memory path; the
+  storage-only change is authenticated separately from the original protocol.
+- Exact accounting records 2,457,600 frozen-feature forward example-passes and
+  2,457,600 integrator forward/backward example-passes for the task-100 fresh
+  fit. Persistent replay used 114,688 training forward and 65,536 backward
+  example-passes at task 100. Its cumulative wall-time curve is close to
+  `T log2(T+1)` over this run (R-squared 0.999), while fresh checkpoint time is
+  close to linear in `T` (power exponent 1.029, R-squared 1.000).
+- All 15 acceptance checks pass. Both focused serial environments pass all 26
+  tests, the CUDA run completed, figures and semantic HTML tables were visually
+  inspected, and a complete resume finished in 8.4 seconds without retraining.
+  Every compact report, plot, ledger, and summary remained byte-identical. The
+  report is under
+  `artifacts/vamp-logt-mlp-permuted-mnist-100-sample-calibrated/runs/e22281a78ae6864ac8a4348bec68fad0b208faad3c721b04b928ff21540e9d9a/`.
+  Source, protocol/config, and the compact technical-writer handoff are
+  included in the repository; model and optimizer checkpoints remain
+  intentionally untracked.
+- **Projection wording corrected (2026-09-02).** The first report conflated the
+  complete projected wall time with the marginal price of four optional fits.
+  The optional task-16/26/41/66 fits accounted for only 171.07 projected seconds
+  after the safety factor. The 4,618.63-second total was dominated by 3,716.25
+  seconds already spent on calibration and hierarchy construction, followed by
+  the 99.09-second task-100 endpoint, 332.22 projected seconds of remaining
+  required training, and a 300-second reporting reserve. The regenerated report
+  gives this arithmetic explicitly in a semantic table. A report-only amendment
+  authenticates the wording change and states that no training result changed.
+- **Cumulative scaling report restored (2026-09-02).** The initial calibrated
+  report also replaced the established training-work layout with four unfitted
+  curves. The corrected report now includes: both conditions on common absolute
+  wall/forward/backward panels; observed cumulative persistent wall time against
+  through-origin `T log2(T+1)` and empirical power fits; the corresponding
+  fresh-fit curves; six wall/feature/backward normalization panels; an explicit
+  task-100 endpoint work comparison; and condition-scoped checkpoint rows.
+  Persistent cumulative wall time fits `T log T` with R-squared 0.999 versus
+  0.997 for a power fit with exponent 1.146. Fresh-fit wall time is closer to
+  linear over the four fitted checkpoints (power exponent 1.029, R-squared
+  1.000) than to the `t log t` reference (R-squared 0.995). The report explains
+  that persistent end-to-end frozen-feature work is `Theta(T log T)`, one fresh
+  endpoint fit is `Theta(t log t)`, and running fresh full replay at every task
+  would accumulate `Theta(T^2 log T)` work. The report-only amendment, complete
+  resume, and all regenerated summary/report/plot hashes are stable; the focused
+  serial suite still passes all 26 tests.
+
 ## Completed Outcome — 100-permutation Capacity and Sample-count Diagnostic
 
 The successor protocol is frozen in

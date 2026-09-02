@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 import math
 from time import perf_counter
@@ -460,8 +460,10 @@ def train_condition(
     seed: int,
     macro_step: int,
     device: torch.device,
+    *,
+    epoch_callback: Callable[[int, IntegratorConditionState], None] | None = None,
 ) -> IntegratorTrainingResult:
-    """Train one condition and measure only loss-construction/gradient work."""
+    """Train one condition and optionally inspect state after each complete epoch."""
     if epochs < 1:
         raise ValueError("integrator training requires at least one epoch")
     before_current = _source_metrics(state.integrator, current, device, config.minibatch_size)
@@ -480,9 +482,11 @@ def train_condition(
     if device.type == "cuda":
         torch.cuda.synchronize(device)
     training_start = perf_counter()
+    callback_wall_seconds = 0.0
     with torch.random.fork_rng(devices=device_indices):
         torch.manual_seed(named_seed(seed, state.name, macro_step, "dropout"))
         for epoch in range(epochs):
+            state.integrator.train()
             chunks = _training_chunks(
                 len(current.labels),
                 0 if historical is None else len(historical.labels),
@@ -513,9 +517,17 @@ def train_condition(
                 )
                 state.optimizer.step()
                 state.optimizer_steps += 1
+            if epoch_callback is not None:
+                if device.type == "cuda":
+                    torch.cuda.synchronize(device)
+                callback_started = perf_counter()
+                epoch_callback(epoch + 1, state)
+                if device.type == "cuda":
+                    torch.cuda.synchronize(device)
+                callback_wall_seconds += perf_counter() - callback_started
     if device.type == "cuda":
         torch.cuda.synchronize(device)
-    training_wall_seconds = perf_counter() - training_start
+    training_wall_seconds = perf_counter() - training_start - callback_wall_seconds
     after_current = _source_metrics(state.integrator, current, device, config.minibatch_size)
     after_historical = (
         None

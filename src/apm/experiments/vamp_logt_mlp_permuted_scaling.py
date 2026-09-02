@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 import csv
 from dataclasses import asdict, dataclass
 from functools import lru_cache
@@ -17,6 +17,7 @@ from time import perf_counter
 
 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
+import numpy as np
 import torch
 from torch import Tensor
 from torch.nn import functional as F
@@ -43,6 +44,7 @@ from apm.continual.logt_behavioral_integrator import (
     IntegratorObservations,
     IntegratorSupervision,
     create_condition_state,
+    named_seed as integrator_named_seed,
     prediction_logits,
     train_condition,
 )
@@ -53,6 +55,7 @@ from apm.experiments.vamp_logt_mlp_permuted_calibration import (
     load_calibrated_base,
 )
 from apm.experiments.vamp_logt_mlp_permuted_config import (
+    SAMPLE_CALIBRATION_REVISION,
     VampLogTDenseConfig,
     load_config,
 )
@@ -80,9 +83,11 @@ CAPACITY_CONFIG = Path("configs/vamp_logt_mlp_permuted_100_capacity.yaml")
 CAPACITY_REVISION = "dense-full-model-v5-scaling-capacity"
 UNIFORM_CONDITION = "integrator_uniform_replay"
 FULL_REPLAY_CONDITION = "full_replay_integrator_20_epochs"
+CALIBRATED_FULL_REPLAY_CONDITION = "full_replay_integrator_calibrated_epochs"
 CONDITION_LABELS = {
     UNIFORM_CONDITION: "Persistent uniform replay",
     FULL_REPLAY_CONDITION: "Fresh full replay, 20 epochs",
+    CALIBRATED_FULL_REPLAY_CONDITION: "Fresh full replay, calibrated epochs",
 }
 POLICY_NAMES = {
     1: "one_node_per_level",
@@ -135,6 +140,11 @@ MATERIAL_SOURCES = (
 CAPACITY_MATERIAL_SOURCES = (
     "configs/vamp_logt_mlp_permuted_100_capacity.yaml",
     "docs/logt_vamp_permuted_mnist_100_capacity_protocol.md",
+    *MATERIAL_SOURCES[3:],
+)
+SAMPLE_CALIBRATION_MATERIAL_SOURCES = (
+    "configs/vamp_logt_mlp_permuted_100_sample_calibrated.yaml",
+    "docs/logt_vamp_permuted_mnist_100_sample_calibrated_protocol.md",
     *MATERIAL_SOURCES[3:],
 )
 
@@ -195,6 +205,31 @@ class _FullReplayFit:
     state: IntegratorConditionState
     work: _TrainingWork
     checkpoint_sha256: str
+    feature_storage: str = "in_memory"
+    peak_resident_feature_rows: int = 0
+    temporary_feature_cache_bytes: int = 0
+
+    def storage_record(self) -> dict[str, object]:
+        """Return bounded-memory implementation details for evidence rows."""
+        return {
+            "feature_storage": self.feature_storage,
+            "peak_resident_feature_rows": self.peak_resident_feature_rows,
+            "temporary_feature_cache_bytes": self.temporary_feature_cache_bytes,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class _DiskFeatureCache:
+    path: Path
+    rows: int
+    input_dim: int
+    record_columns: int
+    data_preparation_wall_seconds: float
+    feature_wall_seconds: float
+    feature_forward_example_passes: int
+    feature_forward_calls: int
+    peak_resident_feature_rows: int
+    bytes: int
 
 
 def run_experiment(config_path: Path = DEFAULT_CONFIG) -> Path:
@@ -208,7 +243,18 @@ def run_experiment(config_path: Path = DEFAULT_CONFIG) -> Path:
     run_root = config.artifact_root / "runs" / config.config_hash
     run_root.mkdir(parents=True, exist_ok=True)
     _write_protocol(config, run_root)
-    if _is_capacity_study(config):
+    experiment_started = perf_counter()
+    if _is_sample_calibration_study(config):
+        print(f"100-permutation sample-calibrated run: {run_root}", flush=True)
+        print(f"Working artifact directory: {run_root}", flush=True)
+        print("Overall ETA: pending the task-100 full-replay timing probe", flush=True)
+        _run_sample_calibrated_experiment(
+            config,
+            run_root,
+            device,
+            experiment_started,
+        )
+    elif _is_capacity_study(config):
         print(f"100-permutation capacity and sample-count run: {run_root}", flush=True)
         print("Phase 1/4 — train or authenticate the fixed 4×-parameter base", flush=True)
         _fit_capacity_base(config, run_root, device)
@@ -250,9 +296,13 @@ def run_experiment(config_path: Path = DEFAULT_CONFIG) -> Path:
                 "config_hash": config.config_hash,
                 "run_root": str(run_root),
                 "schema_version": (
-                    "vamp-logt-dense-scaling-latest-v3"
-                    if _is_capacity_study(config)
-                    else "vamp-logt-dense-scaling-latest-v2"
+                    "vamp-logt-dense-scaling-latest-v4"
+                    if _is_sample_calibration_study(config)
+                    else (
+                        "vamp-logt-dense-scaling-latest-v3"
+                        if _is_capacity_study(config)
+                        else "vamp-logt-dense-scaling-latest-v2"
+                    )
                 ),
             }
         ),
@@ -263,7 +313,13 @@ def run_experiment(config_path: Path = DEFAULT_CONFIG) -> Path:
 def _write_protocol(config: VampLogTDenseConfig, run_root: Path) -> None:
     project_root = Path(__file__).resolve().parents[3]
     material_sources = (
-        CAPACITY_MATERIAL_SOURCES if _is_capacity_study(config) else MATERIAL_SOURCES
+        SAMPLE_CALIBRATION_MATERIAL_SOURCES
+        if _is_sample_calibration_study(config)
+        else (
+            CAPACITY_MATERIAL_SOURCES
+            if _is_capacity_study(config)
+            else MATERIAL_SOURCES
+        )
     )
     missing = tuple(path for path in material_sources if not (project_root / path).is_file())
     if missing:
@@ -281,32 +337,222 @@ def _write_protocol(config: VampLogTDenseConfig, run_root: Path) -> None:
     )
     if any(not path.is_file() for path in predecessor_files):
         raise FileNotFoundError("the declared single-seed scaling predecessor is incomplete")
-    publish_immutable_json(
-        run_root / "protocol.json",
-        {
-            "base_evidence": {
-                "base_checkpoint_sha256": file_sha256(source_base),
-                "calibration_summary_sha256": file_sha256(source_summary),
-                "source_run": str(source_root),
+    protocol = {
+        "base_evidence": {
+            "base_checkpoint_sha256": file_sha256(source_base),
+            "calibration_summary_sha256": file_sha256(source_summary),
+            "source_run": str(source_root),
+        },
+        "config": config.as_record(),
+        "config_hash": config.config_hash,
+        "implementation_sha256": {
+            path: file_sha256(project_root / path) for path in material_sources
+        },
+        "predecessor": {
+            "run": str(predecessor),
+            "sha256": {
+                path.name: file_sha256(path) for path in predecessor_files
             },
-            "config": config.as_record(),
-            "config_hash": config.config_hash,
-            "implementation_sha256": {
-                path: file_sha256(project_root / path) for path in material_sources
-            },
-            "predecessor": {
-                "run": str(predecessor),
-                "sha256": {
-                    path.name: file_sha256(path) for path in predecessor_files
-                },
-            },
-            "pytorch_version": torch.__version__,
-            "schema_version": (
+        },
+        "pytorch_version": torch.__version__,
+        "schema_version": (
+            "vamp-logt-dense-scaling-protocol-v4"
+            if _is_sample_calibration_study(config)
+            else (
                 "vamp-logt-dense-scaling-protocol-v3"
                 if _is_capacity_study(config)
                 else "vamp-logt-dense-scaling-protocol-v2"
+            )
+        ),
+        "source": source_manifest(config),
+    }
+    protocol_path = run_root / "protocol.json"
+    if not protocol_path.is_file():
+        publish_immutable_json(protocol_path, protocol)
+        return
+    original = load_canonical_json(protocol_path)
+    if canonical_json_bytes(original) == canonical_json_bytes(protocol):
+        return
+    if not _is_sample_calibration_study(config):
+        publish_immutable_json(protocol_path, protocol)
+        return
+
+    original_core = {
+        key: value for key, value in original.items() if key != "implementation_sha256"
+    }
+    current_core = {
+        key: value for key, value in protocol.items() if key != "implementation_sha256"
+    }
+    original_implementation = original.get("implementation_sha256")
+    current_implementation = protocol["implementation_sha256"]
+    if (
+        canonical_json_bytes(original_core) != canonical_json_bytes(current_core)
+        or not isinstance(original_implementation, dict)
+    ):
+        raise ValueError("OOM recovery cannot change the frozen scientific protocol")
+    changed_sources = tuple(
+        path
+        for path in material_sources
+        if original_implementation.get(path) != current_implementation[path]
+    )
+    permitted_changes = {
+        "docs/logt_vamp_permuted_mnist_100_sample_calibrated_protocol.md",
+        "src/apm/experiments/vamp_logt_mlp_permuted_scaling.py",
+    }
+    if not changed_sources or not set(changed_sources) <= permitted_changes:
+        raise ValueError(
+            "OOM recovery implementation drift exceeds its storage-only amendment"
+        )
+    oom_amendment_path = run_root / "protocol-amendment-oom-streaming.json"
+    oom_amendment = {
+        "changed_material_sources": list(changed_sources),
+        "config_hash": config.config_hash,
+        "implementation_sha256_after": {
+            path: current_implementation[path] for path in changed_sources
+        },
+        "implementation_sha256_before": {
+            path: original_implementation[path] for path in changed_sources
+        },
+        "original_protocol_sha256": file_sha256(protocol_path),
+        "replacement_protocol_record_sha256": record_sha256(protocol),
+        "retained_completed_phases": [
+            "validation-only sample calibration",
+            "selected 100-task frozen hierarchy",
+        ],
+        "schema_version": "vamp-logt-oom-streaming-amendment-v1",
+        "scope": (
+            "Storage-only correction after two unpublished task-100 OOMs: "
+            "write frozen features once to a bounded memory-mapped cache, "
+            "preserve seeded minibatch order and optimizer updates, and remove "
+            "the temporary cache after checkpoint publication."
+        ),
+        "status": "active",
+        "unpublished_oom_attempts": 2,
+    }
+    if not oom_amendment_path.is_file():
+        publish_immutable_json(oom_amendment_path, oom_amendment)
+        return
+
+    stored_oom_amendment = load_canonical_json(oom_amendment_path)
+    stored_after = stored_oom_amendment.get("implementation_sha256_after")
+    if not isinstance(stored_after, dict):
+        raise ValueError("stored OOM amendment lacks implementation hashes")
+    implementation_after_oom = dict(original_implementation)
+    implementation_after_oom.update(stored_after)
+    protocol_after_oom = dict(protocol)
+    protocol_after_oom["implementation_sha256"] = implementation_after_oom
+    stored_oom_is_valid = (
+        stored_oom_amendment.get("config_hash") == config.config_hash
+        and stored_oom_amendment.get("schema_version")
+        == "vamp-logt-oom-streaming-amendment-v1"
+        and stored_oom_amendment.get("original_protocol_sha256")
+        == file_sha256(protocol_path)
+        and stored_oom_amendment.get("replacement_protocol_record_sha256")
+        == record_sha256(protocol_after_oom)
+    )
+    if not stored_oom_is_valid:
+        raise ValueError("stored OOM amendment does not authenticate its predecessor")
+
+    drift_after_oom = tuple(
+        path
+        for path in material_sources
+        if implementation_after_oom.get(path) != current_implementation[path]
+    )
+    if not drift_after_oom:
+        return
+    report_source = "src/apm/experiments/vamp_logt_mlp_permuted_scaling.py"
+    if drift_after_oom != (report_source,):
+        raise ValueError("post-OOM implementation drift is not report-only")
+    projection_amendment_path = (
+        run_root / "protocol-amendment-report-projection-clarification.json"
+    )
+    projection_amendment = {
+        "changed_material_sources": [report_source],
+        "config_hash": config.config_hash,
+        "implementation_sha256_after": {
+            report_source: current_implementation[report_source]
+        },
+        "implementation_sha256_before": {
+            report_source: implementation_after_oom[report_source]
+        },
+        "prior_amendment_sha256": file_sha256(oom_amendment_path),
+        "prior_protocol_record_sha256": record_sha256(protocol_after_oom),
+        "replacement_protocol_record_sha256": record_sha256(protocol),
+        "schema_version": "vamp-logt-report-clarification-amendment-v1",
+        "scope": (
+            "Report-only clarification separating elapsed setup time, "
+            "remaining required work, reserve time, and the marginal cost of "
+            "the four optional full-replay fits. No training result changed."
+        ),
+        "scientific_results_changed": False,
+        "status": "active",
+    }
+    if not projection_amendment_path.is_file():
+        publish_immutable_json(projection_amendment_path, projection_amendment)
+        return
+
+    stored_projection_amendment = load_canonical_json(projection_amendment_path)
+    projection_after = stored_projection_amendment.get(
+        "implementation_sha256_after"
+    )
+    if not isinstance(projection_after, dict):
+        raise ValueError("stored projection amendment lacks implementation hashes")
+    implementation_after_projection = dict(implementation_after_oom)
+    implementation_after_projection.update(projection_after)
+    protocol_after_projection = dict(protocol)
+    protocol_after_projection["implementation_sha256"] = (
+        implementation_after_projection
+    )
+    stored_projection_is_valid = (
+        stored_projection_amendment.get("config_hash") == config.config_hash
+        and stored_projection_amendment.get("schema_version")
+        == "vamp-logt-report-clarification-amendment-v1"
+        and stored_projection_amendment.get("prior_amendment_sha256")
+        == file_sha256(oom_amendment_path)
+        and stored_projection_amendment.get("prior_protocol_record_sha256")
+        == record_sha256(protocol_after_oom)
+        and stored_projection_amendment.get("replacement_protocol_record_sha256")
+        == record_sha256(protocol_after_projection)
+        and stored_projection_amendment.get("scientific_results_changed") is False
+    )
+    if not stored_projection_is_valid:
+        raise ValueError(
+            "stored projection amendment does not authenticate its predecessor"
+        )
+
+    drift_after_projection = tuple(
+        path
+        for path in material_sources
+        if implementation_after_projection.get(path) != current_implementation[path]
+    )
+    if not drift_after_projection:
+        return
+    if drift_after_projection != (report_source,):
+        raise ValueError("post-projection implementation drift is not report-only")
+    publish_immutable_json(
+        run_root / "protocol-amendment-report-scaling-format.json",
+        {
+            "changed_material_sources": [report_source],
+            "config_hash": config.config_hash,
+            "implementation_sha256_after": {
+                report_source: current_implementation[report_source]
+            },
+            "implementation_sha256_before": {
+                report_source: implementation_after_projection[report_source]
+            },
+            "prior_amendment_sha256": file_sha256(projection_amendment_path),
+            "prior_protocol_record_sha256": record_sha256(
+                protocol_after_projection
             ),
-            "source": source_manifest(config),
+            "replacement_protocol_record_sha256": record_sha256(protocol),
+            "schema_version": "vamp-logt-report-scaling-format-amendment-v1",
+            "scope": (
+                "Report-only restoration of absolute, cumulative empirical-fit, "
+                "and theoretical-normalization views for persistent and fresh "
+                "full replay. No training result changed."
+            ),
+            "scientific_results_changed": False,
+            "status": "active",
         },
     )
 
@@ -505,6 +751,628 @@ def _import_base_evidence(config: VampLogTDenseConfig, run_root: Path) -> None:
     load_calibrated_base(config, run_root)
 
 
+def _run_sample_calibrated_experiment(
+    config: VampLogTDenseConfig,
+    run_root: Path,
+    device: torch.device,
+    experiment_started: float,
+) -> None:
+    """Run the validation-selected sample arm and its endpoint-first comparison."""
+    calibration_config = config.sample_calibration
+    if calibration_config is None:
+        raise ValueError("sample-calibrated protocol lacks its selection settings")
+    print("Phase 1/6 — authenticate the reference dense base", flush=True)
+    _import_base_evidence(config, run_root)
+    print("Phase 2/6 — calibrate samples and full-replay epochs on tasks 1–10", flush=True)
+    selection = _calibrate_sample_budget(config, run_root, device)
+    if selection.get("status") != "complete":
+        print("Calibration stopped: no declared sample candidate reached 95%", flush=True)
+        _write_sample_calibration_stop_report(config, run_root, selection)
+        return
+
+    sample_multiplier = int(selection["selected_sample_multiplier"])
+    epoch_budget = int(selection["selected_full_replay_epochs"])
+    arm_root = _arm_root(config, run_root, sample_multiplier)
+    print(
+        "Selected "
+        f"{config.benchmark.observer_batch_size * sample_multiplier} samples per role "
+        f"and {epoch_budget} full-replay epochs.",
+        flush=True,
+    )
+    print("Phase 3/6 — extend the selected hierarchy through task 100", flush=True)
+    build_hierarchy_tape(
+        config,
+        run_root,
+        device,
+        max_nodes_per_level=1,
+        hierarchy_root=arm_root / "hierarchy",
+        training_sample_multiplier=sample_multiplier,
+    )
+    print("Phase 4/6 — fit and evaluate the task-100 full-replay endpoint first", flush=True)
+    endpoint = _run_full_replay_endpoint_probe(
+        config,
+        run_root,
+        device,
+        sample_multiplier,
+        epoch_budget,
+    )
+    schedule = _resolve_sample_calibrated_schedule(
+        config,
+        run_root,
+        endpoint,
+        sample_multiplier,
+        epoch_budget,
+        perf_counter() - experiment_started,
+    )
+    print(
+        f"Task-100 full replay: {100 * float(endpoint['accuracy']):.2f}% test "
+        f"accuracy in {float(endpoint['total_training_wall_seconds']):.1f}s.",
+        flush=True,
+    )
+    print(
+        f"Projected total: {float(schedule['projected_total_seconds']):.0f}s; "
+        f"intermediate full-replay checkpoints "
+        f"{'included' if schedule['optional_checkpoints_included'] else 'omitted'}.",
+        flush=True,
+    )
+    print("Phase 5/6 — train persistent replay and scheduled fresh full replays", flush=True)
+    _run_scaling_seed(
+        config,
+        run_root,
+        1,
+        0,
+        device,
+        training_sample_multiplier=sample_multiplier,
+        full_replay_checkpoints=tuple(int(value) for value in schedule["checkpoints"]),
+        full_replay_condition=CALIBRATED_FULL_REPLAY_CONDITION,
+        offline_epochs=epoch_budget,
+    )
+    print("Phase 6/6 — validate, plot, and write the standalone report", flush=True)
+    _write_sample_calibrated_report(config, run_root)
+
+
+def _calibrate_sample_budget(
+    config: VampLogTDenseConfig,
+    run_root: Path,
+    device: torch.device,
+) -> dict[str, object]:
+    """Select the least data and earliest epoch satisfying all ten prefixes."""
+    calibration_config = config.sample_calibration
+    if calibration_config is None:
+        raise ValueError("sample calibration settings are absent")
+    selection_path = run_root / "calibration" / "sample_selection.json"
+    if selection_path.is_file():
+        selection = load_canonical_json(selection_path)
+        if selection.get("config_hash") != config.config_hash:
+            raise ValueError("stored sample selection belongs to another protocol")
+        return selection
+
+    calibration_started = perf_counter()
+    candidate_summaries: tuple[dict[str, object], ...] = ()
+    for multiplier in calibration_config.sample_multiplier_candidates:
+        sample_count = config.benchmark.observer_batch_size * multiplier
+        arm_root = _arm_root(config, run_root, multiplier)
+        print(
+            f"Calibration candidate: {sample_count} model + {sample_count} observer "
+            "examples per task",
+            flush=True,
+        )
+        build_hierarchy_tape(
+            config,
+            run_root,
+            device,
+            max_nodes_per_level=1,
+            hierarchy_root=arm_root / "hierarchy",
+            training_sample_multiplier=multiplier,
+            stop_after_step=calibration_config.prefix_steps,
+        )
+        candidate = _calibrate_sample_candidate(
+            config,
+            run_root,
+            device,
+            multiplier,
+        )
+        candidate_summaries = (*candidate_summaries, candidate)
+        if candidate["status"] == "passing":
+            selection = {
+                "calibration_wall_seconds": perf_counter() - calibration_started,
+                "candidate_summaries": list(candidate_summaries),
+                "config_hash": config.config_hash,
+                "schema_version": "vamp-logt-sample-selection-v1",
+                "selected_full_replay_epochs": candidate["selected_epoch"],
+                "selected_model": "reference_1024_1024_512",
+                "selected_sample_count_per_role": sample_count,
+                "selected_sample_multiplier": multiplier,
+                "selection_rule": calibration_config.selection_rule,
+                "status": "complete",
+                "target_accuracy": calibration_config.target_accuracy,
+                "test_evaluations_during_selection": 0,
+            }
+            publish_immutable_json(selection_path, selection)
+            return selection
+
+    selection = {
+        "calibration_wall_seconds": perf_counter() - calibration_started,
+        "candidate_summaries": list(candidate_summaries),
+        "config_hash": config.config_hash,
+        "schema_version": "vamp-logt-sample-selection-v1",
+        "selected_model": None,
+        "selection_rule": calibration_config.selection_rule,
+        "status": "failed_no_candidate",
+        "target_accuracy": calibration_config.target_accuracy,
+        "test_evaluations_during_selection": 0,
+    }
+    publish_immutable_json(selection_path, selection)
+    return selection
+
+
+def _calibrate_sample_candidate(
+    config: VampLogTDenseConfig,
+    run_root: Path,
+    device: torch.device,
+    sample_multiplier: int,
+) -> dict[str, object]:
+    """Measure all prefix-by-epoch validation accuracies for one sample count."""
+    calibration_config = config.sample_calibration
+    if calibration_config is None:
+        raise ValueError("sample calibration settings are absent")
+    directory = run_root / "calibration" / f"samples-{sample_multiplier:02d}x"
+    summary_path = directory / "summary.json"
+    ledger = ChainedJsonlLedger(
+        directory / "metrics.jsonl",
+        "vamp-logt-sample-calibration-metric-v1",
+    )
+    print(f"Calibration log: {ledger.path}", flush=True)
+    if summary_path.is_file():
+        summary = load_canonical_json(summary_path)
+        if (
+            summary.get("config_hash") != config.config_hash
+            or int(summary.get("sample_multiplier", -1)) != sample_multiplier
+            or int(summary.get("metric_rows", -1)) != ledger.next_sequence
+        ):
+            raise ValueError("stored sample candidate summary changed")
+        return summary
+
+    completed_steps = tuple(int(row["macro_step"]) for row in ledger.rows)
+    if completed_steps != tuple(range(1, len(completed_steps) + 1)):
+        raise ValueError("sample calibration ledger is not a complete prefix")
+    benchmark = build_benchmark(
+        config,
+        0,
+        training_sample_multiplier=sample_multiplier,
+    )
+    base = load_calibrated_base(config, run_root)
+    slot_dim = base.embedding_dim + 11
+    input_dim = config.observer.maximum_levels * slot_dim
+    try:
+        from tqdm.auto import tqdm
+    except ImportError as error:  # pragma: no cover - vision environment gate
+        raise RuntimeError("tqdm is required by the vision environment") from error
+    macro_steps = tqdm(
+        range(len(completed_steps) + 1, calibration_config.prefix_steps + 1),
+        initial=len(completed_steps),
+        total=calibration_config.prefix_steps,
+        desc=f"full-replay calibration samples={sample_multiplier}x",
+        disable=not config.runtime.progress,
+        unit="prefix",
+    )
+    hierarchy_root = _arm_root(config, run_root, sample_multiplier) / "hierarchy"
+    for macro_step in macro_steps:
+        training_examples = concatenate_batches(tuple(
+            benchmark.step(step).observer for step in range(1, macro_step + 1)
+        ))
+        validation_examples = concatenate_batches(tuple(
+            benchmark.step(step).evaluation for step in range(1, macro_step + 1)
+        ))
+        frontier = load_frontier(
+            config,
+            run_root,
+            0,
+            macro_step,
+            hierarchy_root=hierarchy_root,
+            training_sample_multiplier=sample_multiplier,
+        )
+        training_features = _timed_features(
+            config,
+            frontier,
+            training_examples,
+            base,
+            device,
+        )
+        validation_features = _timed_features(
+            config,
+            frontier,
+            validation_examples,
+            base,
+            device,
+        )
+        state, initialization_seconds = _timed_state_creation(
+            _full_replay_state_name(
+                CALIBRATED_FULL_REPLAY_CONDITION,
+                sample_multiplier,
+                macro_step,
+            ),
+            input_dim,
+            slot_dim,
+            config,
+            0,
+            1,
+            device,
+        )
+        epoch_metrics: tuple[dict[str, object], ...] = ()
+        callback_wall_seconds = 0.0
+
+        def capture_epoch(
+            epoch: int,
+            epoch_state: IntegratorConditionState,
+        ) -> None:
+            nonlocal epoch_metrics, callback_wall_seconds
+            callback_started = perf_counter()
+            metrics = _integrator_metrics(
+                epoch_state,
+                validation_features.observations,
+                validation_examples.labels,
+                config,
+                device,
+            )
+            callback_wall_seconds += perf_counter() - callback_started
+            epoch_metrics = (*epoch_metrics, {"epoch": epoch, **metrics})
+
+        result = train_condition(
+            state,
+            IntegratorSupervision(
+                training_features.observations,
+                training_examples.labels,
+            ),
+            None,
+            config.integrator.offline_epochs,
+            config.integrator,
+            0,
+            macro_step,
+            device,
+            epoch_callback=capture_epoch,
+        )
+        ledger.append({
+            "calibration_integrator_forward_example_passes": (
+                config.integrator.offline_epochs * len(validation_examples.labels)
+            ),
+            "calibration_validation_wall_seconds": callback_wall_seconds,
+            "config_hash": config.config_hash,
+            "epoch_metrics": list(epoch_metrics),
+            "feature_forward_example_passes": (
+                training_features.forward_example_passes
+            ),
+            "feature_wall_seconds": training_features.wall_seconds,
+            "integrator_backward_example_passes": (
+                result.training_backward_example_passes
+            ),
+            "integrator_forward_example_passes": (
+                result.training_forward_example_passes
+            ),
+            "macro_step": macro_step,
+            "optimizer_wall_seconds": result.training_wall_seconds,
+            "sample_count_per_role": (
+                config.benchmark.observer_batch_size * sample_multiplier
+            ),
+            "sample_multiplier": sample_multiplier,
+            "state_initialization_wall_seconds": initialization_seconds,
+            "test_evaluations": 0,
+            "training_examples": len(training_examples.labels),
+            "validation_examples": len(validation_examples.labels),
+            "validation_feature_forward_example_passes": (
+                validation_features.forward_example_passes
+            ),
+            "validation_feature_wall_seconds": validation_features.wall_seconds,
+        })
+        macro_steps.set_postfix(
+            best=f"{100 * max(float(row['accuracy']) for row in epoch_metrics):.2f}%"
+        )
+
+    selected_epoch, prefix_accuracies, best_epoch, best_minimum = (
+        _select_sample_calibration_epoch(
+            ledger.rows,
+            config.integrator.offline_epochs,
+            calibration_config.target_accuracy,
+        )
+    )
+    summary = {
+        "best_epoch_by_minimum_prefix_accuracy": best_epoch,
+        "best_minimum_prefix_accuracy": best_minimum,
+        "config_hash": config.config_hash,
+        "metric_rows": ledger.next_sequence,
+        "prefix_accuracies_at_selected_epoch": list(prefix_accuracies),
+        "sample_count_per_role": (
+            config.benchmark.observer_batch_size * sample_multiplier
+        ),
+        "sample_multiplier": sample_multiplier,
+        "schema_version": "vamp-logt-sample-candidate-summary-v1",
+        "selected_epoch": selected_epoch,
+        "status": "passing" if selected_epoch is not None else "failed_threshold",
+        "target_accuracy": calibration_config.target_accuracy,
+        "test_evaluations": 0,
+    }
+    publish_immutable_json(summary_path, summary)
+    return summary
+
+
+def _select_sample_calibration_epoch(
+    rows: Sequence[Mapping[str, object]],
+    maximum_epochs: int,
+    target_accuracy: float,
+) -> tuple[int | None, tuple[float, ...], int, float]:
+    """Apply the minimum-samples-then-epochs rule to complete prefix rows."""
+    if not rows or any(
+        len(tuple(row["epoch_metrics"])) != maximum_epochs for row in rows
+    ):
+        raise ValueError("sample calibration requires every epoch at every prefix")
+    accuracy_by_epoch = tuple(
+        tuple(
+            float(tuple(row["epoch_metrics"])[epoch - 1]["accuracy"])
+            for row in rows
+        )
+        for epoch in range(1, maximum_epochs + 1)
+    )
+    passing_epochs = tuple(
+        epoch
+        for epoch, accuracies in enumerate(accuracy_by_epoch, start=1)
+        if min(accuracies) >= target_accuracy
+    )
+    best_epoch = max(
+        range(1, maximum_epochs + 1),
+        key=lambda epoch: (min(accuracy_by_epoch[epoch - 1]), -epoch),
+    )
+    selected_epoch = passing_epochs[0] if passing_epochs else None
+    selected_accuracies = (
+        accuracy_by_epoch[selected_epoch - 1]
+        if selected_epoch is not None
+        else ()
+    )
+    return (
+        selected_epoch,
+        selected_accuracies,
+        best_epoch,
+        min(accuracy_by_epoch[best_epoch - 1]),
+    )
+
+
+def _integrator_metrics(
+    state: IntegratorConditionState,
+    observations: IntegratorObservations,
+    labels: Tensor,
+    config: VampLogTDenseConfig,
+    device: torch.device,
+) -> dict[str, float]:
+    """Measure one integrator on a fixed detached observation matrix."""
+    logits = prediction_logits(
+        state.integrator,
+        observations,
+        device,
+        config.integrator.minibatch_size,
+    )
+    return {
+        "accuracy": float((logits.argmax(dim=1) == labels).float().mean().item()),
+        "cross_entropy": float(F.cross_entropy(logits, labels).item()),
+    }
+
+
+def _run_full_replay_endpoint_probe(
+    config: VampLogTDenseConfig,
+    run_root: Path,
+    device: torch.device,
+    sample_multiplier: int,
+    epoch_budget: int,
+) -> dict[str, object]:
+    """Fit task 100 before every other final-condition training operation."""
+    path = run_root / "endpoint_probe.json"
+    if path.is_file():
+        probe = load_canonical_json(path)
+        if (
+            probe.get("config_hash") != config.config_hash
+            or int(probe.get("sample_multiplier", -1)) != sample_multiplier
+            or int(probe.get("epochs", -1)) != epoch_budget
+        ):
+            raise ValueError("stored task-100 endpoint probe changed")
+        return probe
+    benchmark = build_benchmark(
+        config,
+        0,
+        training_sample_multiplier=sample_multiplier,
+    )
+    base = load_calibrated_base(config, run_root)
+    arm_root = _arm_root(config, run_root, sample_multiplier)
+    frontier = load_frontier(
+        config,
+        run_root,
+        0,
+        config.benchmark.macro_steps,
+        hierarchy_root=arm_root / "hierarchy",
+        training_sample_multiplier=sample_multiplier,
+    )
+    slot_dim = base.embedding_dim + 11
+    full_fit = _fit_full_replay(
+        config,
+        arm_root / "scaling" / "seed-0",
+        config.benchmark.macro_steps,
+        frontier,
+        benchmark,
+        base,
+        config.observer.maximum_levels * slot_dim,
+        slot_dim,
+        0,
+        1,
+        device,
+        sample_multiplier,
+        condition=CALIBRATED_FULL_REPLAY_CONDITION,
+        offline_epochs=epoch_budget,
+    )
+    evaluation, excluded = _evaluate_conditions(
+        config,
+        benchmark,
+        frontier,
+        base,
+        {CALIBRATED_FULL_REPLAY_CONDITION: full_fit.state},
+        config.benchmark.macro_steps,
+        device,
+    )
+    probe = {
+        **evaluation[CALIBRATED_FULL_REPLAY_CONDITION],
+        **full_fit.work.as_record(),
+        **full_fit.storage_record(),
+        **excluded,
+        "checkpoint_sha256": full_fit.checkpoint_sha256,
+        "config_hash": config.config_hash,
+        "epochs": epoch_budget,
+        "macro_step": config.benchmark.macro_steps,
+        "sample_count_per_role": (
+            config.benchmark.observer_batch_size * sample_multiplier
+        ),
+        "sample_multiplier": sample_multiplier,
+        "schema_version": "vamp-logt-full-replay-endpoint-probe-v2",
+        "status": "complete",
+        "trained_before_persistent_condition": True,
+    }
+    publish_immutable_json(path, probe)
+    return probe
+
+
+def _resolve_sample_calibrated_schedule(
+    config: VampLogTDenseConfig,
+    run_root: Path,
+    endpoint: Mapping[str, object],
+    sample_multiplier: int,
+    epoch_budget: int,
+    elapsed_seconds: float,
+) -> dict[str, object]:
+    """Freeze the optional checkpoint decision from the endpoint timing probe."""
+    path = run_root / "full_replay_schedule.json"
+    if path.is_file():
+        schedule = load_canonical_json(path)
+        if schedule.get("config_hash") != config.config_hash:
+            raise ValueError("stored full-replay schedule belongs to another protocol")
+        return schedule
+    calibration_config = config.sample_calibration
+    if calibration_config is None:
+        raise ValueError("sample calibration settings are absent")
+    selection_path = run_root / "calibration" / "sample_selection.json"
+    hierarchy_summary_path = (
+        _arm_root(config, run_root, sample_multiplier) / "hierarchy" / "summary.json"
+    )
+    selection = load_canonical_json(selection_path)
+    calibration_started_at = selection_path.stat().st_mtime - float(
+        selection["calibration_wall_seconds"]
+    )
+    durable_seconds_through_hierarchy = max(
+        0.0,
+        hierarchy_summary_path.stat().st_mtime - calibration_started_at,
+    )
+    resolved_elapsed_seconds = max(
+        elapsed_seconds,
+        durable_seconds_through_hierarchy
+        + float(endpoint["total_training_wall_seconds"]),
+    )
+    mandatory = tuple(
+        step
+        for step in config.evaluation.full_checkpoints
+        if step not in calibration_config.optional_full_checkpoints
+    )
+    endpoint_passes = int(endpoint["total_training_forward_example_passes"]) + int(
+        endpoint["integrator_backward_example_passes"]
+    )
+    seconds_per_model_pass = (
+        float(endpoint["total_training_wall_seconds"]) / endpoint_passes
+    )
+    remaining_mandatory_passes = sum(
+        _full_replay_model_passes(config, step, sample_multiplier, epoch_budget)
+        for step in mandatory
+        if step != config.benchmark.macro_steps
+    )
+    optional_passes = sum(
+        _full_replay_model_passes(config, step, sample_multiplier, epoch_budget)
+        for step in calibration_config.optional_full_checkpoints
+    )
+    persistent_passes = _persistent_model_passes(config, sample_multiplier)
+    safety_factor = 1.25
+    reporting_reserve_seconds = 300.0
+    projected_required_seconds = (
+        resolved_elapsed_seconds
+        + safety_factor
+        * seconds_per_model_pass
+        * (remaining_mandatory_passes + persistent_passes)
+        + reporting_reserve_seconds
+    )
+    projected_with_optional_seconds = (
+        projected_required_seconds
+        + safety_factor * seconds_per_model_pass * optional_passes
+    )
+    include_optional = (
+        projected_with_optional_seconds
+        <= calibration_config.total_time_budget_seconds
+    )
+    checkpoints = tuple(sorted(
+        (*mandatory, *calibration_config.optional_full_checkpoints)
+        if include_optional
+        else mandatory
+    ))
+    schedule = {
+        "checkpoints": list(checkpoints),
+        "config_hash": config.config_hash,
+        "current_process_elapsed_seconds_through_endpoint": elapsed_seconds,
+        "durable_seconds_through_hierarchy": durable_seconds_through_hierarchy,
+        "elapsed_seconds_through_endpoint": resolved_elapsed_seconds,
+        "endpoint_first_execution_order": [
+            config.benchmark.macro_steps,
+            *(step for step in checkpoints if step != config.benchmark.macro_steps),
+        ],
+        "optional_checkpoints": list(
+            calibration_config.optional_full_checkpoints
+        ),
+        "optional_checkpoints_included": include_optional,
+        "projected_required_seconds": projected_required_seconds,
+        "projected_with_optional_seconds": projected_with_optional_seconds,
+        "projected_total_seconds": (
+            projected_with_optional_seconds
+            if include_optional
+            else projected_required_seconds
+        ),
+        "reporting_reserve_seconds": reporting_reserve_seconds,
+        "safety_factor": safety_factor,
+        "schema_version": "vamp-logt-full-replay-schedule-v2",
+        "seconds_per_counted_model_pass": seconds_per_model_pass,
+        "status": "complete",
+        "time_budget_seconds": calibration_config.total_time_budget_seconds,
+    }
+    publish_immutable_json(path, schedule)
+    return schedule
+
+
+def _full_replay_model_passes(
+    config: VampLogTDenseConfig,
+    macro_step: int,
+    sample_multiplier: int,
+    epoch_budget: int,
+) -> int:
+    """Return frozen forward plus integrator forward/backward example-passes."""
+    training_examples = (
+        config.benchmark.observer_batch_size * sample_multiplier * macro_step
+    )
+    return training_examples * (
+        macro_step.bit_count() + 2 * epoch_budget
+    )
+
+
+def _persistent_model_passes(
+    config: VampLogTDenseConfig,
+    sample_multiplier: int,
+) -> int:
+    """Return exact counted passes for all persistent uniform updates."""
+    current_examples = config.benchmark.observer_batch_size * sample_multiplier
+    return sum(
+        (current_examples if step == 1 else 2 * current_examples)
+        * (step.bit_count() + 2 * config.integrator.epochs_per_step)
+        for step in range(1, config.benchmark.macro_steps + 1)
+    )
+
+
 def _run_scaling(
     config: VampLogTDenseConfig,
     run_root: Path,
@@ -556,12 +1424,25 @@ def _run_scaling_seed(
     device: torch.device,
     *,
     training_sample_multiplier: int = 1,
+    full_replay_checkpoints: tuple[int, ...] | None = None,
+    full_replay_condition: str = FULL_REPLAY_CONDITION,
+    offline_epochs: int | None = None,
 ) -> dict[str, object]:
     """Run one crash-resumable seed against one frozen hierarchy policy."""
     policy_root = (
         _arm_root(config, run_root, training_sample_multiplier)
-        if _is_capacity_study(config)
+        if _uses_sample_multiplier_study(config)
         else _policy_root(config, run_root, capacity)
+    )
+    scheduled_full_replay = (
+        config.evaluation.full_checkpoints
+        if full_replay_checkpoints is None
+        else full_replay_checkpoints
+    )
+    epoch_budget = (
+        config.integrator.offline_epochs
+        if offline_epochs is None
+        else offline_epochs
     )
     directory = policy_root / "scaling" / f"seed-{seed}"
     summary_path = directory / "summary.json"
@@ -609,9 +1490,20 @@ def _run_scaling_seed(
             or int(summary.get("run_seed", -1)) != seed
             or int(summary.get("max_nodes_per_level", -1)) != capacity
             or (
-                _is_capacity_study(config)
+                _uses_sample_multiplier_study(config)
                 and int(summary.get("training_sample_multiplier", -1))
                 != training_sample_multiplier
+            )
+            or (
+                _is_sample_calibration_study(config)
+                and (
+                    tuple(int(value) for value in summary["full_replay_checkpoints"])
+                    != scheduled_full_replay
+                    or summary.get("full_replay_condition")
+                    != full_replay_condition
+                    or int(summary.get("full_replay_epochs", -1))
+                    != epoch_budget
+                )
             )
         ):
             raise ValueError("completed scaling summary is not covered by its checkpoint")
@@ -719,8 +1611,10 @@ def _run_scaling_seed(
                 capacity,
                 device,
                 training_sample_multiplier,
+                condition=full_replay_condition,
+                offline_epochs=epoch_budget,
             )
-            if macro_step in config.evaluation.full_checkpoints
+            if macro_step in scheduled_full_replay
             else None
         )
         evaluation, excluded_evaluation = _evaluate_conditions(
@@ -733,7 +1627,7 @@ def _run_scaling_seed(
                 **(
                     {}
                     if full_fit is None
-                    else {FULL_REPLAY_CONDITION: full_fit.state}
+                    else {full_replay_condition: full_fit.state}
                 ),
             },
             macro_step,
@@ -766,11 +1660,11 @@ def _run_scaling_seed(
         if full_fit is not None:
             rows.append(
                 _condition_row(
-                    FULL_REPLAY_CONDITION,
+                    full_replay_condition,
                     macro_step,
                     frontier,
                     full_fit.work,
-                    evaluation[FULL_REPLAY_CONDITION],
+                    evaluation[full_replay_condition],
                     excluded_evaluation,
                     full_fit.checkpoint_sha256,
                     seed,
@@ -779,6 +1673,7 @@ def _run_scaling_seed(
                     config,
                     base,
                     training_sample_multiplier,
+                    training_storage=full_fit.storage_record(),
                 )
             )
         ledger.append_many(rows)
@@ -805,6 +1700,9 @@ def _run_scaling_seed(
         seed,
         capacity,
         training_sample_multiplier=training_sample_multiplier,
+        full_replay_checkpoints=scheduled_full_replay,
+        full_replay_condition=full_replay_condition,
+        offline_epochs=epoch_budget,
     )
     publish_immutable_json(summary_path, summary)
     return summary
@@ -909,31 +1807,40 @@ def _prepare_uniform_replay(
             replay_seed,
             macro_step,
         ).batch
-    elif training_sample_multiplier == 2 and _is_capacity_study(config):
-        base_rows = torch.arange(config.benchmark.observer_batch_size)
-        extra_rows = torch.arange(
-            config.benchmark.observer_batch_size,
-            2 * config.benchmark.observer_batch_size,
+    elif _uses_sample_multiplier_study(config):
+        group_size = config.benchmark.observer_batch_size
+        group_archives = tuple(
+            concatenate_batches(tuple(
+                batch.select(torch.arange(group * group_size, (group + 1) * group_size))
+                for batch in observer_batches
+            ))
+            for group in range(training_sample_multiplier)
         )
-        base_archive = concatenate_batches(tuple(
-            batch.select(base_rows) for batch in observer_batches
+        group_seeds = tuple(
+            replay_seed
+            if group == 0
+            else (
+                named_seed(seed, UNIFORM_CONDITION, macro_step, "extra-replay")
+                if group == 1
+                else named_seed(
+                    seed,
+                    UNIFORM_CONDITION,
+                    macro_step,
+                    "extra-replay",
+                    group,
+                )
+            )
+            for group in range(training_sample_multiplier)
+        )
+        replay_examples = concatenate_batches(tuple(
+            sample_example_balanced(
+                archive,
+                config.online.historical_budget,
+                group_seed,
+                macro_step,
+            ).batch
+            for archive, group_seed in zip(group_archives, group_seeds, strict=True)
         ))
-        extra_archive = concatenate_batches(tuple(
-            batch.select(extra_rows) for batch in observer_batches
-        ))
-        base_replay = sample_example_balanced(
-            base_archive,
-            config.online.historical_budget,
-            replay_seed,
-            macro_step,
-        ).batch
-        extra_replay = sample_example_balanced(
-            extra_archive,
-            config.online.historical_budget,
-            named_seed(seed, UNIFORM_CONDITION, macro_step, "extra-replay"),
-            macro_step,
-        ).batch
-        replay_examples = concatenate_batches((base_replay, extra_replay))
     else:
         raise ValueError("unsupported paired replay sample multiplier")
     preparation_seconds = perf_counter() - started
@@ -944,12 +1851,267 @@ def _prepare_uniform_replay(
     )
 
 
+def _iter_full_replay_batches(
+    source: Sequence[ExampleBatch] | PermutedMnistBenchmark,
+    macro_step: int,
+) -> Iterator[ExampleBatch]:
+    """Yield full-replay observer batches without forcing transformed images resident."""
+    if isinstance(source, PermutedMnistBenchmark):
+        yield from (
+            source.step(step).observer for step in range(1, macro_step + 1)
+        )
+        return
+    if len(source) != macro_step:
+        raise ValueError("full-replay source does not cover the requested prefix")
+    yield from source
+
+
+def _build_full_replay_feature_cache(
+    config: VampLogTDenseConfig,
+    directory: Path,
+    macro_step: int,
+    frontier: DenseFrontier,
+    source: Sequence[ExampleBatch] | PermutedMnistBenchmark,
+    base: DenseMlpState,
+    input_dim: int,
+    device: torch.device,
+    training_sample_multiplier: int,
+) -> _DiskFeatureCache:
+    """Write one bounded-block frozen-feature pass to a temporary memory map."""
+    cache_directory = directory / "full-replay"
+    cache_directory.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_directory / f".step-{macro_step:03d}-features.f32"
+    rows = (
+        config.benchmark.observer_batch_size
+        * training_sample_multiplier
+        * macro_step
+    )
+    record_columns = input_dim + 10 + 1
+    cache_bytes = rows * record_columns * np.dtype(np.float32).itemsize
+    filesystem = os.statvfs(cache_directory)
+    available_bytes = filesystem.f_bavail * filesystem.f_frsize
+    reserve_bytes = 2 * 1024**3
+    if available_bytes < cache_bytes + reserve_bytes:
+        raise RuntimeError(
+            "full-replay feature cache lacks disk headroom: "
+            f"needs {(cache_bytes + reserve_bytes) / 1024**3:.1f} GiB, "
+            f"has {available_bytes / 1024**3:.1f} GiB"
+        )
+    memory_available_bytes = next(
+        (
+            int(line.split()[1]) * 1024
+            for line in Path("/proc/meminfo").read_text().splitlines()
+            if line.startswith("MemAvailable:")
+        ),
+        0,
+    )
+    minimum_memory_headroom = 4 * 1024**3
+    if memory_available_bytes < minimum_memory_headroom:
+        raise RuntimeError(
+            "full-replay feature cache requires at least 4 GiB available host "
+            f"memory; found {memory_available_bytes / 1024**3:.1f} GiB"
+        )
+    if cache_path.exists():
+        if not cache_path.is_file():
+            raise ValueError("full-replay temporary cache path is not a file")
+        cache_path.unlink()
+    print(
+        "Memory-bounded full replay: "
+        f"{rows:,} rows, {cache_bytes / 1024**3:.1f} GiB temporary cache at "
+        f"{cache_path}",
+        flush=True,
+    )
+    try:
+        from tqdm.auto import tqdm
+    except ImportError as error:  # pragma: no cover - vision environment gate
+        raise RuntimeError("tqdm is required by the vision environment") from error
+
+    records = np.memmap(
+        cache_path,
+        dtype=np.float32,
+        mode="w+",
+        shape=(rows, record_columns),
+    )
+    feature_wall_seconds = 0.0
+    feature_forward_example_passes = 0
+    feature_forward_calls = 0
+    peak_resident_feature_rows = 0
+    offset = 0
+    preparation_started = perf_counter()
+    try:
+        batches = _iter_full_replay_batches(source, macro_step)
+        progress = tqdm(
+            batches,
+            total=macro_step,
+            desc=f"cache frozen features t={macro_step}",
+            disable=not config.runtime.progress,
+            unit="task",
+        )
+        for batch_index, examples in enumerate(progress, start=1):
+            stop = offset + len(examples.labels)
+            if stop > rows:
+                raise ValueError("full-replay feature cache exceeded its declared rows")
+            timed = _timed_features(config, frontier, examples, base, device)
+            observations = timed.observations
+            records[offset:stop, :input_dim] = observations.features.numpy()
+            records[offset:stop, input_dim : input_dim + 10] = (
+                observations.baseline_log_probabilities.numpy()
+            )
+            records[offset:stop, -1] = examples.labels.numpy()
+            feature_wall_seconds += timed.wall_seconds
+            feature_forward_example_passes += timed.forward_example_passes
+            feature_forward_calls += timed.forward_calls
+            peak_resident_feature_rows = max(
+                peak_resident_feature_rows,
+                len(examples.labels),
+            )
+            offset = stop
+            del observations, timed
+            if batch_index % 8 == 0:
+                records.flush()
+        if offset != rows:
+            raise ValueError("full-replay feature cache did not fill its declared rows")
+        records.flush()
+    except BaseException:
+        del records
+        cache_path.unlink(missing_ok=True)
+        raise
+    del records
+    if hasattr(os, "posix_fadvise") and hasattr(os, "POSIX_FADV_DONTNEED"):
+        with cache_path.open("rb") as cache_file:
+            os.posix_fadvise(
+                cache_file.fileno(),
+                0,
+                0,
+                os.POSIX_FADV_DONTNEED,
+            )
+    data_preparation_wall_seconds = (
+        perf_counter() - preparation_started - feature_wall_seconds
+    )
+    return _DiskFeatureCache(
+        cache_path,
+        rows,
+        input_dim,
+        record_columns,
+        data_preparation_wall_seconds,
+        feature_wall_seconds,
+        feature_forward_example_passes,
+        feature_forward_calls,
+        peak_resident_feature_rows,
+        cache_bytes,
+    )
+
+
+def _train_full_replay_feature_cache(
+    state: IntegratorConditionState,
+    cache: _DiskFeatureCache,
+    epochs: int,
+    config: VampLogTDenseConfig,
+    seed: int,
+    macro_step: int,
+    device: torch.device,
+) -> tuple[float, float, int]:
+    """Train in the original seeded minibatch order from a bounded disk cache."""
+    if cache.path.stat().st_size != cache.bytes:
+        raise ValueError("full-replay feature cache size changed")
+    chunk_count = math.ceil(cache.rows / config.integrator.minibatch_size)
+    records = np.memmap(
+        cache.path,
+        dtype=np.float32,
+        mode="r",
+        shape=(cache.rows, cache.record_columns),
+    )
+    try:
+        from tqdm.auto import tqdm
+    except ImportError as error:  # pragma: no cover - vision environment gate
+        raise RuntimeError("tqdm is required by the vision environment") from error
+    progress = tqdm(
+        total=epochs * cache.rows,
+        desc=f"train full replay t={macro_step}",
+        disable=not config.runtime.progress,
+        unit="example",
+    )
+    data_preparation_wall_seconds = 0.0
+    optimizer_wall_seconds = 0.0
+    device_indices = [device.index or 0] if device.type == "cuda" else []
+    try:
+        with torch.random.fork_rng(devices=device_indices):
+            torch.manual_seed(
+                integrator_named_seed(seed, state.name, macro_step, "dropout")
+            )
+            for epoch in range(epochs):
+                state.integrator.train()
+                preparation_started = perf_counter()
+                order = torch.randperm(
+                    cache.rows,
+                    generator=torch.Generator().manual_seed(
+                        integrator_named_seed(
+                            seed,
+                            state.name,
+                            macro_step,
+                            "minibatches",
+                            epoch,
+                        )
+                    ),
+                )
+                chunks = torch.tensor_split(order, chunk_count)
+                data_preparation_wall_seconds += perf_counter() - preparation_started
+                for indices in chunks:
+                    preparation_started = perf_counter()
+                    cached_rows = np.array(
+                        records[indices.numpy()],
+                        dtype=np.float32,
+                        copy=True,
+                        order="C",
+                    )
+                    feature_rows = torch.from_numpy(cached_rows[:, : cache.input_dim])
+                    baseline_rows = torch.from_numpy(
+                        cached_rows[:, cache.input_dim : cache.input_dim + 10]
+                    )
+                    labels = torch.from_numpy(
+                        cached_rows[:, -1].astype(np.int64, copy=True)
+                    )
+                    data_preparation_wall_seconds += (
+                        perf_counter() - preparation_started
+                    )
+
+                    _synchronize(device)
+                    optimizer_started = perf_counter()
+                    loss = (
+                        len(indices)
+                        * chunk_count
+                        / cache.rows
+                        * F.cross_entropy(
+                            state.integrator(
+                                feature_rows.to(device),
+                                baseline_rows.to(device),
+                            ),
+                            labels.to(device),
+                        )
+                    )
+                    state.optimizer.zero_grad(set_to_none=True)
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(
+                        state.integrator.parameters(),
+                        config.integrator.gradient_clip_norm,
+                    )
+                    state.optimizer.step()
+                    state.optimizer_steps += 1
+                    _synchronize(device)
+                    optimizer_wall_seconds += perf_counter() - optimizer_started
+                    progress.update(len(indices))
+    finally:
+        progress.close()
+        del records
+    return data_preparation_wall_seconds, optimizer_wall_seconds, chunk_count
+
+
 def _fit_full_replay(
     config: VampLogTDenseConfig,
     directory: Path,
     macro_step: int,
     frontier: DenseFrontier,
-    observer_batches: tuple[ExampleBatch, ...],
+    observer_batches: Sequence[ExampleBatch] | PermutedMnistBenchmark,
     base: DenseMlpState,
     input_dim: int,
     slot_dim: int,
@@ -957,9 +2119,12 @@ def _fit_full_replay(
     capacity: int,
     device: torch.device,
     training_sample_multiplier: int = 1,
+    *,
+    condition: str = FULL_REPLAY_CONDITION,
+    offline_epochs: int | None = None,
 ) -> _FullReplayFit:
     path = directory / "full-replay" / f"step-{macro_step:03d}.pt"
-    name = f"{FULL_REPLAY_CONDITION}-step-{macro_step}"
+    name = _full_replay_state_name(condition, training_sample_multiplier, macro_step)
     state, initialization_seconds = _timed_state_creation(
         name,
         input_dim,
@@ -969,11 +2134,23 @@ def _fit_full_replay(
         capacity,
         device,
     )
-    capacity_study = _is_capacity_study(config)
+    sample_multiplier_study = _uses_sample_multiplier_study(config)
+    epoch_budget = (
+        config.integrator.offline_epochs
+        if offline_epochs is None
+        else offline_epochs
+    )
+    if epoch_budget < 1 or epoch_budget > config.integrator.offline_epochs:
+        raise ValueError("full-replay epoch budget is outside the calibrated limit")
+    sample_calibration_study = _is_sample_calibration_study(config)
     schema_version = (
-        "vamp-logt-scaling-full-replay-v3"
-        if capacity_study
-        else "vamp-logt-scaling-full-replay-v2"
+        "vamp-logt-scaling-full-replay-v4"
+        if sample_calibration_study
+        else (
+            "vamp-logt-scaling-full-replay-v3"
+            if sample_multiplier_study
+            else "vamp-logt-scaling-full-replay-v2"
+        )
     )
     if path.is_file():
         payload = torch.load(path, map_location=device, weights_only=True)
@@ -984,9 +2161,14 @@ def _fit_full_replay(
             or int(payload.get("run_seed", -1)) != seed
             or int(payload.get("max_nodes_per_level", -1)) != capacity
             or (
-                capacity_study
+                sample_multiplier_study
                 and int(payload.get("training_sample_multiplier", -1))
                 != training_sample_multiplier
+            )
+            or int(payload["work"].get("epochs", -1)) != epoch_budget
+            or (
+                sample_calibration_study
+                and payload.get("condition") != condition
             )
         ):
             raise ValueError("stored scaling full-replay fit coordinates changed")
@@ -996,54 +2178,126 @@ def _fit_full_replay(
             state,
             _training_work_from_record(payload["work"]),
             file_sha256(path),
+            str(payload.get("feature_storage", "in_memory")),
+            int(payload.get("peak_resident_feature_rows", 0)),
+            int(payload.get("temporary_feature_cache_bytes", 0)),
         )
 
-    preparation_started = perf_counter()
-    archive = concatenate_batches(observer_batches)
-    preparation_seconds = perf_counter() - preparation_started
-    features = _timed_features(config, frontier, archive, base, device)
-    result = train_condition(
-        state,
-        IntegratorSupervision(features.observations, archive.labels),
-        None,
-        config.integrator.offline_epochs,
-        config.integrator,
-        seed,
-        macro_step,
-        device,
-    )
-    work = _TrainingWork(
-        initialization_seconds,
-        preparation_seconds,
-        features.wall_seconds,
-        result.training_wall_seconds,
-        features.forward_example_passes,
-        features.forward_calls,
-        result.training_forward_example_passes,
-        result.training_backward_example_passes,
-        result.training_forward_calls,
-        result.training_backward_calls,
-        2 * len(archive.labels),
-        2 * math.ceil(len(archive.labels) / config.integrator.minibatch_size),
-        len(archive.labels),
-        len(archive.labels),
-        0,
-        config.integrator.offline_epochs,
-    )
-    payload = {
+    cache: _DiskFeatureCache | None = None
+    try:
+        if sample_calibration_study:
+            cache = _build_full_replay_feature_cache(
+                config,
+                directory,
+                macro_step,
+                frontier,
+                observer_batches,
+                base,
+                input_dim,
+                device,
+                training_sample_multiplier,
+            )
+            training_preparation_seconds, optimizer_seconds, chunk_count = (
+                _train_full_replay_feature_cache(
+                    state,
+                    cache,
+                    epoch_budget,
+                    config,
+                    seed,
+                    macro_step,
+                    device,
+                )
+            )
+            work = _TrainingWork(
+                initialization_seconds,
+                cache.data_preparation_wall_seconds + training_preparation_seconds,
+                cache.feature_wall_seconds,
+                optimizer_seconds,
+                cache.feature_forward_example_passes,
+                cache.feature_forward_calls,
+                cache.rows * epoch_budget,
+                cache.rows * epoch_budget,
+                chunk_count * epoch_budget,
+                chunk_count * epoch_budget,
+                0,
+                0,
+                cache.rows,
+                cache.rows,
+                0,
+                epoch_budget,
+            )
+            feature_storage = "temporary_float32_memory_map"
+            peak_resident_feature_rows = cache.peak_resident_feature_rows
+            temporary_feature_cache_bytes = cache.bytes
+        else:
+            preparation_started = perf_counter()
+            archive = concatenate_batches(
+                tuple(_iter_full_replay_batches(observer_batches, macro_step))
+            )
+            preparation_seconds = perf_counter() - preparation_started
+            features = _timed_features(config, frontier, archive, base, device)
+            result = train_condition(
+                state,
+                IntegratorSupervision(features.observations, archive.labels),
+                None,
+                epoch_budget,
+                config.integrator,
+                seed,
+                macro_step,
+                device,
+            )
+            work = _TrainingWork(
+                initialization_seconds,
+                preparation_seconds,
+                features.wall_seconds,
+                result.training_wall_seconds,
+                features.forward_example_passes,
+                features.forward_calls,
+                result.training_forward_example_passes,
+                result.training_backward_example_passes,
+                result.training_forward_calls,
+                result.training_backward_calls,
+                2 * len(archive.labels),
+                2 * math.ceil(
+                    len(archive.labels) / config.integrator.minibatch_size
+                ),
+                len(archive.labels),
+                len(archive.labels),
+                0,
+                epoch_budget,
+            )
+            feature_storage = "in_memory"
+            peak_resident_feature_rows = len(archive.labels)
+            temporary_feature_cache_bytes = 0
+        payload = {
             "config_hash": config.config_hash,
+            "feature_storage": feature_storage,
             "macro_step": macro_step,
             "max_nodes_per_level": capacity,
             "model": _cpu_state_dict(state.integrator.state_dict()),
             "optimizer_steps": state.optimizer_steps,
+            "peak_resident_feature_rows": peak_resident_feature_rows,
             "run_seed": seed,
             "schema_version": schema_version,
+            "temporary_feature_cache_bytes": temporary_feature_cache_bytes,
             "work": work.as_record(),
         }
-    if capacity_study:
-        payload["training_sample_multiplier"] = training_sample_multiplier
-    atomic_torch_save(path, payload)
-    return _FullReplayFit(state, work, file_sha256(path))
+        if sample_multiplier_study:
+            payload["training_sample_multiplier"] = training_sample_multiplier
+        if sample_calibration_study:
+            payload["condition"] = condition
+        atomic_torch_save(path, payload)
+    finally:
+        if cache is not None:
+            cache.path.unlink(missing_ok=True)
+    return _FullReplayFit(
+        state,
+        work,
+        file_sha256(path),
+        feature_storage,
+        peak_resident_feature_rows,
+        temporary_feature_cache_bytes,
+    )
 
 
 def _training_work_from_record(value: object) -> _TrainingWork:
@@ -1133,6 +2387,8 @@ def _condition_row(
     config: VampLogTDenseConfig,
     base: DenseMlpState,
     training_sample_multiplier: int = 1,
+    *,
+    training_storage: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     arm = _arm_name(config, capacity, training_sample_multiplier)
     return {
@@ -1160,6 +2416,7 @@ def _condition_row(
             [node.first_block + 1, node.last_block + 1] for node in frontier.nodes
         ],
         **work.as_record(),
+        **({} if training_storage is None else dict(training_storage)),
         **dict(excluded_evaluation),
     }
 
@@ -1232,7 +2489,7 @@ def _save_uniform_checkpoint(
     *,
     training_sample_multiplier: int = 1,
 ) -> None:
-    capacity_study = _is_capacity_study(config)
+    sample_multiplier_study = _uses_sample_multiplier_study(config)
     payload = {
             "config_hash": config.config_hash,
             "macro_step": macro_step,
@@ -1244,11 +2501,11 @@ def _save_uniform_checkpoint(
             "run_seed": seed,
             "schema_version": (
                 "vamp-logt-scaling-uniform-checkpoint-v3"
-                if capacity_study
+                if sample_multiplier_study
                 else "vamp-logt-scaling-uniform-checkpoint-v2"
             ),
         }
-    if capacity_study:
+    if sample_multiplier_study:
         payload["training_sample_multiplier"] = training_sample_multiplier
     atomic_torch_save(path, payload)
 
@@ -1270,14 +2527,14 @@ def _load_uniform_checkpoint(
         payload.get("schema_version")
         != (
             "vamp-logt-scaling-uniform-checkpoint-v3"
-            if _is_capacity_study(config)
+            if _uses_sample_multiplier_study(config)
             else "vamp-logt-scaling-uniform-checkpoint-v2"
         )
         or payload.get("config_hash") != config.config_hash
         or int(payload.get("run_seed", -1)) != seed
         or int(payload.get("max_nodes_per_level", -1)) != capacity
         or (
-            _is_capacity_study(config)
+            _uses_sample_multiplier_study(config)
             and int(payload.get("training_sample_multiplier", -1))
             != training_sample_multiplier
         )
@@ -1297,11 +2554,31 @@ def _seed_summary(
     capacity: int,
     *,
     training_sample_multiplier: int = 1,
+    full_replay_checkpoints: tuple[int, ...] | None = None,
+    full_replay_condition: str = FULL_REPLAY_CONDITION,
+    offline_epochs: int | None = None,
 ) -> dict[str, object]:
     """Summarize and validate one policy/seed ledger."""
+    scheduled_full_replay = (
+        config.evaluation.full_checkpoints
+        if full_replay_checkpoints is None
+        else full_replay_checkpoints
+    )
+    epoch_budget = (
+        config.integrator.offline_epochs
+        if offline_epochs is None
+        else offline_epochs
+    )
     conditions = tuple(row for row in rows if row.get("row_type") == "condition")
     uniform = tuple(row for row in conditions if row["condition"] == UNIFORM_CONDITION)
-    full = tuple(row for row in conditions if row["condition"] == FULL_REPLAY_CONDITION)
+    full = tuple(
+        row for row in conditions if row["condition"] == full_replay_condition
+    )
+    epoch_acceptance_name = (
+        "full_replay_exactly_twenty_epochs"
+        if full_replay_condition == FULL_REPLAY_CONDITION
+        else "full_replay_selected_epoch_budget_exact"
+    )
     hierarchy = tuple(
         row for row in rows if row.get("row_type") == "shared_hierarchy_work"
     )
@@ -1312,7 +2589,7 @@ def _seed_summary(
             for name in ("accuracy", "cross_entropy", "total_training_wall_seconds")
         ),
         "ceiling_checkpoints_exact": tuple(int(row["macro_step"]) for row in full)
-        == config.evaluation.full_checkpoints,
+        == scheduled_full_replay,
         "evaluation_excluded_from_training_work": all(
             "excluded_evaluation_forward_example_passes"
             not in row
@@ -1321,8 +2598,8 @@ def _seed_summary(
             + int(row["integrator_forward_example_passes"])
             for row in conditions
         ),
-        "full_replay_exactly_twenty_epochs": all(
-            int(row["epochs"]) == config.integrator.offline_epochs for row in full
+        epoch_acceptance_name: all(
+            int(row["epochs"]) == epoch_budget for row in full
         ),
         "coordinates_exact": all(
             int(row["run_seed"]) == seed
@@ -1349,7 +2626,9 @@ def _seed_summary(
         "condition_rows": len(conditions),
         "config_hash": config.config_hash,
         "final_macro_step": config.benchmark.macro_steps,
-        "full_replay_checkpoints": list(config.evaluation.full_checkpoints),
+        "full_replay_checkpoints": list(scheduled_full_replay),
+        "full_replay_condition": full_replay_condition,
+        "full_replay_epochs": epoch_budget,
         "max_nodes_per_level": capacity,
         "metric_rows": len(rows),
         "policy": POLICY_NAMES[capacity],
@@ -1391,6 +2670,41 @@ def _is_capacity_study(config: VampLogTDenseConfig) -> bool:
     return config.protocol_revision == CAPACITY_REVISION
 
 
+def _is_sample_calibration_study(config: VampLogTDenseConfig) -> bool:
+    """Return whether sample count and full-replay epochs are calibrated."""
+    return config.protocol_revision == SAMPLE_CALIBRATION_REVISION
+
+
+def _uses_sample_multiplier_study(config: VampLogTDenseConfig) -> bool:
+    """Return whether checkpoints authenticate a training-sample multiplier."""
+    return _is_capacity_study(config) or _is_sample_calibration_study(config)
+
+
+def _sample_calibration_arm_name(
+    config: VampLogTDenseConfig,
+    training_sample_multiplier: int,
+) -> str:
+    """Return the stable identifier for one reference-model sample candidate."""
+    return (
+        "reference_model_"
+        f"{config.benchmark.observer_batch_size * training_sample_multiplier}_samples"
+    )
+
+
+def _full_replay_state_name(
+    condition: str,
+    training_sample_multiplier: int,
+    macro_step: int,
+) -> str:
+    """Return a stable initialization name shared by calibration and final fits."""
+    sample_coordinate = (
+        f"-samples-{training_sample_multiplier}x"
+        if condition == CALIBRATED_FULL_REPLAY_CONDITION
+        else ""
+    )
+    return f"{condition}{sample_coordinate}-step-{macro_step}"
+
+
 def _arm_name(
     config: VampLogTDenseConfig,
     capacity: int,
@@ -1401,12 +2715,21 @@ def _arm_name(
         if capacity != 1 or training_sample_multiplier not in CAPACITY_ARM_NAMES:
             raise ValueError("unknown capacity-study arm")
         return CAPACITY_ARM_NAMES[training_sample_multiplier]
+    if _is_sample_calibration_study(config):
+        if capacity != 1:
+            raise ValueError("sample-calibrated study requires one node per level")
+        return _sample_calibration_arm_name(config, training_sample_multiplier)
     return POLICY_NAMES[capacity]
 
 
 def _arm_label(arm: str) -> str:
     """Return a literal user-facing arm label."""
-    return CAPACITY_ARM_LABELS.get(arm, arm.replace("_", " "))
+    if arm in CAPACITY_ARM_LABELS:
+        return CAPACITY_ARM_LABELS[arm]
+    if arm.startswith("reference_model_") and arm.endswith("_samples"):
+        sample_count = arm.removeprefix("reference_model_").removesuffix("_samples")
+        return f"Reference model, {sample_count} samples per role and task"
+    return arm.replace("_", " ")
 
 
 def _arm_root(
@@ -1414,9 +2737,9 @@ def _arm_root(
     run_root: Path,
     training_sample_multiplier: int,
 ) -> Path:
-    """Return the artifact root for one paired large-model sample arm."""
-    if not _is_capacity_study(config):
-        raise ValueError("sample arms belong only to the capacity study")
+    """Return the artifact root for one authenticated sample-count arm."""
+    if not _uses_sample_multiplier_study(config):
+        raise ValueError("sample arms require a sample-count protocol")
     return run_root / "arms" / _arm_name(config, 1, training_sample_multiplier)
 
 
@@ -1696,6 +3019,35 @@ def _capacity_cell(
     if len(values) != 1:
         raise ValueError(f"capacity metric cell is not unique: {arm}, {condition}, {step}")
     return values[0]
+
+
+def _condition_series(
+    rows: Sequence[Mapping[str, object]],
+    condition: str,
+    field: str,
+) -> tuple[tuple[int, ...], tuple[float, ...]]:
+    """Return one ordered single-arm condition series."""
+    selected = sorted(
+        (
+            (int(row["macro_step"]), float(row[field]))
+            for row in rows
+            if row["condition"] == condition
+        ),
+        key=lambda item: item[0],
+    )
+    if not selected or len({step for step, _ in selected}) != len(selected):
+        raise ValueError("condition series is empty or contains duplicate steps")
+    return tuple(step for step, _ in selected), tuple(value for _, value in selected)
+
+
+def _condition_cumulative_series(
+    rows: Sequence[Mapping[str, object]],
+    condition: str,
+    field: str,
+) -> tuple[tuple[int, ...], tuple[float, ...]]:
+    """Return cumulative values for one ordered single-arm condition series."""
+    steps, values = _condition_series(rows, condition, field)
+    return steps, tuple(accumulate(values))
 
 
 def _capacity_series(
@@ -1993,6 +3345,1183 @@ def _capacity_summary(
     }
 
 
+def _write_sample_calibration_stop_report(
+    config: VampLogTDenseConfig,
+    run_root: Path,
+    selection: Mapping[str, object],
+) -> None:
+    """Write a visible terminal report when the fixed sample ladder fails."""
+    candidate_lines = "\n".join(
+        "| "
+        f"{int(candidate['sample_count_per_role'])} | "
+        f"{100 * float(candidate['best_minimum_prefix_accuracy']):.2f}% | "
+        f"{int(candidate['best_epoch_by_minimum_prefix_accuracy'])} | "
+        f"{candidate['status']} |"
+        for candidate in selection["candidate_summaries"]
+    )
+    markdown = f"""# Sample-calibrated 100-permutation integrator
+
+## Outcome
+
+Calibration stopped before the 100-task experiment. None of the declared
+reference-model candidates kept learned-domain held-out accuracy at or above
+{100 * float(selection['target_accuracy']):.1f}% at every prefix from task 1
+through task {config.sample_calibration.prefix_steps if config.sample_calibration else 10}.
+No final test examples were evaluated and no larger model was selected
+silently.
+
+| Samples per model/observer role and task | Best minimum prefix accuracy | Epoch | Status |
+|---:|---:|---:|---|
+{candidate_lines}
+
+## Interpretation boundary
+
+This result rejects only the declared reference-sized model and sample ladder
+through 32x samples with at most 20 full-replay epochs. It does not establish
+that a larger network or different optimizer cannot reach the target.
+"""
+    atomic_write(run_root / "RESULTS.md", markdown.encode("utf-8"))
+    atomic_write(
+        run_root / "RESULTS.html",
+        _html(markdown, run_root, "Sample-calibrated integrator stop").encode("utf-8"),
+    )
+    atomic_write(run_root / "summary.json", canonical_json_bytes(dict(selection)))
+
+
+def _write_sample_calibrated_report(
+    config: VampLogTDenseConfig,
+    run_root: Path,
+) -> None:
+    """Write calibrated-condition evidence, figures, and standalone reports."""
+    selection = load_canonical_json(run_root / "calibration" / "sample_selection.json")
+    schedule = load_canonical_json(run_root / "full_replay_schedule.json")
+    sample_multiplier = int(selection["selected_sample_multiplier"])
+    arm_root = _arm_root(config, run_root, sample_multiplier)
+    ledger = ChainedJsonlLedger(
+        arm_root / "scaling" / "seed-0" / "metrics.jsonl",
+        "vamp-logt-scaling-metric-v2",
+    )
+    condition_rows = tuple(
+        row for row in ledger.rows if row.get("row_type") == "condition"
+    )
+    hierarchy_rows = tuple(
+        row
+        for row in ledger.rows
+        if row.get("row_type") == "shared_hierarchy_work"
+    )
+    summary = _sample_calibrated_summary(
+        config,
+        run_root,
+        condition_rows,
+        hierarchy_rows,
+    )
+    _write_metrics_csv(run_root / "work_metrics.csv", condition_rows)
+    _write_hierarchy_csv(run_root / "hierarchy_work.csv", hierarchy_rows)
+    _write_sample_calibration_csv(config, run_root, selection)
+    _write_sample_calibrated_plots(config, run_root, condition_rows, selection)
+    markdown = _sample_calibrated_report_markdown(
+        config,
+        summary,
+        condition_rows,
+        selection,
+        schedule,
+    )
+    atomic_write(run_root / "RESULTS.md", markdown.encode("utf-8"))
+    atomic_write(
+        run_root / "RESULTS.html",
+        _html(
+            markdown,
+            run_root,
+            "Sample-calibrated 100-permutation integrator comparison",
+        ).encode("utf-8"),
+    )
+    atomic_write(run_root / "summary.json", canonical_json_bytes(summary))
+
+
+def _sample_calibrated_summary(
+    config: VampLogTDenseConfig,
+    run_root: Path,
+    rows: Sequence[Mapping[str, object]],
+    hierarchy: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    """Validate the selected arm and summarize its accuracy and counted work."""
+    selection = load_canonical_json(run_root / "calibration" / "sample_selection.json")
+    schedule = load_canonical_json(run_root / "full_replay_schedule.json")
+    endpoint = load_canonical_json(run_root / "endpoint_probe.json")
+    protocol_amendment = load_canonical_json(
+        run_root / "protocol-amendment-oom-streaming.json"
+    )
+    sample_multiplier = int(selection["selected_sample_multiplier"])
+    sample_count = config.benchmark.observer_batch_size * sample_multiplier
+    epoch_budget = int(selection["selected_full_replay_epochs"])
+    scheduled_checkpoints = tuple(int(value) for value in schedule["checkpoints"])
+    uniform = tuple(row for row in rows if row["condition"] == UNIFORM_CONDITION)
+    full = tuple(
+        row
+        for row in rows
+        if row["condition"] == CALIBRATED_FULL_REPLAY_CONDITION
+    )
+    selected_candidate = tuple(selection["candidate_summaries"])[-1]
+    earlier_candidates = tuple(selection["candidate_summaries"][:-1])
+    expected_uniform_steps = tuple(range(1, config.benchmark.macro_steps + 1))
+    final_full = tuple(
+        row for row in full if int(row["macro_step"]) == config.benchmark.macro_steps
+    )
+    acceptance = {
+        "all_metrics_finite": all(
+            math.isfinite(float(row[field]))
+            for row in rows
+            for field in ("accuracy", "cross_entropy", "total_training_wall_seconds")
+        ),
+        "bounded_memory_full_replay": all(
+            row.get("feature_storage") == "temporary_float32_memory_map"
+            and 0 < int(row.get("peak_resident_feature_rows", 0)) <= sample_count
+            and int(row.get("temporary_feature_cache_bytes", 0)) > 0
+            for row in full
+        ),
+        "calibration_passes_every_prefix": (
+            selected_candidate["status"] == "passing"
+            and min(
+                float(value)
+                for value in selected_candidate["prefix_accuracies_at_selected_epoch"]
+            )
+            >= float(selection["target_accuracy"])
+        ),
+        "earlier_sample_candidates_failed": all(
+            candidate["status"] != "passing" for candidate in earlier_candidates
+        ),
+        "full_replay_cells_match_frozen_schedule": tuple(
+            int(row["macro_step"]) for row in full
+        )
+        == scheduled_checkpoints,
+        "full_replay_epoch_budget_exact": all(
+            int(row["epochs"]) == epoch_budget for row in full
+        ),
+        "full_replay_work_exact": all(
+            int(row["total_training_forward_example_passes"])
+            + int(row["integrator_backward_example_passes"])
+            == _full_replay_model_passes(
+                config,
+                int(row["macro_step"]),
+                sample_multiplier,
+                epoch_budget,
+            )
+            for row in full
+        ),
+        "hierarchy_cells_exact": tuple(int(row["macro_step"]) for row in hierarchy)
+        == expected_uniform_steps,
+        "optional_checkpoint_decision_matches_projection": bool(
+            schedule["optional_checkpoints_included"]
+        )
+        == (
+            float(schedule["projected_with_optional_seconds"])
+            <= float(schedule["time_budget_seconds"])
+        ),
+        "reference_model_selected": selection["selected_model"]
+        == "reference_1024_1024_512",
+        "sample_counts_exact": all(
+            (
+                int(row["current_examples"]) == sample_count
+                and int(row["historical_examples"])
+                == (0 if int(row["macro_step"]) == 1 else sample_count)
+            )
+            if row["condition"] == UNIFORM_CONDITION
+            else int(row["training_examples"])
+            == sample_count * int(row["macro_step"])
+            for row in rows
+        ),
+        "task_100_endpoint_matches_final_row": (
+            len(final_full) == 1
+            and float(final_full[0]["accuracy"]) == float(endpoint["accuracy"])
+            and final_full[0]["checkpoint_sha256"] == endpoint["checkpoint_sha256"]
+            and bool(endpoint["trained_before_persistent_condition"])
+        ),
+        "test_set_sealed_during_selection": int(
+            selection["test_evaluations_during_selection"]
+        )
+        == 0,
+        "uniform_every_permutation": tuple(
+            int(row["macro_step"]) for row in uniform
+        )
+        == expected_uniform_steps,
+        "uniform_work_exact": all(
+            int(row["total_training_forward_example_passes"])
+            + int(row["integrator_backward_example_passes"])
+            == (
+                (sample_count if int(row["macro_step"]) == 1 else 2 * sample_count)
+                * (
+                    int(row["macro_step"]).bit_count()
+                    + 2 * config.integrator.epochs_per_step
+                )
+            )
+            for row in uniform
+        ),
+    }
+    persistent_steps, persistent_wall = _condition_cumulative_series(
+        rows,
+        UNIFORM_CONDITION,
+        "total_training_wall_seconds",
+    )
+    _, persistent_forward = _condition_cumulative_series(
+        rows,
+        UNIFORM_CONDITION,
+        "total_training_forward_example_passes",
+    )
+    full_steps, full_wall = _condition_series(
+        rows,
+        CALIBRATED_FULL_REPLAY_CONDITION,
+        "total_training_wall_seconds",
+    )
+    _, full_forward = _condition_series(
+        rows,
+        CALIBRATED_FULL_REPLAY_CONDITION,
+        "total_training_forward_example_passes",
+    )
+    return {
+        "acceptance": acceptance,
+        "calibration": selection,
+        "condition_rows": len(rows),
+        "config_hash": config.config_hash,
+        "empirical_growth_fits": {
+            "full_replay_forward_example_passes": _growth_fits(
+                full_steps,
+                full_forward,
+            ),
+            "full_replay_training_wall_seconds": _growth_fits(
+                full_steps,
+                full_wall,
+            ),
+            "persistent_uniform_cumulative_forward_example_passes": _growth_fits(
+                persistent_steps,
+                persistent_forward,
+            ),
+            "persistent_uniform_cumulative_training_wall_seconds": _growth_fits(
+                persistent_steps,
+                persistent_wall,
+            ),
+        },
+        "endpoint_probe": endpoint,
+        "final_accuracy": {
+            CALIBRATED_FULL_REPLAY_CONDITION: float(final_full[0]["accuracy"]),
+            UNIFORM_CONDITION: float(uniform[-1]["accuracy"]),
+        },
+        "full_replay_schedule": schedule,
+        "protocol_amendment": protocol_amendment,
+        "report_revision": "cumulative-t-log-comparisons-v3",
+        "run_seed": 0,
+        "schema_version": "vamp-logt-sample-calibrated-summary-v3",
+        "status": "complete" if all(acceptance.values()) else "failed_acceptance",
+    }
+
+
+def _write_sample_calibration_csv(
+    config: VampLogTDenseConfig,
+    run_root: Path,
+    selection: Mapping[str, object],
+) -> None:
+    """Flatten candidate prefix-by-epoch validation evidence to one compact CSV."""
+    fields = (
+        "sample_multiplier",
+        "sample_count_per_role",
+        "candidate_status",
+        "macro_step",
+        "epoch",
+        "accuracy",
+        "cross_entropy",
+    )
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=fields, lineterminator="\n")
+    writer.writeheader()
+    for candidate in selection["candidate_summaries"]:
+        multiplier = int(candidate["sample_multiplier"])
+        ledger = ChainedJsonlLedger(
+            run_root / "calibration" / f"samples-{multiplier:02d}x" / "metrics.jsonl",
+            "vamp-logt-sample-calibration-metric-v1",
+        )
+        for row in ledger.rows:
+            for epoch in row["epoch_metrics"]:
+                writer.writerow({
+                    "sample_multiplier": multiplier,
+                    "sample_count_per_role": (
+                        config.benchmark.observer_batch_size * multiplier
+                    ),
+                    "candidate_status": candidate["status"],
+                    "macro_step": row["macro_step"],
+                    "epoch": epoch["epoch"],
+                    "accuracy": epoch["accuracy"],
+                    "cross_entropy": epoch["cross_entropy"],
+                })
+    atomic_write(
+        run_root / "sample_calibration_metrics.csv",
+        output.getvalue().encode("utf-8"),
+    )
+
+
+def _write_sample_calibrated_plots(
+    config: VampLogTDenseConfig,
+    run_root: Path,
+    rows: Sequence[Mapping[str, object]],
+    selection: Mapping[str, object],
+) -> None:
+    """Plot calibration, predecessor accuracy, work scaling, and final topology."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    plot_root = run_root / "plots"
+    plot_root.mkdir(parents=True, exist_ok=True)
+    candidates = tuple(selection["candidate_summaries"])
+    selected = candidates[-1]
+    figure, axes = plt.subplots(1, 2, figsize=(14.5, 5.4), constrained_layout=True)
+    candidate_samples = tuple(int(row["sample_count_per_role"]) for row in candidates)
+    candidate_minima = tuple(
+        100 * float(row["best_minimum_prefix_accuracy"]) for row in candidates
+    )
+    axes[0].plot(
+        candidate_samples,
+        candidate_minima,
+        color="#0072B2",
+        marker="o",
+        linewidth=2.4,
+        label="Best minimum across prefixes",
+    )
+    axes[0].axhline(
+        100 * float(selection["target_accuracy"]),
+        color="#D55E00",
+        linestyle="--",
+        linewidth=2.0,
+        label="95% requirement",
+    )
+    axes[0].set_xscale("log", base=2)
+    axes[0].set_xlabel("Model and observer examples per task")
+    axes[0].set_ylabel("Worst prefix held-out accuracy (%)")
+    axes[0].set_title("Ascending sample calibration")
+    axes[0].grid(True, alpha=0.25)
+    axes[0].legend(frameon=False)
+    prefix_accuracies = tuple(
+        100 * float(value) for value in selected["prefix_accuracies_at_selected_epoch"]
+    )
+    axes[1].plot(
+        range(1, len(prefix_accuracies) + 1),
+        prefix_accuracies,
+        color="#009E73",
+        marker="D",
+        linewidth=2.4,
+        label=f"Selected epoch {int(selected['selected_epoch'])}",
+    )
+    axes[1].axhline(
+        100 * float(selection["target_accuracy"]),
+        color="#D55E00",
+        linestyle="--",
+        linewidth=2.0,
+        label="95% requirement",
+    )
+    axes[1].set_xlabel("Learned permutations")
+    axes[1].set_ylabel("Learned-domain held-out accuracy (%)")
+    axes[1].set_title("All ten selected-prefix checks")
+    axes[1].set_xticks(range(1, len(prefix_accuracies) + 1))
+    axes[1].grid(True, alpha=0.25)
+    axes[1].legend(frameon=False)
+    figure.savefig(plot_root / "01_sample_calibration.png", dpi=220)
+    plt.close(figure)
+
+    predecessor_path = config.scaling.predecessor_run / "work_metrics.csv"
+    with predecessor_path.open(encoding="utf-8", newline="") as source:
+        predecessor_rows = tuple(csv.DictReader(source))
+    prior_arms = (
+        REFERENCE_ARM,
+        CAPACITY_ARM_NAMES[1],
+        CAPACITY_ARM_NAMES[2],
+    )
+    arm_styles = {
+        REFERENCE_ARM: ("#0072B2", "o"),
+        CAPACITY_ARM_NAMES[1]: ("#E69F00", "s"),
+        CAPACITY_ARM_NAMES[2]: ("#009E73", "^"),
+        "selected": ("#CC79A7", "D"),
+    }
+    figure, axes = plt.subplots(1, 2, figsize=(16.5, 5.8), constrained_layout=True)
+    for axis, condition, title in (
+        (axes[0], UNIFORM_CONDITION, "Persistent uniform replay"),
+        (axes[1], FULL_REPLAY_CONDITION, "Fresh full replay"),
+    ):
+        for arm in prior_arms:
+            points = tuple(
+                (int(row["learned_permutation_count"]), 100 * float(row["accuracy"]))
+                for row in predecessor_rows
+                if row["arm"] == arm and row["condition"] == condition
+            )
+            color, marker = arm_styles[arm]
+            axis.plot(
+                tuple(step for step, _ in points),
+                tuple(value for _, value in points),
+                color=color,
+                marker=marker,
+                markevery=10 if condition == UNIFORM_CONDITION else 1,
+                linewidth=1.8,
+                label=CAPACITY_ARM_LABELS[arm],
+            )
+        selected_condition = (
+            UNIFORM_CONDITION
+            if condition == UNIFORM_CONDITION
+            else CALIBRATED_FULL_REPLAY_CONDITION
+        )
+        selected_points = tuple(
+            (int(row["macro_step"]), 100 * float(row["accuracy"]))
+            for row in rows
+            if row["condition"] == selected_condition
+        )
+        color, marker = arm_styles["selected"]
+        axis.plot(
+            tuple(step for step, _ in selected_points),
+            tuple(value for _, value in selected_points),
+            color=color,
+            marker=marker,
+            markevery=10 if condition == UNIFORM_CONDITION else 1,
+            linewidth=2.8,
+            label=(
+                f"Reference model, {selection['selected_sample_count_per_role']} samples"
+            ),
+        )
+        axis.set_xscale("log", base=2)
+        axis.set_xlabel("Learned permutations")
+        axis.set_ylabel("Test accuracy over learned domains (%)")
+        axis.set_title(title)
+        axis.grid(True, which="both", alpha=0.25)
+        axis.legend(frameon=False, fontsize=8)
+    figure.savefig(plot_root / "02_accuracy_with_calibrated_arm.png", dpi=220)
+    plt.close(figure)
+
+    epoch_budget = int(selection["selected_full_replay_epochs"])
+    condition_styles = {
+        UNIFORM_CONDITION: (
+            "#0072B2",
+            "o",
+            "-",
+            "Persistent uniform replay",
+        ),
+        CALIBRATED_FULL_REPLAY_CONDITION: (
+            "#CC79A7",
+            "s",
+            "--",
+            f"Fresh full replay, {epoch_budget} epochs",
+        ),
+    }
+    figure, axes = plt.subplots(1, 3, figsize=(17.5, 5.6), constrained_layout=True)
+    quantities = (
+        ("total_training_wall_seconds", "Training-only wall time per update (s)"),
+        ("total_training_forward_example_passes", "Forward example-passes per update"),
+        ("integrator_backward_example_passes", "Backward example-passes per update"),
+    )
+    for axis, (field, ylabel) in zip(axes, quantities, strict=True):
+        for condition in (UNIFORM_CONDITION, CALIBRATED_FULL_REPLAY_CONDITION):
+            color, marker, linestyle, label = condition_styles[condition]
+            steps, values = _condition_series(rows, condition, field)
+            axis.plot(
+                steps,
+                values,
+                color=color,
+                marker=marker,
+                markersize=4.5 if condition == UNIFORM_CONDITION else 6.0,
+                markevery=10 if condition == UNIFORM_CONDITION else 1,
+                linestyle=linestyle,
+                linewidth=2.2,
+                label=label,
+            )
+        axis.set_xscale("log", base=2)
+        axis.set_yscale("log")
+        axis.set_xlabel("Learned permutations")
+        axis.set_ylabel(ylabel)
+        axis.grid(True, which="both", alpha=0.25)
+    axes[0].legend(frameon=False, fontsize=8)
+    figure.suptitle(
+        "Absolute condition-specific training work (evaluation excluded)",
+        fontsize=14,
+    )
+    figure.savefig(plot_root / "03_calibrated_training_work.png", dpi=220)
+    plt.close(figure)
+
+    figure, axes = plt.subplots(1, 2, figsize=(15.5, 5.8), constrained_layout=True)
+    curve_steps = tuple(range(1, config.benchmark.macro_steps + 1))
+    fit_specs = (
+        (
+            axes[0],
+            UNIFORM_CONDITION,
+            True,
+            "Persistent replay cumulative training wall time through T (s)",
+            "Observed cumulative runtime",
+            "T",
+        ),
+        (
+            axes[1],
+            CALIBRATED_FULL_REPLAY_CONDITION,
+            False,
+            "Fresh full-replay wall time for one fit at t (s)",
+            "Observed checkpoint runtime",
+            "t",
+        ),
+    )
+    for axis, condition, cumulative, ylabel, observed_label, symbol in fit_specs:
+        series = _condition_cumulative_series if cumulative else _condition_series
+        steps, values = series(rows, condition, "total_training_wall_seconds")
+        fits = _growth_fits(steps, values)
+        tlog = fits["t_log2_t_plus_1"]
+        power = fits["power_law"]
+        color, marker, _, _ = condition_styles[condition]
+        axis.plot(
+            steps,
+            values,
+            color=color,
+            marker=marker,
+            markersize=4.5 if cumulative else 6.5,
+            markevery=10 if cumulative else 1,
+            linewidth=1.8 if cumulative else 0,
+            label=observed_label,
+        )
+        axis.plot(
+            curve_steps,
+            tuple(
+                float(tlog["coefficient"]) * _growth_scale(step)
+                for step in curve_steps
+            ),
+            color="#222222",
+            linestyle="-",
+            linewidth=2.0,
+            label=(
+                f"c·{symbol}·log₂({symbol}+1), "
+                f"R²={float(tlog['r_squared']):.3f}"
+            ),
+        )
+        axis.plot(
+            curve_steps,
+            tuple(
+                float(power["coefficient"])
+                * step ** float(power["exponent"])
+                for step in curve_steps
+            ),
+            color="#E69F00",
+            linestyle="--",
+            linewidth=2.0,
+            label=(
+                f"c·{symbol}^{float(power['exponent']):.2f}, "
+                f"R²={float(power['r_squared']):.3f}"
+            ),
+        )
+        axis.axvspan(1, FIT_MINIMUM_STEP, color="#999999", alpha=0.08)
+        axis.set_xscale("log", base=2)
+        axis.set_yscale("log")
+        axis.set_xlabel("Learned permutations")
+        axis.set_ylabel(ylabel)
+        axis.grid(True, which="both", alpha=0.25)
+        axis.legend(frameon=False, fontsize=8)
+    figure.suptitle(
+        "Empirical runtime fits (fit uses T or t ≥ 4)",
+        fontsize=14,
+    )
+    figure.savefig(plot_root / "05_runtime_growth_fits.png", dpi=220)
+    plt.close(figure)
+
+    sample_count = int(selection["selected_sample_count_per_role"])
+    persistent_steps, persistent_wall = _condition_cumulative_series(
+        rows,
+        UNIFORM_CONDITION,
+        "total_training_wall_seconds",
+    )
+    _, persistent_features = _condition_cumulative_series(
+        rows,
+        UNIFORM_CONDITION,
+        "feature_forward_example_passes",
+    )
+    _, persistent_backward = _condition_cumulative_series(
+        rows,
+        UNIFORM_CONDITION,
+        "integrator_backward_example_passes",
+    )
+    full_steps, full_wall = _condition_series(
+        rows,
+        CALIBRATED_FULL_REPLAY_CONDITION,
+        "total_training_wall_seconds",
+    )
+    _, full_features = _condition_series(
+        rows,
+        CALIBRATED_FULL_REPLAY_CONDITION,
+        "feature_forward_example_passes",
+    )
+    _, full_backward = _condition_series(
+        rows,
+        CALIBRATED_FULL_REPLAY_CONDITION,
+        "integrator_backward_example_passes",
+    )
+    figure, axes = plt.subplots(2, 3, figsize=(17.5, 9.0), constrained_layout=True)
+    normalized_specs = (
+        (
+            axes[0, 0],
+            persistent_steps,
+            tuple(
+                value / _growth_scale(step)
+                for step, value in zip(
+                    persistent_steps,
+                    persistent_wall,
+                    strict=True,
+                )
+            ),
+            "Cumulative wall / [T log₂(T+1)]",
+            "Persistent replay — wall time",
+            "#0072B2",
+            "o",
+            None,
+        ),
+        (
+            axes[0, 1],
+            persistent_steps,
+            tuple(
+                value / (sample_count * _growth_scale(step))
+                for step, value in zip(
+                    persistent_steps,
+                    persistent_features,
+                    strict=True,
+                )
+            ),
+            "Cumulative frozen forwards / [N T log₂(T+1)]",
+            "Persistent replay — frozen features",
+            "#0072B2",
+            "o",
+            None,
+        ),
+        (
+            axes[0, 2],
+            persistent_steps,
+            tuple(
+                value
+                / (
+                    config.integrator.epochs_per_step
+                    * sample_count
+                    * (2 * step - 1)
+                )
+                for step, value in zip(
+                    persistent_steps,
+                    persistent_backward,
+                    strict=True,
+                )
+            ),
+            "Cumulative backward / [4N(2T−1)]",
+            "Persistent replay — integrator backward",
+            "#0072B2",
+            "o",
+            1.0,
+        ),
+        (
+            axes[1, 0],
+            full_steps,
+            tuple(
+                value / _growth_scale(step)
+                for step, value in zip(full_steps, full_wall, strict=True)
+            ),
+            "Fit wall / [t log₂(t+1)]",
+            "Fresh full replay — wall time per fit",
+            "#CC79A7",
+            "s",
+            None,
+        ),
+        (
+            axes[1, 1],
+            full_steps,
+            tuple(
+                value / (sample_count * _growth_scale(step))
+                for step, value in zip(full_steps, full_features, strict=True)
+            ),
+            "Frozen forwards / [N t log₂(t+1)]",
+            "Fresh full replay — frozen features per fit",
+            "#CC79A7",
+            "s",
+            None,
+        ),
+        (
+            axes[1, 2],
+            full_steps,
+            tuple(
+                value / (epoch_budget * sample_count * step)
+                for step, value in zip(full_steps, full_backward, strict=True)
+            ),
+            f"Backward / [{epoch_budget}N t]",
+            "Fresh full replay — integrator backward per fit",
+            "#CC79A7",
+            "s",
+            1.0,
+        ),
+    )
+    for axis, steps, values, ylabel, title, color, marker, reference in normalized_specs:
+        axis.plot(
+            steps,
+            values,
+            color=color,
+            marker=marker,
+            markersize=4.5,
+            markevery=10 if len(steps) > 10 else 1,
+            linewidth=2.0,
+        )
+        if reference is not None:
+            axis.axhline(reference, color="#222222", linestyle=":", linewidth=1.2)
+        axis.set_xscale("log", base=2)
+        axis.set_xlabel("Learned permutations")
+        axis.set_ylabel(ylabel)
+        axis.set_title(title)
+        axis.grid(True, which="both", alpha=0.25)
+    figure.suptitle(
+        "Training work normalized by the relevant theoretical growth factor",
+        fontsize=14,
+        y=1.02,
+    )
+    figure.savefig(
+        plot_root / "06_normalized_runtime_growth.png",
+        dpi=220,
+        bbox_inches="tight",
+    )
+    plt.close(figure)
+
+    sample_multiplier = int(selection["selected_sample_multiplier"])
+    frontier = load_frontier(
+        config,
+        run_root,
+        0,
+        config.benchmark.macro_steps,
+        hierarchy_root=_arm_root(config, run_root, sample_multiplier) / "hierarchy",
+        training_sample_multiplier=sample_multiplier,
+    )
+    figure, axis = plt.subplots(figsize=(13.5, 4.8), constrained_layout=True)
+    topology_colors = ("#0072B2", "#E69F00", "#009E73", "#CC79A7")
+    for index, node in enumerate(frontier.nodes):
+        axis.barh(
+            node.level,
+            node.last_block - node.first_block + 1,
+            left=node.first_block + 1,
+            height=0.55,
+            color=topology_colors[index % len(topology_colors)],
+            edgecolor="#202124",
+        )
+        axis.text(
+            (node.first_block + node.last_block + 2) / 2,
+            node.level,
+            f"{node.first_block + 1}–{node.last_block + 1}",
+            ha="center",
+            va="center",
+            fontsize=9,
+        )
+    axis.set_xlabel("Permutation-task interval represented by frozen node")
+    axis.set_ylabel("Temporal level / stable input slot")
+    axis.set_title("Task-100 one-node-per-level frontier")
+    axis.set_yticks(range(config.observer.maximum_levels))
+    axis.grid(True, axis="x", alpha=0.25)
+    figure.savefig(plot_root / "04_final_hierarchy.png", dpi=220)
+    plt.close(figure)
+
+
+def _sample_calibrated_report_markdown(
+    config: VampLogTDenseConfig,
+    summary: Mapping[str, object],
+    rows: Sequence[Mapping[str, object]],
+    selection: Mapping[str, object],
+    schedule: Mapping[str, object],
+) -> str:
+    """Render the sample-calibrated result in direct, self-contained language."""
+    sample_count = int(selection["selected_sample_count_per_role"])
+    epoch_budget = int(selection["selected_full_replay_epochs"])
+    selected = tuple(selection["candidate_summaries"])[-1]
+    candidate_lines = "\n".join(
+        "| "
+        f"{int(candidate['sample_count_per_role'])} | "
+        f"{100 * float(candidate['best_minimum_prefix_accuracy']):.2f}% | "
+        f"{int(candidate['best_epoch_by_minimum_prefix_accuracy'])} | "
+        f"{candidate['status']} |"
+        for candidate in selection["candidate_summaries"]
+    )
+    prefix_lines = "\n".join(
+        f"| {step} | {100 * float(accuracy):.2f}% |"
+        for step, accuracy in enumerate(
+            selected["prefix_accuracies_at_selected_epoch"],
+            start=1,
+        )
+    )
+    full_by_step = {
+        int(row["macro_step"]): row
+        for row in rows
+        if row["condition"] == CALIBRATED_FULL_REPLAY_CONDITION
+    }
+    uniform_by_step = {
+        int(row["macro_step"]): row
+        for row in rows
+        if row["condition"] == UNIFORM_CONDITION
+    }
+    checkpoint_lines = "\n".join(
+        f"| {step} | {100 * float(uniform_by_step[step]['accuracy']):.2f}% | "
+        f"{100 * float(full_by_step[step]['accuracy']):.2f}% | "
+        f"{float(full_by_step[step]['total_training_wall_seconds']):.2f} |"
+        for step in schedule["checkpoints"]
+    )
+    acceptance_lines = "\n".join(
+        f"| {name.replace('_', ' ')} | {value} |"
+        for name, value in summary["acceptance"].items()
+    )
+    final_accuracy = summary["final_accuracy"]
+    endpoint_seconds = float(summary["endpoint_probe"]["total_training_wall_seconds"])
+    elapsed_through_endpoint = float(schedule["elapsed_seconds_through_endpoint"])
+    durable_through_hierarchy = float(schedule["durable_seconds_through_hierarchy"])
+    required_total = float(schedule["projected_required_seconds"])
+    optional_total = float(schedule["projected_with_optional_seconds"])
+    reporting_reserve = float(schedule["reporting_reserve_seconds"])
+    remaining_required_training = (
+        required_total - elapsed_through_endpoint - reporting_reserve
+    )
+    optional_training = optional_total - required_total
+    fit_summary = summary["empirical_growth_fits"]
+    persistent_wall_fits = fit_summary[
+        "persistent_uniform_cumulative_training_wall_seconds"
+    ]
+    persistent_forward_fits = fit_summary[
+        "persistent_uniform_cumulative_forward_example_passes"
+    ]
+    full_wall_fits = fit_summary["full_replay_training_wall_seconds"]
+    full_forward_fits = fit_summary["full_replay_forward_example_passes"]
+    persistent_steps, persistent_wall = _condition_cumulative_series(
+        rows,
+        UNIFORM_CONDITION,
+        "total_training_wall_seconds",
+    )
+    _, persistent_features = _condition_cumulative_series(
+        rows,
+        UNIFORM_CONDITION,
+        "feature_forward_example_passes",
+    )
+    _, persistent_forward = _condition_cumulative_series(
+        rows,
+        UNIFORM_CONDITION,
+        "integrator_forward_example_passes",
+    )
+    _, persistent_backward = _condition_cumulative_series(
+        rows,
+        UNIFORM_CONDITION,
+        "integrator_backward_example_passes",
+    )
+    full_steps, full_wall = _condition_series(
+        rows,
+        CALIBRATED_FULL_REPLAY_CONDITION,
+        "total_training_wall_seconds",
+    )
+    _, full_features = _condition_series(
+        rows,
+        CALIBRATED_FULL_REPLAY_CONDITION,
+        "feature_forward_example_passes",
+    )
+    _, full_forward = _condition_series(
+        rows,
+        CALIBRATED_FULL_REPLAY_CONDITION,
+        "integrator_forward_example_passes",
+    )
+    _, full_backward = _condition_series(
+        rows,
+        CALIBRATED_FULL_REPLAY_CONDITION,
+        "integrator_backward_example_passes",
+    )
+    final_step = config.benchmark.macro_steps
+    if persistent_steps[-1] != final_step or full_steps[-1] != final_step:
+        raise ValueError("training-work comparison does not reach task 100")
+    growth_at_endpoint = _growth_scale(final_step)
+    persistent_wall_normalized = persistent_wall[-1] / growth_at_endpoint
+    persistent_feature_normalized = persistent_features[-1] / (
+        sample_count * growth_at_endpoint
+    )
+    persistent_backward_normalized = persistent_backward[-1] / (
+        config.integrator.epochs_per_step
+        * sample_count
+        * (2 * final_step - 1)
+    )
+    full_wall_normalized = full_wall[-1] / growth_at_endpoint
+    full_feature_normalized = full_features[-1] / (
+        sample_count * growth_at_endpoint
+    )
+    full_backward_normalized = full_backward[-1] / (
+        epoch_budget * sample_count * final_step
+    )
+    persistent_fit_lines = (
+        "| Cumulative wall seconds | "
+        f"{float(persistent_wall_fits['t_log2_t_plus_1']['coefficient']):.5f} | "
+        f"{float(persistent_wall_fits['t_log2_t_plus_1']['r_squared']):.3f} | "
+        f"{float(persistent_wall_fits['power_law']['exponent']):.3f} | "
+        f"{float(persistent_wall_fits['power_law']['r_squared']):.3f} |\n"
+        "| Cumulative total forward example-passes | "
+        f"{float(persistent_forward_fits['t_log2_t_plus_1']['coefficient']):.1f} | "
+        f"{float(persistent_forward_fits['t_log2_t_plus_1']['r_squared']):.3f} | "
+        f"{float(persistent_forward_fits['power_law']['exponent']):.3f} | "
+        f"{float(persistent_forward_fits['power_law']['r_squared']):.3f} |"
+    )
+    full_fit_lines = (
+        "| Wall seconds for one fresh fit | "
+        f"{float(full_wall_fits['t_log2_t_plus_1']['coefficient']):.5f} | "
+        f"{float(full_wall_fits['t_log2_t_plus_1']['r_squared']):.3f} | "
+        f"{float(full_wall_fits['power_law']['exponent']):.3f} | "
+        f"{float(full_wall_fits['power_law']['r_squared']):.3f} |\n"
+        "| Total forward example-passes for one fresh fit | "
+        f"{float(full_forward_fits['t_log2_t_plus_1']['coefficient']):.1f} | "
+        f"{float(full_forward_fits['t_log2_t_plus_1']['r_squared']):.3f} | "
+        f"{float(full_forward_fits['power_law']['exponent']):.3f} | "
+        f"{float(full_forward_fits['power_law']['r_squared']):.3f} |"
+    )
+    endpoint_comparison_lines = "\n".join(
+        (
+            "| Wall time (s) | "
+            f"{persistent_wall[-1]:.2f} | {full_wall[-1]:.2f} | "
+            f"{full_wall[-1] / persistent_wall[-1]:.3f} |",
+            "| Frozen-feature forward example-passes | "
+            f"{persistent_features[-1]:,.0f} | {full_features[-1]:,.0f} | "
+            f"{full_features[-1] / persistent_features[-1]:.3f} |",
+            "| Integrator forward example-passes | "
+            f"{persistent_forward[-1]:,.0f} | {full_forward[-1]:,.0f} | "
+            f"{full_forward[-1] / persistent_forward[-1]:.3f} |",
+            "| Integrator backward example-passes | "
+            f"{persistent_backward[-1]:,.0f} | {full_backward[-1]:,.0f} | "
+            f"{full_backward[-1] / persistent_backward[-1]:.3f} |",
+        )
+    )
+    work_checkpoint_lines = []
+    for step in schedule["checkpoints"]:
+        for condition, label in (
+            (UNIFORM_CONDITION, "Persistent uniform replay — one update"),
+            (
+                CALIBRATED_FULL_REPLAY_CONDITION,
+                f"Fresh full replay — one {epoch_budget}-epoch fit",
+            ),
+        ):
+            row = (
+                uniform_by_step[int(step)]
+                if condition == UNIFORM_CONDITION
+                else full_by_step[int(step)]
+            )
+            work_checkpoint_lines.append(
+                f"| {int(step)} | {label} | "
+                f"{float(row['total_training_wall_seconds']):.3f} | "
+                f"{int(row['total_training_forward_example_passes']):,} | "
+                f"{int(row['integrator_backward_example_passes']):,} |"
+            )
+    return f"""# Sample-calibrated 100-permutation integrator comparison
+
+## Outcome
+
+The reference-sized model passed the calibration with {sample_count} model
+examples and {sample_count} disjoint observer examples per task. Fresh full
+replay first cleared 95% at all ten prefixes after {epoch_budget} epochs. At
+task 100, persistent uniform replay reached
+{100 * float(final_accuracy[UNIFORM_CONDITION]):.2f}% test accuracy and fresh
+full replay reached
+{100 * float(final_accuracy[CALIBRATED_FULL_REPLAY_CONDITION]):.2f}%.
+This is one fixed-order seed, so the difference is not a variance estimate.
+
+The task-100 full-replay fit ran before persistent training. It took
+{endpoint_seconds:.2f} training
+seconds. By then, calibration, hierarchy construction, and the endpoint fit had
+already consumed {elapsed_through_endpoint:.2f}
+seconds, which exceeded the {float(schedule['time_budget_seconds']):.0f}-second
+limit. The four optional fits themselves were projected to add only
+{optional_training:.2f} seconds after the 1.25 safety factor. They were
+{'included' if schedule['optional_checkpoints_included'] else 'omitted'} because
+the complete projected total with them was {optional_total:.2f} seconds.
+
+| Projection component | Seconds |
+|---|---:|
+| Calibration and hierarchy already elapsed | {durable_through_hierarchy:.2f} |
+| Task-100 full-replay endpoint already elapsed | {endpoint_seconds:.2f} |
+| Remaining mandatory fits and persistent training, projected with 1.25 safety factor | {remaining_required_training:.2f} |
+| Reporting reserve | {reporting_reserve:.2f} |
+| Required projected total without optional fits | {required_total:.2f} |
+| Four optional fits, projected with 1.25 safety factor | {optional_training:.2f} |
+| Projected total with optional fits | {optional_total:.2f} |
+
+Two earlier endpoint attempts were killed before producing a checkpoint because
+the old implementation simultaneously held the complete image archive and a
+roughly 12 GB dense feature matrix. The corrected implementation computed every
+frozen feature exactly once into a temporary float32 memory map, retained at
+most {int(summary['endpoint_probe']['peak_resident_feature_rows']):,} feature
+rows in anonymous memory, preserved the original seeded minibatch order, and
+deleted the cache after checkpoint publication. This storage-only correction is
+authenticated by `protocol-amendment-oom-streaming.json`; the completed sample
+calibration and frozen hierarchy were retained unchanged.
+
+## Exact condition definitions
+
+| Report name | What was trained |
+|---|---|
+| Persistent uniform replay | One integrator continued across all 100 tasks. At each task it trained four epochs on {sample_count} current observer examples and, after task 1, {sample_count} examples sampled uniformly from all earlier tasks. Current and historical losses each had weight 0.5. |
+| Fresh full replay | A new integrator was initialized at every reported checkpoint and trained {epoch_budget} epochs on all {sample_count} observer examples from every task seen by that checkpoint. |
+
+Both conditions used the same frozen reference MLP, permutation order,
+one-node-per-level hierarchy, and test subsets. The smaller model was retained
+because it met the calibration requirement; the 4x-parameter model was not
+rerun.
+
+## Sample and epoch calibration
+
+| Samples per role and task | Best worst-prefix accuracy | Best epoch | Result |
+|---:|---:|---:|---|
+{candidate_lines}
+
+The selection used 128 held-out training examples per learned domain. It
+required every prefix accuracy below to reach 95% at the same epoch. It did
+not evaluate final test examples.
+
+| Prefix task | Held-out accuracy at selected epoch |
+|---:|---:|
+{prefix_lines}
+
+![Sample and epoch calibration](plots/01_sample_calibration.png)
+
+## Accuracy against the earlier experiment
+
+The two panels separate persistent and fresh-full-replay training so four
+model/sample arms remain visually distinct. Earlier full-replay arms used 20
+epochs; the new purple arm uses the {epoch_budget}-epoch calibrated budget.
+
+![Accuracy with calibrated arm](plots/02_accuracy_with_calibrated_arm.png)
+
+| Learned tasks | Persistent uniform accuracy | Fresh full-replay accuracy | Fresh full-replay training seconds |
+|---:|---:|---:|---:|
+{checkpoint_lines}
+
+## Training work
+
+The initial calibrated report replaced the established scaling layout with four
+unfitted absolute curves. That made the persistent condition's cumulative
+`T log T` comparison invisible. This revision restores the absolute, fitted,
+and normalized views used by the preceding capacity report. It changes no
+training measurement.
+
+The absolute plot restores the earlier report format: each panel shows both
+conditions for the same quantity. A persistent point is the cost of that task's
+one update. A fresh-full-replay point is the cost of one newly initialized fit
+at that checkpoint. Forward counts include frozen-node feature forwards plus
+integrator training forwards; backward counts include only integrator training
+backwards.
+
+Evaluation is excluded. Validation passes used to select samples and epochs are
+retained separately in `sample_calibration_metrics.csv`. Full-replay wall time
+includes temporary-cache writes and shuffled reads; the storage correction does
+not change the examples, model passes, or optimizer updates.
+
+![Calibrated training work](plots/03_calibrated_training_work.png)
+
+### Persistent replay: cumulative scaling through task T
+
+Persistent replay performs one update at every task, so its end-to-end cost is
+the cumulative sum of all updates through `T`. The table fits observations from
+`T >= {FIT_MINIMUM_STEP}`. The through-origin comparison is
+`work = c × T × log2(T+1)`; the empirical alternative is `work = c × T^p`.
+R-squared is calculated on the original measurement scale.
+
+| Persistent cumulative series | T-log coefficient c | T-log R² | Power p | Power R² |
+|---|---:|---:|---:|---:|
+{persistent_fit_lines}
+
+Measured cumulative wall time is slightly better described by `T log T`
+(R²={float(persistent_wall_fits['t_log2_t_plus_1']['r_squared']):.3f}) than by
+the fitted power curve
+(R²={float(persistent_wall_fits['power_law']['r_squared']):.3f},
+`p={float(persistent_wall_fits['power_law']['exponent']):.3f}`). Counted forward
+passes follow the exact popcount schedule rather than a smooth curve; their
+finite-range power fit is numerically tighter, but the schedule's asymptotic
+bound remains `Theta(T log T)`.
+
+At `T=100`, cumulative persistent wall time was {persistent_wall[-1]:.2f}
+seconds. Dividing by `T log2(T+1)` gives
+{persistent_wall_normalized:.5f} seconds. Cumulative frozen-node
+forwards divided by `N T log2(T+1)` equal
+{persistent_feature_normalized:.3f}. Cumulative integrator backwards divided by
+their exact count, `4N(2T-1)`, equal {persistent_backward_normalized:.3f}.
+
+### Fresh full replay: cost of one fit at task t
+
+Fresh full replay was measured only at the six scheduled checkpoints. Its
+series is therefore the cost of one independent fresh fit at `t`, not a
+cumulative sum of fits at every earlier task. Fits again use
+`t >= {FIT_MINIMUM_STEP}` and the same through-origin `t log2(t+1)` and power
+curves.
+
+| Fresh-fit series | t-log coefficient c | t-log R² | Power p | Power R² |
+|---|---:|---:|---:|---:|
+{full_fit_lines}
+
+For wall time, the nearly linear power fit
+(`p={float(full_wall_fits['power_law']['exponent']):.3f}`,
+R²={float(full_wall_fits['power_law']['r_squared']):.3f}) is tighter than the
+`t log t` comparison
+(R²={float(full_wall_fits['t_log2_t_plus_1']['r_squared']):.3f}). The three
+epochs of linear integrator work and memory-map I/O dominate the frozen-feature
+term over these tasks. Only four sampled points—tasks 4, 8, 10, and 100—enter
+these fits, so the fitted exponent is descriptive rather than a reliable
+asymptotic estimate.
+
+At `t=100`, wall time divided by `t log2(t+1)` is
+{full_wall_normalized:.5f} seconds. Frozen-node forwards divided by
+`N t log2(t+1)` equal {full_feature_normalized:.3f}. Integrator backwards
+divided by their exact count, `{epoch_budget}Nt`, equal
+{full_backward_normalized:.3f}.
+
+![Empirical runtime fits for persistent and full replay](plots/05_runtime_growth_fits.png)
+
+![Both conditions normalized by their theoretical factors](plots/06_normalized_runtime_growth.png)
+
+The one-node frontier contains `popcount(t)` active frozen nodes. Persistent
+replay evaluates a fixed `2N` examples after task 1, so cumulative frozen-node
+work is `N + 2N × sum(popcount(k), k=2..T)`, which is `Theta(T log T)`.
+Persistent integrator forward/backward work is exactly linear in `T`. One fresh
+full-replay fit evaluates `Nt` examples against `popcount(t)` nodes, so its
+frozen-node component is `Theta(t log t)` and its integrator component is
+linear in `t`. If fresh full replay were actually rerun after every task, its
+cumulative cost would instead be `Theta(T² log T)`; this protocol skipped
+unsampled fits because they do not affect the independently initialized fits
+that were measured.
+
+### Direct endpoint work comparison
+
+The persistent column below is all training accumulated from tasks 1 through
+100. The fresh-full-replay column is only the independent task-100 fit. This is
+the like-for-purpose endpoint comparison; it is not the cumulative cost of
+running fresh full replay at every task.
+
+| Quantity | Persistent cumulative through T=100 | Fresh full replay at t=100 | Fresh / persistent |
+|---|---:|---:|---:|
+{endpoint_comparison_lines}
+
+### Scheduled checkpoint measurements
+
+| Learned tasks | Condition and scope | Training seconds | Forward example-passes | Backward example-passes |
+|---:|---|---:|---:|---:|
+{chr(10).join(work_checkpoint_lines)}
+
+## Frozen hierarchy at task 100
+
+Each bar is one active frozen temporal node. Its vertical position is the
+stable integrator input slot and its label is the inclusive task interval it
+represents.
+
+![Final hierarchy](plots/04_final_hierarchy.png)
+
+## Acceptance checks
+
+| Check | Passed |
+|---|---|
+{acceptance_lines}
+
+The overall status is {summary['status']}. The resolved config identity is
+{config.config_hash}.
+
+## Limits
+
+Calibration on one fixed validation split can overstate how reliably 95% will
+hold on other sample draws or permutation orders. Passing tasks 1–10 does not
+guarantee 95% at task 100. Fresh full replay is a high-information baseline at
+a validation-selected fixed epoch count, not a mathematical best-possible
+integrator or a proof of convergence.
+"""
+
+
 def _write_capacity_report(config: VampLogTDenseConfig, run_root: Path) -> None:
     """Write the capacity/sample comparison artifacts from authenticated rows."""
     all_rows = _all_metric_rows(config, run_root)
@@ -2067,6 +4596,9 @@ def _write_metrics_csv(path: Path, rows: Sequence[Mapping[str, object]]) -> None
         "data_preparation_wall_seconds",
         "feature_wall_seconds",
         "optimizer_wall_seconds",
+        "feature_storage",
+        "peak_resident_feature_rows",
+        "temporary_feature_cache_bytes",
         "total_training_forward_example_passes",
         "feature_forward_example_passes",
         "integrator_forward_example_passes",

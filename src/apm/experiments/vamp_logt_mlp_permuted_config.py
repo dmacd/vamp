@@ -29,6 +29,7 @@ INTEGRATOR_CONDITIONS = (
 )
 
 SCALING_CHECKPOINTS = (1, 2, 4, 8, 10, 16, 26, 41, 66, 100)
+SAMPLE_CALIBRATION_REVISION = "dense-full-model-v6-sample-calibrated"
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,22 +246,54 @@ class ScalingConfig:
     training_sample_multipliers: tuple[int, ...] = (1,)
 
     def __post_init__(self) -> None:
+        variance_shape = (
+            self.hierarchy_node_capacities == (1, 2)
+            and self.base_hidden_widths is None
+            and self.training_sample_multipliers == (1,)
+        )
+        capacity_shape = (
+            self.hierarchy_node_capacities == (1,)
+            and self.base_hidden_widths == (2272, 2272, 1136)
+            and self.training_sample_multipliers == (1, 2)
+        )
+        sample_calibration_shape = (
+            self.hierarchy_node_capacities == (1,)
+            and self.base_hidden_widths is None
+            and self.training_sample_multipliers == (1,)
+        )
         if (
             not self.predecessor_run.is_absolute()
-            or (
-                (
-                    self.hierarchy_node_capacities != (1, 2)
-                    or self.base_hidden_widths is not None
-                    or self.training_sample_multipliers != (1,)
-                )
-                and (
-                    self.hierarchy_node_capacities != (1,)
-                    or self.base_hidden_widths != (2272, 2272, 1136)
-                    or self.training_sample_multipliers != (1, 2)
-                )
-            )
+            or not (variance_shape or capacity_shape or sample_calibration_shape)
         ):
             raise ValueError("invalid dense scaling comparison")
+
+
+@dataclass(frozen=True, slots=True)
+class SampleCalibrationConfig:
+    """Validation-only sample search and conditional checkpoint schedule."""
+
+    sample_multiplier_candidates: tuple[int, ...]
+    prefix_steps: int
+    target_accuracy: float
+    selection_rule: str
+    total_time_budget_seconds: float
+    optional_full_checkpoints: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not self.sample_multiplier_candidates
+            or tuple(sorted(set(self.sample_multiplier_candidates)))
+            != self.sample_multiplier_candidates
+            or min(self.sample_multiplier_candidates) < 1
+            or self.prefix_steps < 1
+            or not 0.0 < self.target_accuracy <= 1.0
+            or self.selection_rule
+            != "minimum_samples_then_epochs_all_prefixes"
+            or self.total_time_budget_seconds <= 0.0
+            or tuple(sorted(set(self.optional_full_checkpoints)))
+            != self.optional_full_checkpoints
+        ):
+            raise ValueError("invalid full-replay sample calibration")
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,11 +329,13 @@ class VampLogTDenseConfig:
     evaluation: EvaluationConfig
     runtime: RuntimeConfig
     scaling: ScalingConfig | None = None
+    sample_calibration: SampleCalibrationConfig | None = None
 
     def __post_init__(self) -> None:
         variance_scaling = self.protocol_revision == "dense-full-model-v4-scaling-variance"
         capacity_scaling = self.protocol_revision == "dense-full-model-v5-scaling-capacity"
-        scaling = variance_scaling or capacity_scaling
+        sample_calibration = self.protocol_revision == SAMPLE_CALIBRATION_REVISION
+        scaling = variance_scaling or capacity_scaling or sample_calibration
         if (
             self.name
             != (
@@ -313,6 +348,7 @@ class VampLogTDenseConfig:
                 "dense-full-model-v2-posthoc-ungated",
                 "dense-full-model-v4-scaling-variance",
                 "dense-full-model-v5-scaling-capacity",
+                SAMPLE_CALIBRATION_REVISION,
             }
             or self.observer.maximum_levels != self.router.maximum_levels
             or self.observer.maximum_levels != self.integrator.maximum_levels
@@ -376,10 +412,44 @@ class VampLogTDenseConfig:
                 or not 3.99
                 <= large_integrator_parameters / reference_integrator_parameters
                 <= 4.01
+                or self.sample_calibration is not None
             ):
                 raise ValueError("capacity successor differs from its frozen 100-domain protocol")
+        elif sample_calibration:
+            if (
+                self.benchmark.domain_count != 100
+                or self.benchmark.macro_steps != 100
+                or self.benchmark.model_batch_size != 256
+                or self.benchmark.observer_batch_size != 256
+                or self.benchmark.evaluation_batch_size != 128
+                or self.calibration.candidate_widths != ((1024, 1024, 512),)
+                or self.online.seeds != (0,)
+                or self.online.historical_budget != 256
+                or self.integrator.hidden_widths != (1024, 512, 256)
+                or self.integrator.conditions != ("integrator_uniform_replay",)
+                or self.integrator.offline_epochs != 20
+                or self.ceiling.restarts_per_step != 1
+                or self.evaluation.full_checkpoints != SCALING_CHECKPOINTS
+                or self.evaluation.headline_checkpoints != SCALING_CHECKPOINTS
+                or self.scaling is None
+                or self.scaling.hierarchy_node_capacities != (1,)
+                or self.scaling.base_hidden_widths is not None
+                or self.scaling.training_sample_multipliers != (1,)
+                or self.sample_calibration is None
+                or self.sample_calibration.sample_multiplier_candidates
+                != (1, 2, 4, 8, 16, 32)
+                or self.sample_calibration.prefix_steps != 10
+                or self.sample_calibration.target_accuracy != 0.95
+                or self.sample_calibration.total_time_budget_seconds != 3600.0
+                or self.sample_calibration.optional_full_checkpoints
+                != (16, 26, 41, 66)
+            ):
+                raise ValueError(
+                    "sample-calibrated successor differs from its frozen protocol"
+                )
         elif (
             self.scaling is not None
+            or self.sample_calibration is not None
             or self.benchmark.domain_count != 8
             or self.integrator.conditions != INTEGRATOR_CONDITIONS
         ):
@@ -407,6 +477,8 @@ class VampLogTDenseConfig:
             if self.protocol_revision == "dense-full-model-v4-scaling-variance":
                 record["scaling"].pop("base_hidden_widths")
                 record["scaling"].pop("training_sample_multipliers")
+        if self.sample_calibration is None:
+            record.pop("sample_calibration")
         return record
 
 
@@ -505,8 +577,11 @@ def load_config(path: str | Path) -> VampLogTDenseConfig:
     if revision in {
         "dense-full-model-v4-scaling-variance",
         "dense-full-model-v5-scaling-capacity",
+        SAMPLE_CALIBRATION_REVISION,
     }:
         root_keys.add("scaling")
+    if revision == SAMPLE_CALIBRATION_REVISION:
+        root_keys.add("sample_calibration")
     root = _mapping(
         loaded,
         "configuration",
@@ -579,6 +654,22 @@ def load_config(path: str | Path) -> VampLogTDenseConfig:
         if revision == "dense-full-model-v5-scaling-capacity":
             scaling_keys.update({"base_hidden_widths", "training_sample_multipliers"})
         scaling = _mapping(root["scaling"], "scaling", scaling_keys)
+    sample_calibration = (
+        _mapping(
+            root["sample_calibration"],
+            "sample_calibration",
+            {
+                "sample_multiplier_candidates",
+                "prefix_steps",
+                "target_accuracy",
+                "selection_rule",
+                "total_time_budget_seconds",
+                "optional_full_checkpoints",
+            },
+        )
+        if "sample_calibration" in root
+        else None
+    )
     if str(router["optimizer"]).lower() != "adamw" or str(integrator["optimizer"]).lower() != "adamw":
         raise ValueError("router and integrator optimizers must be AdamW")
     project_root = _project_root(source)
@@ -684,6 +775,24 @@ def load_config(path: str | Path) -> VampLogTDenseConfig:
             if scaling is not None
             else None
         ),
+        (
+            SampleCalibrationConfig(
+                tuple(
+                    int(value)
+                    for value in sample_calibration["sample_multiplier_candidates"]
+                ),
+                int(sample_calibration["prefix_steps"]),
+                float(sample_calibration["target_accuracy"]),
+                str(sample_calibration["selection_rule"]),
+                float(sample_calibration["total_time_budget_seconds"]),
+                tuple(
+                    int(value)
+                    for value in sample_calibration["optional_full_checkpoints"]
+                ),
+            )
+            if sample_calibration is not None
+            else None
+        ),
     )
 
 
@@ -700,6 +809,8 @@ __all__ = [
     "ROUTER_CONDITIONS",
     "RouterConfig",
     "RuntimeConfig",
+    "SAMPLE_CALIBRATION_REVISION",
+    "SampleCalibrationConfig",
     "ScalingConfig",
     "VampLogTDenseConfig",
     "load_config",
