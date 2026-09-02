@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 import math
+from time import perf_counter
 
 import torch
 from torch import Tensor, nn
@@ -94,7 +95,7 @@ class IntegratorConditionState:
 
 @dataclass(frozen=True, slots=True)
 class IntegratorTrainingResult:
-    """Pre/post source losses and accuracy for one bounded update."""
+    """Pre/post metrics and training-only model work for one bounded update."""
 
     objective_before: float
     objective_after: float
@@ -106,6 +107,11 @@ class IntegratorTrainingResult:
     current_accuracy_after: float
     baseline_current_accuracy: float
     optimizer_steps: int
+    training_forward_example_passes: int
+    training_backward_example_passes: int
+    training_forward_calls: int
+    training_backward_calls: int
+    training_wall_seconds: float
 
     def __post_init__(self) -> None:
         values = (
@@ -123,6 +129,15 @@ class IntegratorTrainingResult:
             or any(value is not None and not math.isfinite(value) for value in optional)
             or (self.historical_loss_before is None) != (self.historical_loss_after is None)
             or self.optimizer_steps < 1
+            or min(
+                self.training_forward_example_passes,
+                self.training_backward_example_passes,
+                self.training_forward_calls,
+                self.training_backward_calls,
+            )
+            < 1
+            or not math.isfinite(self.training_wall_seconds)
+            or self.training_wall_seconds < 0.0
         ):
             raise ValueError("integrator training did not produce finite bounded evidence")
 
@@ -303,14 +318,17 @@ def create_condition_state(
     config: IntegratorConfig,
     seed: int,
     device: torch.device,
+    *,
+    maximum_slots: int | None = None,
 ) -> IntegratorConditionState:
     """Create one independently initialized integrator and optimizer."""
+    slot_count = config.maximum_levels if maximum_slots is None else maximum_slots
     device_indices = [device.index or 0] if device.type == "cuda" else []
     with torch.random.fork_rng(devices=device_indices):
         torch.manual_seed(named_seed(seed, "integrator-init", name))
         integrator = LevelSlotIntegrator(
             input_dim,
-            config.maximum_levels,
+            slot_count,
             slot_dim,
             config.hidden_widths,
             config.dropout,
@@ -443,7 +461,7 @@ def train_condition(
     macro_step: int,
     device: torch.device,
 ) -> IntegratorTrainingResult:
-    """Train one condition with fixed current/historical source weighting."""
+    """Train one condition and measure only loss-construction/gradient work."""
     if epochs < 1:
         raise ValueError("integrator training requires at least one epoch")
     before_current = _source_metrics(state.integrator, current, device, config.minibatch_size)
@@ -453,7 +471,15 @@ def train_condition(
         else _source_metrics(state.integrator, historical, device, config.minibatch_size)
     )
     state.integrator.train()
+    historical_count = 0 if historical is None else len(historical.labels)
+    chunk_count = math.ceil((len(current.labels) + historical_count) / config.minibatch_size)
+    training_forward_example_passes = epochs * (len(current.labels) + historical_count)
+    training_forward_calls = epochs * chunk_count * (1 + int(historical is not None))
+    training_backward_calls = epochs * chunk_count
     device_indices = [device.index or 0] if device.type == "cuda" else []
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    training_start = perf_counter()
     with torch.random.fork_rng(devices=device_indices):
         torch.manual_seed(named_seed(seed, state.name, macro_step, "dropout"))
         for epoch in range(epochs):
@@ -487,6 +513,9 @@ def train_condition(
                 )
                 state.optimizer.step()
                 state.optimizer_steps += 1
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    training_wall_seconds = perf_counter() - training_start
     after_current = _source_metrics(state.integrator, current, device, config.minibatch_size)
     after_historical = (
         None
@@ -515,6 +544,11 @@ def train_condition(
         after_current[1],
         baseline_accuracy,
         state.optimizer_steps,
+        training_forward_example_passes,
+        training_forward_example_passes,
+        training_forward_calls,
+        training_backward_calls,
+        training_wall_seconds,
     )
 
 

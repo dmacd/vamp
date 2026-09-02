@@ -26,10 +26,10 @@ from apm.continual.dense_mlp_adapter import (
 from apm.continual.logt_behavioral_integrator import IntegratorObservations
 from apm.continual.logt_behavioral_router import RouterSupervision
 from apm.continual.logt_evidence_bank import (
-    LogTState,
+    TemporalMerge,
     TemporalNode,
-    empty_logt_state,
-    insert_block,
+    merge_temporal_nodes,
+    temporal_leaf,
 )
 from apm.continual.vision.imagenetr.checkpoints import atomic_torch_save
 from apm.experiments.vamp_logt_mlp_permuted_calibration import load_calibrated_base
@@ -51,16 +51,26 @@ class DenseFrontier:
     nodes: tuple[TemporalNode, ...]
     deltas: PMap[str, DenseMlpState]
     node_checkpoint_sha256: PMap[str, str]
+    max_nodes_per_level: int = 1
 
     def __post_init__(self) -> None:
         node_ids = {node.node_id for node in self.nodes}
+        level_counts = {
+            level: sum(node.level == level for node in self.nodes)
+            for level in {node.level for node in self.nodes}
+        }
         if (
             self.macro_step < 1
+            or self.max_nodes_per_level < 1
             or set(self.deltas) != node_ids
             or set(self.node_checkpoint_sha256) != node_ids
-            or len({node.level for node in self.nodes}) != len(self.nodes)
+            or any(count > self.max_nodes_per_level for count in level_counts.values())
         ):
             raise ValueError("dense frontier is incomplete or misaligned")
+
+    def node_slots(self, maximum_levels: int) -> PMap[str, int]:
+        """Return stable rank-major slots for all active nodes."""
+        return _node_slots(self.nodes, maximum_levels, self.max_nodes_per_level)
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,26 +81,148 @@ class DenseObservations:
     router: RouterSupervision
 
 
+@dataclass(frozen=True, slots=True)
+class _DenseLogTState:
+    """Immutable exponential-histogram frontier with a fixed level capacity."""
+
+    block_size: int
+    processed_blocks: int
+    max_nodes_per_level: int
+    active_by_level: PMap[int, tuple[TemporalNode, ...]]
+
+    def __post_init__(self) -> None:
+        groups = tuple(self.active_by_level.items())
+        if (
+            self.block_size < 1
+            or self.processed_blocks < 0
+            or self.max_nodes_per_level < 1
+            or any(
+                not nodes
+                or len(nodes) > self.max_nodes_per_level
+                or any(node.level != level for node in nodes)
+                or tuple(sorted(nodes, key=lambda node: node.first_block)) != nodes
+                for level, nodes in groups
+            )
+        ):
+            raise ValueError("invalid dense LogT topology")
+        chronological = self.active_nodes
+        blocks = tuple(
+            block
+            for node in chronological
+            for block in range(node.first_block, node.last_block + 1)
+        )
+        examples = tuple(example for node in chronological for example in node.example_ids)
+        if (
+            blocks != tuple(range(self.processed_blocks))
+            or examples != tuple(range(self.processed_blocks * self.block_size))
+        ):
+            raise ValueError("dense LogT nodes do not partition the stream")
+
+    @property
+    def active_nodes(self) -> tuple[TemporalNode, ...]:
+        """Return active nodes in chronological interval order."""
+        return tuple(sorted(
+            (node for nodes in self.active_by_level.values() for node in nodes),
+            key=lambda node: node.first_block,
+        ))
+
+
+def _empty_dense_logt_state(block_size: int, max_nodes_per_level: int) -> _DenseLogTState:
+    return _DenseLogTState(block_size, 0, max_nodes_per_level, pmap())
+
+
+def _insert_dense_block(
+    state: _DenseLogTState,
+    example_ids: tuple[int, ...],
+) -> tuple[_DenseLogTState, TemporalNode, tuple[TemporalMerge, ...]]:
+    expected = tuple(range(
+        state.processed_blocks * state.block_size,
+        (state.processed_blocks + 1) * state.block_size,
+    ))
+    if example_ids != expected:
+        raise ValueError("dense LogT blocks must be complete and chronological")
+    leaf = temporal_leaf(state.processed_blocks, example_ids)
+    active = state.active_by_level
+    pending = leaf
+    merges = []
+    while True:
+        residents = active.get(pending.level, ())
+        candidates = (*residents, pending)
+        if len(candidates) <= state.max_nodes_per_level:
+            active = active.set(pending.level, candidates)
+            break
+        merge = merge_temporal_nodes(candidates[0], candidates[1])
+        survivors = candidates[2:]
+        active = (
+            active.set(pending.level, survivors)
+            if survivors
+            else active.remove(pending.level)
+        )
+        merges.append(merge)
+        pending = merge.parent
+    return (
+        _DenseLogTState(
+            state.block_size,
+            state.processed_blocks + 1,
+            state.max_nodes_per_level,
+            active,
+        ),
+        leaf,
+        tuple(merges),
+    )
+
+
 def build_hierarchy_tape(
     config: VampLogTDenseConfig,
     run_root: Path,
     device: torch.device,
+    *,
+    max_nodes_per_level: int = 1,
+    hierarchy_root: Path | None = None,
+    training_sample_multiplier: int = 1,
 ) -> tuple[dict[str, object], ...]:
     """Run or resume every seed's hierarchy and retain all created nodes."""
     base = load_calibrated_base(config, run_root)
+    target_root = run_root / "hierarchy" if hierarchy_root is None else hierarchy_root
+    try:
+        from tqdm.auto import tqdm
+    except ImportError as error:  # pragma: no cover - environment dependency
+        raise RuntimeError("tqdm is required by the vision environment") from error
     summaries = tuple(
-        _build_seed_tape(config, run_root, seed, base, device)
-        for seed in config.online.seeds
+        _build_seed_tape(
+            config,
+            run_root,
+            target_root,
+            seed,
+            base,
+            device,
+            max_nodes_per_level,
+            training_sample_multiplier,
+        )
+        for seed in tqdm(
+            config.online.seeds,
+            desc=(
+                f"dense hierarchies capacity={max_nodes_per_level} "
+                f"samples={training_sample_multiplier}x"
+            ),
+            disable=not config.runtime.progress,
+            unit="seed",
+        )
     )
-    publish_immutable_json(
-        run_root / "hierarchy" / "summary.json",
-        {
+    hierarchy_summary = {
             "config_hash": config.config_hash,
-            "schema_version": "vamp-logt-dense-hierarchy-summary-v1",
+            "max_nodes_per_level": max_nodes_per_level,
             "seeds": list(summaries),
             "status": "complete",
-        },
-    )
+        }
+    if _is_capacity_study(config):
+        hierarchy_summary.update({
+            "schema_version": "vamp-logt-dense-hierarchy-summary-v2",
+            "training_sample_multiplier": training_sample_multiplier,
+        })
+    else:
+        hierarchy_summary["schema_version"] = "vamp-logt-dense-hierarchy-summary-v1"
+    publish_immutable_json(target_root / "summary.json", hierarchy_summary)
     return summaries
 
 
@@ -99,31 +231,67 @@ def load_frontier(
     run_root: Path,
     seed: int,
     macro_step: int,
+    *,
+    max_nodes_per_level: int = 1,
+    hierarchy_root: Path | None = None,
+    training_sample_multiplier: int = 1,
 ) -> DenseFrontier:
     """Authenticate one frontier manifest and load its immutable node deltas."""
-    path = run_root / "hierarchy" / f"seed-{seed}" / "frontiers" / f"step-{macro_step:03d}.json"
+    target_root = run_root / "hierarchy" if hierarchy_root is None else hierarchy_root
+    path = target_root / f"seed-{seed}" / "frontiers" / f"step-{macro_step:03d}.json"
     manifest = load_canonical_json(path)
     if (
         manifest.get("config_hash") != config.config_hash
         or int(manifest.get("run_seed", -1)) != seed
         or int(manifest.get("macro_step", -1)) != macro_step
+        or int(manifest.get("max_nodes_per_level", -1)) != max_nodes_per_level
+        or (
+            _is_capacity_study(config)
+            and int(manifest.get("training_sample_multiplier", -1))
+            != training_sample_multiplier
+        )
     ):
         raise ValueError("dense hierarchy frontier coordinates changed")
     nodes = tuple(_node_from_record(row) for row in manifest["active_nodes"])
     deltas = {}
     hashes = {}
     for node, row in zip(nodes, manifest["active_nodes"], strict=True):
-        checkpoint = run_root / "hierarchy" / f"seed-{seed}" / "nodes" / node.node_id / "delta.pt"
+        checkpoint = target_root / f"seed-{seed}" / "nodes" / node.node_id / "delta.pt"
         expected = str(row["checkpoint_sha256"])
         if file_sha256(checkpoint) != expected:
             raise ValueError(f"dense hierarchy node changed: {node.node_id}")
         payload = torch.load(checkpoint, map_location="cpu", weights_only=True)
-        if payload.get("node_id") != node.node_id or payload.get("config_hash") != config.config_hash:
+        if (
+            payload.get("node_id") != node.node_id
+            or payload.get("config_hash") != config.config_hash
+            or (
+                _is_capacity_study(config)
+                and int(payload.get("training_sample_multiplier", -1))
+                != training_sample_multiplier
+            )
+        ):
             raise ValueError("dense node checkpoint metadata changed")
         deltas[node.node_id] = DenseMlpState(tuple(payload["delta_parameters"]))
         hashes[node.node_id] = expected
-    _require_frontier_partition(nodes, macro_step, config.benchmark.model_batch_size)
-    return DenseFrontier(macro_step, nodes, pmap(deltas), pmap(hashes))
+    _require_frontier_partition(
+        nodes,
+        macro_step,
+        config.benchmark.model_batch_size * training_sample_multiplier,
+    )
+    frontier = DenseFrontier(
+        macro_step,
+        nodes,
+        pmap(deltas),
+        pmap(hashes),
+        max_nodes_per_level,
+    )
+    declared_slots = {
+        str(row["node_id"]): int(row["slot"])
+        for row in manifest["active_nodes"]
+    }
+    if dict(frontier.node_slots(config.observer.maximum_levels)) != declared_slots:
+        raise ValueError("dense hierarchy node slots changed")
+    return frontier
 
 
 def build_dense_observations(
@@ -145,13 +313,16 @@ def build_dense_observations(
         raise ValueError("invalid dense observer request")
     rows = len(examples.labels)
     slot_dim = base.embedding_dim + 10 + 1
-    features = torch.zeros((rows, maximum_levels, slot_dim), dtype=torch.float32)
-    node_logits = torch.zeros((rows, maximum_levels, 10), dtype=torch.float32)
+    total_slots = maximum_levels * frontier.max_nodes_per_level
+    features = torch.zeros((rows, total_slots, slot_dim), dtype=torch.float32)
+    node_logits = torch.zeros((rows, total_slots, 10), dtype=torch.float32)
     node_log_probabilities = torch.zeros_like(node_logits)
-    active_mask = torch.zeros(maximum_levels, dtype=torch.bool)
+    active_mask = torch.zeros(total_slots, dtype=torch.bool)
+    node_slots = frontier.node_slots(maximum_levels)
     flattened = examples.images.flatten(1)
     target_base = DenseMlpState(tuple(tensor.to(device) for tensor in base.tensors))
-    for node in sorted(frontier.nodes, key=lambda value: value.level):
+    for node in sorted(frontier.nodes, key=lambda value: node_slots[value.node_id]):
+        slot = node_slots[node.node_id]
         delta = DenseMlpState(tuple(tensor.to(device) for tensor in frontier.deltas[node.node_id].tensors))
         hidden_rows, logit_rows = [], []
         with torch.inference_mode():
@@ -166,19 +337,19 @@ def build_dense_observations(
         hidden = torch.cat(hidden_rows)
         logits = torch.cat(logit_rows)
         log_probabilities = F.log_softmax(logits, dim=1)
-        features[:, node.level, :-1] = torch.cat(
+        features[:, slot, :-1] = torch.cat(
             (F.layer_norm(hidden, (base.embedding_dim,)), log_probabilities),
             dim=1,
         )
-        features[:, node.level, -1] = 1.0
-        node_logits[:, node.level] = logits
-        node_log_probabilities[:, node.level] = log_probabilities
-        active_mask[node.level] = True
+        features[:, slot, -1] = 1.0
+        node_logits[:, slot] = logits
+        node_log_probabilities[:, slot] = log_probabilities
+        active_mask[slot] = True
     active_probabilities = node_log_probabilities[:, active_mask]
     baseline = torch.logsumexp(active_probabilities, dim=1) - torch.log(
         torch.tensor(float(active_probabilities.shape[1]))
     )
-    expanded_labels = examples.labels[:, None, None].expand(-1, maximum_levels, 1)
+    expanded_labels = examples.labels[:, None, None].expand(-1, total_slots, 1)
     node_losses = -F.log_softmax(node_logits, dim=2).gather(2, expanded_labels).squeeze(2)
     node_losses[:, ~active_mask] = torch.inf
     hard_targets = node_losses.argmin(dim=1)
@@ -247,11 +418,14 @@ def build_base_observations(
 def _build_seed_tape(
     config: VampLogTDenseConfig,
     run_root: Path,
+    hierarchy_root: Path,
     seed: int,
     base: DenseMlpState,
     device: torch.device,
+    max_nodes_per_level: int,
+    training_sample_multiplier: int,
 ) -> dict[str, object]:
-    directory = run_root / "hierarchy" / f"seed-{seed}"
+    directory = hierarchy_root / f"seed-{seed}"
     summary_path = directory / "summary.json"
     if summary_path.is_file():
         summary = load_canonical_json(summary_path)
@@ -265,10 +439,38 @@ def _build_seed_tape(
         final_manifest = directory / "frontiers" / f"step-{config.benchmark.macro_steps:03d}.json"
         if file_sha256(final_manifest) != summary.get("final_frontier_sha256"):
             raise ValueError("dense hierarchy final frontier manifest changed")
-        load_frontier(config, run_root, seed, config.benchmark.macro_steps)
+        if int(summary.get("max_nodes_per_level", -1)) != max_nodes_per_level:
+            raise ValueError("dense hierarchy capacity changed")
+        if (
+            _is_capacity_study(config)
+            and int(summary.get("training_sample_multiplier", -1))
+            != training_sample_multiplier
+        ):
+            raise ValueError("dense hierarchy training sample count changed")
+        load_frontier(
+            config,
+            run_root,
+            seed,
+            config.benchmark.macro_steps,
+            max_nodes_per_level=max_nodes_per_level,
+            hierarchy_root=hierarchy_root,
+            training_sample_multiplier=training_sample_multiplier,
+        )
         return summary
-    benchmark = build_benchmark(config, seed)
-    topology: LogTState = empty_logt_state(config.benchmark.model_batch_size)
+    benchmark = (
+        build_benchmark(config, seed)
+        if training_sample_multiplier == 1
+        else build_benchmark(
+            config,
+            seed,
+            training_sample_multiplier=training_sample_multiplier,
+        )
+    )
+    block_size = config.benchmark.model_batch_size * training_sample_multiplier
+    topology = _empty_dense_logt_state(
+        block_size,
+        max_nodes_per_level,
+    )
     model_batches: tuple[ExampleBatch, ...] = ()
     node_hashes: dict[str, str] = {}
     example_updates = 0
@@ -276,24 +478,38 @@ def _build_seed_tape(
     for macro_step in range(1, config.benchmark.macro_steps + 1):
         model_batches = (*model_batches, benchmark.step(macro_step).model)
         archive = concatenate_batches(model_batches)
-        first_example = topology.processed_blocks * config.benchmark.model_batch_size
-        topology, leaf, merges = insert_block(
+        first_example = topology.processed_blocks * block_size
+        topology, leaf, merges = _insert_dense_block(
             topology,
-            tuple(range(first_example, first_example + config.benchmark.model_batch_size)),
+            tuple(range(first_example, first_example + block_size)),
         )
         for node in (leaf, *(merge.parent for merge in merges)):
             checkpoint_hash, updates = _fit_or_load_node(
-                config, directory, seed, node, archive, base, device
+                config,
+                directory,
+                seed,
+                node,
+                archive,
+                base,
+                device,
+                training_sample_multiplier,
             )
             node_hashes[node.node_id] = checkpoint_hash
             example_updates += updates
             created_nodes += 1
         active_nodes = topology.active_nodes
-        publish_immutable_json(
-            directory / "frontiers" / f"step-{macro_step:03d}.json",
-            {
+        slots = _node_slots(
+            active_nodes,
+            config.observer.maximum_levels,
+            max_nodes_per_level,
+        )
+        frontier_record = {
                 "active_nodes": [
-                    {**_node_record(node), "checkpoint_sha256": node_hashes[node.node_id]}
+                    {
+                        **_node_record(node),
+                        "checkpoint_sha256": node_hashes[node.node_id],
+                        "slot": slots[node.node_id],
+                    }
                     for node in active_nodes
                 ],
                 "config_hash": config.config_hash,
@@ -301,11 +517,21 @@ def _build_seed_tape(
                     [node.node_id, node_hashes[node.node_id]] for node in active_nodes
                 ]),
                 "macro_step": macro_step,
+                "max_nodes_per_level": max_nodes_per_level,
                 "run_seed": seed,
-                "schema_version": "vamp-logt-dense-frontier-v1",
-            },
+            }
+        if _is_capacity_study(config):
+            frontier_record.update({
+                "schema_version": "vamp-logt-dense-frontier-v2",
+                "training_sample_multiplier": training_sample_multiplier,
+            })
+        else:
+            frontier_record["schema_version"] = "vamp-logt-dense-frontier-v1"
+        publish_immutable_json(
+            directory / "frontiers" / f"step-{macro_step:03d}.json",
+            frontier_record,
         )
-    expected_nodes = 2 * config.benchmark.macro_steps - config.benchmark.macro_steps.bit_count()
+    expected_nodes = 2 * config.benchmark.macro_steps - len(topology.active_nodes)
     if created_nodes != expected_nodes:
         raise RuntimeError("dense hierarchy did not create the binary-counter node count")
     summary = {
@@ -317,10 +543,17 @@ def _build_seed_tape(
             directory / "frontiers" / f"step-{config.benchmark.macro_steps:03d}.json"
         ),
         "node_example_updates": example_updates,
+        "max_nodes_per_level": max_nodes_per_level,
         "run_seed": seed,
-        "schema_version": "vamp-logt-dense-hierarchy-seed-v1",
         "status": "complete",
     }
+    if _is_capacity_study(config):
+        summary.update({
+            "schema_version": "vamp-logt-dense-hierarchy-seed-v2",
+            "training_sample_multiplier": training_sample_multiplier,
+        })
+    else:
+        summary["schema_version"] = "vamp-logt-dense-hierarchy-seed-v1"
     publish_immutable_json(summary_path, summary)
     return summary
 
@@ -333,16 +566,32 @@ def _fit_or_load_node(
     archive: ExampleBatch,
     base: DenseMlpState,
     device: torch.device,
+    training_sample_multiplier: int,
 ) -> tuple[str, int]:
     path = directory / "nodes" / node.node_id / "delta.pt"
-    node_seed = named_seed(seed, "node", node.node_id)
+    capacity_study = _is_capacity_study(config)
+    node_seed = named_seed(
+        seed,
+        "capacity-node",
+        node.level,
+        node.first_block,
+        node.last_block,
+    ) if capacity_study else named_seed(seed, "node", node.node_id)
+    schema_version = (
+        "vamp-logt-dense-node-v2" if capacity_study else "vamp-logt-dense-node-v1"
+    )
     if path.is_file():
         payload = torch.load(path, map_location="cpu", weights_only=True)
         if (
-            payload.get("schema_version") != "vamp-logt-dense-node-v1"
+            payload.get("schema_version") != schema_version
             or payload.get("config_hash") != config.config_hash
             or payload.get("node_id") != node.node_id
             or int(payload.get("seed", -1)) != node_seed
+            or (
+                capacity_study
+                and int(payload.get("training_sample_multiplier", -1))
+                != training_sample_multiplier
+            )
         ):
             raise ValueError("stored dense node coordinates changed")
         return file_sha256(path), int(payload["example_updates"])
@@ -364,19 +613,24 @@ def _fit_or_load_node(
         progress=config.runtime.progress,
     )
     delta = dense_delta(base, result.state)
-    atomic_torch_save(
-        path,
-        {
+    payload = {
             "config_hash": config.config_hash,
             "delta_parameters": delta.tensors,
             "example_updates": result.training_example_presentations,
             "node": _node_record(node),
             "node_id": node.node_id,
-            "schema_version": "vamp-logt-dense-node-v1",
+            "schema_version": schema_version,
             "seed": node_seed,
-        },
-    )
+        }
+    if capacity_study:
+        payload["training_sample_multiplier"] = training_sample_multiplier
+    atomic_torch_save(path, payload)
     return file_sha256(path), result.training_example_presentations
+
+
+def _is_capacity_study(config: VampLogTDenseConfig) -> bool:
+    """Return whether sample multiplier is an authenticated coordinate."""
+    return config.protocol_revision == "dense-full-model-v5-scaling-capacity"
 
 
 def _node_record(node: TemporalNode) -> dict[str, object]:
@@ -420,6 +674,33 @@ def _require_frontier_partition(
     )
     if blocks != tuple(range(macro_step)) or examples != tuple(range(macro_step * block_size)):
         raise ValueError("dense hierarchy frontier does not partition the stream prefix")
+
+
+def _node_slots(
+    nodes: tuple[TemporalNode, ...],
+    maximum_levels: int,
+    max_nodes_per_level: int,
+) -> PMap[str, int]:
+    if (
+        maximum_levels < 1
+        or max_nodes_per_level < 1
+        or any(node.level >= maximum_levels for node in nodes)
+    ):
+        raise ValueError("dense frontier exceeds the configured slot geometry")
+    by_level = {
+        level: tuple(sorted(
+            (node for node in nodes if node.level == level),
+            key=lambda node: node.first_block,
+        ))
+        for level in {node.level for node in nodes}
+    }
+    if any(len(group) > max_nodes_per_level for group in by_level.values()):
+        raise ValueError("dense frontier exceeds its per-level node capacity")
+    return pmap({
+        node.node_id: rank * maximum_levels + level
+        for level, group in by_level.items()
+        for rank, node in enumerate(group)
+    })
 
 
 __all__ = [

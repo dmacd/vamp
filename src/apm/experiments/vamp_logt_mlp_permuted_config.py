@@ -28,10 +28,12 @@ INTEGRATOR_CONDITIONS = (
     "integrator_base_uniform_replay",
 )
 
+SCALING_CHECKPOINTS = (1, 2, 4, 8, 10, 16, 26, 41, 66, 100)
+
 
 @dataclass(frozen=True, slots=True)
 class DenseBenchmarkConfig:
-    """Fixed eight-domain stream and disjoint per-step allocations."""
+    """Fixed multi-domain stream and disjoint per-step allocations."""
 
     macro_steps: int
     permutation_seeds: tuple[int, ...]
@@ -43,15 +45,15 @@ class DenseBenchmarkConfig:
     def __post_init__(self) -> None:
         if (
             self.macro_steps < 1
-            or len(self.permutation_seeds) != 7
-            or len(set(self.permutation_seeds)) != 7
+            or not self.permutation_seeds
+            or len(set(self.permutation_seeds)) != len(self.permutation_seeds)
             or min(self.model_batch_size, self.observer_batch_size, self.evaluation_batch_size) < 1
         ):
             raise ValueError("invalid dense Permuted-MNIST benchmark")
 
     @property
     def domain_count(self) -> int:
-        """Return identity plus seven fixed permutations."""
+        """Return identity plus every configured fixed permutation."""
         return len(self.permutation_seeds) + 1
 
     @property
@@ -183,7 +185,9 @@ class IntegratorConfig:
             or self.weight_decay < 0.0
             or min(self.minibatch_size, self.epochs_per_step, self.offline_epochs) < 1
             or self.current_source_weight != 0.5
-            or self.conditions != INTEGRATOR_CONDITIONS
+            or not self.conditions
+            or len(set(self.conditions)) != len(self.conditions)
+            or not set(self.conditions).issubset(INTEGRATOR_CONDITIONS)
         ):
             raise ValueError("invalid dense integrator configuration")
 
@@ -232,6 +236,34 @@ class EvaluationConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ScalingConfig:
+    """Factors and authenticated predecessor for a 100-domain scaling study."""
+
+    hierarchy_node_capacities: tuple[int, ...]
+    predecessor_run: Path
+    base_hidden_widths: tuple[int, int, int] | None = None
+    training_sample_multipliers: tuple[int, ...] = (1,)
+
+    def __post_init__(self) -> None:
+        if (
+            not self.predecessor_run.is_absolute()
+            or (
+                (
+                    self.hierarchy_node_capacities != (1, 2)
+                    or self.base_hidden_widths is not None
+                    or self.training_sample_multipliers != (1,)
+                )
+                and (
+                    self.hierarchy_node_capacities != (1,)
+                    or self.base_hidden_widths != (2272, 2272, 1136)
+                    or self.training_sample_multipliers != (1, 2)
+                )
+            )
+        ):
+            raise ValueError("invalid dense scaling comparison")
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeConfig:
     """Execution-only device and deterministic-progress controls."""
 
@@ -263,17 +295,28 @@ class VampLogTDenseConfig:
     ceiling: CeilingConfig
     evaluation: EvaluationConfig
     runtime: RuntimeConfig
+    scaling: ScalingConfig | None = None
 
     def __post_init__(self) -> None:
+        variance_scaling = self.protocol_revision == "dense-full-model-v4-scaling-variance"
+        capacity_scaling = self.protocol_revision == "dense-full-model-v5-scaling-capacity"
+        scaling = variance_scaling or capacity_scaling
         if (
-            self.name != "vamp-logt-dense-permuted-mnist"
+            self.name
+            != (
+                "vamp-logt-dense-permuted-mnist-scaling"
+                if scaling
+                else "vamp-logt-dense-permuted-mnist"
+            )
             or self.protocol_revision not in {
                 "dense-full-model-v1",
                 "dense-full-model-v2-posthoc-ungated",
+                "dense-full-model-v4-scaling-variance",
+                "dense-full-model-v5-scaling-capacity",
             }
-            or self.benchmark.domain_count != 8
             or self.observer.maximum_levels != self.router.maximum_levels
             or self.observer.maximum_levels != self.integrator.maximum_levels
+            or self.benchmark.macro_steps.bit_length() > self.observer.maximum_levels
             or max(self.evaluation.full_checkpoints) > self.benchmark.macro_steps
         ):
             raise ValueError("resolved dense protocol violates the frozen plan")
@@ -285,6 +328,62 @@ class VampLogTDenseConfig:
             or self.calibration.selection_policy != "smallest_candidate"
         ):
             raise ValueError("the post-hoc dense successor requires ungated evidence import")
+        if variance_scaling:
+            if (
+                self.benchmark.domain_count != 100
+                or self.benchmark.macro_steps != 100
+                or self.online.seeds != (0, 1, 2, 3, 4)
+                or self.integrator.conditions != ("integrator_uniform_replay",)
+                or self.integrator.offline_epochs != 20
+                or self.ceiling.restarts_per_step != 1
+                or self.evaluation.full_checkpoints != SCALING_CHECKPOINTS
+                or self.evaluation.headline_checkpoints != SCALING_CHECKPOINTS
+                or self.scaling is None
+            ):
+                raise ValueError("scaling successor differs from its frozen 100-domain protocol")
+        elif capacity_scaling:
+            reference_base_parameters = _parameter_count((1024, 1024, 512))
+            large_base_parameters = _parameter_count((2272, 2272, 1136))
+            reference_integrator_parameters = _integrator_parameter_count(
+                7 * (512 + 11),
+                (1024, 512, 256),
+            )
+            large_integrator_parameters = _integrator_parameter_count(
+                7 * (1136 + 11),
+                (1912, 956, 478),
+            )
+            if (
+                self.benchmark.domain_count != 100
+                or self.benchmark.macro_steps != 100
+                or self.benchmark.model_batch_size != 256
+                or self.benchmark.observer_batch_size != 256
+                or self.benchmark.evaluation_batch_size != 128
+                or self.calibration.candidate_widths != ((2272, 2272, 1136),)
+                or self.calibration.seeds != (0,)
+                or self.online.seeds != (0,)
+                or self.online.historical_budget != 256
+                or self.integrator.hidden_widths != (1912, 956, 478)
+                or self.integrator.conditions != ("integrator_uniform_replay",)
+                or self.integrator.offline_epochs != 20
+                or self.ceiling.restarts_per_step != 1
+                or self.evaluation.full_checkpoints != SCALING_CHECKPOINTS
+                or self.evaluation.headline_checkpoints != SCALING_CHECKPOINTS
+                or self.scaling is None
+                or self.scaling.hierarchy_node_capacities != (1,)
+                or self.scaling.base_hidden_widths != (2272, 2272, 1136)
+                or self.scaling.training_sample_multipliers != (1, 2)
+                or not 3.99 <= large_base_parameters / reference_base_parameters <= 4.01
+                or not 3.99
+                <= large_integrator_parameters / reference_integrator_parameters
+                <= 4.01
+            ):
+                raise ValueError("capacity successor differs from its frozen 100-domain protocol")
+        elif (
+            self.scaling is not None
+            or self.benchmark.domain_count != 8
+            or self.integrator.conditions != INTEGRATOR_CONDITIONS
+        ):
+            raise ValueError("original dense protocols require their eight-domain condition matrix")
 
     @property
     def config_hash(self) -> str:
@@ -301,12 +400,35 @@ class VampLogTDenseConfig:
             record["calibration"].pop("selection_policy")
         else:
             record["calibration_evidence_run"] = str(self.calibration_evidence_run)
+        if self.scaling is None:
+            record.pop("scaling")
+        else:
+            record["scaling"]["predecessor_run"] = str(self.scaling.predecessor_run)
+            if self.protocol_revision == "dense-full-model-v4-scaling-variance":
+                record["scaling"].pop("base_hidden_widths")
+                record["scaling"].pop("training_sample_multipliers")
         return record
 
 
 def _parameter_count(widths: tuple[int, int, int]) -> int:
     first, second, third = widths
     return (784 + 1) * first + (first + 1) * second + (second + 1) * third + (third + 1) * 10
+
+
+def _integrator_parameter_count(
+    input_dim: int,
+    widths: tuple[int, int, int],
+) -> int:
+    """Count the residual integrator's affine and LayerNorm parameters."""
+    first, second, third = widths
+    return (
+        (input_dim + 1) * first
+        + 2 * first
+        + (first + 1) * second
+        + 2 * second
+        + (second + 1) * third
+        + (third + 1) * 10
+    )
 
 
 def _mapping(value: object, label: str, keys: set[str]) -> Mapping[str, object]:
@@ -318,6 +440,14 @@ def _mapping(value: object, label: str, keys: set[str]) -> Mapping[str, object]:
 def _path(value: object, project_root: Path) -> Path:
     path = Path(str(value)).expanduser()
     return path.resolve() if path.is_absolute() else (project_root / path).resolve()
+
+
+def _project_root(source: Path) -> Path:
+    """Locate the repository root without constraining config directory depth."""
+    try:
+        return next(parent for parent in source.parents if (parent / "pyproject.toml").is_file())
+    except StopIteration as error:
+        raise FileNotFoundError("dense config is not inside the project tree") from error
 
 
 def _optimizer(row: Mapping[str, object], label: str) -> DenseOptimizerConfig:
@@ -364,18 +494,28 @@ def load_config(path: str | Path) -> VampLogTDenseConfig:
     except ImportError as error:  # pragma: no cover - environment dependency
         raise RuntimeError("PyYAML is required by the vision environment") from error
     source = Path(path).resolve()
+    loaded = yaml.safe_load(source.read_text(encoding="utf-8"))
+    if not isinstance(loaded, Mapping) or not isinstance(loaded.get("experiment"), Mapping):
+        raise ValueError("configuration must contain an experiment mapping")
+    revision = str(loaded["experiment"].get("protocol_revision"))
+    root_keys = {
+        "experiment", "paths", "benchmark", "calibration", "node", "observer",
+        "router", "integrator", "online", "ceiling", "evaluation", "runtime",
+    }
+    if revision in {
+        "dense-full-model-v4-scaling-variance",
+        "dense-full-model-v5-scaling-capacity",
+    }:
+        root_keys.add("scaling")
     root = _mapping(
-        yaml.safe_load(source.read_text(encoding="utf-8")),
+        loaded,
         "configuration",
-        {
-            "experiment", "paths", "benchmark", "calibration", "node", "observer",
-            "router", "integrator", "online", "ceiling", "evaluation", "runtime",
-        },
+        root_keys,
     )
     experiment = _mapping(root["experiment"], "experiment", {"name", "protocol_revision"})
     revision = str(experiment["protocol_revision"])
     path_keys = {"artifact_root", "data_root"}
-    if revision == "dense-full-model-v2-posthoc-ungated":
+    if revision != "dense-full-model-v1":
         path_keys.add("calibration_evidence_run")
     paths = _mapping(root["paths"], "paths", path_keys)
     benchmark = _mapping(
@@ -392,7 +532,7 @@ def load_config(path: str | Path) -> VampLogTDenseConfig:
         "identity_mean_accuracy_minimum", "identity_seed_zero_accuracy_minimum",
         "pooled_gap_from_widest_maximum",
     }
-    if revision == "dense-full-model-v2-posthoc-ungated":
+    if revision != "dense-full-model-v1":
         calibration_keys.add("selection_policy")
     calibration = _mapping(
         root["calibration"],
@@ -433,9 +573,15 @@ def load_config(path: str | Path) -> VampLogTDenseConfig:
     runtime = _mapping(
         root["runtime"], "runtime", {"device", "deterministic_algorithms", "progress"}
     )
+    scaling = None
+    if "scaling" in root:
+        scaling_keys = {"hierarchy_node_capacities", "predecessor_run"}
+        if revision == "dense-full-model-v5-scaling-capacity":
+            scaling_keys.update({"base_hidden_widths", "training_sample_multipliers"})
+        scaling = _mapping(root["scaling"], "scaling", scaling_keys)
     if str(router["optimizer"]).lower() != "adamw" or str(integrator["optimizer"]).lower() != "adamw":
         raise ValueError("router and integrator optimizers must be AdamW")
-    project_root = source.parents[2]
+    project_root = _project_root(source)
     return VampLogTDenseConfig(
         str(experiment["name"]),
         revision,
@@ -521,6 +667,23 @@ def load_config(path: str | Path) -> VampLogTDenseConfig:
             bool(runtime["deterministic_algorithms"]),
             bool(runtime["progress"]),
         ),
+        (
+            ScalingConfig(
+                tuple(int(value) for value in scaling["hierarchy_node_capacities"]),
+                _path(scaling["predecessor_run"], project_root),
+                (
+                    tuple(int(value) for value in scaling["base_hidden_widths"])
+                    if "base_hidden_widths" in scaling
+                    else None
+                ),
+                tuple(
+                    int(value)
+                    for value in scaling.get("training_sample_multipliers", (1,))
+                ),
+            )
+            if scaling is not None
+            else None
+        ),
     )
 
 
@@ -537,6 +700,7 @@ __all__ = [
     "ROUTER_CONDITIONS",
     "RouterConfig",
     "RuntimeConfig",
+    "ScalingConfig",
     "VampLogTDenseConfig",
     "load_config",
 ]

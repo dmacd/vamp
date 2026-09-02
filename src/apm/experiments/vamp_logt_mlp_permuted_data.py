@@ -65,7 +65,7 @@ class StepAllocation:
 
     def __post_init__(self) -> None:
         combined = self.model_indices + self.observer_indices + self.evaluation_indices
-        if self.macro_step < 1 or not 0 <= self.domain_id < 8 or len(set(combined)) != len(combined):
+        if self.macro_step < 1 or self.domain_id < 0 or len(set(combined)) != len(combined):
             raise ValueError("invalid or overlapping dense stream allocation")
 
 
@@ -80,7 +80,7 @@ class StepBatches:
 
 @dataclass(frozen=True, slots=True)
 class PermutedMnistBenchmark:
-    """Lazy eight-domain benchmark with deterministic source allocations."""
+    """Lazy multi-domain benchmark with deterministic source allocations."""
 
     train_images: Tensor
     train_labels: Tensor
@@ -97,12 +97,14 @@ class PermutedMnistBenchmark:
             or self.train_images.dtype != torch.float32
             or self.test_images.dtype != torch.float32
             or self.train_labels.dtype != self.test_labels.dtype != torch.int64
-            or len(self.permutations) != 8
-            or len(self.test_subset_indices) != 8
+            or not self.permutations
+            or len(self.test_subset_indices) != len(self.permutations)
         ):
             raise ValueError("dense Permuted-MNIST benchmark has unexpected dimensions")
-        used = {domain: [] for domain in range(8)}
+        used = {domain: [] for domain in range(len(self.permutations))}
         for allocation in self.allocations:
+            if allocation.domain_id not in used:
+                raise ValueError("stream allocation names an unknown permutation")
             used[allocation.domain_id].extend(
                 allocation.model_indices + allocation.observer_indices + allocation.evaluation_indices
             )
@@ -124,7 +126,7 @@ class PermutedMnistBenchmark:
 
     def test_domain(self, domain_id: int, *, full: bool) -> ExampleBatch:
         """Materialize a fixed subset or the complete transformed test domain."""
-        if not 0 <= domain_id < 8:
+        if not 0 <= domain_id < len(self.permutations):
             raise ValueError("unknown Permuted-MNIST domain")
         rows = tuple(range(len(self.test_labels))) if full else self.test_subset_indices[domain_id]
         return self._batch(domain_id, rows, 0, train=False)
@@ -165,7 +167,12 @@ def resolved_device(name: str) -> torch.device:
     return torch.device(name)
 
 
-def build_benchmark(config: VampLogTDenseConfig, run_seed: int) -> PermutedMnistBenchmark:
+def build_benchmark(
+    config: VampLogTDenseConfig,
+    run_seed: int,
+    *,
+    training_sample_multiplier: int = 1,
+) -> PermutedMnistBenchmark:
     """Build one seed's stream without materializing all transformed domains."""
     arrays = load_mnist(root=config.data_root, allow_download=False, npz_cache_path=None)
     permutations = (
@@ -175,7 +182,11 @@ def build_benchmark(config: VampLogTDenseConfig, run_seed: int) -> PermutedMnist
             for seed in config.benchmark.permutation_seeds
         ),
     )
-    allocations = build_stream_allocations(config, run_seed)
+    allocations = build_stream_allocations(
+        config,
+        run_seed,
+        training_sample_multiplier=training_sample_multiplier,
+    )
     test_subsets = tuple(
         tuple(
             int(value)
@@ -183,7 +194,7 @@ def build_benchmark(config: VampLogTDenseConfig, run_seed: int) -> PermutedMnist
                 : config.evaluation.test_subset_per_domain
             ]
         )
-        for domain in range(8)
+        for domain in range(config.benchmark.domain_count)
     )
     return PermutedMnistBenchmark(
         torch.from_numpy(arrays.train_images).unsqueeze(1),
@@ -199,36 +210,56 @@ def build_benchmark(config: VampLogTDenseConfig, run_seed: int) -> PermutedMnist
 def build_stream_allocations(
     config: VampLogTDenseConfig,
     run_seed: int,
+    *,
+    training_sample_multiplier: int = 1,
 ) -> tuple[StepAllocation, ...]:
-    """Allocate every seed-varying source row without loading pixels."""
+    """Allocate paired model/observer rows without loading pixels.
+
+    Multipliers retain every multiplier-one role assignment and append disjoint
+    model and observer rows. Evaluation rows never change.
+    """
+    if training_sample_multiplier < 1:
+        raise ValueError("training sample multiplier must be positive")
     benchmark = config.benchmark
     schedule_generator = np.random.default_rng(benchmark.stream_seed)
+    domain_count = benchmark.domain_count
     schedule = tuple(
         int(domain)
-        for _block in range((benchmark.macro_steps + 7) // 8)
-        for domain in schedule_generator.permutation(8)
+        for _block in range((benchmark.macro_steps + domain_count - 1) // domain_count)
+        for domain in schedule_generator.permutation(domain_count)
     )[: benchmark.macro_steps]
     orders = tuple(
         np.random.default_rng(named_seed(run_seed, "domain-order", domain)).permutation(60_000)
-        for domain in range(8)
+        for domain in range(domain_count)
     )
-    cursors = [0] * 8
+    cursors = [0] * domain_count
     allocations = []
     for macro_step, domain_id in enumerate(schedule, start=1):
         start = cursors[domain_id]
-        stop = start + benchmark.examples_per_step
+        base_training_examples = benchmark.model_batch_size + benchmark.observer_batch_size
+        stop = (
+            start
+            + training_sample_multiplier * base_training_examples
+            + benchmark.evaluation_batch_size
+        )
         if stop > 60_000:
             raise RuntimeError("a domain exhausted before the configured horizon")
         rows = orders[domain_id][start:stop]
         model_stop = benchmark.model_batch_size
         observer_stop = model_stop + benchmark.observer_batch_size
+        evaluation_stop = observer_stop + benchmark.evaluation_batch_size
+        extra_model_stop = evaluation_stop + (
+            training_sample_multiplier - 1
+        ) * benchmark.model_batch_size
+        model_rows = np.concatenate((rows[:model_stop], rows[evaluation_stop:extra_model_stop]))
+        observer_rows = np.concatenate((rows[model_stop:observer_stop], rows[extra_model_stop:]))
         allocations.append(
             StepAllocation(
                 macro_step,
                 domain_id,
-                tuple(int(value) for value in rows[:model_stop]),
-                tuple(int(value) for value in rows[model_stop:observer_stop]),
-                tuple(int(value) for value in rows[observer_stop:]),
+                tuple(int(value) for value in model_rows),
+                tuple(int(value) for value in observer_rows),
+                tuple(int(value) for value in rows[observer_stop:evaluation_stop]),
             )
         )
         cursors[domain_id] = stop

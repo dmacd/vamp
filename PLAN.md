@@ -12,6 +12,215 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Outcome — 100-permutation Capacity and Sample-count Diagnostic
+
+The successor protocol is frozen in
+`docs/logt_vamp_permuted_mnist_100_capacity_protocol.md` and resolves under
+config identity
+`26adf88c61114a8cd32e6aa25dcc2c4aa8bc62b7c020db9878a9d42281492dd2`.
+It reuses the authenticated seed-0 one-node results from the completed
+five-seed study as the 1x-model/1x-sample reference, then runs a
+4.003x-parameter 2272/2272/1136 base and a 4.001x-parameter
+1912/956/478 integrator with (a) the original 256 node and observer examples
+per domain and (b) paired doubled 512-example allocations. This isolates the
+capacity contrast before measuring the extra-sample contrast. It uses seed 0,
+one node per level, the persistent uniform-replay integrator at every step,
+and fresh 20-epoch full replay at the ten declared checkpoints. The prior
+two-node policy is excluded.
+
+The production run is complete. The doubled allocation retains all original
+model/observer role assignments, appends disjoint rows, preserves evaluation
+rows, and doubles replay through paired base and extra draws.
+Hierarchy/checkpoint coordinates authenticate the sample multiplier. The
+shared scaling runner accepts this frozen config; no second runner was added.
+
+At step 100, persistent uniform replay reached 75.64% for the reference,
+75.02% for the 4x-parameter model with standard samples, and 83.30% for the
+4x-parameter model with doubled samples. Thus the isolated capacity contrast
+was -0.62 percentage points, while the isolated sample-count contrast was
++8.29 points. The corresponding fresh 20-epoch full-replay accuracies were
+77.86%, 79.41%, and 85.15%: +1.55 points from capacity and +5.74 points from
+samples. In this single run, more parameters alone therefore did not repair
+the persistent integrator; additional node/observer examples did. The latter
+is the effect of the entire doubled training-data budget, including doubled
+node and replay work, not a free accuracy improvement.
+
+The first generated report mistakenly fitted only full replay even though the
+request asked for both conditions. The 2026-09-02 report-only amendment fixes
+that omission without changing training. The corrected fit figure gives
+persistent cumulative runtime the full top row and full-replay checkpoint
+runtime the bottom row. The normalized figure gives each condition separate
+wall-time, frozen-forward, and integrator-backward panels, with exact overlaps
+called out explicitly.
+
+For persistent replay, cumulative wall time through all 100 updates has power
+exponents 1.111, 1.103, and 1.123 for the reference, large/standard, and
+large/doubled arms, with R-squared 0.999, 1.000, and 0.999. The corresponding
+`T log2(T+1)` fits have R-squared 0.997, 0.995, and 0.997. Cumulative forward
+example-passes have power exponent 1.119 and R-squared 1.000, versus
+`T log2(T+1)` R-squared 0.992. At step 100 the cumulative wall totals are
+12.876, 23.237, and 36.913 seconds. Cumulative frozen-feature work divided by
+`N T log2(T+1)` is 0.957 for all arms, while integrator backward work divided
+by its exact linear count is 1.000.
+
+Full-replay wall time over steps 4--100 remains better described by an
+approximately linear power fit: exponent 0.965 and R-squared 0.999 for the
+large standard-sample arm, and exponent 1.000 and R-squared 1.000 for the
+doubled-sample arm. Its corresponding `t log t` fits have R-squared 0.973 and
+0.976. This difference is expected: persistent integrator work is constant per
+update and accumulates linearly, while its frozen-feature work accumulates as
+`Theta(T log T)`; one full-replay fit has linear 20-epoch integrator work plus
+an oscillating `t * popcount(t)` frozen-feature term.
+
+All 11 acceptance checks pass. The serial focused gates pass 39 tests, the
+vision-environment experiment suite passes 20 tests, and the explicit RTX 4090
+smoke passes for the 9,541,274-parameter base and 17,650,160-parameter
+integrator. All five real plots were visually inspected, and the standalone
+HTML uses semantic tables and collapsible sections. An exact resume before the
+reporting amendment restored every phase without retraining. Regenerating the
+corrected report changed only derived summaries, reports, and figures; both
+new-arm metric ledgers remain byte-identical. The authenticated artifacts are
+under
+`artifacts/vamp-logt-mlp-permuted-mnist-100-capacity/runs/26adf88c61114a8cd32e6aa25dcc2c4aa8bc62b7c020db9878a9d42281492dd2/`.
+No required work remains. Replication across seeds would be a new follow-up;
+this one-seed result is not a variance estimate.
+
+## Completed Outcome — Five-seed 100-permutation Consolidation Comparison
+
+The five-seed scaling successor is complete under protocol identity
+`81f6d7f10d752f6b68058a254945c10db281d852e13066a49f3d29d7787f344f`.
+Its amendment is
+`docs/logt_vamp_permuted_mnist_100_scaling_five_seed_amendment.md`, its live
+configuration is `configs/vamp_logt_mlp_permuted_100_scaling.yaml`, and it uses
+the same single resumable scaling entry point as the predecessor. Seeds 0
+through 4 share the fixed 100-domain order and vary example allocation,
+held-out subsets, node training, replay draws, and integrator optimization.
+The experiment therefore estimates run-seed variance but not permutation-order
+sensitivity.
+
+The original one-node-per-level policy is paired against a two-node-per-level
+policy. On a two-node overflow, the two older residents merge and the newest
+resident remains. The first seven input slots retain their predecessor
+positions and weights; seven secondary slots are appended with exactly zero
+input weights. Both policies run the persistent four-epoch uniform-replay
+integrator at every step and a fresh 20-epoch full-replay integrator at steps
+1, 2, 4, 8, 10, 16, 26, 41, 66, and 100. The latter is a fixed-compute
+high-information comparator, not a converged ceiling.
+
+At step 100, persistent uniform replay reached 74.91% +/- 0.63% with one node
+per level and 66.29% +/- 0.76% with two. The paired two-minus-one difference
+was -8.62 +/- 1.29 percentage points, and every seed was negative (-6.94 to
+-10.16 points). The degradation appears by step 2 and remains broad rather
+than being driven by a single seed. In contrast, fresh full replay reached
+77.60% +/- 0.53% and 77.93% +/- 0.46%, for a paired +0.33 +/- 0.68-point
+difference. The retained two-node features therefore still support the same
+accuracy when the integrator receives substantially more cumulative training;
+the failure is in adapting the bounded persistent integrator to the larger,
+more fragmented frontier, not an evident loss of representational information
+in the frozen hierarchy.
+
+The two-node policy makes 19.33% less shared hierarchy-training work per seed
+(2,693,120 versus 3,338,240 forward passes, with the same counts backward)
+because it consolidates less often. That saving moves work downstream: across
+all uniform updates it requires 54.29% more frozen-feature forward
+example-passes (566,016 versus 366,848), while integrator forward/backward pass
+counts remain fixed by the replay budget. Its 14-slot integrator has 8,160,522
+parameters versus 4,411,658 for seven slots, an 84.98% increase in work per
+integrator pass that example-pass counts intentionally do not normalize away.
+At step 100 the two-node frontier has nine active nodes versus three, uniform
+wall time is 0.230 versus 0.145 seconds, and full-replay wall time is 15.369
+versus 10.728 seconds.
+
+All ten acceptance checks pass, including exact seed/cell counts, fixed replay
+budgets, exact 20-epoch full fits, evaluation exclusion, and exact seed-zero
+reproduction of the predecessor under the one-node policy. The focused serial
+CPU suite and explicit CUDA structural smoke pass. All four plots use distinct
+high-contrast encodings, and the standalone HTML contains semantic tables and
+embedded figures. A complete rerun authenticated and resumed every hierarchy
+and condition without retraining; all 42 checked reports, plots, summaries,
+and ledgers remained byte-identical. The report and machine-readable tables
+are under
+`artifacts/vamp-logt-mlp-permuted-mnist-100-scaling-five-seed/runs/81f6d7f10d752f6b68058a254945c10db281d852e13066a49f3d29d7787f344f/`.
+No required work remains. A separate order-randomized study or a larger
+persistent-integrator replay/optimization budget would be a new follow-up,
+not an extension of this completed fixed-order protocol.
+
+## Completed Predecessor — Single-seed 100-permutation Integrator Scaling
+
+The single-seed scaling predecessor is complete under protocol identity
+`6d4f13fdf7d3aad964b1d8becae3fa7130e05422548576912e6e830506a3710c`.
+Its frozen specification is
+`docs/logt_vamp_permuted_mnist_100_scaling_protocol.md`; the current config at
+`configs/vamp_logt_mlp_permuted_100_scaling.yaml` now selects the completed
+five-seed successor above. Its one resumable entry point is
+`src/apm/experiments/vamp_logt_mlp_permuted_scaling.py`. The predecessor stream
+contains the identity transform followed by 99 distinct pixel permutations.
+It compares only the persistent integrator trained for four epochs on 256
+current and 256 uniformly replayed examples with a fresh integrator trained for
+20 epochs on every example seen so far. The full-replay fit is measured at
+steps 1, 2, 4, 8, 10, 16, 26, 41, 66, and 100; the uniform-replay condition is
+measured at all 100 steps.
+
+Training work now separates frozen-node and integrator forward example-passes
+from integrator backward example-passes and batch calls. Timed training
+includes condition initialization, training-data preparation, frozen-node
+feature extraction, and optimizer work. It excludes pre/post diagnostics,
+test evaluation, reporting, and the shared hierarchy construction, because
+neither condition depends on those evaluations and the hierarchy is common to
+both. The shared hierarchy's separately reported construction cost was
+3,338,240 forward and 3,338,240 backward example-passes.
+
+At step 100, uniform replay used 3,584 forward and 2,048 backward
+example-passes in 0.146 seconds; full replay used 588,800 forward and 512,000
+backward example-passes in 11.341 seconds. Full-replay backward work increased
+exactly 100-fold from step 1 to 100, and its measured update time increased
+80.8-fold, corresponding to a two-endpoint empirical exponent of 0.954.
+Uniform replay's backward work is constant after step 1. Its forward work is
+`2,048 + 512 * popcount(k)` because the fixed replay batch is evaluated by the
+active LogT frontier, so it is `O(log k)` in the worst case and sawtoothed under
+binary carries. Its mean update time increased only 1.61-fold from steps 1–10
+to steps 91–100. Across all 100 updates, uniform replay used 366,848 forward
+and 203,776 backward example-passes.
+
+The accuracy result is less decisive than the work result. At step 100,
+uniform replay reached 75.64% accuracy and 0.9160 cross-entropy; the 20-epoch
+full-replay fit reached 77.86% and 1.0773. Across its ten sampled checkpoints,
+full replay won six top-1 comparisons and five cross-entropy comparisons. A
+fixed 20-epoch run is therefore a high-information comparator, not a converged
+ceiling or a best-possible integrator. The experiment establishes the expected
+work separation but does not show that full replay stably solves integration
+over 100 one-off permutations.
+
+All seven acceptance checks pass. The focused serial suite passes all 15
+tests, the two plots use distinct blue-solid-circle and pink-dashed-square
+encodings, and the standalone HTML contains semantic tables and embedded
+figures. A complete rerun restored the run without changing the chained
+metric-ledger, CSV, or summary hashes. The report, plots, and machine-readable
+work table are under
+`artifacts/vamp-logt-mlp-permuted-mnist-100-scaling/runs/6d4f13fdf7d3aad964b1d8becae3fa7130e05422548576912e6e830506a3710c/`.
+
+This run is a valid standalone work-scaling measurement, but it is not a
+prefix-controlled extension of the earlier eight-domain experiment. Applying
+the same `stream_seed` to a 100-domain permutation changed the full schedule:
+the old prefix was `[6, 0, 3, 4, 5, 1, 2, 7]`, while the new prefix was
+`[5, 90, 10, 63, 35, 71, 85, 43]`. In particular, the identity domain moved
+from step 2 to step 44. The scaling runner also changed the uniform replay RNG
+coordinate and reduced the test subset from 1,000 to 256 examples per domain.
+An eight-step diagnostic exactly reproduced the old reported curve with the
+old hierarchy and RNG. On that fixed path, the smaller test subset changed
+accuracy by at most 1.0 percentage point and the replay RNG changed it by at
+most 2.9 points. At steps 2 and 3 those two changes together accounted for
+only +0.22 and -1.83 points, versus total new-minus-old gaps of -6.03 and
+-10.43 points; the changed tasks and hierarchy accounted for the remainder.
+The new early accuracy curve must therefore not be interpreted as a controlled
+scaling continuation of the prior curve.
+
+A comparison-correct successor should preserve the old eight-step domain
+prefix explicitly, retain the legacy uniform-replay RNG coordinate, and use a
+matched evaluation subset. Repeating with more seeds or replacing the fixed
+20-epoch comparator with a validation-selected converged fit would be separate
+follow-ups.
+
 ## Completed Exploratory Outcome — Ungated Dense-base LogT on Permuted-MNIST
 
 The post-hoc ungated successor to the strict calibration stop is complete. Its

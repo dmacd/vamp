@@ -182,26 +182,37 @@ def insert_block(
     )
     if example_ids != expected:
         raise ValueError("LogT blocks must be fixed, complete, and arrive in stream order")
-    leaf = _node(0, state.processed_blocks, state.processed_blocks, example_ids, ())
+    leaf = temporal_leaf(state.processed_blocks, example_ids)
     active = state.active_by_level
     current = leaf
     merges = []
     while current.level in active:
         left = active[current.level]
-        if left.last_block + 1 != current.first_block:
-            raise ValueError("binary-counter carry encountered noncontiguous nodes")
         active = active.remove(current.level)
-        parent = _node(
-            current.level + 1,
-            left.first_block,
-            current.last_block,
-            left.example_ids + current.example_ids,
-            (left.node_id, current.node_id),
-        )
-        merges.append(TemporalMerge(left, current, parent))
-        current = parent
+        merge = merge_temporal_nodes(left, current)
+        merges.append(merge)
+        current = merge.parent
     active = active.set(current.level, current)
     return LogTState(state.block_size, state.processed_blocks + 1, active), leaf, tuple(merges)
+
+
+def temporal_leaf(block: int, example_ids: tuple[int, ...]) -> TemporalNode:
+    """Create one content-addressed level-zero node for a complete stream block."""
+    return _node(0, block, block, example_ids, ())
+
+
+def merge_temporal_nodes(left: TemporalNode, right: TemporalNode) -> TemporalMerge:
+    """Merge two contiguous equal-level nodes into their content-addressed parent."""
+    if left.level != right.level or left.last_block + 1 != right.first_block:
+        raise ValueError("temporal consolidation requires contiguous equal-level nodes")
+    parent = _node(
+        left.level + 1,
+        left.first_block,
+        right.last_block,
+        left.example_ids + right.example_ids,
+        (left.node_id, right.node_id),
+    )
+    return TemporalMerge(left, right, parent)
 
 
 def evidence_update_bound(processed_blocks: int, block_size: int, epochs: int) -> int:
@@ -247,5 +258,7 @@ __all__ = [
     "empty_logt_state",
     "evidence_update_bound",
     "insert_block",
+    "merge_temporal_nodes",
     "require_evidence_work_bound",
+    "temporal_leaf",
 ]

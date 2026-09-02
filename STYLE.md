@@ -124,6 +124,8 @@ tests should be parallelized if possible to reduce the run time.
 
 For long-running experiments with lots of data + results to communicate:
 - Generate separate markdown reports and self-contained html reports
+- Ensure tables in html reports are rendered properly with html and not just markdown
+  dropped in a preformatted block
 - Include renders of any relevant node-edge-like structures 
 - Use a proper plotting lib for normal graphs, dont fake it and construct 
   them manually
@@ -139,3 +141,7 @@ For long-running experiments with lots of data + results to communicate:
   code to analyze, unless specifically requested.
 - Do not generate a separate publication bundle. Just provide enough raw materials
   in the tracked files in the artifacts path so that one can be generated.
+
+
+On any turn when a report has been generated or updated, run xdg-open on the report html
+output artifact(s) without being asked.

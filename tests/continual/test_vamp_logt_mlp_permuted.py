@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 import torch
+from pyrsistent import pmap
 
 from apm.continual.artifacts import (
     file_sha256,
@@ -19,6 +20,12 @@ from apm.continual.dense_mlp_adapter import (
     dense_state,
     fit_dense_model,
     zero_dense_delta,
+)
+from apm.continual.logt_behavioral_integrator import (
+    IntegratorObservations,
+    IntegratorSupervision,
+    create_condition_state,
+    train_condition,
 )
 from apm.continual.vision.imagenetr.checkpoints import atomic_torch_save
 from apm.experiments.vamp_logt_mlp_permuted_amended_reporting import (
@@ -37,9 +44,13 @@ from apm.experiments.vamp_logt_mlp_permuted_config import load_config
 from apm.experiments.vamp_logt_mlp_permuted_data import (
     PermutedMnistBenchmark,
     StepAllocation,
+    build_stream_allocations,
     stratified_source_split,
 )
 from apm.experiments.vamp_logt_mlp_permuted_hierarchy import (
+    DenseFrontier,
+    _empty_dense_logt_state,
+    _insert_dense_block,
     build_dense_observations,
     build_hierarchy_tape,
     load_frontier,
@@ -49,6 +60,14 @@ from apm.experiments.vamp_logt_mlp_permuted_reporting import (
     CONDITION_PROTOCOL,
     PLOT_STYLES,
     write_results,
+)
+from apm.experiments.vamp_logt_mlp_permuted_scaling import (
+    _capacity_cumulative_series,
+    _growth_fits,
+    _run_scaling,
+    _run_scaling_seed,
+    _shared_hierarchy_work,
+    _timed_state_creation,
 )
 from apm.experiments.vamp_logt_router_reporting import _html
 
@@ -186,6 +205,261 @@ def test_production_protocol_matches_the_frozen_dense_plan() -> None:
     assert config.online.historical_budget == 256
     assert config.ceiling.restarts_per_step == 3
     assert config.evaluation.headline_checkpoints == (15, 31, 63)
+
+
+def test_scaling_protocol_is_exactly_five_seeds_two_policies_and_two_conditions() -> None:
+    config = load_config("configs/vamp_logt_mlp_permuted_100_scaling.yaml")
+    assert config.artifact_root == Path(
+        "artifacts/vamp-logt-mlp-permuted-mnist-100-scaling-five-seed"
+    ).resolve()
+    assert config.calibration_evidence_run == Path(
+        "artifacts/vamp-logt-mlp-permuted-mnist-ungated/runs/"
+        "d38c612562699eb55c578a48a8ea94639596c4009a539c1092b63b76eb4f26c0"
+    ).resolve()
+    assert config.benchmark.domain_count == config.benchmark.macro_steps == 100
+    assert config.benchmark.permutation_seeds == tuple(range(1001, 1100))
+    assert config.online.seeds == (0, 1, 2, 3, 4)
+    assert config.scaling is not None
+    assert config.scaling.hierarchy_node_capacities == (1, 2)
+    assert config.scaling.predecessor_run.name == (
+        "6d4f13fdf7d3aad964b1d8becae3fa7130e05422548576912e6e830506a3710c"
+    )
+    assert config.integrator.conditions == ("integrator_uniform_replay",)
+    assert config.integrator.offline_epochs == 20
+    assert config.evaluation.full_checkpoints == (1, 2, 4, 8, 10, 16, 26, 41, 66, 100)
+
+
+def test_capacity_protocol_is_one_seed_one_policy_and_two_paired_sample_arms() -> None:
+    config = load_config("configs/vamp_logt_mlp_permuted_100_capacity.yaml")
+    assert config.config_hash == (
+        "26adf88c61114a8cd32e6aa25dcc2c4aa8bc62b7c020db9878a9d42281492dd2"
+    )
+    assert config.online.seeds == (0,)
+    assert config.scaling is not None
+    assert config.scaling.hierarchy_node_capacities == (1,)
+    assert config.scaling.training_sample_multipliers == (1, 2)
+    assert config.scaling.base_hidden_widths == (2272, 2272, 1136)
+    assert config.integrator.hidden_widths == (1912, 956, 478)
+    assert config.integrator.conditions == ("integrator_uniform_replay",)
+    base = DenseMnistMLP(config.scaling.base_hidden_widths, config.calibration.dropout)
+    assert sum(parameter.numel() for parameter in base.parameters()) == 9_541_274
+    integrator = create_condition_state(
+        "capacity-parameter-count",
+        7 * (1136 + 11),
+        1136 + 11,
+        config.integrator,
+        0,
+        torch.device("cpu"),
+    )
+    assert sum(
+        parameter.numel() for parameter in integrator.integrator.parameters()
+    ) == 17_650_160
+
+
+def test_doubled_training_allocations_retain_standard_roles_and_evaluation() -> None:
+    config = load_config("configs/vamp_logt_mlp_permuted_100_capacity.yaml")
+    standard = build_stream_allocations(config, 0)
+    doubled = build_stream_allocations(config, 0, training_sample_multiplier=2)
+    assert len(standard) == len(doubled) == 100
+    for base, expanded in zip(standard, doubled, strict=True):
+        assert expanded.domain_id == base.domain_id
+        assert expanded.model_indices[:256] == base.model_indices
+        assert expanded.observer_indices[:256] == base.observer_indices
+        assert expanded.evaluation_indices == base.evaluation_indices
+        assert len(expanded.model_indices) == len(expanded.observer_indices) == 512
+        combined = (
+            expanded.model_indices
+            + expanded.observer_indices
+            + expanded.evaluation_indices
+        )
+        assert len(combined) == len(set(combined))
+
+
+def test_capacity_work_multiplier_and_t_log_fit_are_exact() -> None:
+    config = load_config("configs/vamp_logt_mlp_permuted_100_capacity.yaml")
+    standard = _shared_hierarchy_work(config, 8, training_sample_multiplier=1)
+    doubled = _shared_hierarchy_work(config, 8, training_sample_multiplier=2)
+    assert doubled["shared_forward_example_passes"] == (
+        2 * standard["shared_forward_example_passes"]
+    )
+    steps = (1, 2, 4, 8, 10, 16, 26, 41, 66, 100)
+    values = tuple(3.0 * step * __import__("math").log2(step + 1) for step in steps)
+    fits = _growth_fits(steps, values)
+    assert fits["t_log2_t_plus_1"]["coefficient"] == pytest.approx(3.0)
+    assert fits["t_log2_t_plus_1"]["r_squared"] == pytest.approx(1.0)
+
+    rows = tuple(
+        {
+            "arm": "persistent",
+            "condition": "uniform",
+            "macro_step": step,
+            "training_seconds": value,
+        }
+        for step, value in enumerate((1.0, 2.0, 3.0), start=1)
+    )
+    cumulative_steps, cumulative_values = _capacity_cumulative_series(
+        rows,
+        "persistent",
+        "uniform",
+        "training_seconds",
+    )
+    assert cumulative_steps == (1, 2, 3)
+    assert cumulative_values == (1.0, 3.0, 6.0)
+
+
+def test_dense_benchmark_accepts_dynamic_permutation_counts() -> None:
+    generator = torch.Generator().manual_seed(29)
+    benchmark = PermutedMnistBenchmark(
+        torch.rand((6, 1, 28, 28), generator=generator),
+        torch.arange(6, dtype=torch.int64) % 10,
+        torch.rand((3, 1, 28, 28), generator=generator),
+        torch.arange(3, dtype=torch.int64) % 10,
+        tuple(torch.roll(torch.arange(784), shifts=domain) for domain in range(100)),
+        (StepAllocation(1, 99, (0, 1), (2, 3), (4,)),),
+        ((0,),) * 100,
+    )
+    assert benchmark.step(1).observer.domain_ids.tolist() == [99, 99]
+    assert benchmark.test_domain(99, full=False).domain_ids.tolist() == [99]
+
+
+def test_integrator_training_reports_only_optimizer_model_passes(tmp_path: Path) -> None:
+    config = _tiny_config(tmp_path)
+    active_mask = torch.tensor((True, False))
+    observations = lambda rows: IntegratorObservations(
+        torch.zeros((rows, 30)),
+        torch.zeros((rows, 2, 10)),
+        active_mask,
+        torch.zeros((rows, 10)),
+    )
+    current = IntegratorSupervision(observations(4), torch.tensor((0, 1, 2, 3)))
+    historical = IntegratorSupervision(observations(4), torch.tensor((4, 5, 6, 7)))
+    state = create_condition_state(
+        "work-accounting-test",
+        30,
+        15,
+        config.integrator,
+        31,
+        torch.device("cpu"),
+    )
+    result = train_condition(
+        state,
+        current,
+        historical,
+        2,
+        config.integrator,
+        31,
+        1,
+        torch.device("cpu"),
+    )
+    assert result.training_forward_example_passes == 16
+    assert result.training_backward_example_passes == 16
+    assert result.training_forward_calls == 16
+    assert result.training_backward_calls == 8
+    assert result.training_wall_seconds >= 0.0
+
+
+def test_shared_hierarchy_work_counts_leaf_and_binary_carries() -> None:
+    config = load_config("configs/vamp_logt_mlp_permuted_100_scaling.yaml")
+    leaf_only = _shared_hierarchy_work(config, 7)
+    three_carries = _shared_hierarchy_work(config, 8)
+    assert leaf_only["created_node_count"] == 1
+    assert leaf_only["shared_forward_example_passes"] == 20 * 256
+    assert three_carries["created_node_count"] == 4
+    assert three_carries["shared_forward_example_passes"] == 20 * 256 * (1 + 2 + 4 + 8)
+    assert three_carries["shared_backward_example_passes"] == three_carries[
+        "shared_forward_example_passes"
+    ]
+    capacity_two_merge = _shared_hierarchy_work(config, 3, 2)
+    assert capacity_two_merge["created_node_count"] == 2
+    assert capacity_two_merge["shared_forward_example_passes"] == 20 * 256 * (1 + 2)
+
+
+def test_two_node_policy_partitions_stream_and_preserves_surviving_slots() -> None:
+    topology = _empty_dense_logt_state(2, 2)
+    created_nodes = 0
+    previous_slots = {}
+    for block in range(100):
+        topology, leaf, merges = _insert_dense_block(
+            topology,
+            (2 * block, 2 * block + 1),
+        )
+        created_nodes += 1 + len(merges)
+        slots = {
+            node.node_id: (node.level, rank)
+            for level, nodes in topology.active_by_level.items()
+            for rank, node in enumerate(nodes)
+        }
+        assert all(
+            slots[node_id] == slot
+            for node_id, slot in previous_slots.items()
+            if node_id in slots
+        )
+        previous_slots = slots
+    assert len(topology.active_nodes) == 9
+    assert created_nodes == 191
+    assert all(len(nodes) <= 2 for nodes in topology.active_by_level.values())
+
+
+def test_two_node_features_append_secondary_slots_and_copy_initial_weights(
+    tmp_path: Path,
+) -> None:
+    config = _tiny_config(tmp_path)
+    base = initialize_dense_state((8, 6, 4), 0.0, 71)
+    topology = _empty_dense_logt_state(2, 2)
+    for block in range(2):
+        topology, _leaf, _merges = _insert_dense_block(
+            topology,
+            (2 * block, 2 * block + 1),
+        )
+    deltas = pmap({node.node_id: zero_dense_delta(base) for node in topology.active_nodes})
+    frontier = DenseFrontier(
+        2,
+        topology.active_nodes,
+        deltas,
+        pmap({node.node_id: node.node_id for node in topology.active_nodes}),
+        2,
+    )
+    observations = build_dense_observations(
+        frontier,
+        _benchmark().step(1).observer,
+        base,
+        2,
+        0.1,
+        torch.device("cpu"),
+        8,
+    ).integrator
+    slots = observations.features.reshape(2, 4, -1)
+    assert observations.active_mask.tolist() == [True, False, True, False]
+    assert torch.equal(slots[:, 1], torch.zeros_like(slots[:, 1]))
+    assert torch.equal(slots[:, 3], torch.zeros_like(slots[:, 3]))
+
+    slot_dim = base.embedding_dim + 11
+    one, _ = _timed_state_creation(
+        "integrator_uniform_replay",
+        2 * slot_dim,
+        slot_dim,
+        config,
+        0,
+        1,
+        torch.device("cpu"),
+    )
+    two, _ = _timed_state_creation(
+        "integrator_uniform_replay",
+        4 * slot_dim,
+        slot_dim,
+        config,
+        0,
+        2,
+        torch.device("cpu"),
+    )
+    assert torch.equal(
+        two.integrator.input_layer.weight[:, : one.integrator.input_dim],
+        one.integrator.input_layer.weight,
+    )
+    assert torch.equal(
+        two.integrator.input_layer.weight[:, one.integrator.input_dim :],
+        torch.zeros_like(two.integrator.input_layer.weight[:, one.integrator.input_dim :]),
+    )
 
 
 def test_zero_delta_has_exact_parity_and_every_affine_tensor_matters() -> None:
@@ -343,6 +617,7 @@ def test_two_step_hierarchy_online_ceiling_and_resume_are_exact(
         "apm.experiments.vamp_logt_mlp_permuted_hierarchy",
         "apm.experiments.vamp_logt_mlp_permuted_online",
         "apm.experiments.vamp_logt_mlp_permuted_ceiling",
+        "apm.experiments.vamp_logt_mlp_permuted_scaling",
     ):
         monkeypatch.setattr(f"{module}.build_benchmark", lambda _config, _seed: benchmark)
     hierarchy = build_hierarchy_tape(config, run_root, torch.device("cpu"))
@@ -365,6 +640,40 @@ def test_two_step_hierarchy_online_ceiling_and_resume_are_exact(
         observation.integrator.baseline_log_probabilities,
         observation.integrator.node_log_probabilities[:, 0],
     )
+    scaling = _run_scaling(config, run_root, torch.device("cpu"))
+    scaling_ledger = run_root / "scaling" / "seed-0" / "metrics.jsonl"
+    scaling_before = scaling_ledger.read_bytes()
+    assert scaling["status"] == "complete"
+    assert scaling["full_replay_checkpoints"] == [2]
+    assert _run_scaling(config, run_root, torch.device("cpu")) == scaling
+    assert scaling_ledger.read_bytes() == scaling_before
+    capacity_two_root = run_root / "policies" / "two_nodes_per_level"
+    build_hierarchy_tape(
+        config,
+        run_root,
+        torch.device("cpu"),
+        max_nodes_per_level=2,
+        hierarchy_root=capacity_two_root / "hierarchy",
+    )
+    capacity_two = _run_scaling_seed(
+        config,
+        run_root,
+        2,
+        0,
+        torch.device("cpu"),
+    )
+    capacity_two_ledger = capacity_two_root / "scaling" / "seed-0" / "metrics.jsonl"
+    capacity_two_before = capacity_two_ledger.read_bytes()
+    assert capacity_two["status"] == "complete"
+    assert capacity_two["max_nodes_per_level"] == 2
+    assert _run_scaling_seed(
+        config,
+        run_root,
+        2,
+        0,
+        torch.device("cpu"),
+    ) == capacity_two
+    assert capacity_two_ledger.read_bytes() == capacity_two_before
     online = run_online_seed(config, run_root, 0, base, torch.device("cpu"))
     ledger_before = (online.directory / "metrics.jsonl").read_bytes()
     restored = run_online_seed(config, run_root, 0, base, torch.device("cpu"))
@@ -459,12 +768,24 @@ def test_cuda_dense_structural_smoke(
     for module in (
         "apm.experiments.vamp_logt_mlp_permuted_hierarchy",
         "apm.experiments.vamp_logt_mlp_permuted_online",
+        "apm.experiments.vamp_logt_mlp_permuted_scaling",
     ):
         monkeypatch.setattr(f"{module}.build_benchmark", lambda _config, _seed: benchmark)
     build_hierarchy_tape(config, run_root, device)
     result = run_online_seed(config, run_root, 0, base, device)
     assert result.summary["final_macro_step"] == 2
     assert all(result.summary["acceptance"].values())
+    capacity_two_root = run_root / "policies" / "two_nodes_per_level"
+    build_hierarchy_tape(
+        config,
+        run_root,
+        device,
+        max_nodes_per_level=2,
+        hierarchy_root=capacity_two_root / "hierarchy",
+    )
+    scaling = _run_scaling_seed(config, run_root, 2, 0, device)
+    assert scaling["status"] == "complete"
+    assert scaling["max_nodes_per_level"] == 2
     production_state = initialize_dense_state((2048, 2048, 1024), 0.2, 101)
     examples = DenseExamples(
         torch.rand((4, 1, 28, 28), generator=torch.Generator().manual_seed(103)),
@@ -481,3 +802,47 @@ def test_cuda_dense_structural_smoke(
         dropout=0.2,
     )
     assert fit.state.parameter_count == 7_912_458
+    capacity_config = load_config("configs/vamp_logt_mlp_permuted_100_capacity.yaml")
+    large_base = initialize_dense_state((2272, 2272, 1136), 0.2, 109)
+    large_fit = fit_dense_model(
+        examples,
+        large_base,
+        capacity_config.calibration.optimizer,
+        113,
+        device,
+        fixed_epochs=1,
+        dropout=0.2,
+    )
+    assert large_fit.state.parameter_count == 9_541_274
+    slot_dim = 1136 + 11
+    input_dim = 7 * slot_dim
+    large_integrator = create_condition_state(
+        "capacity-cuda-smoke",
+        input_dim,
+        slot_dim,
+        capacity_config.integrator,
+        127,
+        device,
+    )
+    assert sum(
+        parameter.numel() for parameter in large_integrator.integrator.parameters()
+    ) == 17_650_160
+    active_mask = torch.tensor((True, False, False, False, False, False, False))
+    observations = IntegratorObservations(
+        torch.zeros((2, input_dim)),
+        torch.zeros((2, 7, 10)),
+        active_mask,
+        torch.zeros((2, 10)),
+    )
+    work = train_condition(
+        large_integrator,
+        IntegratorSupervision(observations, torch.tensor((0, 1))),
+        None,
+        1,
+        capacity_config.integrator,
+        127,
+        1,
+        device,
+    )
+    assert work.training_forward_example_passes == 2
+    assert work.training_backward_example_passes == 2
