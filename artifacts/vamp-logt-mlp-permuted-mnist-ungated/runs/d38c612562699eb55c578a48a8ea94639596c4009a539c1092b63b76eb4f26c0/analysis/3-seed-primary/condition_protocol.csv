@@ -1,0 +1,19 @@
+condition,family,persistence,current data,history,history sampler,epochs per update,validation/restarts
+"Router — current only, hard target",router,persistent,256 current,none,none,4,no
+"Router — uniform history, hard target",router,persistent,256 current,256 history,uniform examples,4,no
+"Router — range-balanced history, hard target",router,persistent,256 current,256 history,uniform live ranges,4,no
+"Router — uniform history, soft target",router,persistent,256 current,256 history,uniform examples,4,no
+"Router — range-balanced history, soft target",router,persistent,256 current,256 history,uniform live ranges,4,no
+Integrator — current only,integrator,persistent,256 current,none,none,4,no
+Integrator — uniform-history replay,integrator,persistent,256 current,256 history,uniform examples,4,no
+Integrator — range-balanced replay,integrator,persistent,256 current,256 history,uniform live ranges,4,no
+Base-only integrator — uniform-history replay,integrator control,persistent,256 current,256 history,uniform examples,4,no
+Fresh cumulative integrator — four epochs,optimization reference,fresh at checkpoint,all cumulative,all cumulative,full replay,4,no
+Pooled single MLP over cumulative node-training data,model reference,fresh at checkpoint,all cumulative,all cumulative,full replay,20,no
+Converged full-replay integrator ceiling,optimization ceiling,fresh every step,all cumulative,all cumulative,full replay,20–200,yes; 3 restarts
+Equal-probability mean of active nodes,fixed control,none,none,none,none,0,no
+Newest temporal range,fixed control,none,none,none,none,0,no
+Largest temporal range,fixed control,none,none,none,none,0,no
+Uniform random active node,fixed control,none,none,none,none,0,no
+Best active node (label-aware oracle),offline oracle,none,none,none,none,0,uses labels directly
+Best active node (label-aware router oracle),offline oracle,none,none,none,none,0,uses labels directly

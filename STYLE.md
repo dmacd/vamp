@@ -133,3 +133,9 @@ For long-running experiments with lots of data + results to communicate:
 - Use collapsible containers to organize sections and subsections
 - Double-check that text is legible (size, contrast, etc), especially on 
   plots and renders 
+- When committing experimental artifacts, commit all generated figures and
+  enough of the logs so that a human or agent can write a detailed
+  scientific report. Exclude large, raw artifacts that would require extensive
+  code to analyze, unless specifically requested.
+- Do not generate a separate publication bundle. Just provide enough raw materials
+  in the tracked files in the artifacts path so that one can be generated.
