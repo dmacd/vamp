@@ -1,0 +1,52 @@
+{
+  "additional_integrator_optimizer_steps": 0,
+  "additional_leaf_optimizer_steps": 0,
+  "additional_parent_optimizer_steps": 0,
+  "command": "scripts/vision/imagenetr/run_integrator_local.sh run configs/vision/imagenetr/logt_prediction_integrator_full_union_ungated_v3.yaml",
+  "content_hash": "02734bf24c4e744fbd9a699e5172ed70c8193cbbbb92a0894b693f6ba1f28b31",
+  "elapsed_seconds": 4.534560008,
+  "exit_code": 0,
+  "immutable_groups": {
+    "behavior_ledger": {
+      "bytes": 168225,
+      "content_sha256": "90d9f50123112d5c18e17872a62bc5760f26b466153a09e0898d1217c9597769",
+      "count": 1,
+      "mtime_sha256": "1a02f98c493cb674822fe38e863dedaecb2ca1047c0502f42adda6176e1f09de"
+    },
+    "hierarchy_metadata": {
+      "bytes": 38869553,
+      "content_sha256": "7b89b4fce531ccb2fb1a62584ce1100e9d2f7595005f78d5a065663dc5da17d2",
+      "count": 1576,
+      "mtime_sha256": "21ed34f0ec97cdcb58efd4cc597f6d03217919305920ce5652edca3e49246ca5"
+    },
+    "integrator_checkpoints": {
+      "bytes": 3811891800,
+      "content_sha256": "551486d7ec7c9df9fac58b6cf3176ba0384ae65c4008d7a25b1da30f0bda2049",
+      "count": 100,
+      "mtime_sha256": "3d01862f3af73a7260b6e0f01a1142cffef2538c57fce30c0fb436e889cc86ed"
+    },
+    "leaf_checkpoints": {
+      "bytes": 1068440600,
+      "content_sha256": "9bc51067209a271b841f90c74a7badf814d1a2219bf5b65783b815d2a621353c",
+      "count": 100,
+      "mtime_sha256": "847cd60f9ce42726a73cea2d3a33996816906f1bbecc8fe335eab15dc6e63da8"
+    },
+    "parent_checkpoints": {
+      "bytes": 1013150420,
+      "content_sha256": "4c7e2161af76e8a665e5f04aaedd3192255a3e445103fc64dc72478427f45a24",
+      "count": 94,
+      "mtime_sha256": "ddd8f1866faa5e19d4f4af328b8678f8409e47033d75e24a794a5cd097ab3d5b"
+    },
+    "scientific_json": {
+      "bytes": 1956623,
+      "content_sha256": "523bdb4ad5fe746c3d9bf6375779f9843e587df6a9d69ab1dfa6626d341625b1",
+      "count": 15,
+      "mtime_sha256": "0b79ebebbde9d93a206ae5e8e47095dee7423d2d967343c3bf690e567316db6c"
+    }
+  },
+  "pre_after_equal": true,
+  "run_hash": "fd5cb0502d705bbd9662e197e9d867fda2b6c1b633c340f513be4b33579fd8b4",
+  "schema_version": "imagenetr50-integrator-reuse-proof-v3",
+  "source_commit": "8328b8561102009c483c83521e173d965854ef5f",
+  "workflow_phases_reused": 6
+}

@@ -12,7 +12,60 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
-## Completed Outcome — ImageNet-R-50 Full-Union Prediction Integrator
+## Completed Outcome — ImageNet-R-50 Ungated Full-Union Integrator
+
+- **The complete ungated benchmark finished on 2026-09-02.** Source commit
+  `8328b85` freezes `scores`, H=2,048, and full-union parent retraining in
+  `configs/vision/imagenetr/logt_prediction_integrator_full_union_ungated_v3.yaml`.
+  Run `fd5cb0502d705bbd9662e197e9d867fda2b6c1b633c340f513be4b33579fd8b4`
+  reached `COMPLETE` in 1 hour 26 minutes 18 seconds. Accuracy comparisons
+  never controlled execution; only protocol-integrity failures could stop it.
+- The locked benchmark trained every node and all 50 persistent integrator
+  checkpoints on the 24,000-image training split before publishing its seal.
+  The seal records zero test requests before completion. The subsequent
+  6,000-image evaluation contains all 50 stage rows and all 1,275 stage/task
+  cells.
+- The evaluated full-union integrator reached **65.567% final accuracy** and
+  **73.015% incremental accuracy**. The offline joint-IID rank-16 LoRA ceiling
+  reached 78.867% and 84.795%, gaps of 13.300 and 11.780 percentage points.
+  The secondary local E2-LoRA reproduction reached 78.100% and 82.995%, gaps
+  of 12.533 and 9.980 points. These are paired local comparisons, not gates;
+  this condition is not competitive with either reference.
+- The failure has two measured components. On clean task-50 validation, fresh
+  full replay reached 68.340% while the persistent H=2,048 integrator reached
+  63.146%, a 5.194-point gap. Fresh replay was only 0.986 point above the best
+  static union and remained 6.181 points below the 74.521% true-node oracle.
+  Persistent replay is therefore a real bottleneck, but removing it does not
+  close the larger frontier-information gap.
+- On locked test at task 50, raw union reached 69.267%, affine-calibrated union
+  69.567%, and the diagnostic true-node oracle 76.733%. The persistent
+  integrator was 3.700 points below raw union, 4.000 below affine union, and
+  11.167 below the oracle. Across all 50 stages it averaged 0.784 point below
+  raw union, improving it at 16 stages and losing at 33. At the one-node
+  power-of-two frontiers it closely tracked or modestly improved raw union;
+  the large loss appears when several consolidated nodes must be combined
+  without node identity.
+- Even the label-aware task-50 oracle is 2.133 points below joint IID. The next
+  validation-only work should separately test (1) full cumulative history or
+  a step-matched replay replacement for the persistent integrator and (2) a
+  bounded adapter-dependent summary that survives carries. The first isolates
+  continual fitting from fresh fitting; the second must raise the fresh
+  frontier ceiling before another locked benchmark is worthwhile. R3-style
+  adapter-dependent routing remains a main experimental condition, not a
+  deferred diagnostic.
+- Exact resume is proven. The identical command completed in 4.535 seconds,
+  reused all six phases, and executed zero additional leaf, parent, or
+  integrator optimizer steps. Content and nanosecond-mtime aggregates remained
+  unchanged for 100 leaf checkpoints, 94 parent checkpoints, 100 persistent
+  integrator checkpoints, 1,576 hierarchy metadata files, 15 scientific JSON
+  records, and the behavior ledger.
+- All 52 focused serial ImageNet-R tests and both explicitly enabled real-model
+  integrator GPU tests pass. The Markdown and standalone HTML reports, accuracy
+  plot, and lineage plot have been inspected. Compact evidence and the handoff
+  live under
+  `artifacts/imagenetr50/integrator_full_union_ungated_v3/runs/fd5cb0502d705bbd9662e197e9d867fda2b6c1b633c340f513be4b33579fd8b4/`.
+
+## Completed Outcome — ImageNet-R-50 Full-Union Prediction Integrator (v2)
 
 - **Protocol run complete at its preregistered history-selection stop
   (2026-09-02).** Commit `1d00249` promotes full-union parent retraining to the

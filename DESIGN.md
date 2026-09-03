@@ -510,12 +510,16 @@ reloadable. This normalization is part of the content-addressing boundary, not
 a report-formatting convention.
 
 Clean development uses 19,200 fit identities for every trainable component and
-4,800 disjoint validation identities for stopping and gates. Feature-family and
-fresh-ceiling statistics are arithmetic means over three fixed restarts. Parent
-training is fixed to full union before execution. H alone is selected by
-persistent proximity to fresh integration and a static-control margin. The
-frozen H/feature choice must then pass task-50 development before test access is
-possible.
+4,800 disjoint validation identities. Feature-family and fresh-ceiling
+statistics are arithmetic means over three fixed restarts. The completed v2
+protocol used persistent-to-fresh and static-control gates to select H and to
+control test access; those gates remain part of that immutable historical run.
+The ungated v3 successor freezes `scores`, H=2,048, and full-union parent
+training from v2's authenticated task-16 evidence before execution. It treats
+all development differences as measurements and always continues through
+task-50 development and the locked benchmark unless an integrity or runtime
+failure occurs. Offline joint-IID LoRA is its primary descriptive ceiling,
+local E2-LoRA is its secondary reference, and neither value controls execution.
 
 An integrator capacity diagnostic must reproduce the information available at
 the evaluated hierarchy frontier, not only its maximum slot count. The sealed
@@ -527,6 +531,18 @@ History replay cannot reconstruct child behaviors that a carry removed from the
 frontier. A successor that needs those alternatives must persist an explicit,
 bounded multiresolution prediction summary or change the consolidation target;
 it must authenticate that extra state and account for its inference cost.
+
+The completed v3 benchmark sharpens that boundary. At power-of-two stages the
+frontier contains one node, so raw union and the true-node oracle coincide; the
+persistent direct integrator tracked or modestly improved that prediction. At
+task 50 the frontier contains three nodes: persistent integration reached
+65.567% test accuracy, raw union 69.267%, and the label-aware node oracle
+76.733%. Fresh full replay recovered 5.194 points over persistent integration
+on task-50 validation but remained 6.181 points below its node oracle. Future
+work must therefore report continual-fitting loss separately from information
+lost or left ambiguous across carries. Adapter-dependent R3 routing belongs in
+the main matrix whenever it is proposed as the mechanism for preserving that
+information.
 
 The locked run first rebuilds on all 24,000 training identities. Its hierarchy
 and all 50 persistent checkpoints are complete before a training-seal record is

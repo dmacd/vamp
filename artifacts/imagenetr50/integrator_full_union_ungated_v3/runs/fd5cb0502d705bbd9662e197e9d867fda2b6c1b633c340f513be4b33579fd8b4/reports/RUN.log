@@ -1,0 +1,40 @@
+ImageNet-R-50 ungated full-union integrator execution record
+Run: fd5cb0502d705bbd9662e197e9d867fda2b6c1b633c340f513be4b33579fd8b4
+Implementation source: 8328b8561102009c483c83521e173d965854ef5f
+Device: NVIDIA GeForce RTX 4090, BF16 supported
+
+[phase 1/6] Sealed U100 prediction-integrator capacity diagnostic
+[phase 2/6] Eight-task real-data smoke
+[phase 3/6] Full-union task-16 development measurements
+[phase 4/6] Frozen clean development extension through task 50
+  fit hierarchy: 97/97 nodes in 13:52
+  persistent H=2048: 50/50 tasks in 12:55, 964 optimizer steps
+  fresh task-50 validation mean: 68.3402777778%
+  persistent task-50 validation: 63.1458342075%
+[phase 5/6] Locked 24k-train / 6k-test benchmark
+  all-training hierarchy: 97/97 nodes in 23:39
+  sealed persistent training: 50/50 tasks in 08:31, 1024 optimizer steps
+  sealed checkpoint evaluation: 50/50 stages in 10:34
+  test requests before training seal: 0
+  final accuracy: 65.5666649342%
+  incremental accuracy: 73.0151457787%
+[phase 6/6] Reports complete
+Workflow state: COMPLETE
+Workflow elapsed: 1:26:18
+
+Exact unchanged rerun:
+  elapsed: 4.534560008 seconds
+  exit code: 0
+  workflow phases reused: 6/6
+  additional leaf optimizer steps: 0
+  additional parent optimizer steps: 0
+  additional integrator optimizer steps: 0
+  immutable content and mtime aggregates equal before/after: true
+
+Verification:
+  focused serial ImageNet-R tests: 52 passed
+  explicitly enabled real-model integrator GPU tests: 2 passed
+  content-addressed records checked: 15
+  locked stage rows checked: 50
+  locked stage/task cells checked: 1275
+  report tables, Parquet projections, embedded figures, and reuse proof: checked
