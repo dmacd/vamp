@@ -5,6 +5,7 @@ from dataclasses import fields
 import pytest
 import torch
 
+from apm.continual.vision.imagenetr.integrator_artifacts import hierarchy_policy
 from apm.continual.vision.imagenetr.data import ImageRecord
 from apm.continual.vision.imagenetr.integrator_bank import (
     class_stratified_reservoir,
@@ -79,8 +80,11 @@ def _frontier() -> FrontierTensors:
 
 def test_resolved_config_and_capacity_one_topology_match_the_protocol() -> None:
     config = load_integrator_config(
-        "configs/vision/imagenetr/logt_prediction_integrator_v1.yaml"
+        "configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml"
     )
+    policy = hierarchy_policy(config, "fit")
+    assert policy.parent_training == "full_union"
+    assert policy.source_identity_capacity == 24_000
     events, snapshots = simulate_binary_topology(config.tasks)
     require_binary_work_bound(snapshots, events)
     assert len(events) == 47
@@ -174,7 +178,7 @@ def test_feature_selection_chooses_smallest_family_near_the_best() -> None:
 
 def test_persistent_training_is_independent_of_ambient_dropout_rng() -> None:
     config = load_integrator_config(
-        "configs/vision/imagenetr/logt_prediction_integrator_v1.yaml"
+        "configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml"
     )
     seen = torch.zeros(200, dtype=torch.bool)
     seen[:4] = True

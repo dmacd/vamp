@@ -24,13 +24,12 @@ from apm.continual.vision.imagenetr.integrator_persistence import (
     save_integrator_checkpoint,
 )
 from apm.continual.vision.imagenetr.integrator_reporting import write_integrator_report
-from apm.continual.vision.imagenetr.integrator_workflow import _json_capacity_rows
 from apm.continual.vision.imagenetr.proxy_memory import TensorCache
 
 
 def test_checkpoint_and_immutable_safetensors_round_trip(tmp_path: Path) -> None:
     config = load_integrator_config(
-        "configs/vision/imagenetr/logt_prediction_integrator_v1.yaml"
+        "configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml"
     )
     device = torch.device("cpu")
     state = create_integrator_state(
@@ -69,7 +68,7 @@ def test_checkpoint_and_immutable_safetensors_round_trip(tmp_path: Path) -> None
 
 def test_checkpoint_rejects_a_different_frontier(tmp_path: Path) -> None:
     config = load_integrator_config(
-        "configs/vision/imagenetr/logt_prediction_integrator_v1.yaml"
+        "configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml"
     )
     state = create_integrator_state(
         "boundary", 2, "scores", config.optimization, 7, torch.device("cpu")
@@ -128,27 +127,28 @@ def test_partial_report_is_markdown_and_self_contained_html(tmp_path: Path) -> N
     assert (tmp_path / "reports" / "resource_accounting.json").is_file()
 
 
-def test_clean_capacity_record_round_trips_and_report_exposes_failed_gate(
+def test_clean_history_record_round_trips_and_report_exposes_failed_gate(
     tmp_path: Path,
 ) -> None:
-    bounded = {
-        capacity: (
-            {
-                "controls": {"true_node_oracle": accuracy},
-                "stage": 16,
-            },
-        )
-        for capacity, accuracy in ((512, 68.0), (1024, 70.0), (2048, 73.0))
+    persistent = {
+        str(capacity): [{"accuracy": accuracy, "stage": 16}]
+        for capacity, accuracy in ((512, 72.0), (1024, 74.0), (2048, 76.0))
     }
     core: dict[str, object] = {
-        "bounded_controls": _json_capacity_rows(bounded),
-        "full_controls": [
-            {"controls": {"true_node_oracle": 77.25}, "stage": 16}
+        "fresh": [{"mean_validation_accuracy": 77.25, "stage": 16}],
+        "hierarchy_controls": [
+            {
+                "controls": {"raw_union": 70.0, "true_node_oracle": 77.5},
+                "stage": 16,
+            }
         ],
         "gate_open": False,
-        "hierarchy_oracle_tolerance": 2.0,
-        "reason": "no bounded consolidation reservoir passed",
-        "schema_version": "imagenetr50-integrator-clean-development-v1",
+        "parent_training": "full_union",
+        "persistent": persistent,
+        "reason": "no bounded historical reservoir passed",
+        "schema_version": "imagenetr50-integrator-clean-development-v2",
+        "selected_historical_capacity": None,
+        "selected_parent_training": "full_union",
         "selected_variant": "scores",
     }
     record = {**core, "content_hash": record_sha256(core)}
@@ -158,14 +158,14 @@ def test_clean_capacity_record_round_trips_and_report_exposes_failed_gate(
     (tmp_path / "state").mkdir()
     atomic_write(
         tmp_path / "state" / "workflow.json",
-        canonical_json_bytes({"phase": "COMPLETE_CLEAN_SELECTION_FAILURE"}),
+        canonical_json_bytes({"phase": "COMPLETE_HISTORY_SELECTION_FAILURE"}),
     )
 
     write_integrator_report(tmp_path)
 
     markdown = (tmp_path / "reports" / "REPORT.md").read_text(encoding="utf-8")
-    assert "K=2048 - full (pp)" in markdown
-    assert "-4.250" in markdown
+    assert "H=2048 - fresh (pp)" in markdown
+    assert "-1.250" in markdown
     assert "Gate open: False" in markdown
-    assert (tmp_path / "reports" / "clean_capacity_gate.csv").is_file()
-    assert (tmp_path / "reports" / "clean_capacity_gate.parquet").is_file()
+    assert (tmp_path / "reports" / "clean_history_selection.csv").is_file()
+    assert (tmp_path / "reports" / "clean_history_selection.parquet").is_file()

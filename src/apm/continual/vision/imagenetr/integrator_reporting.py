@@ -72,61 +72,69 @@ def _write_tables(
     return flattened, task_rows
 
 
-def _clean_capacity_rows(
+def _clean_history_rows(
     clean: Mapping[str, object] | None,
 ) -> tuple[tuple[int, ...], list[dict[str, object]]]:
-    """Project the clean hierarchy-capacity gate into one row per checkpoint."""
+    """Project clean persistent-history selection into one row per checkpoint."""
     if clean is None:
         return (), []
-    bounded = dict(clean.get("bounded_controls", {}))
-    full = tuple(dict(row) for row in clean.get("full_controls", ()))
-    if not bounded or not full:
+    persistent = dict(clean.get("persistent", {}))
+    fresh = tuple(dict(row) for row in clean.get("fresh", ()))
+    controls = {
+        int(dict(row)["stage"]): dict(row)
+        for row in clean.get("hierarchy_controls", ())
+    }
+    if not persistent or not fresh:
         return (), []
-    capacities = tuple(sorted((int(value) for value in bounded), key=int))
-    bounded_by_capacity = {
+    histories = tuple(sorted((int(value) for value in persistent), key=int))
+    persistent_by_history = {
         capacity: {
             int(dict(row)["stage"]): dict(row)
-            for row in bounded[str(capacity)]
+            for row in persistent[str(capacity)]
+            if "accuracy" in row
         }
-        for capacity in capacities
+        for capacity in histories
     }
     rows: list[dict[str, object]] = []
-    for full_row in sorted(full, key=lambda row: int(row["stage"])):
-        stage = int(full_row["stage"])
-        full_accuracy = float(dict(full_row["controls"])["true_node_oracle"])
+    for fresh_row in sorted(fresh, key=lambda row: int(row["stage"])):
+        stage = int(fresh_row["stage"])
+        fresh_accuracy = float(fresh_row["mean_validation_accuracy"])
+        stage_controls = dict(controls.get(stage, {}).get("controls", {}))
         projected: dict[str, object] = {
-            "full_union_oracle_accuracy": full_accuracy,
+            "fresh_mean_accuracy": fresh_accuracy,
+            "raw_union_accuracy": stage_controls.get("raw_union"),
             "stage": stage,
+            "true_node_oracle_accuracy": stage_controls.get("true_node_oracle"),
         }
-        for capacity in capacities:
-            bounded_accuracy = float(
-                dict(bounded_by_capacity[capacity][stage]["controls"])[
-                    "true_node_oracle"
-                ]
+        for capacity in histories:
+            persistent_accuracy = float(
+                persistent_by_history[capacity][stage]["accuracy"]
             )
-            projected[f"k{capacity}_oracle_accuracy"] = bounded_accuracy
-            projected[f"k{capacity}_minus_full_pp"] = bounded_accuracy - full_accuracy
+            projected[f"h{capacity}_accuracy"] = persistent_accuracy
+            projected[f"h{capacity}_minus_fresh_pp"] = (
+                persistent_accuracy - fresh_accuracy
+            )
         rows.append(projected)
-    return capacities, rows
+    return histories, rows
 
 
-def _write_clean_capacity_tables(
+def _write_clean_history_tables(
     report_root: Path,
-    capacities: Sequence[int],
+    histories: Sequence[int],
     rows: Sequence[Mapping[str, object]],
 ) -> None:
-    """Write the clean gate evidence in CSV, JSON, and Parquet forms."""
-    _write_csv(report_root / "clean_capacity_gate.csv", rows)
+    """Write clean history-selection evidence in CSV, JSON, and Parquet forms."""
+    _write_csv(report_root / "clean_history_selection.csv", rows)
     atomic_write(
-        report_root / "clean_capacity_gate.json",
-        canonical_json_bytes({"capacities": list(capacities), "rows": list(rows)}),
+        report_root / "clean_history_selection.json",
+        canonical_json_bytes({"histories": list(histories), "rows": list(rows)}),
     )
     if rows:
         try:
             import pandas as pd
 
             pd.DataFrame(rows).to_parquet(
-                report_root / "clean_capacity_gate.parquet", index=False
+                report_root / "clean_history_selection.parquet", index=False
             )
         except ImportError:  # pragma: no cover - environment preflight requires pandas
             pass
@@ -168,7 +176,9 @@ def _resource_rows(run: Path) -> list[dict[str, object]]:
                     for node in nodes
                     if node["parent_hashes"]
                 ),
-                "condition": f"hierarchy:{policy['replay_mode']}:{policy['partition']}:{policy['reservoir_capacity']}",
+                "condition": (
+                    f"hierarchy:{policy['parent_training']}:{policy['partition']}"
+                ),
                 "integrator_backward_example_passes": None,
                 "integrator_forward_example_passes": None,
                 "hierarchy_training_image_presentations": sum(
@@ -398,9 +408,8 @@ def _accuracy_plot(
     path: Path,
     diagnostic: Mapping[str, object] | None,
     locked_rows: Sequence[Mapping[str, object]],
-    capacities: Sequence[int],
-    capacity_rows: Sequence[Mapping[str, object]],
-    hierarchy_tolerance: float | None,
+    histories: Sequence[int],
+    history_rows: Sequence[Mapping[str, object]],
 ) -> None:
     import matplotlib
 
@@ -426,7 +435,11 @@ def _accuracy_plot(
         axes[0].set_axis_off()
     if locked_rows:
         stages = [int(row["stage"]) for row in locked_rows]
-        axes[1].plot(stages, [float(row["accuracy"]) for row in locked_rows], label="bounded integrator")
+        axes[1].plot(
+            stages,
+            [float(row["accuracy"]) for row in locked_rows],
+            label="full-union integrator",
+        )
         for key, label in (
             ("raw_union", "raw union"),
             ("true_node_oracle", "true-node oracle"),
@@ -441,31 +454,28 @@ def _accuracy_plot(
         axes[1].set_ylim(0, 100)
         axes[1].grid(alpha=0.2)
         axes[1].legend()
-    elif capacity_rows:
-        stages = [int(row["stage"]) for row in capacity_rows]
-        full = [float(row["full_union_oracle_accuracy"]) for row in capacity_rows]
-        axes[1].plot(stages, full, color="#263238", marker="o", label="full-union oracle")
-        if hierarchy_tolerance is not None:
-            axes[1].plot(
-                stages,
-                [value - hierarchy_tolerance for value in full],
-                color="#78909c",
-                linestyle=":",
-                label=f"full minus {hierarchy_tolerance:g} pp",
-            )
+    elif history_rows:
+        stages = [int(row["stage"]) for row in history_rows]
+        axes[1].plot(
+            stages,
+            [float(row["fresh_mean_accuracy"]) for row in history_rows],
+            color="#263238",
+            marker="o",
+            label="fresh full replay",
+        )
         colors = ("#1565c0", "#ef6c00", "#2e7d32", "#6a1b9a")
-        for index, capacity in enumerate(capacities):
+        for index, capacity in enumerate(histories):
             axes[1].plot(
                 stages,
-                [float(row[f"k{capacity}_oracle_accuracy"]) for row in capacity_rows],
+                [float(row[f"h{capacity}_accuracy"]) for row in history_rows],
                 color=colors[index % len(colors)],
                 marker="s",
-                label=f"bounded K={capacity}",
+                label=f"persistent H={capacity}",
             )
         axes[1].set(
             xlabel="Tasks seen",
             ylabel="Validation accuracy (%)",
-            title="Clean hierarchy capacity gate",
+            title="Clean integrator-history selection",
             xticks=stages,
         )
         axes[1].grid(alpha=0.2)
@@ -515,24 +525,19 @@ def write_integrator_report(run_root: str | Path) -> Path:
     development = _load(run / "evaluations" / "development_task50.json")
     locked = _load(run / "evaluations" / "locked_test.json")
     stage_rows, _task_rows = _write_tables(reports, locked)
-    capacities, capacity_rows = _clean_capacity_rows(clean)
-    _write_clean_capacity_tables(reports, capacities, capacity_rows)
+    histories, history_rows = _clean_history_rows(clean)
+    _write_clean_history_tables(reports, histories, history_rows)
     resources = _resource_rows(run)
     _write_resource_tables(reports, resources)
     lineage = reports / "lineage.png"
     accuracy_plot = reports / "accuracy.png"
     _lineage_plot(lineage)
-    tolerance_value = None if clean is None else clean.get("hierarchy_oracle_tolerance")
-    hierarchy_tolerance = (
-        float(tolerance_value) if isinstance(tolerance_value, (int, float)) else None
-    )
     _accuracy_plot(
         accuracy_plot,
         diagnostic,
         stage_rows,
-        capacities,
-        capacity_rows,
-        hierarchy_tolerance,
+        histories,
+        history_rows,
     )
     diagnostic_rows = []
     if diagnostic:
@@ -545,16 +550,16 @@ def write_integrator_report(run_root: str | Path) -> Path:
         references = dict(locked["local_references"])
         static = dict(dict(locked["final_static_controls"])["controls"])
         final_rows = [
-            ("LogT bounded integrator — Last", f"{float(locked['last_accuracy']):.3f}"),
-            ("LogT bounded integrator — Incremental", f"{float(locked['incremental_accuracy']):.3f}"),
-            ("Bounded hierarchy — raw union", f"{float(static['raw_union']):.3f}"),
-            ("Bounded hierarchy — cosine union", f"{float(static['cosine_union']):.3f}"),
+            ("LogT full-union integrator — Last", f"{float(locked['last_accuracy']):.3f}"),
+            ("LogT full-union integrator — Incremental", f"{float(locked['incremental_accuracy']):.3f}"),
+            ("Full-union hierarchy — raw union", f"{float(static['raw_union']):.3f}"),
+            ("Full-union hierarchy — cosine union", f"{float(static['cosine_union']):.3f}"),
             (
-                "Bounded hierarchy — affine-calibrated union",
+                "Full-union hierarchy — affine-calibrated union",
                 f"{float(static['affine_calibrated_union']):.3f}",
             ),
             (
-                "Bounded hierarchy — true-node oracle",
+                "Full-union hierarchy — true-node oracle",
                 f"{float(static['true_node_oracle']):.3f}",
             ),
             ("Frozen-reference control — Last", f"{float(references['frozen_reference_last']):.3f}"),
@@ -565,31 +570,31 @@ def write_integrator_report(run_root: str | Path) -> Path:
         ]
     selected = None if clean is None else {
         "feature_variant": clean.get("selected_variant"),
-        "consolidation_capacity": clean.get("selected_consolidation_capacity"),
         "historical_capacity": clean.get("selected_historical_capacity"),
+        "parent_training": clean.get("selected_parent_training"),
     }
-    capacity_headers = ["stage", "full-union oracle"]
-    for capacity in capacities:
-        capacity_headers.extend((f"K={capacity}", f"K={capacity} - full (pp)"))
-    capacity_table_rows = []
-    for row in capacity_rows:
-        values: list[object] = [row["stage"], f"{float(row['full_union_oracle_accuracy']):.3f}"]
-        for capacity in capacities:
+    history_headers = ["stage", "fresh mean", "raw union", "true-node oracle"]
+    for capacity in histories:
+        history_headers.extend((f"H={capacity}", f"H={capacity} - fresh (pp)"))
+    history_table_rows = []
+    for row in history_rows:
+        values: list[object] = [
+            row["stage"],
+            f"{float(row['fresh_mean_accuracy']):.3f}",
+            f"{float(row['raw_union_accuracy']):.3f}",
+            f"{float(row['true_node_oracle_accuracy']):.3f}",
+        ]
+        for capacity in histories:
             values.extend(
                 (
-                    f"{float(row[f'k{capacity}_oracle_accuracy']):.3f}",
-                    f"{float(row[f'k{capacity}_minus_full_pp']):+.3f}",
+                    f"{float(row[f'h{capacity}_accuracy']):.3f}",
+                    f"{float(row[f'h{capacity}_minus_fresh_pp']):+.3f}",
                 )
             )
-        capacity_table_rows.append(tuple(values))
+        history_table_rows.append(tuple(values))
     clean_note = ""
     if clean is not None:
         clean_note = f"Gate open: {clean.get('gate_open')}."
-        if hierarchy_tolerance is not None:
-            clean_note += (
-                " Required every bounded-minus-full difference to be at least "
-                f"-{hierarchy_tolerance:g} percentage points."
-            )
         if clean.get("reason"):
             clean_note += f" Stop reason: {clean['reason']}."
         clean_note += "\n\n"
@@ -614,27 +619,30 @@ def write_integrator_report(run_root: str | Path) -> Path:
         "# ImageNet-R-50 LogT Prediction Integrator\n\n"
         f"Run: `{run.name}`  \nWorkflow state: `{state.get('phase', 'NOT_STARTED')}`\n\n"
         "This experiment replaces task-free node selection with a direct 200-way residual "
-        "integrator over frozen node behavior. The scalable condition uses a capacity-one "
-        "binary counter, bounded consolidation replay, and bounded persistent integrator replay.\n\n"
+        "integrator over frozen node behavior. Its capacity-one binary counter retrains every "
+        "parent on the complete represented training union; only persistent integrator history "
+        "uses a bounded replay reservoir.\n\n"
         "## Sealed capacity diagnostic\n\n"
         + _markdown_table(("feature family", "mean validation accuracy"), diagnostic_rows)
         + (f"\nGate open: **{diagnostic.get('gate_open')}**. Selected: `{diagnostic.get('selected_variant')}`.\n" if diagnostic else "")
         + "\n## Frozen clean selection\n\n"
         + (f"`{json.dumps(selected, sort_keys=True)}`\n\n" if selected else "_Not complete._\n\n")
         + clean_note
-        + _markdown_table(tuple(capacity_headers), capacity_table_rows)
+        + _markdown_table(tuple(history_headers), history_table_rows)
         + "\n"
         + "Validation identities are excluded from every clean node and integrator update. "
-        "Full-union training is an empirical ceiling and is excluded from the scalable claim.\n\n"
+        "Full-union parent retraining is the primary condition, matching the successful "
+        "Permuted-MNIST consolidation methodology.\n\n"
         + "## Locked local result\n\n"
         + _markdown_table(("condition", "accuracy (%)"), final_rows)
         + "\nPublished E2-LoRA values (78.58 Last / 83.96 Incremental) remain external context; "
         "the paired local E2-LoRA rerun is the direct comparator.\n\n"
         + "## Complexity boundary\n\n"
-        + "Per arrival, the capacity-one hierarchy performs at most `bit_length(t)` carries and "
-        "the persistent observer evaluates at most `popcount(t) * (current + H)` node/example "
-        "pairs. Cumulative model work is therefore O(T log T). Classifier-row union arithmetic "
-        "is reported separately because the 200-way output space is fixed in this benchmark.\n\n"
+        + "The hierarchy retains at most `popcount(t)` live adapters and performs at most "
+        "`bit_length(t)` carries per arrival. A carry retrains on its complete represented "
+        "union, so its worst-case data work grows with interval size and cumulative parent "
+        "presentations are O(N T log T) for N examples per task. Persistent observer work "
+        "remains bounded by `popcount(t) * (current + H)` per arrival.\n\n"
         + _markdown_table(
             (
                 "condition",
@@ -649,7 +657,7 @@ def write_integrator_report(run_root: str | Path) -> Path:
     )
     atomic_write(reports / "REPORT.md", markdown.encode("utf-8"))
     diagnostic_html = _html_table(("feature family", "mean validation accuracy"), diagnostic_rows)
-    capacity_html = _html_table(tuple(capacity_headers), capacity_table_rows)
+    history_html = _html_table(tuple(history_headers), history_table_rows)
     final_html = _html_table(("condition", "accuracy (%)"), final_rows)
     resource_html = _html_table(
         (
@@ -665,13 +673,13 @@ def write_integrator_report(run_root: str | Path) -> Path:
 <title>ImageNet-R-50 LogT Prediction Integrator</title>
 <style>body{{font:16px/1.55 system-ui,sans-serif;max-width:1200px;margin:auto;padding:2rem;color:#17202a;background:#fafafa}}h1,h2{{color:#123b5d}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #ccd5dd;padding:.45rem;text-align:left}}th{{background:#e8f1f8}}details{{background:white;border:1px solid #d9e1e7;border-radius:8px;padding:1rem;margin:1rem 0}}summary{{font-weight:700;cursor:pointer}}img{{max-width:100%;height:auto}}code{{overflow-wrap:anywhere}}</style></head>
 <body><h1>ImageNet-R-50 LogT Prediction Integrator</h1><p><strong>Run:</strong> <code>{escape(run.name)}</code><br><strong>State:</strong> {escape(str(state.get('phase', 'NOT_STARTED')))}</p>
-<p>A direct 200-way residual integrator observes frozen LogT node behavior. The scalable condition uses capacity-one consolidation and bounded replay; full-union training is a ceiling only.</p>
+<p>A direct 200-way residual integrator observes frozen LogT node behavior. Capacity-one parents retrain on every represented training example; only persistent integrator history is bounded.</p>
 <details open><summary>Sealed capacity diagnostic</summary>{diagnostic_html}<p>Gate open: {escape(str(None if diagnostic is None else diagnostic.get('gate_open')))}; selected feature family: <code>{escape(str(None if diagnostic is None else diagnostic.get('selected_variant')))}</code>.</p></details>
-<details open><summary>Clean selection</summary><p><code>{escape(json.dumps(selected, sort_keys=True))}</code></p><p>{escape(clean_note.strip())}</p>{capacity_html}<p>Validation identities are excluded from all clean trainable components.</p></details>
+<details open><summary>Clean selection</summary><p><code>{escape(json.dumps(selected, sort_keys=True))}</code></p><p>{escape(clean_note.strip())}</p>{history_html}<p>Validation identities are excluded from all clean trainable components.</p></details>
 <details open><summary>Locked local benchmark</summary>{final_html}<p>The common-split local E2-LoRA rerun is the direct comparator. Published 78.58/83.96 values are external context.</p></details>
 <details open><summary>Accuracy</summary><img alt="Diagnostic and locked accuracy plots" src="{_image_data(accuracy_plot)}"></details>
 <details><summary>Capacity-one lineage</summary><img alt="Capacity-one binary-counter lineage" src="{_image_data(lineage)}"></details>
-<details><summary>Complexity and resources</summary><p>Per arrival there are at most bit_length(t) carries and popcount(t) live nodes. Persistent observer work is bounded by popcount(t) × (current + H), giving O(T log T) cumulative model work. Output-head arithmetic is accounted separately.</p>{resource_html}<pre>{escape(json.dumps({'clean': clean, 'development': development}, indent=2, sort_keys=True))}</pre></details>
+<details><summary>Complexity and resources</summary><p>There are at most bit_length(t) carries and popcount(t) live nodes. Full-union carry cost grows with interval size; cumulative parent presentations are O(N T log T) for N examples per task. Persistent observer work stays bounded by popcount(t) × (current + H).</p>{resource_html}<pre>{escape(json.dumps({'clean': clean, 'development': development}, indent=2, sort_keys=True))}</pre></details>
 </body></html>"""
     atomic_write(reports / "REPORT.html", html.encode("utf-8"))
     files = tuple(

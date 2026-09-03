@@ -12,6 +12,29 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Active Experiment — ImageNet-R-50 Full-Union Prediction Integrator
+
+- **Protocol revision implemented; execution pending (2026-09-02).** The new
+  `configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml`
+  protocol promotes full-union parent retraining from a ceiling to the sole
+  primary hierarchy condition. It has a separate
+  `artifacts/imagenetr50/integrator_full_union_v2` namespace and leaves the
+  terminal v1 fixed-K result immutable.
+- Every parent now trains on and records the exact union of all fit examples
+  represented by its two children. This matches the successful Permuted-MNIST
+  consolidation method. The fixed-K parent screen and its two-point gate have
+  been removed from the active workflow; the v1 K=512/1,024/2,048 results
+  remain useful bounded-memory ablations.
+- Persistent prediction-integrator replay remains bounded and selects the
+  smallest H in {512, 1,024, 2,048} that passes the predeclared task-16
+  validation gates. If it passes, the workflow continues through task-50 clean
+  development, an all-24,000 retrain, the sealed 6,000-image test matrix, and
+  the existing paired local E2-LoRA comparisons.
+- Immediate execution order: authenticated GPU preflight, eight-task
+  full-union smoke and reuse proof, task-16 H selection, task-50 development,
+  then locked test. A scientific gate failure still stops later data access;
+  implementation or environment failures are repaired and resumed.
+
 ## Completed Outcome — ImageNet-R-50 LogT Prediction Integrator
 
 - **Protocol run complete at its preregistered negative branch (2026-09-02).**
@@ -59,15 +82,10 @@
   tests need `tokenizers`; no unrelated assertion failure appeared. The generic
   environment cannot collect vision reporting because it intentionally lacks
   the vision extra.
-- **Next discriminating experiment:** reuse the sealed task-16 leaves and
-  permanent-priority candidates to test K=4,096 and the exact task-16
-  full-fit endpoint K=6,594 before touching the integrator. Pair the existing
-  five-epoch fits with an optimizer-step-matched bounded condition. This
-  separates retained-example capacity from merely receiving fewer gradient
-  updates. Only if a scaling-compatible choice reaches the two-point gate
-  should the workflow resume H selection and task-50 development; otherwise
-  the parent training/replay design, rather than routing or integration, is the
-  next mechanism to change.
+- **Follow-up decision:** fixed-K parent consolidation is no longer a gate for
+  the direct integrator. Full-union parent retraining is now the active primary
+  experiment above. K=4,096 and step-matched bounded studies are optional
+  scaling ablations after the full-union result, not prerequisites.
 
 ## Completed Outcome — Sample-calibrated 100-permutation Integrators
 

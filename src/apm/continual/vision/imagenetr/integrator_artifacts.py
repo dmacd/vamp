@@ -62,7 +62,7 @@ class IntegratorProtocol:
     code_manifest_hash: str
     environment_manifest_hash: str
     reference_results_hash: str
-    schema_version: str = "imagenetr50-logt-integrator-protocol-v1"
+    schema_version: str = "imagenetr50-logt-integrator-protocol-v2"
 
     def __post_init__(self) -> None:
         for label, identity in (
@@ -80,7 +80,7 @@ class IntegratorProtocol:
         for identity in self.sealed_final_node_hashes:
             require_sha256(identity, "sealed final node")
         if (
-            self.schema_version != "imagenetr50-logt-integrator-protocol-v1"
+            self.schema_version != "imagenetr50-logt-integrator-protocol-v2"
             or not self.sealed_final_node_hashes
             or len(set(self.sealed_final_node_hashes)) != len(self.sealed_final_node_hashes)
         ):
@@ -111,23 +111,23 @@ class IntegratorProtocol:
 
 @dataclass(frozen=True, slots=True)
 class HierarchyPolicy:
-    """Identity of one full-union or bounded-replay capacity-one hierarchy."""
+    """Identity of the full-union capacity-one hierarchy."""
 
     partition: str
-    replay_mode: str
-    reservoir_capacity: int
+    parent_training: str
+    source_identity_capacity: int
     training_config_hash: str
     seed: int
-    schema_version: str = "imagenetr50-integrator-hierarchy-policy-v1"
+    schema_version: str = "imagenetr50-integrator-hierarchy-policy-v2"
 
     def __post_init__(self) -> None:
         require_sha256(self.training_config_hash, "hierarchy training config")
         if (
             self.partition not in {"fit", "all_train"}
-            or self.replay_mode not in {"bounded", "full_union"}
-            or self.reservoir_capacity < 1
+            or self.parent_training != "full_union"
+            or self.source_identity_capacity != 24_000
             or self.seed < 0
-            or self.schema_version != "imagenetr50-integrator-hierarchy-policy-v1"
+            or self.schema_version != "imagenetr50-integrator-hierarchy-policy-v2"
         ):
             raise ValueError("invalid capacity-one hierarchy policy")
 
@@ -286,7 +286,10 @@ def _material_paths(project_root: Path, config_path: Path) -> tuple[Path, ...]:
         package / "merging" / "common.py",
     )
     script = project_root / "scripts/vision/imagenetr/run_integrator_local.sh"
-    protocol = project_root / "docs/imagenetr50_logt_prediction_integrator_protocol.md"
+    protocol = (
+        project_root
+        / "docs/imagenetr50_logt_prediction_integrator_full_union_protocol.md"
+    )
     optional = (script,) if script.is_file() else ()
     return (
         config_path,
@@ -400,7 +403,7 @@ def bootstrap_integrator(config_path: str | Path) -> IntegratorBootstrap:
         canonical_json_bytes(
             {
                 "run_hash": protocol.content_hash,
-                "schema_version": "imagenetr50-integrator-latest-run-v1",
+                "schema_version": "imagenetr50-integrator-latest-run-v2",
             }
         ),
     )
@@ -430,7 +433,7 @@ def latest_integrator_run(
     """Resolve the latest prepared run without mutating local state."""
     config = load_integrator_config(config_path)
     record = load_canonical_json(config.artifact_root / "LATEST_RUN.json")
-    if record.get("schema_version") != "imagenetr50-integrator-latest-run-v1":
+    if record.get("schema_version") != "imagenetr50-integrator-latest-run-v2":
         raise ValueError("unknown integrator latest-run record")
     run_hash = str(record["run_hash"])
     require_sha256(run_hash, "latest integrator run")
@@ -451,15 +454,13 @@ def hierarchy_training_hash(config: ImageNetRIntegratorConfig) -> str:
 def hierarchy_policy(
     config: ImageNetRIntegratorConfig,
     partition: str,
-    replay_mode: str,
-    reservoir_capacity: int,
     seed: int | None = None,
 ) -> HierarchyPolicy:
     """Construct one canonical hierarchy policy from the resolved protocol."""
     return HierarchyPolicy(
         partition,
-        replay_mode,
-        reservoir_capacity,
+        config.parent_training,
+        config.source_identity_capacity,
         hierarchy_training_hash(config),
         config.seed if seed is None else seed,
     )

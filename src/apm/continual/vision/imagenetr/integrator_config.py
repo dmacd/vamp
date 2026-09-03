@@ -54,7 +54,6 @@ class IntegratorGateConfig:
     diagnostic_accuracy: float
     diagnostic_control_margin: float
     feature_tolerance: float
-    hierarchy_oracle_tolerance: float
     persistent_fresh_tolerance: float
     task16_persistent_fresh_tolerance: float
     persistent_control_margin: float
@@ -68,7 +67,6 @@ class IntegratorGateConfig:
             self.diagnostic_accuracy,
             self.diagnostic_control_margin,
             self.feature_tolerance,
-            self.hierarchy_oracle_tolerance,
             self.persistent_fresh_tolerance,
             self.task16_persistent_fresh_tolerance,
             self.persistent_control_margin,
@@ -104,7 +102,8 @@ class ImageNetRIntegratorConfig:
     fit_fraction: float
     maximum_levels: int
     diagnostic_maximum_slots: int
-    consolidation_reservoir_sizes: tuple[int, ...]
+    parent_training: str
+    source_identity_capacity: int
     historical_reservoir_sizes: tuple[int, ...]
     calibration_checkpoints: tuple[int, ...]
     consolidation_training: TrainingConfig
@@ -125,8 +124,8 @@ class ImageNetRIntegratorConfig:
         ):
             require_sha256(identity, label)
         if (
-            self.name != "imagenetr50_logt_prediction_integrator_v1"
-            or self.protocol_revision != "imagenetr50-logt-integrator-v1"
+            self.name != "imagenetr50_logt_prediction_integrator_full_union_v2"
+            or self.protocol_revision != "imagenetr50-logt-integrator-full-union-v2"
             or self.seed < 0
             or not self.replication_seeds
             or self.replication_seeds[0] != self.seed
@@ -140,7 +139,8 @@ class ImageNetRIntegratorConfig:
             or self.fit_fraction != 0.8
             or self.maximum_levels != 6
             or self.diagnostic_maximum_slots != 8
-            or self.consolidation_reservoir_sizes != (512, 1024, 2048)
+            or self.parent_training != "full_union"
+            or self.source_identity_capacity != 24_000
             or self.historical_reservoir_sizes != (512, 1024, 2048)
             or self.calibration_checkpoints != (2, 4, 8, 16)
             or self.feature_variants != FEATURE_VARIANTS
@@ -232,7 +232,8 @@ def load_integrator_config(path: str | Path) -> ImageNetRIntegratorConfig:
         {
             "maximum_levels",
             "diagnostic_maximum_slots",
-            "consolidation_reservoir_sizes",
+            "parent_training",
+            "source_identity_capacity",
             "historical_reservoir_sizes",
             "calibration_checkpoints",
             "consolidation_training",
@@ -266,7 +267,6 @@ def load_integrator_config(path: str | Path) -> ImageNetRIntegratorConfig:
             "diagnostic_accuracy",
             "diagnostic_control_margin",
             "feature_tolerance",
-            "hierarchy_oracle_tolerance",
             "persistent_fresh_tolerance",
             "task16_persistent_fresh_tolerance",
             "persistent_control_margin",
@@ -302,7 +302,8 @@ def load_integrator_config(path: str | Path) -> ImageNetRIntegratorConfig:
         fit_fraction=float(dataset["fit_fraction"]),
         maximum_levels=int(hierarchy["maximum_levels"]),
         diagnostic_maximum_slots=int(hierarchy["diagnostic_maximum_slots"]),
-        consolidation_reservoir_sizes=tuple(int(value) for value in hierarchy["consolidation_reservoir_sizes"]),
+        parent_training=str(hierarchy["parent_training"]),
+        source_identity_capacity=int(hierarchy["source_identity_capacity"]),
         historical_reservoir_sizes=tuple(int(value) for value in hierarchy["historical_reservoir_sizes"]),
         calibration_checkpoints=tuple(int(value) for value in hierarchy["calibration_checkpoints"]),
         consolidation_training=_training(hierarchy["consolidation_training"]),

@@ -23,7 +23,7 @@ def test_real_integrator_bootstrap_and_bf16_step() -> None:
     if not torch.cuda.is_available():
         pytest.skip("CUDA is unavailable")
     bootstrap = bootstrap_integrator(
-        "configs/vision/imagenetr/logt_prediction_integrator_v1.yaml"
+        "configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml"
     )
     device = torch.device("cuda:0")
     state = create_integrator_state(
@@ -53,7 +53,7 @@ def test_real_sealed_node_behavior_cache_matches_direct_forward(tmp_path: Path) 
     if not torch.cuda.is_available():
         pytest.skip("CUDA is unavailable")
     bootstrap = bootstrap_integrator(
-        "configs/vision/imagenetr/logt_prediction_integrator_v1.yaml"
+        "configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml"
     )
     device = torch.device("cuda:0")
     node = BehaviorNode.from_sealed(bootstrap.sealed_tree.final.nodes[0])

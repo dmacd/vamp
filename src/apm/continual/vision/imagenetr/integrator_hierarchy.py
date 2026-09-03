@@ -40,7 +40,7 @@ from apm.continual.vision.imagenetr.model import AdapterVisionModel
 from apm.continual.vision.imagenetr.training import train_adapter_model
 
 
-RESERVOIR_NAMESPACE = "imagenetr50-integrator-consolidation-bottom-k-v1"
+RESERVOIR_NAMESPACE = "imagenetr50-integrator-full-source-identities-v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,9 +236,9 @@ def _train_leaf(
 ) -> tuple[NodeBundle, HierarchyWork]:
     logical = LogicalNode(0, task_index, task_index)
     rows = _partition_rows(bootstrap, policy.partition, logical.task_ids)
-    # Leaves are shared across every replay policy.  Retain the largest declared
-    # reservoir so the first policy built cannot discard candidates needed later.
-    leaf_reservoir_capacity = max(bootstrap.config.consolidation_reservoir_sizes)
+    # Every node retains the exact identities it trained on.  The configured
+    # capacity equals the complete 24,000-image training universe.
+    leaf_reservoir_capacity = bootstrap.config.source_identity_capacity
     reservoir = class_stratified_reservoir(
         rows, leaf_reservoir_capacity, RESERVOIR_NAMESPACE
     )
@@ -250,7 +250,7 @@ def _train_leaf(
             "source_ids": [row.image_id for row in rows],
             "task": task_index,
             "training_config_hash": policy.training_config_hash,
-            "schema_version": "imagenetr50-integrator-leaf-job-v1",
+            "schema_version": "imagenetr50-integrator-leaf-job-v2",
         }
     )
     cache = _leaf_cache_path(bootstrap, policy, task_index, job_hash)
@@ -349,18 +349,18 @@ def _train_parent(
     right_rows = _partition_rows(bootstrap, policy.partition, event.right.task_ids)
     reservoir = merge_stratified_reservoirs(
         (
-            _reservoir_from_bundle(left, left_rows, policy.reservoir_capacity),
-            _reservoir_from_bundle(right, right_rows, policy.reservoir_capacity),
+            _reservoir_from_bundle(left, left_rows, policy.source_identity_capacity),
+            _reservoir_from_bundle(right, right_rows, policy.source_identity_capacity),
         ),
         rows_by_id,
-        policy.reservoir_capacity,
+        policy.source_identity_capacity,
         RESERVOIR_NAMESPACE,
     )
-    training_rows = (
-        represented_rows
-        if policy.replay_mode == "full_union"
-        else tuple(rows_by_id[image_id] for image_id in reservoir.image_ids)
-    )
+    training_rows = represented_rows
+    if tuple(sorted(reservoir.image_ids)) != tuple(
+        sorted(row.image_id for row in represented_rows)
+    ):
+        raise RuntimeError("full-union parent source identities are incomplete")
     classifier = union_classifier_rows((left.classifier, right.classifier))
     seed = policy.seed + 300_000 + event.sequence
     job_hash = record_sha256(
@@ -369,7 +369,7 @@ def _train_parent(
             "initialization_seed": seed,
             "policy": policy.as_record(),
             "source_ids": [row.image_id for row in training_rows],
-            "schema_version": "imagenetr50-integrator-parent-job-v1",
+            "schema_version": "imagenetr50-integrator-parent-job-v2",
         }
     )
     model = AdapterVisionModel(
@@ -404,7 +404,7 @@ def _train_parent(
             bootstrap,
             event.parent,
             (left.artifact.content_hash, right.artifact.content_hash),
-            f"{policy.replay_mode}_retrain_union",
+            "full_union_retrain_union",
             job_hash,
             reservoir,
             represented_rows,
@@ -470,7 +470,7 @@ def build_hierarchy(
 
     overall = tqdm(
         total=task_count + len(events),
-        desc=f"{policy.replay_mode} hierarchy through task {task_count}",
+        desc=f"full-union hierarchy through task {task_count}",
         disable=not progress,
         unit="node",
     )

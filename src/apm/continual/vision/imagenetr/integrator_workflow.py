@@ -64,7 +64,7 @@ from apm.continual.vision.imagenetr.router_features import test_transform_hash
 
 
 DEFAULT_INTEGRATOR_CONFIG = Path(
-    "configs/vision/imagenetr/logt_prediction_integrator_v1.yaml"
+    "configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml"
 )
 HISTORICAL_NAMESPACE = "imagenetr50-integrator-history-bottom-k-v1"
 
@@ -460,6 +460,10 @@ def run_preflight(bootstrap: IntegratorBootstrap, device: torch.device) -> dict[
         "peak_vram_bytes": (
             torch.cuda.max_memory_allocated(device) if device.type == "cuda" else 0
         ),
+        "source_identity_capacity": bootstrap.config.source_identity_capacity,
+        "source_identity_capacity_covers_train": (
+            bootstrap.config.source_identity_capacity >= len(train)
+        ),
         "sealed_primary_preflight": inherited,
         "schema_version": "imagenetr50-integrator-preflight-v1",
         "test_training_overlap": len(test & train),
@@ -472,6 +476,7 @@ def run_preflight(bootstrap: IntegratorBootstrap, device: torch.device) -> dict[
         or core["fit_validation_overlap"] != 0
         or not core["fit_validation_union_matches_train"]
         or core["test_training_overlap"] != 0
+        or not core["source_identity_capacity_covers_train"]
         or parity_error != 0.0
         or not math.isfinite(float(core["one_step_loss"]))
     ):
@@ -661,10 +666,9 @@ def run_smoke(
     if target.is_file():
         return load_canonical_json(target)
     print("[phase 2/6] Eight-task real-data smoke", flush=True)
-    capacity = min(bootstrap.config.consolidation_reservoir_sizes)
     hierarchy = build_hierarchy(
         bootstrap,
-        hierarchy_policy(bootstrap.config, "fit", "bounded", capacity),
+        hierarchy_policy(bootstrap.config, "fit"),
         bootstrap.config.smoke_tasks,
         _backbone_factory(bootstrap),
         device,
@@ -711,6 +715,11 @@ def run_smoke(
             and replayed_rows == rows
         ),
         "finite_accuracy": math.isfinite(float(final["accuracy"])),
+        "full_source_membership": all(
+            bundle.artifact.represented_train_image_count
+            == len(bundle.artifact.proxy_image_ids)
+            for bundle in hierarchy.nodes
+        ),
         "one_live_root": int(final["live_nodes"]) == 1,
         "seven_carries": len(hierarchy.nodes) - bootstrap.config.smoke_tasks == 7,
         "validation_excluded": not bool(
@@ -728,7 +737,7 @@ def run_smoke(
         "hierarchy_work": asdict(hierarchy.work),
         "metric": final,
         "reuse_work": asdict(replayed.work),
-        "schema_version": "imagenetr50-integrator-smoke-v1",
+        "schema_version": "imagenetr50-integrator-smoke-v2",
         "selected_variant": selected_variant,
     }
     record = {**core, "content_hash": record_sha256(core)}
@@ -1080,37 +1089,6 @@ def _persistent_run(
     return state, combined
 
 
-def _select_consolidation_capacity(
-    bounded: Mapping[int, tuple[dict[str, object], ...]],
-    full: Sequence[dict[str, object]],
-    tolerance: float,
-) -> int | None:
-    full_by_stage = {int(row["stage"]): row for row in full}
-    return next(
-        (
-            capacity
-            for capacity in sorted(bounded)
-            if all(
-                float(full_by_stage[int(row["stage"])]["controls"]["true_node_oracle"])
-                - float(row["controls"]["true_node_oracle"])
-                <= tolerance
-                for row in bounded[capacity]
-            )
-        ),
-        None,
-    )
-
-
-def _json_capacity_rows(
-    rows_by_capacity: Mapping[int, Sequence[Mapping[str, object]]],
-) -> dict[str, list[dict[str, object]]]:
-    """Return a canonically reloadable JSON object keyed by replay capacity."""
-    return {
-        str(capacity): [dict(row) for row in rows_by_capacity[capacity]]
-        for capacity in sorted(rows_by_capacity)
-    }
-
-
 def _select_historical_capacity(
     runs: Mapping[int, Sequence[dict[str, object]]],
     fresh: Sequence[dict[str, object]],
@@ -1151,60 +1129,25 @@ def run_clean_development(
     selected_variant: str,
     device: torch.device,
 ) -> dict[str, object]:
-    """Select bounded hierarchy and history capacities without touching test identities."""
+    """Select bounded integrator history on the full-union clean hierarchy."""
     target = bootstrap.store.run / "evaluations" / "clean_development.json"
     if target.is_file():
         return load_canonical_json(target)
-    print("[phase 3/6] Clean fit/validation hierarchy and capacity selection", flush=True)
-    training_hash_capacity = max(bootstrap.config.consolidation_reservoir_sizes)
-    full_policy = hierarchy_policy(
-        bootstrap.config, "fit", "full_union", training_hash_capacity
+    print("[phase 3/6] Full-union clean hierarchy and history selection", flush=True)
+    selected_tree = build_hierarchy(
+        bootstrap,
+        hierarchy_policy(bootstrap.config, "fit"),
+        16,
+        _backbone_factory(bootstrap),
+        device,
     )
-    full = build_hierarchy(
-        bootstrap, full_policy, 16, _backbone_factory(bootstrap), device
+    hierarchy_controls = _hierarchy_controls(
+        bootstrap,
+        selected_tree,
+        bootstrap.config.calibration_checkpoints,
+        "validation",
+        device,
     )
-    bounded_trees = {
-        capacity: build_hierarchy(
-            bootstrap,
-            hierarchy_policy(bootstrap.config, "fit", "bounded", capacity),
-            16,
-            _backbone_factory(bootstrap),
-            device,
-        )
-        for capacity in bootstrap.config.consolidation_reservoir_sizes
-    }
-    full_controls = _hierarchy_controls(
-        bootstrap, full, bootstrap.config.calibration_checkpoints, "validation", device
-    )
-    bounded_controls = {
-        capacity: _hierarchy_controls(
-            bootstrap,
-            hierarchy,
-            bootstrap.config.calibration_checkpoints,
-            "validation",
-            device,
-        )
-        for capacity, hierarchy in bounded_trees.items()
-    }
-    selected_consolidation = _select_consolidation_capacity(
-        bounded_controls,
-        full_controls,
-        bootstrap.config.gates.hierarchy_oracle_tolerance,
-    )
-    if selected_consolidation is None:
-        core = {
-            "bounded_controls": _json_capacity_rows(bounded_controls),
-            "full_controls": list(full_controls),
-            "gate_open": False,
-            "hierarchy_oracle_tolerance": bootstrap.config.gates.hierarchy_oracle_tolerance,
-            "reason": "no bounded consolidation reservoir stayed within the hierarchy-oracle tolerance",
-            "schema_version": "imagenetr50-integrator-clean-development-v1",
-            "selected_variant": selected_variant,
-        }
-        record = {**core, "content_hash": record_sha256(core)}
-        publish_immutable_json(target, record)
-        return record
-    selected_tree = bounded_trees[selected_consolidation]
     fresh = _fresh_checkpoints(
         bootstrap,
         selected_tree,
@@ -1228,7 +1171,7 @@ def run_clean_development(
             device,
         )
         persistent[capacity] = rows
-    task16_controls = next(row for row in bounded_controls[selected_consolidation] if row["stage"] == 16)
+    task16_controls = next(row for row in hierarchy_controls if row["stage"] == 16)
     control_floor = max(
         float(value)
         for name, value in task16_controls["controls"].items()
@@ -1239,17 +1182,16 @@ def run_clean_development(
     )
     selection_open = selected_history is not None
     core = {
-        "bounded_controls": _json_capacity_rows(bounded_controls),
         "control_floor": control_floor,
         "fresh": list(fresh),
-        "full_controls": list(full_controls),
         "gate_open": selection_open,
-        "hierarchy_oracle_tolerance": bootstrap.config.gates.hierarchy_oracle_tolerance,
+        "hierarchy_controls": list(hierarchy_controls),
+        "parent_training": bootstrap.config.parent_training,
         "persistent": {str(key): list(value) for key, value in persistent.items()},
         "reason": None if selection_open else "no bounded historical reservoir met the fresh/control gates",
-        "schema_version": "imagenetr50-integrator-clean-development-v1",
-        "selected_consolidation_capacity": selected_consolidation,
+        "schema_version": "imagenetr50-integrator-clean-development-v2",
         "selected_historical_capacity": selected_history,
+        "selected_parent_training": bootstrap.config.parent_training,
         "selected_variant": selected_variant,
     }
     record = {**core, "content_hash": record_sha256(core)}
@@ -1267,31 +1209,18 @@ def run_development_extension(
     if target.is_file():
         return load_canonical_json(target)
     print("[phase 4/6] Frozen clean development extension through task 50", flush=True)
-    consolidation = int(selection["selected_consolidation_capacity"])
     history = int(selection["selected_historical_capacity"])
     variant = str(selection["selected_variant"])
-    bounded = build_hierarchy(
+    hierarchy = build_hierarchy(
         bootstrap,
-        hierarchy_policy(bootstrap.config, "fit", "bounded", consolidation),
-        50,
-        _backbone_factory(bootstrap),
-        device,
-    )
-    full = build_hierarchy(
-        bootstrap,
-        hierarchy_policy(
-            bootstrap.config,
-            "fit",
-            "full_union",
-            max(bootstrap.config.consolidation_reservoir_sizes),
-        ),
+        hierarchy_policy(bootstrap.config, "fit"),
         50,
         _backbone_factory(bootstrap),
         device,
     )
     _state, persistent = _persistent_run(
         bootstrap,
-        bounded,
+        hierarchy,
         variant,
         history,
         "fit",
@@ -1301,20 +1230,18 @@ def run_development_extension(
         bootstrap.config.seed,
         device,
     )
-    fresh = _fresh_checkpoints(bootstrap, bounded, variant, (50,), device)
-    bounded_controls = _hierarchy_controls(bootstrap, bounded, (50,), "validation", device)[0]
-    full_controls = _hierarchy_controls(bootstrap, full, (50,), "validation", device)[0]
+    fresh = _fresh_checkpoints(bootstrap, hierarchy, variant, (50,), device)
+    hierarchy_controls = _hierarchy_controls(
+        bootstrap, hierarchy, (50,), "validation", device
+    )[0]
     final = persistent[-1]
     static_floor = max(
         float(value)
-        for name, value in bounded_controls["controls"].items()
+        for name, value in hierarchy_controls["controls"].items()
         if name != "true_node_oracle"
     )
     checks = {
         "accuracy": float(final["accuracy"]) >= bootstrap.config.gates.development_accuracy,
-        "hierarchy": float(full_controls["controls"]["true_node_oracle"])
-        - float(bounded_controls["controls"]["true_node_oracle"])
-        <= bootstrap.config.gates.hierarchy_oracle_tolerance,
         "persistent_fresh": float(fresh[0]["mean_validation_accuracy"])
         - float(final["accuracy"])
         <= bootstrap.config.gates.persistent_fresh_tolerance,
@@ -1323,12 +1250,12 @@ def run_development_extension(
     }
     core = {
         "acceptance": checks,
-        "bounded_controls": bounded_controls,
         "fresh": list(fresh),
-        "full_controls": full_controls,
         "gate_open": all(checks.values()),
+        "hierarchy_controls": hierarchy_controls,
+        "parent_training": bootstrap.config.parent_training,
         "persistent": list(persistent),
-        "schema_version": "imagenetr50-integrator-development-task50-v1",
+        "schema_version": "imagenetr50-integrator-development-task50-v2",
         "selection": dict(selection),
         "static_floor": static_floor,
     }
@@ -1347,14 +1274,13 @@ def run_locked_benchmark(
     if target.is_file():
         return load_canonical_json(target)
     print("[phase 5/6] Locked 24k-train / 6k-test benchmark", flush=True)
-    consolidation = int(selection["selected_consolidation_capacity"])
     history = int(selection["selected_historical_capacity"])
     variant = str(selection["selected_variant"])
     matrix_core = {
-        "consolidation_capacity": consolidation,
         "historical_capacity": history,
+        "parent_training": bootstrap.config.parent_training,
         "protocol_hash": bootstrap.protocol.content_hash,
-        "schema_version": "imagenetr50-integrator-locked-matrix-v1",
+        "schema_version": "imagenetr50-integrator-locked-matrix-v2",
         "test_rows_opened_before_seal": 0,
         "variant": variant,
     }
@@ -1362,16 +1288,16 @@ def run_locked_benchmark(
         bootstrap.store.run / "protocol" / "locked_matrix.json",
         {**matrix_core, "content_hash": record_sha256(matrix_core)},
     )
-    bounded = build_hierarchy(
+    hierarchy = build_hierarchy(
         bootstrap,
-        hierarchy_policy(bootstrap.config, "all_train", "bounded", consolidation),
+        hierarchy_policy(bootstrap.config, "all_train"),
         50,
         _backbone_factory(bootstrap),
         device,
     )
     _state, _training_only = _persistent_run(
         bootstrap,
-        bounded,
+        hierarchy,
         variant,
         history,
         "all_train",
@@ -1393,13 +1319,13 @@ def run_locked_benchmark(
         if test_requests_before_seal:
             raise RuntimeError("test behavior was opened before locked training completed")
     training_seal_core = {
-        "final_frontier_hash": bounded.snapshots[-1].content_hash,
+        "final_frontier_hash": hierarchy.snapshots[-1].content_hash,
         "persistent_checkpoint_sha256": file_sha256(
             bootstrap.store.run
             / "integrators"
             / "persistent"
             / _persistent_family_name(
-                bounded,
+                hierarchy,
                 variant,
                 history,
                 "all_train",
@@ -1408,7 +1334,7 @@ def run_locked_benchmark(
             / "checkpoints"
             / "stage_050.pt"
         ),
-        "schema_version": "imagenetr50-integrator-locked-training-seal-v1",
+        "schema_version": "imagenetr50-integrator-locked-training-seal-v2",
         "test_requests_before_seal": 0,
     }
     publish_immutable_json(
@@ -1420,7 +1346,7 @@ def run_locked_benchmark(
     )
     _state, persistent = _persistent_run(
         bootstrap,
-        bounded,
+        hierarchy,
         variant,
         history,
         "all_train",
@@ -1434,7 +1360,7 @@ def run_locked_benchmark(
     last = float(stage_rows[-1]["accuracy"])
     incremental = sum(float(row["accuracy"]) for row in stage_rows) / len(stage_rows)
     final_controls = _hierarchy_controls(
-        bootstrap, bounded, (50,), "test", device
+        bootstrap, hierarchy, (50,), "test", device
     )[0]
     task_matrix = tuple(
         {
@@ -1466,7 +1392,7 @@ def run_locked_benchmark(
         "local_references": local_references,
         "final_static_controls": final_controls,
         "replications_required": beats_local,
-        "schema_version": "imagenetr50-integrator-locked-test-v1",
+        "schema_version": "imagenetr50-integrator-locked-test-v2",
         "selection": dict(selection),
         "stage_metrics": list(stage_rows),
         "task_accuracy_matrix": list(task_matrix),
@@ -1523,7 +1449,7 @@ def run_integrator_workflow(
     )
     overall.update(1)
     if not bool(selection["gate_open"]):
-        _write_state(bootstrap, "COMPLETE_CLEAN_SELECTION_FAILURE", selection=selection)
+        _write_state(bootstrap, "COMPLETE_HISTORY_SELECTION_FAILURE", selection=selection)
         write_integrator_report(bootstrap.store.run)
         overall.update(3)
         overall.close()

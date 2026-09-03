@@ -466,22 +466,22 @@ than attempting to republish wall-clock timing as new immutable protocol data.
 
 ### Direct prediction-integrator follow-up
 
-The direct ImageNet-R prediction integrator is a new protocol and artifact
-namespace; it does not reinterpret or mutate the completed capacity-two VAMP
-or recursive-router runs. Those runs supply authenticated, read-only diagnostic
-nodes and local comparison results. The new protocol additionally binds hashes
-of the exact prior summary and router-validation ledger, so reported local
-E2-LoRA, joint-IID, and static controls cannot drift beneath an unchanged run
-name.
+The direct ImageNet-R prediction integrator uses isolated protocol and artifact
+namespaces; it does not reinterpret or mutate completed capacity-two VAMP,
+recursive-router, or integrator runs. Those runs supply authenticated,
+read-only diagnostic nodes and local comparison results. Each protocol binds
+hashes of the exact prior summary and router-validation ledger, so reported
+local E2-LoRA, joint-IID, and static controls cannot drift beneath an unchanged
+run name.
 
-The deployable hierarchy is a capacity-one binary counter with one stable input
-slot per level. An arrival carries through occupied levels, so 50 tasks create
-47 parents and leave three nodes at levels 1, 4, and 5. Leaves are shared across
-replay policies and retain the largest declared reservoir; this prevents the
-first small-K smoke run from irreversibly discarding candidates needed by a
-later ceiling. Parent adapters are fresh base-relative rank-16 models trained
-for five epochs. Bounded parents see only a mergeable class-stratified bottom-K
-reservoir, while full-union parents are explicitly non-scaling ceilings.
+The hierarchy is a capacity-one binary counter with one stable input slot per
+level. An arrival carries through occupied levels, so 50 tasks create 47
+parents and leave three nodes at levels 1, 4, and 5. In the active full-union
+protocol, every parent is a fresh base-relative rank-16 model trained for five
+epochs on every fit example represented by its children. Its node artifact
+records that exact source union. The completed v1 protocol's bottom-K parents
+remain immutable bounded-memory ablations; they are not candidates or gates in
+the active matrix.
 
 An integrator observation is a detached, fixed-width tensor with six semantic
 level slots. Depending on the frozen feature-family choice, a slot contains
@@ -496,10 +496,11 @@ and a zero output layer gives bit-exact baseline parity before training.
 Behavior caching is row-addressed rather than request-addressed. Each immutable
 safetensors shard is keyed by the model/node/transform semantics and lists its
 exact image identities. A new stage request assembles cached rows in requested
-order and forwards only missing identities. This permits reuse across K/H
+order and forwards only missing identities. This permits reuse across H
 conditions and historical stage projections without computing a future or test
-identity early. Shard manifests provide crash-independent exact forward counts;
-a hash-chained request ledger records observed hits, misses, and elapsed time.
+identity early. Shard manifests provide crash-independent exact forward
+counts; a hash-chained request ledger records observed hits, misses, and elapsed
+time.
 
 Canonical JSON records normalize map keys to strings before hashing and
 publication. In particular, numeric capacity labels use their decimal string
@@ -510,11 +511,11 @@ a report-formatting convention.
 
 Clean development uses 19,200 fit identities for every trainable component and
 4,800 disjoint validation identities for stopping and gates. Feature-family and
-fresh-ceiling statistics are arithmetic means over three fixed restarts. K is
-selected by true-node oracle proximity to full-union parents through task 16;
-H is selected by persistent proximity to fresh integration and a static-control
-margin. The frozen K/H/feature choice must then pass task-50 development before
-test access is possible.
+fresh-ceiling statistics are arithmetic means over three fixed restarts. Parent
+training is fixed to full union before execution. H alone is selected by
+persistent proximity to fresh integration and a static-control margin. The
+frozen H/feature choice must then pass task-50 development before test access is
+possible.
 
 The locked run first rebuilds on all 24,000 training identities. Its hierarchy
 and all 50 persistent checkpoints are complete before a training-seal record is
@@ -522,10 +523,13 @@ published and the 6,000 test identities can be requested. Training and
 evaluation use separate hash-chained ledgers: this makes evaluation schedules
 extendable without retraining or losing early stage cells, while every restored
 stage remains tied to its exact frontier and training-ID hash. Per-arrival
-adapted-node work is bounded by `popcount(t) * (current + H)` and carries by
-`bit_length(t)`; persisted reports keep exact model passes, integrator
-forward/backward presentations, classifier-row copies, live memory, and archive
-storage separate.
+integrator observation work is bounded by `popcount(t) * (current + H)` and the
+number of carries by `bit_length(t)`. Full-union carry data work grows with
+interval size: for N examples per task, cumulative parent presentations are
+O(N T log T), worst-arrival work is O(N T), and amortized arrival work is
+O(N log T), apart from fixed epoch factors. Persisted reports keep exact model
+passes, integrator forward/backward presentations, classifier-row copies, live
+memory, and archive storage separate.
 
 ## TRACE Log-t VAMP
 
