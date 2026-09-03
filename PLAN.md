@@ -12,28 +12,67 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
-## Active Experiment — ImageNet-R-50 Full-Union Prediction Integrator
+## Completed Outcome — ImageNet-R-50 Full-Union Prediction Integrator
 
-- **Protocol revision implemented; execution pending (2026-09-02).** The new
-  `configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml`
-  protocol promotes full-union parent retraining from a ceiling to the sole
-  primary hierarchy condition. It has a separate
-  `artifacts/imagenetr50/integrator_full_union_v2` namespace and leaves the
-  terminal v1 fixed-K result immutable.
-- Every parent now trains on and records the exact union of all fit examples
-  represented by its two children. This matches the successful Permuted-MNIST
-  consolidation method. The fixed-K parent screen and its two-point gate have
-  been removed from the active workflow; the v1 K=512/1,024/2,048 results
-  remain useful bounded-memory ablations.
-- Persistent prediction-integrator replay remains bounded and selects the
-  smallest H in {512, 1,024, 2,048} that passes the predeclared task-16
-  validation gates. If it passes, the workflow continues through task-50 clean
-  development, an all-24,000 retrain, the sealed 6,000-image test matrix, and
-  the existing paired local E2-LoRA comparisons.
-- Immediate execution order: authenticated GPU preflight, eight-task
-  full-union smoke and reuse proof, task-16 H selection, task-50 development,
-  then locked test. A scientific gate failure still stops later data access;
-  implementation or environment failures are repaired and resumed.
+- **Protocol run complete at its preregistered history-selection stop
+  (2026-09-02).** Commit `1d00249` promotes full-union parent retraining to the
+  sole primary hierarchy condition in
+  `configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml`.
+  Production run
+  `7f8ac3ef574fe7ec3a2097c3a4b8a8ed13c5c1e4f34a856d69b6c32108a6a946`
+  finished in 15 minutes 5 seconds with state
+  `COMPLETE_HISTORY_SELECTION_FAILURE`. The v1 fixed-K run remains immutable.
+- Every parent trained on and recorded the exact union of the fit examples
+  represented by its children. The eight-task smoke passed: seven carries
+  produced one live root, source membership was complete, validation identities
+  were excluded, accuracy was finite, and the immediate rebuild reused all
+  eight leaves and seven parents. The task-16 hierarchy contained all 16 leaves
+  and 15 full-union parents; its root represented 6,594 fit images without
+  fixed-K sampling.
+- The sealed feature diagnostic again selected `scores`: mean validation
+  accuracy over seeds 1993/1994/1995 was 85.188% for behavior, 85.201% for
+  behavior-plus-base, and 85.194% for scores, versus 82.000% for the strongest
+  static diagnostic control. This gate passed, but it used eight retained U100
+  nodes and was therefore more informative than a power-of-two
+  capacity-one frontier.
+- At tasks 2/4/8/16, the fresh full-replay integrator reached
+  88.265/83.555/80.958/77.994% mean validation accuracy. H=2,048 was the best
+  persistent condition at task 16, reaching 77.162%; its differences from
+  fresh were -0.000/+0.516/-0.157/-0.832 percentage points. It therefore met
+  every fresh-replay tolerance, including the one-point task-16 rule.
+- The decisive control-margin gate failed. The strongest task-16 static
+  control was raw/local-probability union at 77.284%, so the frozen three-point
+  margin required at least 80.284%. H=2,048 was 0.122 point below the control
+  and 3.122 points below the required threshold. Even fresh full replay gained
+  only 0.711 point over the control and was 2.289 points short of that
+  threshold. Increasing bounded history alone cannot satisfy this gate under
+  the observed fresh ceiling.
+- The likely bottleneck is now upstream of persistent replay. At task 16, a
+  capacity-one binary-counter hierarchy has one live root, so the direct
+  integrator sees the consolidated parent's predictions rather than multiple
+  adapter-dependent alternatives. It can recalibrate that root but cannot
+  recover child behaviors discarded from the live frontier. The optimistic
+  eight-node diagnostic did not reproduce this information boundary.
+- In accordance with the protocol, task-50 development, the 6,000-image sealed
+  test set, and local E2-LoRA comparison remained unopened. The next experiment
+  should preserve adapter-dependent information across a carry—such as a
+  bounded multiresolution behavior sketch or distillation target—and first
+  demonstrate a fresh task-16 gain over the full-union root. Lowering the
+  three-point gate or enlarging H would not test the identified bottleneck.
+- Exact resume is proven. The unchanged command finished in 3.994 seconds with
+  all six phases reused and zero additional leaf or parent optimizer steps.
+  Content and modification-time aggregates were identical for 16 leaf
+  checkpoints, 15 parent checkpoints, 254 hierarchy metadata records, 11
+  scientific JSON files, and the behavior ledger. The compact report and proof
+  live under
+  `artifacts/imagenetr50/integrator_full_union_v2/runs/7f8ac3ef574fe7ec3a2097c3a4b8a8ed13c5c1e4f34a856d69b6c32108a6a946/`.
+- All 52 focused serial ImageNet-R tests and all six authenticated
+  real-data/model/GPU tests pass on the RTX 4090. The Markdown report,
+  standalone HTML, accuracy plot, and lineage plot have been visually
+  inspected. The repository-wide serial suite was also run; its 31 failures
+  are confined to the known optional environments (eight require FabricPC and
+  23 require `tokenizers`), with no unrelated assertion failure. No required
+  execution remains for this frozen protocol.
 
 ## Completed Outcome — ImageNet-R-50 LogT Prediction Integrator
 

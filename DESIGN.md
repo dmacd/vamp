@@ -476,7 +476,7 @@ run name.
 
 The hierarchy is a capacity-one binary counter with one stable input slot per
 level. An arrival carries through occupied levels, so 50 tasks create 47
-parents and leave three nodes at levels 1, 4, and 5. In the active full-union
+parents and leave three nodes at levels 1, 4, and 5. In the completed full-union
 protocol, every parent is a fresh base-relative rank-16 model trained for five
 epochs on every fit example represented by its children. Its node artifact
 records that exact source union. The completed v1 protocol's bottom-K parents
@@ -516,6 +516,17 @@ training is fixed to full union before execution. H alone is selected by
 persistent proximity to fresh integration and a static-control margin. The
 frozen H/feature choice must then pass task-50 development before test access is
 possible.
+
+An integrator capacity diagnostic must reproduce the information available at
+the evaluated hierarchy frontier, not only its maximum slot count. The sealed
+U100 diagnostic exposes eight retained nodes, whereas the capacity-one frontier
+at a power-of-two stage exposes one consolidated root. The full-union v2 run
+showed that bounded history can stay within the fresh replay tolerance at task
+16 while both persistent and fresh integrators fail the static-control margin.
+History replay cannot reconstruct child behaviors that a carry removed from the
+frontier. A successor that needs those alternatives must persist an explicit,
+bounded multiresolution prediction summary or change the consolidation target;
+it must authenticate that extra state and account for its inference cost.
 
 The locked run first rebuilds on all 24,000 training identities. Its hierarchy
 and all 50 persistent checkpoints are complete before a training-seal record is
