@@ -196,6 +196,44 @@ def class_stratified_reservoir(
     )
 
 
+def resize_stratified_reservoir(
+    reservoir: StratifiedReservoir,
+    rows_by_id: Mapping[str, ImageRecord],
+    capacity: int,
+) -> StratifiedReservoir:
+    """Project a retained reservoir to a smaller capacity without reopening its source."""
+    if capacity < 1 or capacity > reservoir.capacity:
+        raise ValueError("reservoir projection must use a positive nonincreasing capacity")
+    if capacity == reservoir.capacity:
+        return reservoir
+    if any(image_id not in rows_by_id for image_id in reservoir.image_ids):
+        raise ValueError("retained reservoir identities cannot be resolved")
+    source_counts = dict(reservoir.source_class_counts)
+    selected_total = min(capacity, reservoir.represented_source_count)
+    allocation = _minimum_one_allocation(source_counts, selected_total)
+    grouped: dict[int, list[ImageRecord]] = defaultdict(list)
+    for image_id in reservoir.image_ids:
+        row = rows_by_id[image_id]
+        grouped[row.remapped_class_index].append(row)
+    if any(len(grouped[class_id]) < count for class_id, count in allocation.items()):
+        raise ValueError("retained reservoir lacks a required permanent-priority row")
+    selected = tuple(
+        row
+        for class_id in sorted(grouped)
+        for row in sorted(
+            grouped[class_id], key=lambda value: _priority(value, reservoir.namespace)
+        )[: allocation[class_id]]
+    )
+    return StratifiedReservoir(
+        tuple(row.image_id for row in selected),
+        tuple((class_id, allocation[class_id]) for class_id in sorted(allocation)),
+        reservoir.source_class_counts,
+        reservoir.represented_source_count,
+        capacity,
+        reservoir.namespace,
+    )
+
+
 def merge_stratified_reservoirs(
     children: Sequence[StratifiedReservoir],
     rows_by_id: Mapping[str, ImageRecord],
@@ -261,5 +299,6 @@ __all__ = [
     "insert_binary_leaf",
     "merge_stratified_reservoirs",
     "require_binary_work_bound",
+    "resize_stratified_reservoir",
     "simulate_binary_topology",
 ]

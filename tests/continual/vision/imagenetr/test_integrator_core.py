@@ -10,6 +10,7 @@ from apm.continual.vision.imagenetr.integrator_bank import (
     class_stratified_reservoir,
     merge_stratified_reservoirs,
     require_binary_work_bound,
+    resize_stratified_reservoir,
     simulate_binary_topology,
 )
 from apm.continual.vision.imagenetr.integrator_config import load_integrator_config
@@ -108,6 +109,18 @@ def test_stratified_child_merge_equals_direct_permanent_priority_selection() -> 
     assert merged.selected_class_counts == direct.selected_class_counts
     assert merged.source_class_counts == direct.source_class_counts
     assert all(count >= 1 for _class_id, count in merged.selected_class_counts)
+
+
+def test_larger_shared_leaf_reservoir_projects_exactly_to_policy_capacity() -> None:
+    rows = tuple(_row(class_id, index) for class_id in range(8) for index in range(8))
+    retained = class_stratified_reservoir(rows, 32, "unit-test-bottom-k")
+    projected = resize_stratified_reservoir(
+        retained, {row.image_id: row for row in rows}, 16
+    )
+    direct = class_stratified_reservoir(rows, 16, "unit-test-bottom-k")
+    assert projected.image_ids == direct.image_ids
+    assert projected.selected_class_counts == direct.selected_class_counts
+    assert projected.source_class_counts == direct.source_class_counts
 
 
 def test_observation_variants_are_label_free_fixed_slots_with_exact_raw_parity() -> None:

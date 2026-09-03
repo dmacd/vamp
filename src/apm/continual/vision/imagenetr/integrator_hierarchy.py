@@ -31,6 +31,7 @@ from apm.continual.vision.imagenetr.integrator_bank import (
     class_stratified_reservoir,
     merge_stratified_reservoirs,
     require_binary_work_bound,
+    resize_stratified_reservoir,
     simulate_binary_topology,
 )
 from apm.continual.vision.imagenetr.manifests import git_commit_or_unknown
@@ -305,21 +306,28 @@ def _reservoir_from_bundle(
     represented_rows: Sequence[ImageRecord],
     capacity: int,
 ) -> StratifiedReservoir:
-    source_counts = Counter(row.remapped_class_index for row in represented_rows)
-    selected_rows = {
-        row.image_id: row
-        for row in represented_rows
-        if row.image_id in frozenset(bundle.artifact.proxy_image_ids)
-    }
-    selected_counts = Counter(row.remapped_class_index for row in selected_rows.values())
-    return StratifiedReservoir(
-        bundle.artifact.proxy_image_ids,
-        tuple(sorted(selected_counts.items())),
-        tuple(sorted(source_counts.items())),
-        len(represented_rows),
-        capacity,
-        RESERVOIR_NAMESPACE,
+    record = load_canonical_json(bundle.directory / "reservoir.json")
+    retained = StratifiedReservoir(
+        tuple(str(value) for value in record["image_ids"]),
+        tuple((int(class_id), int(count)) for class_id, count in record["selected_class_counts"]),
+        tuple((int(class_id), int(count)) for class_id, count in record["source_class_counts"]),
+        int(record["represented_source_count"]),
+        int(record["capacity"]),
+        str(record["namespace"]),
     )
+    source_counts = tuple(
+        sorted(Counter(row.remapped_class_index for row in represented_rows).items())
+    )
+    if (
+        retained.content_hash != record.get("content_hash")
+        or retained.image_ids != bundle.artifact.proxy_image_ids
+        or retained.source_class_counts != source_counts
+        or retained.represented_source_count != len(represented_rows)
+        or retained.namespace != RESERVOIR_NAMESPACE
+    ):
+        raise ValueError("node reservoir metadata differs from its represented source")
+    rows_by_id = {row.image_id: row for row in represented_rows}
+    return resize_stratified_reservoir(retained, rows_by_id, capacity)
 
 
 def _train_parent(

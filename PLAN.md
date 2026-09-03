@@ -44,7 +44,14 @@
   that no test request exists, and only then evaluates the 6,000 test images.
   Training and evaluation ledgers are separate so smoke reuse and retrospective
   stage evaluation cannot suppress required matrix cells.
-- Current verification: all 50 serial ImageNet-R tests pass; the local RTX 4090
+- The first production smoke correctly stopped at the first carry because
+  shared leaf caches retain the largest declared reservoir while the 512-row
+  smoke policy expected an already projected reservoir. The loader now
+  authenticates the persisted source counts and deterministically projects a
+  retained reservoir to any smaller policy capacity before merging. A focused
+  regression proves the projection is identical to direct permanent-priority
+  selection; no scientific result or protocol choice changed.
+- Current verification: all 51 serial ImageNet-R tests pass; the local RTX 4090
   passes both explicitly selected real-GPU checks (BF16 optimization and
   two-image direct/cache equivalence). The broader non-ImageNet suite completed
   with 865 passes, 276 skips, and 27 deselections. Its 12 failures are isolated
