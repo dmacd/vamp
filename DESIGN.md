@@ -464,6 +464,62 @@ and reruns paired R1/R3 smoke policies to prove zero-node, zero-optimizer-step
 artifact reuse. A rerun reuses the original measured preflight record rather
 than attempting to republish wall-clock timing as new immutable protocol data.
 
+### Direct prediction-integrator follow-up
+
+The direct ImageNet-R prediction integrator is a new protocol and artifact
+namespace; it does not reinterpret or mutate the completed capacity-two VAMP
+or recursive-router runs. Those runs supply authenticated, read-only diagnostic
+nodes and local comparison results. The new protocol additionally binds hashes
+of the exact prior summary and router-validation ledger, so reported local
+E2-LoRA, joint-IID, and static controls cannot drift beneath an unchanged run
+name.
+
+The deployable hierarchy is a capacity-one binary counter with one stable input
+slot per level. An arrival carries through occupied levels, so 50 tasks create
+47 parents and leave three nodes at levels 1, 4, and 5. Leaves are shared across
+replay policies and retain the largest declared reservoir; this prevents the
+first small-K smoke run from irreversibly discarding candidates needed by a
+later ceiling. Parent adapters are fresh base-relative rank-16 models trained
+for five epochs. Bounded parents see only a mergeable class-stratified bottom-K
+reservoir, while full-union parents are explicitly non-scaling ceilings.
+
+An integrator observation is a detached, fixed-width tensor with six semantic
+level slots. Depending on the frozen feature-family choice, a slot contains
+adapted raw logits and ownership, normalized adapted pre-logits and local log
+probabilities, and optionally frozen-base features scored through that node's
+classifier. Inactive slots are exact zero. Labels live only in
+`IntegratorSupervision`; task IDs, class-owner truth, node truth, and interval
+metadata never enter `IntegratorObservations` or the prediction call. The
+parameter-free residual baseline unions disjoint raw affine classifier rows,
+and a zero output layer gives bit-exact baseline parity before training.
+
+Behavior caching is row-addressed rather than request-addressed. Each immutable
+safetensors shard is keyed by the model/node/transform semantics and lists its
+exact image identities. A new stage request assembles cached rows in requested
+order and forwards only missing identities. This permits reuse across K/H
+conditions and historical stage projections without computing a future or test
+identity early. Shard manifests provide crash-independent exact forward counts;
+a hash-chained request ledger records observed hits, misses, and elapsed time.
+
+Clean development uses 19,200 fit identities for every trainable component and
+4,800 disjoint validation identities for stopping and gates. Feature-family and
+fresh-ceiling statistics are arithmetic means over three fixed restarts. K is
+selected by true-node oracle proximity to full-union parents through task 16;
+H is selected by persistent proximity to fresh integration and a static-control
+margin. The frozen K/H/feature choice must then pass task-50 development before
+test access is possible.
+
+The locked run first rebuilds on all 24,000 training identities. Its hierarchy
+and all 50 persistent checkpoints are complete before a training-seal record is
+published and the 6,000 test identities can be requested. Training and
+evaluation use separate hash-chained ledgers: this makes evaluation schedules
+extendable without retraining or losing early stage cells, while every restored
+stage remains tied to its exact frontier and training-ID hash. Per-arrival
+adapted-node work is bounded by `popcount(t) * (current + H)` and carries by
+`bit_length(t)`; persisted reports keep exact model passes, integrator
+forward/backward presentations, classifier-row copies, live memory, and archive
+storage separate.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under

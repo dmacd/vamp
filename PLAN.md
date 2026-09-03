@@ -12,6 +12,50 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Active Experiment — ImageNet-R-50 LogT Prediction Integrator
+
+- **Implementation complete; production run pending (2026-09-02).** The new
+  isolated workflow is frozen by
+  `configs/vision/imagenetr/logt_prediction_integrator_v1.yaml` and
+  `docs/imagenetr50_logt_prediction_integrator_protocol.md`. It applies the
+  successful direct residual-integration method from the Permuted-MNIST work
+  to the existing sealed ImageNet-R split, ViT-B/16 checkpoint, rank-16 LoRA
+  leaves, and local E2-LoRA/joint-IID references.
+- The scalable hierarchy is now a capacity-one binary counter: 50 arrivals
+  create 47 carries and finish with level-1, level-4, and level-5 nodes over
+  2, 16, and 32 tasks. Fresh parents train for five epochs on deterministic
+  class-stratified permanent-priority reservoirs. K and persistent history H
+  are selected from 512/1,024/2,048 against fit-only full-replay and fresh-fit
+  ceilings before the 4,800-image validation gate is frozen.
+- The primary task-free model is a zero-residual 200-way MLP over six stable
+  level slots. Its preregistered feature families contain raw scores alone;
+  adapted pre-logits plus raw/local-normalized scores; and those behaviors plus
+  frozen-base classifier responses. Labels and task/node truth remain outside
+  the deployed observation and prediction APIs. Feature and fresh-ceiling
+  gates use the arithmetic mean over seeds 1993/1994/1995 rather than selecting
+  the luckiest restart.
+- Behavior persistence is row-addressed by model, node, image, and transform.
+  Immutable safetensors shards compute only missing identities, so changing a
+  stage subset reuses prior node/image work without pre-opening future or test
+  examples. A hash-chained request ledger plus shard manifests separates exact
+  persisted model passes from theoretical LogT bounds.
+- The locked workflow trains the full all-24,000 hierarchy and persistent
+  integrator through task 50, seals the checkpoint/frontier hashes, verifies
+  that no test request exists, and only then evaluates the 6,000 test images.
+  Training and evaluation ledgers are separate so smoke reuse and retrospective
+  stage evaluation cannot suppress required matrix cells.
+- Current verification: all 50 serial ImageNet-R tests pass; the local RTX 4090
+  passes both explicitly selected real-GPU checks (BF16 optimization and
+  two-image direct/cache equivalence). The broader non-ImageNet suite completed
+  with 865 passes, 276 skips, and 27 deselections. Its 12 failures are isolated
+  environment mismatches: four torchvision-dependent tests pass in the vision
+  environment, while eight FabricPC tests require FabricPC 0.4.0 rather than
+  the generic environment's 0.3.1. Remaining work is the immutable
+  implementation commit, phase-gated production run, report inspection, exact
+  resume/reuse check, and compact result-artifact commit. A failed scientific
+  gate is a completed negative result; only a condition requiring user action
+  is to be called a blocker.
+
 ## Completed Outcome — Sample-calibrated 100-permutation Integrators
 
 - **Checkpoint complete (2026-09-02).** Commit `dcb7951` records the existing

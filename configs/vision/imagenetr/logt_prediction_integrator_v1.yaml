@@ -1,0 +1,73 @@
+experiment:
+  name: imagenetr50_logt_prediction_integrator_v1
+  protocol_revision: imagenetr50-logt-integrator-v1
+  seed: 1993
+  replication_seeds: [1993, 1994, 1995]
+
+paths:
+  artifact_root: artifacts/imagenetr50/integrator_v1
+  inference_artifact_root: artifacts/imagenetr50
+  router_artifact_root: artifacts/imagenetr50/router_v1
+  data_root: data/imagenetr50
+
+sealed_inputs:
+  run_hash: 08d22d66a713f9d3d45454935af6043a716a71888a169946ef5c2244af0809db
+  u100_policy_hash: d1950bf4efe9d528b3e842432f56d54882fbaeb313e4505b980784083bf457e1
+  router_run_hash: e45f751547dcb4352dbce9340985e648eb4df01df8d50b29330bc69d1f6357a0
+  router_split_hash: b18c7f375fd1f51d6f05d3b37315b56827131c7731c6be20aafead0dfb843d96
+  handoff_commit: 2dc0b1c
+
+dataset:
+  classes: 200
+  tasks: 50
+  classes_per_task: 4
+  fit_fraction: 0.8
+
+hierarchy:
+  maximum_levels: 6
+  diagnostic_maximum_slots: 8
+  consolidation_reservoir_sizes: [512, 1024, 2048]
+  historical_reservoir_sizes: [512, 1024, 2048]
+  calibration_checkpoints: [2, 4, 8, 16]
+  consolidation_training:
+    optimizer: sgd
+    epochs: 5
+    batch_size: 64
+    momentum: 0.9
+    weight_decay: 0.0
+    lora_lr: 0.0005
+    head_lr: 0.01
+
+integrator:
+  feature_variants: [scores, behavior, behavior_base]
+  hidden_widths: [1024, 512, 256]
+  dropout: 0.1
+  optimizer: adamw
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip_norm: 1.0
+  batch_size: 512
+  persistent_epochs: 4
+  fresh_minimum_epochs: 20
+  fresh_maximum_epochs: 100
+  fresh_patience: 10
+  improvement_delta: 0.0001
+
+gates:
+  diagnostic_accuracy: 85.0
+  diagnostic_control_margin: 3.0
+  feature_tolerance: 0.25
+  hierarchy_oracle_tolerance: 2.0
+  persistent_fresh_tolerance: 2.0
+  task16_persistent_fresh_tolerance: 1.0
+  persistent_control_margin: 3.0
+  development_accuracy: 79.0
+  development_control_margin: 5.0
+  local_e2_last: 78.10
+  local_e2_incremental: 82.9952
+
+runtime:
+  feature_batch_size: 64
+  num_workers: 12
+  checkpoint_steps: 50
+  smoke_tasks: 8

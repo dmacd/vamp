@@ -202,6 +202,135 @@ class TensorCache:
             raise
         return tensors, False
 
+    def get_or_compute_rows(
+        self,
+        values: Mapping[str, object],
+        image_ids: Sequence[str],
+        compute: Callable[[tuple[str, ...]], Mapping[str, Tensor]],
+    ) -> tuple[dict[str, Tensor], int, int]:
+        """Load cached rows, compute only missing identities, and preserve request order.
+
+        Entries are immutable shards below one semantic model/transform namespace.  The
+        shard manifests carry every image identity explicitly, so a later request with
+        different stage membership can reuse individual rows without treating a future
+        or test image as observed before it is actually requested.
+        """
+        try:
+            from safetensors.torch import load_file, save_file
+        except ImportError as error:  # pragma: no cover - vision environment gate
+            raise RuntimeError("safetensors is required by the vision environment") from error
+        requested = tuple(image_ids)
+        if (
+            not requested
+            or len(set(requested)) != len(requested)
+            or any(not image_id for image_id in requested)
+        ):
+            raise ValueError("row cache requires unique nonempty image identities")
+        semantic_key = self.key(values)
+        root = self.root / "row_shards" / semantic_key
+        locations: dict[str, tuple[Path, int]] = {}
+        if root.is_dir():
+            for shard in sorted(path for path in root.iterdir() if not path.name.startswith(".")):
+                manifest_path = shard / "cache.json"
+                tensor_path = shard / "tensors.safetensors"
+                if not shard.is_dir() or not manifest_path.is_file() or not tensor_path.is_file():
+                    raise ValueError("row tensor cache contains a partial shard")
+                record = json.loads(manifest_path.read_text(encoding="utf-8"))
+                core = {
+                    "cache_key": semantic_key,
+                    "image_ids": record.get("image_ids"),
+                    "schema_version": "imagenetr50-row-tensor-cache-entry-v1",
+                    "semantic_values": dict(values),
+                    "tensor_sha256": file_sha256(tensor_path),
+                }
+                if record != {**core, "content_hash": record_sha256(core)}:
+                    raise ValueError("row tensor cache shard changed")
+                stored_ids = tuple(str(value) for value in record["image_ids"])
+                if not stored_ids or len(set(stored_ids)) != len(stored_ids):
+                    raise ValueError("row tensor cache shard identities are malformed")
+                for row_index, image_id in enumerate(stored_ids):
+                    if image_id in locations:
+                        raise ValueError("row tensor cache contains a duplicate image identity")
+                    locations[image_id] = (tensor_path, row_index)
+
+        missing = tuple(image_id for image_id in requested if image_id not in locations)
+        if missing:
+            computed = {
+                key: value.detach().to(device="cpu").contiguous()
+                for key, value in sorted(compute(missing).items())
+            }
+            if (
+                not computed
+                or any(tensor.ndim < 1 or len(tensor) != len(missing) for tensor in computed.values())
+            ):
+                raise ValueError("row cache computation did not return one row per identity")
+            shard_key = record_sha256(
+                {
+                    "cache_key": semantic_key,
+                    "image_ids": list(missing),
+                    "schema_version": "imagenetr50-row-tensor-cache-shard-key-v1",
+                }
+            )
+            directory = root / shard_key
+            if directory.exists():
+                raise ValueError("row tensor cache shard identity already exists unexpectedly")
+            root.mkdir(parents=True, exist_ok=True)
+            temporary = Path(tempfile.mkdtemp(prefix=f".{shard_key}.", dir=root))
+            try:
+                tensor_path = temporary / "tensors.safetensors"
+                save_file(
+                    computed,
+                    tensor_path,
+                    metadata={
+                        "cache_key": semantic_key,
+                        "schema_version": self.namespace,
+                    },
+                )
+                with tensor_path.open("rb") as persisted:
+                    os.fsync(persisted.fileno())
+                core = {
+                    "cache_key": semantic_key,
+                    "image_ids": list(missing),
+                    "schema_version": "imagenetr50-row-tensor-cache-entry-v1",
+                    "semantic_values": dict(values),
+                    "tensor_sha256": file_sha256(tensor_path),
+                }
+                publish_immutable_json(
+                    temporary / "cache.json",
+                    {**core, "content_hash": record_sha256(core)},
+                )
+                os.rename(temporary, directory)
+                fsync_directory(root)
+            except BaseException:
+                shutil.rmtree(temporary, ignore_errors=True)
+                raise
+            final_tensor_path = directory / "tensors.safetensors"
+            for row_index, image_id in enumerate(missing):
+                locations[image_id] = (final_tensor_path, row_index)
+
+        requested_paths = tuple(sorted({locations[image_id][0] for image_id in requested}))
+        loaded = {path: dict(load_file(path, device="cpu")) for path in requested_paths}
+        tensor_keys = tuple(sorted(loaded[requested_paths[0]]))
+        if not tensor_keys or any(set(shard) != set(tensor_keys) for shard in loaded.values()):
+            raise ValueError("row tensor cache shards expose inconsistent tensor names")
+        assembled: dict[str, Tensor] = {}
+        for tensor_name in tensor_keys:
+            example = loaded[requested_paths[0]][tensor_name]
+            output = torch.empty((len(requested), *example.shape[1:]), dtype=example.dtype)
+            grouped: dict[Path, list[tuple[int, int]]] = {}
+            for output_index, image_id in enumerate(requested):
+                path, source_index = locations[image_id]
+                grouped.setdefault(path, []).append((output_index, source_index))
+            for path, indices in grouped.items():
+                source = loaded[path][tensor_name]
+                if source.shape[1:] != example.shape[1:] or source.dtype != example.dtype:
+                    raise ValueError("row tensor cache shards expose inconsistent tensor shapes")
+                output_indices = torch.tensor([value[0] for value in indices], dtype=torch.int64)
+                source_indices = torch.tensor([value[1] for value in indices], dtype=torch.int64)
+                output[output_indices] = source[source_indices]
+            assembled[tensor_name] = output
+        return assembled, len(requested) - len(missing), len(missing)
+
 
 def score_cache_values(
     model_hash: str,
