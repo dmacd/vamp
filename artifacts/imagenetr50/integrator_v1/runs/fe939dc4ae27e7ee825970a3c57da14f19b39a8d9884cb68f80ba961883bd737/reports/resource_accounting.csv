@@ -1,0 +1,17 @@
+base_example_forwards,cache_bytes,cache_hits,cache_misses,classifier_union_scalar_copies,condition,evaluation_forward_example_passes,hierarchy_training_image_presentations,integrator_backward_example_passes,integrator_forward_example_passes,live_adapter_bytes,live_classifier_bytes,live_nodes,node_example_forward_bound,node_example_forwards,optimizer_steps,peak_vram_bytes,replay_identity_bytes
+,,,,196864,hierarchy:bounded:fit:512,,71370,,,5314216,197272,1,,,1145,4146465792,32768
+,,,,196864,hierarchy:bounded:fit:2048,,129630,,,5314216,197272,1,,,2085,4146290176,131072
+,,,,196864,hierarchy:full_union:fit:2048,,164850,,,5314216,197272,1,,,2645,4146290176,131072
+,,,,196864,hierarchy:bounded:fit:1024,,101730,,,5314216,197272,1,,,1635,4146290176,65536
+,,,,,integrator:14217b6c89286ec7cdfc2056b6e092ab01988165f4ad3f0a914fac6c8601e17f_scores_history512_fit_seed1993,849,,27508,34385,,,1,11444,,64,88883712,32768
+,,,,,fresh:sealed_diagnostic:1923c8b743d945cbaf6cf09ff56ba9812a326ead9a2dea6b30c6a5e9b73af7cd,,,384000,504000,,,,,,760,105292288,
+,,,,,fresh:sealed_diagnostic:354337c25846e88b174be424c2dac24050dff576c689534fc635004365ec160c,,,384000,504000,,,,,,760,169841152,
+,,,,,fresh:sealed_diagnostic:60930840a43c1051e7c5dcb9ee621a10d41f63a1a4a10e69a8bc79e1fea67767,,,384000,504000,,,,,,760,471065088,
+,,,,,fresh:sealed_diagnostic:66efa248c2ece28a08c9dee49feb717b6422da94cb5bea57545b4b0ab221be79,,,384000,504000,,,,,,760,169239040,
+,,,,,fresh:sealed_diagnostic:6c1b6aec78fbe0c13a9cba6175bc54b2501f54b48720650c262695a1d3aed491,,,384000,504000,,,,,,760,541549056,
+,,,,,fresh:sealed_diagnostic:7a8f3effadf0d5b819982604623fe9e8b232c763e5046e1b30b313e1673efdc9,,,384000,504000,,,,,,760,512233984,
+,,,,,fresh:sealed_diagnostic:7b9344884db9379786ec8967f14749492b2eacba8b56665cd74ada85d8f94657,,,384000,504000,,,,,,760,471147008,
+,,,,,fresh:sealed_diagnostic:b2939a5b1bdb559e0db7da37a77a1cfc6b77e3e3d8b6fb6e8e1c0e7c4adecb4c,,,384000,504000,,,,,,760,542376448,
+,,,,,fresh:sealed_diagnostic:b62fa06539b83f8e70bd7a84c645766924273ddb9a043755e84399b54ac6c3e4,,,384000,504000,,,,,,760,344269312,
+24000,,77053,285182,,all_behavior_requests,,,,,,,,,261182,,,
+,487897905,,,,shared_behavior_cache,,,,,,,,,,,,

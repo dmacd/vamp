@@ -12,56 +12,62 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
-## Active Experiment — ImageNet-R-50 LogT Prediction Integrator
+## Completed Outcome — ImageNet-R-50 LogT Prediction Integrator
 
-- **Implementation complete; production run pending (2026-09-02).** The new
-  isolated workflow is frozen by
+- **Protocol run complete at its preregistered negative branch (2026-09-02).**
+  The isolated workflow is frozen by
   `configs/vision/imagenetr/logt_prediction_integrator_v1.yaml` and
-  `docs/imagenetr50_logt_prediction_integrator_protocol.md`. It applies the
-  successful direct residual-integration method from the Permuted-MNIST work
-  to the existing sealed ImageNet-R split, ViT-B/16 checkpoint, rank-16 LoRA
-  leaves, and local E2-LoRA/joint-IID references.
-- The scalable hierarchy is now a capacity-one binary counter: 50 arrivals
-  create 47 carries and finish with level-1, level-4, and level-5 nodes over
-  2, 16, and 32 tasks. Fresh parents train for five epochs on deterministic
-  class-stratified permanent-priority reservoirs. K and persistent history H
-  are selected from 512/1,024/2,048 against fit-only full-replay and fresh-fit
-  ceilings before the 4,800-image validation gate is frozen.
-- The primary task-free model is a zero-residual 200-way MLP over six stable
-  level slots. Its preregistered feature families contain raw scores alone;
-  adapted pre-logits plus raw/local-normalized scores; and those behaviors plus
-  frozen-base classifier responses. Labels and task/node truth remain outside
-  the deployed observation and prediction APIs. Feature and fresh-ceiling
-  gates use the arithmetic mean over seeds 1993/1994/1995 rather than selecting
-  the luckiest restart.
-- Behavior persistence is row-addressed by model, node, image, and transform.
-  Immutable safetensors shards compute only missing identities, so changing a
-  stage subset reuses prior node/image work without pre-opening future or test
-  examples. A hash-chained request ledger plus shard manifests separates exact
-  persisted model passes from theoretical LogT bounds.
-- The locked workflow trains the full all-24,000 hierarchy and persistent
-  integrator through task 50, seals the checkpoint/frontier hashes, verifies
-  that no test request exists, and only then evaluates the 6,000 test images.
-  Training and evaluation ledgers are separate so smoke reuse and retrospective
-  stage evaluation cannot suppress required matrix cells.
-- The first production smoke correctly stopped at the first carry because
-  shared leaf caches retain the largest declared reservoir while the 512-row
-  smoke policy expected an already projected reservoir. The loader now
-  authenticates the persisted source counts and deterministically projects a
-  retained reservoir to any smaller policy capacity before merging. A focused
-  regression proves the projection is identical to direct permanent-priority
-  selection; no scientific result or protocol choice changed.
-- Current verification: all 51 serial ImageNet-R tests pass; the local RTX 4090
-  passes both explicitly selected real-GPU checks (BF16 optimization and
-  two-image direct/cache equivalence). The broader non-ImageNet suite completed
-  with 865 passes, 276 skips, and 27 deselections. Its 12 failures are isolated
-  environment mismatches: four torchvision-dependent tests pass in the vision
-  environment, while eight FabricPC tests require FabricPC 0.4.0 rather than
-  the generic environment's 0.3.1. Remaining work is the immutable
-  implementation commit, phase-gated production run, report inspection, exact
-  resume/reuse check, and compact result-artifact commit. A failed scientific
-  gate is a completed negative result; only a condition requiring user action
-  is to be called a blocker.
+  `docs/imagenetr50_logt_prediction_integrator_protocol.md`. Production run
+  `fe939dc4ae27e7ee825970a3c57da14f19b39a8d9884cb68f80ba961883bd737`
+  finished in 22 minutes 11 seconds with state
+  `COMPLETE_CLEAN_SELECTION_FAILURE`. The implementation is recorded by
+  commits `5a4f7ab`, `76f108d`, and `194d906`.
+- The optimistic sealed-capacity diagnostic passed. Mean validation accuracy
+  over seeds 1993/1994/1995 was 85.188% for behavior, 85.201% for
+  behavior-plus-base, and 85.194% for scores, versus 82.000% for the strongest
+  static control. The smallest feature family within 0.25 point of the best,
+  `scores`, was therefore frozen without choosing the luckiest restart.
+- The real eight-task smoke passed all gates: seven carries produced one live
+  root, validation identities stayed excluded, and the persistent integrator
+  reached 76.443% versus 76.561% for both raw union and the one-node oracle.
+  Its immediate reuse pass loaded all eight leaves and seven parents with zero
+  leaf or parent optimizer steps.
+- The clean consolidation-capacity gate failed at task 16. Full-union oracle
+  accuracy at tasks 2/4/8/16 was 85.714/83.186/79.505/77.284%. The corresponding
+  K=512 results were 88.776/82.301/76.561/68.331%, K=1,024 reached
+  89.796/83.850/77.974/69.732%, and K=2,048 reached
+  89.796/84.956/80.094/73.021%. K=2,048 was best at the decisive stage but was
+  still 4.263 points below full union, outside the frozen two-point tolerance.
+- The failure localizes before persistent integration: bounded parent replay
+  becomes inadequate as represented classes grow. In accordance with the
+  protocol, H selection, task-50 training, the 6,000-image test split, and any
+  local comparator claim remained unopened. The result is evidence against the
+  tested fixed-K consolidation budgets, not against direct prediction
+  integration; the diagnostic and smoke show that the integrator itself can
+  learn from an optimistic or small frontier.
+- Exact resume is proven after fixing canonical serialization of integer-like
+  capacity keys. The unchanged command completed in 3.750 seconds with all six
+  phases reused. Content and nanosecond-mtime aggregates stayed identical for
+  all 16 leaves, 69 parent/fresh checkpoints, 773 hierarchy records, scientific
+  JSON, and the behavior ledger; it executed zero additional leaf or parent
+  optimizer steps. The proof and compact report live under
+  `artifacts/imagenetr50/integrator_v1/runs/fe939dc4ae27e7ee825970a3c57da14f19b39a8d9884cb68f80ba961883bd737/`.
+- Verification is complete for this experiment: all 52 focused serial
+  ImageNet-R tests pass, as do all six authenticated real-data/model/GPU tests
+  on the RTX 4090. A repository-wide serial run in `.venv-vision` has only
+  optional-environment failures: eight tests need FabricPC and 23 TinyWorlds
+  tests need `tokenizers`; no unrelated assertion failure appeared. The generic
+  environment cannot collect vision reporting because it intentionally lacks
+  the vision extra.
+- **Next discriminating experiment:** reuse the sealed task-16 leaves and
+  permanent-priority candidates to test K=4,096 and the exact task-16
+  full-fit endpoint K=6,594 before touching the integrator. Pair the existing
+  five-epoch fits with an optimizer-step-matched bounded condition. This
+  separates retained-example capacity from merely receiving fewer gradient
+  updates. Only if a scaling-compatible choice reaches the two-point gate
+  should the workflow resume H selection and task-50 development; otherwise
+  the parent training/replay design, rather than routing or integration, is the
+  next mechanism to change.
 
 ## Completed Outcome — Sample-calibrated 100-permutation Integrators
 

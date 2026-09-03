@@ -501,6 +501,13 @@ conditions and historical stage projections without computing a future or test
 identity early. Shard manifests provide crash-independent exact forward counts;
 a hash-chained request ledger records observed hits, misses, and elapsed time.
 
+Canonical JSON records normalize map keys to strings before hashing and
+publication. In particular, numeric capacity labels use their decimal string
+form. JSON object keys become strings on reload, so hashing or sorting native
+integer keys would otherwise make an artifact writable but not canonically
+reloadable. This normalization is part of the content-addressing boundary, not
+a report-formatting convention.
+
 Clean development uses 19,200 fit identities for every trainable component and
 4,800 disjoint validation identities for stopping and gates. Feature-family and
 fresh-ceiling statistics are arithmetic means over three fixed restarts. K is
