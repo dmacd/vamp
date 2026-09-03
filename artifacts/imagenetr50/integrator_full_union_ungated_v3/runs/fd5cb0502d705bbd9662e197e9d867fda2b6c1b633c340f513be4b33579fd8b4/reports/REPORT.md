@@ -43,6 +43,7 @@ The feature family and H were frozen from the authenticated v2 task-16 developme
 | 4 | 83.555 | 83.186 | 83.186 | 84.071 | +0.516 |
 | 8 | 80.958 | 79.505 | 79.505 | 80.801 | -0.157 |
 | 16 | 77.994 | 77.284 | 77.284 | 77.040 | -0.954 |
+| 50 | 68.340 | 66.812 | 74.521 | 63.146 | -5.194 |
 
 Validation identities are excluded from every clean node and integrator update. Full-union parent retraining is the primary condition, matching the successful Permuted-MNIST consolidation methodology.
 
@@ -97,6 +98,8 @@ The hierarchy retains at most `popcount(t)` live adapters and performs at most `
 Exact per-request cache/model work is retained in `resource_accounting.*`.
 
 ## Figures
+
+The middle accuracy panel shows fresh full-replay and persistent integrator measurements only at the selected clean-validation checkpoints (tasks 2/4/8/16/50). The right panel shows the complete locked-test curves, including the offline joint-IID ceiling. Validation and test curves are deliberately kept in separate panels and must not be compared point-for-point across splits.
 
 ![Accuracy](accuracy.png)
 

@@ -23,7 +23,11 @@ from apm.continual.vision.imagenetr.integrator_persistence import (
     restore_integrator_checkpoint,
     save_integrator_checkpoint,
 )
-from apm.continual.vision.imagenetr.integrator_reporting import write_integrator_report
+from apm.continual.vision.imagenetr.integrator_reporting import (
+    _joint_iid_stage_rows,
+    _write_tables,
+    write_integrator_report,
+)
 from apm.continual.vision.imagenetr.proxy_memory import TensorCache
 
 
@@ -150,6 +154,26 @@ def test_clean_history_record_round_trips_and_report_is_explicitly_ungated(
     record = {**core, "content_hash": record_sha256(core)}
     target = tmp_path / "evaluations" / "clean_development.json"
     publish_immutable_json(target, record)
+    atomic_write(
+        tmp_path / "evaluations" / "development_task50.json",
+        canonical_json_bytes(
+            {
+                "fresh": [{"mean_validation_accuracy": 68.25, "stage": 50}],
+                "hierarchy_controls": {
+                    "controls": {"raw_union": 66.75, "true_node_oracle": 74.5},
+                    "stage": 50,
+                },
+                "persistent": [
+                    {
+                        "accuracy": 63.125,
+                        "historical_capacity": 2048,
+                        "stage": 50,
+                    }
+                ],
+                "selection": {"selected_historical_capacity": 2048},
+            }
+        ),
+    )
     assert load_canonical_json(target) == record
     (tmp_path / "state").mkdir()
     atomic_write(
@@ -164,5 +188,61 @@ def test_clean_history_record_round_trips_and_report_is_explicitly_ungated(
     assert "-1.250" in markdown
     assert "No accuracy or comparator value gates execution" in markdown
     assert "Gate open" not in markdown
+    assert "clean-validation checkpoints (tasks 2/4/8/16/50)" in markdown
+    projection = load_canonical_json(
+        tmp_path / "reports" / "clean_history_selection.json"
+    )
+    assert [row["stage"] for row in projection["rows"]] == [16, 50]
+    assert projection["rows"][-1]["fresh_mean_accuracy"] == 68.25
+    assert projection["rows"][-1]["h2048_accuracy"] == 63.125
     assert (tmp_path / "reports" / "clean_history_selection.csv").is_file()
     assert (tmp_path / "reports" / "clean_history_selection.parquet").is_file()
+
+
+def test_joint_iid_curve_is_authenticated_and_projected_by_stage(
+    tmp_path: Path,
+) -> None:
+    sealed_run_hash = "a" * 64
+    source_root = tmp_path / "sealed"
+    source = source_root / "runs" / sealed_run_hash / "reports" / "stage_accuracy.csv"
+    source.parent.mkdir(parents=True)
+    accuracies = [95.0 - stage / 4 for stage in range(1, 51)]
+    atomic_write(
+        source,
+        (
+            "accuracy,condition,diagnostic,score_mode,stage\n"
+            + "".join(
+                f"{accuracy},joint_iid_lora_r16,False,raw,{stage}\n"
+                for stage, accuracy in enumerate(accuracies, start=1)
+            )
+        ).encode("utf-8"),
+    )
+    atomic_write(
+        tmp_path / "config_resolved.json",
+        canonical_json_bytes(
+            {
+                "inference_artifact_root": str(source_root),
+                "sealed_run_hash": sealed_run_hash,
+            }
+        ),
+    )
+    locked = {
+        "local_references": {
+            "joint_iid_incremental": sum(accuracies) / len(accuracies),
+            "joint_iid_last": accuracies[-1],
+        },
+        "stage_metrics": [
+            {"accuracy": 50.0, "controls": {}, "stage": stage}
+            for stage in range(1, 51)
+        ],
+        "task_accuracy_matrix": [],
+    }
+
+    joint_rows = _joint_iid_stage_rows(tmp_path, locked)
+    flattened, _task_rows = _write_tables(
+        tmp_path / "reports", locked, joint_rows
+    )
+
+    assert len(joint_rows) == 50
+    assert flattened[0]["offline_joint_iid"] == accuracies[0]
+    assert flattened[-1]["offline_joint_iid"] == accuracies[-1]

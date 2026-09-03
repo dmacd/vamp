@@ -87,12 +87,15 @@ against this run's opened test results.
   of the 6,000 test identities appeared in training, proxy, or calibration
   requests before that seal.
 - The locked result contains 50 stage metrics and all 1,275 stage/task cells.
+- The accuracy figure separates selected clean-validation full-replay
+  checkpoints from locked-test curves and includes the authenticated 50-stage
+  offline joint-IID ceiling; `stage_metrics.*` carries the same joint curve.
 - An identical rerun completed in 4.535 seconds, reused all six phases, and
   performed zero additional leaf, parent, or integrator optimizer steps.
 - Content and nanosecond mtimes were unchanged for 100 leaf checkpoints, 94
   parent checkpoints, 100 persistent-integrator checkpoints, 1,576 hierarchy
   metadata files, 15 scientific JSON records, and the behavior ledger. See
   `../evaluations/reuse_proof.json`.
-- All 52 focused serial ImageNet-R tests and both explicitly enabled real-model
+- All 53 focused serial ImageNet-R tests and both explicitly enabled real-model
   integrator GPU tests passed. The Markdown/HTML report and both plots were
   inspected.

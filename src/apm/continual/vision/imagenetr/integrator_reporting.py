@@ -5,6 +5,7 @@ from __future__ import annotations
 from base64 import b64encode
 from collections.abc import Mapping, Sequence
 from html import escape
+from math import fsum, isclose, isfinite
 from pathlib import Path
 import csv
 import json
@@ -33,11 +34,77 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
         writer.writerows(rows)
 
 
+def _joint_iid_stage_rows(
+    run: Path, locked: Mapping[str, object] | None
+) -> list[dict[str, object]]:
+    """Load and authenticate the sealed run's complete raw joint-IID test curve."""
+    if locked is None:
+        return []
+    config = _load(run / "config_resolved.json")
+    if config is None or not config.get("sealed_run_hash"):
+        return []
+    sealed_run_hash = str(config["sealed_run_hash"])
+    configured_root = Path(str(config.get("inference_artifact_root", "")))
+    candidate_roots = (
+        ([configured_root] if configured_root.is_absolute() else [Path.cwd() / configured_root])
+        + list(run.parents)
+    )
+    source = next(
+        (
+            root / "runs" / sealed_run_hash / "reports" / "stage_accuracy.csv"
+            for root in candidate_roots
+            if (root / "runs" / sealed_run_hash / "reports" / "stage_accuracy.csv").is_file()
+        ),
+        None,
+    )
+    if source is None:
+        return []
+    with source.open(encoding="utf-8", newline="") as input_file:
+        matching = tuple(
+            row
+            for row in csv.DictReader(input_file)
+            if row["condition"] == "joint_iid_lora_r16"
+            and row["score_mode"] == "raw"
+            and row["diagnostic"].strip().lower() == "false"
+        )
+    rows = sorted(
+        (
+            {"accuracy": float(row["accuracy"]), "stage": int(row["stage"])}
+            for row in matching
+        ),
+        key=lambda row: int(row["stage"]),
+    )
+    stages = [int(row["stage"]) for row in rows]
+    if stages != list(range(1, 51)) or not all(
+        isfinite(float(row["accuracy"])) for row in rows
+    ):
+        raise ValueError(
+            "sealed joint-IID curve must contain one finite raw test value for every stage 1..50"
+        )
+    references = dict(locked.get("local_references", {}))
+    expected_last = float(references["joint_iid_last"])
+    expected_incremental = float(references["joint_iid_incremental"])
+    actual_last = float(rows[-1]["accuracy"])
+    actual_incremental = fsum(float(row["accuracy"]) for row in rows) / len(rows)
+    if not isclose(actual_last, expected_last, abs_tol=1e-6) or not isclose(
+        actual_incremental, expected_incremental, abs_tol=1e-6
+    ):
+        raise ValueError(
+            "sealed joint-IID curve does not match the locked endpoint and incremental references"
+        )
+    return rows
+
+
 def _write_tables(
-    report_root: Path, locked: Mapping[str, object] | None
+    report_root: Path,
+    locked: Mapping[str, object] | None,
+    joint_iid_rows: Sequence[Mapping[str, object]] = (),
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     stage_rows = [] if locked is None else [dict(row) for row in locked.get("stage_metrics", ())]
     task_rows = [] if locked is None else [dict(row) for row in locked.get("task_accuracy_matrix", ())]
+    joint_iid_by_stage = {
+        int(row["stage"]): float(row["accuracy"]) for row in joint_iid_rows
+    }
     flattened = [
         {
             "accuracy": row.get("accuracy"),
@@ -47,6 +114,7 @@ def _write_tables(
             "local_log_probability_union": dict(row.get("controls", {})).get(
                 "local_log_probability_union"
             ),
+            "offline_joint_iid": joint_iid_by_stage.get(int(row["stage"])),
             "raw_union": dict(row.get("controls", {})).get("raw_union"),
             "stage": row.get("stage"),
             "true_node_oracle": dict(row.get("controls", {})).get("true_node_oracle"),
@@ -74,18 +142,16 @@ def _write_tables(
 
 def _clean_history_rows(
     clean: Mapping[str, object] | None,
+    development: Mapping[str, object] | None = None,
 ) -> tuple[tuple[int, ...], list[dict[str, object]]]:
     """Project clean persistent-history measurements into one row per checkpoint."""
-    if clean is None:
-        return (), []
-    persistent = dict(clean.get("persistent", {}))
-    fresh = tuple(dict(row) for row in clean.get("fresh", ()))
+    clean_record = {} if clean is None else clean
+    persistent = dict(clean_record.get("persistent", {}))
+    fresh = tuple(dict(row) for row in clean_record.get("fresh", ()))
     controls = {
         int(dict(row)["stage"]): dict(row)
-        for row in clean.get("hierarchy_controls", ())
+        for row in clean_record.get("hierarchy_controls", ())
     }
-    if not persistent or not fresh:
-        return (), []
     histories = tuple(sorted((int(value) for value in persistent), key=int))
     persistent_by_history = {
         capacity: {
@@ -107,15 +173,74 @@ def _clean_history_rows(
             "true_node_oracle_accuracy": stage_controls.get("true_node_oracle"),
         }
         for capacity in histories:
-            persistent_accuracy = float(
-                persistent_by_history[capacity][stage]["accuracy"]
+            persistent_row = persistent_by_history[capacity].get(stage)
+            persistent_accuracy = (
+                None if persistent_row is None else float(persistent_row["accuracy"])
             )
             projected[f"h{capacity}_accuracy"] = persistent_accuracy
             projected[f"h{capacity}_minus_fresh_pp"] = (
-                persistent_accuracy - fresh_accuracy
+                None
+                if persistent_accuracy is None
+                else persistent_accuracy - fresh_accuracy
             )
         rows.append(projected)
-    return histories, rows
+    if development is None:
+        return histories, rows
+    development_fresh = tuple(dict(row) for row in development.get("fresh", ()))
+    development_persistent = tuple(
+        dict(row) for row in development.get("persistent", ()) if "accuracy" in row
+    )
+    selection = dict(development.get("selection", {}))
+    selected_capacity_value = selection.get("selected_historical_capacity")
+    if selected_capacity_value is None and development_persistent:
+        selected_capacity_value = development_persistent[-1].get("historical_capacity")
+    selected_capacity = (
+        None if selected_capacity_value is None else int(selected_capacity_value)
+    )
+    if selected_capacity is not None:
+        histories = tuple(sorted({*histories, selected_capacity}))
+    raw_development_controls = development.get("hierarchy_controls", ())
+    development_controls = (
+        (dict(raw_development_controls),)
+        if isinstance(raw_development_controls, Mapping)
+        else tuple(dict(row) for row in raw_development_controls)
+    )
+    controls_by_stage = {
+        int(row["stage"]): dict(row.get("controls", {}))
+        for row in development_controls
+    }
+    persistent_by_stage = {
+        int(row["stage"]): row for row in development_persistent
+    }
+    existing_stages = {int(row["stage"]) for row in rows}
+    for fresh_row in development_fresh:
+        stage = int(fresh_row["stage"])
+        if stage in existing_stages:
+            continue
+        fresh_accuracy = float(fresh_row["mean_validation_accuracy"])
+        persistent_row = persistent_by_stage.get(stage)
+        stage_controls = controls_by_stage.get(
+            stage,
+            {} if persistent_row is None else dict(persistent_row.get("controls", {})),
+        )
+        projected = {
+            "fresh_mean_accuracy": fresh_accuracy,
+            "raw_union_accuracy": stage_controls.get("raw_union"),
+            "stage": stage,
+            "true_node_oracle_accuracy": stage_controls.get("true_node_oracle"),
+        }
+        if selected_capacity is not None:
+            persistent_accuracy = (
+                None if persistent_row is None else float(persistent_row["accuracy"])
+            )
+            projected[f"h{selected_capacity}_accuracy"] = persistent_accuracy
+            projected[f"h{selected_capacity}_minus_fresh_pp"] = (
+                None
+                if persistent_accuracy is None
+                else persistent_accuracy - fresh_accuracy
+            )
+        rows.append(projected)
+    return histories, sorted(rows, key=lambda row: int(row["stage"]))
 
 
 def _write_clean_history_tables(
@@ -408,6 +533,8 @@ def _accuracy_plot(
     path: Path,
     diagnostic: Mapping[str, object] | None,
     locked_rows: Sequence[Mapping[str, object]],
+    joint_iid_rows: Sequence[Mapping[str, object]],
+    joint_iid_last: float | None,
     histories: Sequence[int],
     history_rows: Sequence[Mapping[str, object]],
 ) -> None:
@@ -416,7 +543,15 @@ def _accuracy_plot(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+    def series_values(
+        rows: Sequence[Mapping[str, object]], key: str
+    ) -> list[float]:
+        return [
+            float("nan") if row.get(key) is None else float(row[key])
+            for row in rows
+        ]
+
+    fig, axes = plt.subplots(1, 3, figsize=(20, 5.5))
     if diagnostic:
         feature = dict(diagnostic.get("feature_accuracies", {}))
         controls = {
@@ -425,64 +560,118 @@ def _accuracy_plot(
             if name != "true_node_oracle"
         }
         labels = list(feature) + ["best static"]
-        values = [float(feature[label]) for label in feature] + ([max(controls.values())] if controls else [0.0])
-        axes[0].bar(labels, values, color=["#1565c0"] * len(feature) + ["#9e9e9e"])
+        bar_values = [float(feature[label]) for label in feature] + (
+            [max(controls.values())] if controls else [0.0]
+        )
+        axes[0].bar(
+            labels,
+            bar_values,
+            color=["#1565c0"] * len(feature) + ["#9e9e9e"],
+        )
         axes[0].set_ylim(0, 100)
         axes[0].tick_params(axis="x", rotation=25)
         axes[0].set(title="Sealed diagnostic", ylabel="Validation accuracy (%)")
     else:
         axes[0].text(0.5, 0.5, "Diagnostic not complete", ha="center", va="center")
         axes[0].set_axis_off()
-    if locked_rows:
-        stages = [int(row["stage"]) for row in locked_rows]
-        axes[1].plot(
-            stages,
-            [float(row["accuracy"]) for row in locked_rows],
-            label="full-union integrator",
-        )
-        for key, label in (
-            ("raw_union", "raw union"),
-            ("true_node_oracle", "true-node oracle"),
-        ):
-            axes[1].plot(
-                stages,
-                [float(row[key]) for row in locked_rows],
-                label=label,
-                linestyle="--",
-            )
-        axes[1].set(xlabel="Tasks seen", ylabel="Test accuracy (%)", title="Locked local benchmark")
-        axes[1].set_ylim(0, 100)
-        axes[1].grid(alpha=0.2)
-        axes[1].legend()
-    elif history_rows:
+    if history_rows:
         stages = [int(row["stage"]) for row in history_rows]
         axes[1].plot(
             stages,
-            [float(row["fresh_mean_accuracy"]) for row in history_rows],
+            series_values(history_rows, "fresh_mean_accuracy"),
             color="#263238",
+            linewidth=2.2,
             marker="o",
-            label="fresh full replay",
+            label="fresh full-replay integrator",
         )
-        colors = ("#1565c0", "#ef6c00", "#2e7d32", "#6a1b9a")
+        colors = ("#1565c0", "#6a1b9a", "#00838f", "#ad1457")
         for index, capacity in enumerate(histories):
+            key = f"h{capacity}_accuracy"
+            if not any(row.get(key) is not None for row in history_rows):
+                continue
             axes[1].plot(
                 stages,
-                [float(row[f"h{capacity}_accuracy"]) for row in history_rows],
+                series_values(history_rows, key),
                 color=colors[index % len(colors)],
                 marker="s",
                 label=f"persistent H={capacity}",
             )
+        axes[1].plot(
+            stages,
+            series_values(history_rows, "raw_union_accuracy"),
+            color="#ef6c00",
+            linestyle="--",
+            marker="^",
+            label="raw union",
+        )
+        axes[1].plot(
+            stages,
+            series_values(history_rows, "true_node_oracle_accuracy"),
+            color="#2e7d32",
+            linestyle=":",
+            marker="D",
+            label="true-node oracle",
+        )
         axes[1].set(
             xlabel="Tasks seen",
             ylabel="Validation accuracy (%)",
-            title="Clean integrator-history measurements",
+            title="Clean validation checkpoints",
             xticks=stages,
         )
+        axes[1].set_ylim(55, 100)
         axes[1].grid(alpha=0.2)
-        axes[1].legend()
+        axes[1].legend(fontsize=8)
     else:
-        axes[1].text(0.5, 0.5, "Locked test not opened", ha="center", va="center")
+        axes[1].text(0.5, 0.5, "Validation checkpoints not complete", ha="center", va="center")
         axes[1].set_axis_off()
+    if locked_rows:
+        stages = [int(row["stage"]) for row in locked_rows]
+        axes[2].plot(
+            stages,
+            series_values(locked_rows, "accuracy"),
+            color="#1565c0",
+            linewidth=2.0,
+            label="persistent full-union integrator",
+        )
+        for key, label, color, linestyle in (
+            ("raw_union", "raw union", "#ef6c00", "--"),
+            ("true_node_oracle", "true-node oracle", "#2e7d32", ":"),
+        ):
+            axes[2].plot(
+                stages,
+                series_values(locked_rows, key),
+                color=color,
+                label=label,
+                linestyle=linestyle,
+            )
+        if joint_iid_rows:
+            axes[2].plot(
+                [int(row["stage"]) for row in joint_iid_rows],
+                series_values(joint_iid_rows, "accuracy"),
+                color="#212121",
+                linewidth=2.2,
+                linestyle="-.",
+                label="offline joint-IID ceiling",
+            )
+        elif joint_iid_last is not None:
+            axes[2].axhline(
+                joint_iid_last,
+                color="#212121",
+                linewidth=2.2,
+                linestyle="-.",
+                label="offline joint-IID final ceiling",
+            )
+        axes[2].set(
+            xlabel="Tasks seen",
+            ylabel="Test accuracy (%)",
+            title="Locked test with offline joint-IID ceiling",
+        )
+        axes[2].set_ylim(55, 100)
+        axes[2].grid(alpha=0.2)
+        axes[2].legend(fontsize=8)
+    else:
+        axes[2].text(0.5, 0.5, "Locked test not opened", ha="center", va="center")
+        axes[2].set_axis_off()
     fig.tight_layout()
     fig.savefig(path, dpi=170)
     plt.close(fig)
@@ -524,8 +713,9 @@ def write_integrator_report(run_root: str | Path) -> Path:
     clean = _load(run / "evaluations" / "clean_development.json")
     development = _load(run / "evaluations" / "development_task50.json")
     locked = _load(run / "evaluations" / "locked_test.json")
-    stage_rows, _task_rows = _write_tables(reports, locked)
-    histories, history_rows = _clean_history_rows(clean)
+    joint_iid_rows = _joint_iid_stage_rows(run, locked)
+    stage_rows, _task_rows = _write_tables(reports, locked, joint_iid_rows)
+    histories, history_rows = _clean_history_rows(clean, development)
     _write_clean_history_tables(reports, histories, history_rows)
     resources = _resource_rows(run)
     _write_resource_tables(reports, resources)
@@ -536,6 +726,12 @@ def write_integrator_report(run_root: str | Path) -> Path:
         accuracy_plot,
         diagnostic,
         stage_rows,
+        joint_iid_rows,
+        (
+            None
+            if locked is None
+            else float(dict(locked.get("local_references", {}))["joint_iid_last"])
+        ),
         histories,
         history_rows,
     )
@@ -607,19 +803,26 @@ def write_integrator_report(run_root: str | Path) -> Path:
     history_headers = ["stage", "fresh mean", "raw union", "true-node oracle"]
     for capacity in histories:
         history_headers.extend((f"H={capacity}", f"H={capacity} - fresh (pp)"))
+
+    def accuracy_text(value: object) -> str:
+        return "—" if value is None else f"{float(value):.3f}"
+
+    def difference_text(value: object) -> str:
+        return "—" if value is None else f"{float(value):+.3f}"
+
     history_table_rows = []
     for row in history_rows:
         values: list[object] = [
             row["stage"],
-            f"{float(row['fresh_mean_accuracy']):.3f}",
-            f"{float(row['raw_union_accuracy']):.3f}",
-            f"{float(row['true_node_oracle_accuracy']):.3f}",
+            accuracy_text(row.get("fresh_mean_accuracy")),
+            accuracy_text(row.get("raw_union_accuracy")),
+            accuracy_text(row.get("true_node_oracle_accuracy")),
         ]
         for capacity in histories:
             values.extend(
                 (
-                    f"{float(row[f'h{capacity}_accuracy']):.3f}",
-                    f"{float(row[f'h{capacity}_minus_fresh_pp']):+.3f}",
+                    accuracy_text(row.get(f"h{capacity}_accuracy")),
+                    difference_text(row.get(f"h{capacity}_minus_fresh_pp")),
                 )
             )
         history_table_rows.append(tuple(values))
@@ -629,6 +832,13 @@ def write_integrator_report(run_root: str | Path) -> Path:
         "differences are diagnostic, not thresholds.\n\n"
         if clean is not None
         else ""
+    )
+    split_note = (
+        "The middle accuracy panel shows fresh full-replay and persistent integrator "
+        "measurements only at the selected clean-validation checkpoints (tasks "
+        "2/4/8/16/50). The right panel shows the complete locked-test curves, including "
+        "the offline joint-IID ceiling. Validation and test curves are deliberately kept "
+        "in separate panels and must not be compared point-for-point across splits."
     )
     resource_summary = [
         (
@@ -694,7 +904,9 @@ def write_integrator_report(run_root: str | Path) -> Path:
             resource_summary,
         )
         + "\nExact per-request cache/model work is retained in `resource_accounting.*`.\n\n"
-        + "## Figures\n\n![Accuracy](accuracy.png)\n\n![Capacity-one lineage](lineage.png)\n"
+        + "## Figures\n\n"
+        + split_note
+        + "\n\n![Accuracy](accuracy.png)\n\n![Capacity-one lineage](lineage.png)\n"
     )
     atomic_write(reports / "REPORT.md", markdown.encode("utf-8"))
     diagnostic_html = _html_table(("feature family", "mean validation accuracy"), diagnostic_rows)
@@ -727,7 +939,7 @@ def write_integrator_report(run_root: str | Path) -> Path:
 <details><summary>Report-only feature diagnostic</summary>{diagnostic_html}<p>Configured feature family: <code>{escape(str(None if diagnostic is None else diagnostic.get('selected_variant')))}</code>.</p></details>
 <details open><summary>Frozen development choices</summary><p><code>{escape(json.dumps(selected, sort_keys=True))}</code></p><p>{escape(clean_note.strip())}</p>{history_html}<p>Validation identities are excluded from all clean trainable components.</p></details>
 <details><summary>Final-frontier diagnostics</summary>{static_html}<p>These rows explain the hierarchy frontier and do not define acceptance.</p></details>
-<details open><summary>Accuracy</summary><img alt="Diagnostic and locked accuracy plots" src="{_image_data(accuracy_plot)}"></details>
+<details open><summary>Accuracy</summary><p>{escape(split_note)}</p><img alt="Feature diagnostic, selected validation checkpoints, and locked test curves with the offline joint-IID ceiling" src="{_image_data(accuracy_plot)}"></details>
 <details><summary>Capacity-one lineage</summary><img alt="Capacity-one binary-counter lineage" src="{_image_data(lineage)}"></details>
 <details><summary>Complexity and resources</summary><p>There are at most bit_length(t) carries and popcount(t) live nodes. Full-union carry cost grows with interval size; cumulative parent presentations are O(N T log T) for N examples per task. Persistent observer work stays bounded by popcount(t) × (current + H).</p>{resource_html}<pre>{escape(json.dumps({'clean': clean, 'development': development}, indent=2, sort_keys=True))}</pre></details>
 </body></html>"""

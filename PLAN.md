@@ -59,11 +59,17 @@
   unchanged for 100 leaf checkpoints, 94 parent checkpoints, 100 persistent
   integrator checkpoints, 1,576 hierarchy metadata files, 15 scientific JSON
   records, and the behavior ledger.
-- All 52 focused serial ImageNet-R tests and both explicitly enabled real-model
+- All 53 focused serial ImageNet-R tests and both explicitly enabled real-model
   integrator GPU tests pass. The Markdown and standalone HTML reports, accuracy
   plot, and lineage plot have been inspected. Compact evidence and the handoff
   live under
   `artifacts/imagenetr50/integrator_full_union_ungated_v3/runs/fd5cb0502d705bbd9662e197e9d867fda2b6c1b633c340f513be4b33579fd8b4/`.
+- **Report correction (2026-09-03):** the accuracy figure now keeps selected
+  fresh full-replay measurements on their clean-validation panel and plots the
+  complete 50-stage offline joint-IID ceiling beside the continual methods on
+  the locked-test panel. The joint curve is loaded from the bound sealed run,
+  checked against both authenticated aggregate values, and included in the
+  machine-readable stage table. This correction changes no training result.
 
 ## Completed Outcome — ImageNet-R-50 Full-Union Prediction Integrator (v2)
 
