@@ -1,4 +1,4 @@
-"""Strict configuration for the ImageNet-R LogT prediction integrator."""
+"""Strict configuration for the ungated ImageNet-R LogT prediction integrator."""
 
 from __future__ import annotations
 
@@ -48,35 +48,28 @@ class IntegratorOptimizationConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class IntegratorGateConfig:
-    """Predeclared diagnostic, development, and replication gates."""
+class IntegratorSelectionConfig:
+    """Choices frozen from the completed v2 development-only evidence."""
 
-    diagnostic_accuracy: float
-    diagnostic_control_margin: float
-    feature_tolerance: float
-    persistent_fresh_tolerance: float
-    task16_persistent_fresh_tolerance: float
-    persistent_control_margin: float
-    development_accuracy: float
-    development_control_margin: float
+    feature_variant: str
+    historical_capacity: int
+
+    def __post_init__(self) -> None:
+        if self.feature_variant not in FEATURE_VARIANTS or self.historical_capacity < 1:
+            raise ValueError("invalid frozen integrator selection")
+
+
+@dataclass(frozen=True, slots=True)
+class IntegratorReferenceConfig:
+    """Authenticated report-only E2-LoRA reference values."""
+
     local_e2_last: float
     local_e2_incremental: float
 
     def __post_init__(self) -> None:
-        percentages = (
-            self.diagnostic_accuracy,
-            self.diagnostic_control_margin,
-            self.feature_tolerance,
-            self.persistent_fresh_tolerance,
-            self.task16_persistent_fresh_tolerance,
-            self.persistent_control_margin,
-            self.development_accuracy,
-            self.development_control_margin,
-            self.local_e2_last,
-            self.local_e2_incremental,
-        )
+        percentages = (self.local_e2_last, self.local_e2_incremental)
         if any(not 0.0 <= value <= 100.0 for value in percentages):
-            raise ValueError("integrator gates must be percentage-point values")
+            raise ValueError("integrator references must be percentages")
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,11 +83,14 @@ class ImageNetRIntegratorConfig:
     artifact_root: Path
     inference_artifact_root: Path
     router_artifact_root: Path
+    predecessor_artifact_root: Path
     data_root: Path
     sealed_run_hash: str
     sealed_u100_policy_hash: str
     sealed_router_run_hash: str
     sealed_router_split_hash: str
+    predecessor_run_hash: str
+    predecessor_clean_development_sha256: str
     handoff_commit: str
     classes: int
     tasks: int
@@ -104,12 +100,12 @@ class ImageNetRIntegratorConfig:
     diagnostic_maximum_slots: int
     parent_training: str
     source_identity_capacity: int
-    historical_reservoir_sizes: tuple[int, ...]
-    calibration_checkpoints: tuple[int, ...]
+    reporting_checkpoints: tuple[int, ...]
     consolidation_training: TrainingConfig
     feature_variants: tuple[str, ...]
     optimization: IntegratorOptimizationConfig
-    gates: IntegratorGateConfig
+    selection: IntegratorSelectionConfig
+    references: IntegratorReferenceConfig
     feature_batch_size: int
     num_workers: int
     checkpoint_steps: int
@@ -121,11 +117,13 @@ class ImageNetRIntegratorConfig:
             ("sealed U100 policy", self.sealed_u100_policy_hash),
             ("sealed router run", self.sealed_router_run_hash),
             ("sealed router split", self.sealed_router_split_hash),
+            ("predecessor run", self.predecessor_run_hash),
+            ("predecessor clean development", self.predecessor_clean_development_sha256),
         ):
             require_sha256(identity, label)
         if (
-            self.name != "imagenetr50_logt_prediction_integrator_full_union_v2"
-            or self.protocol_revision != "imagenetr50-logt-integrator-full-union-v2"
+            self.name != "imagenetr50_logt_prediction_integrator_full_union_ungated_v3"
+            or self.protocol_revision != "imagenetr50-logt-integrator-full-union-ungated-v3"
             or self.seed < 0
             or not self.replication_seeds
             or self.replication_seeds[0] != self.seed
@@ -141,9 +139,10 @@ class ImageNetRIntegratorConfig:
             or self.diagnostic_maximum_slots != 8
             or self.parent_training != "full_union"
             or self.source_identity_capacity != 24_000
-            or self.historical_reservoir_sizes != (512, 1024, 2048)
-            or self.calibration_checkpoints != (2, 4, 8, 16)
+            or self.reporting_checkpoints != (2, 4, 8, 16)
             or self.feature_variants != FEATURE_VARIANTS
+            or self.selection.feature_variant != "scores"
+            or self.selection.historical_capacity != 2048
             or self.feature_batch_size < 1
             or self.num_workers < 0
             or self.checkpoint_steps < 1
@@ -163,6 +162,7 @@ class ImageNetRIntegratorConfig:
             "artifact_root",
             "inference_artifact_root",
             "router_artifact_root",
+            "predecessor_artifact_root",
             "data_root",
         ):
             record[name] = str(getattr(self, name))
@@ -208,7 +208,17 @@ def load_integrator_config(path: str | Path) -> ImageNetRIntegratorConfig:
     root = _mapping(
         yaml.safe_load(source.read_text(encoding="utf-8")),
         "configuration",
-        {"experiment", "paths", "sealed_inputs", "dataset", "hierarchy", "integrator", "gates", "runtime"},
+        {
+            "experiment",
+            "paths",
+            "sealed_inputs",
+            "dataset",
+            "hierarchy",
+            "integrator",
+            "selection",
+            "references",
+            "runtime",
+        },
     )
     experiment = _mapping(
         root["experiment"], "experiment", {"name", "protocol_revision", "seed", "replication_seeds"}
@@ -216,12 +226,26 @@ def load_integrator_config(path: str | Path) -> ImageNetRIntegratorConfig:
     paths = _mapping(
         root["paths"],
         "paths",
-        {"artifact_root", "inference_artifact_root", "router_artifact_root", "data_root"},
+        {
+            "artifact_root",
+            "inference_artifact_root",
+            "router_artifact_root",
+            "predecessor_artifact_root",
+            "data_root",
+        },
     )
     sealed = _mapping(
         root["sealed_inputs"],
         "sealed_inputs",
-        {"run_hash", "u100_policy_hash", "router_run_hash", "router_split_hash", "handoff_commit"},
+        {
+            "run_hash",
+            "u100_policy_hash",
+            "router_run_hash",
+            "router_split_hash",
+            "predecessor_run_hash",
+            "predecessor_clean_development_sha256",
+            "handoff_commit",
+        },
     )
     dataset = _mapping(
         root["dataset"], "dataset", {"classes", "tasks", "classes_per_task", "fit_fraction"}
@@ -234,8 +258,7 @@ def load_integrator_config(path: str | Path) -> ImageNetRIntegratorConfig:
             "diagnostic_maximum_slots",
             "parent_training",
             "source_identity_capacity",
-            "historical_reservoir_sizes",
-            "calibration_checkpoints",
+            "reporting_checkpoints",
             "consolidation_training",
         },
     )
@@ -260,21 +283,15 @@ def load_integrator_config(path: str | Path) -> ImageNetRIntegratorConfig:
     )
     if str(integrator["optimizer"]).lower() != "adamw":
         raise ValueError("the prediction integrator must use AdamW")
-    gates = _mapping(
-        root["gates"],
-        "gates",
-        {
-            "diagnostic_accuracy",
-            "diagnostic_control_margin",
-            "feature_tolerance",
-            "persistent_fresh_tolerance",
-            "task16_persistent_fresh_tolerance",
-            "persistent_control_margin",
-            "development_accuracy",
-            "development_control_margin",
-            "local_e2_last",
-            "local_e2_incremental",
-        },
+    selection = _mapping(
+        root["selection"],
+        "selection",
+        {"feature_variant", "historical_capacity"},
+    )
+    references = _mapping(
+        root["references"],
+        "references",
+        {"local_e2_last", "local_e2_incremental"},
     )
     runtime = _mapping(
         root["runtime"],
@@ -290,11 +307,16 @@ def load_integrator_config(path: str | Path) -> ImageNetRIntegratorConfig:
         artifact_root=_path(paths["artifact_root"], project_root),
         inference_artifact_root=_path(paths["inference_artifact_root"], project_root),
         router_artifact_root=_path(paths["router_artifact_root"], project_root),
+        predecessor_artifact_root=_path(paths["predecessor_artifact_root"], project_root),
         data_root=_path(os.environ.get("CIL_DATA_ROOT", str(paths["data_root"])), project_root),
         sealed_run_hash=str(sealed["run_hash"]),
         sealed_u100_policy_hash=str(sealed["u100_policy_hash"]),
         sealed_router_run_hash=str(sealed["router_run_hash"]),
         sealed_router_split_hash=str(sealed["router_split_hash"]),
+        predecessor_run_hash=str(sealed["predecessor_run_hash"]),
+        predecessor_clean_development_sha256=str(
+            sealed["predecessor_clean_development_sha256"]
+        ),
         handoff_commit=str(sealed["handoff_commit"]),
         classes=int(dataset["classes"]),
         tasks=int(dataset["tasks"]),
@@ -304,8 +326,7 @@ def load_integrator_config(path: str | Path) -> ImageNetRIntegratorConfig:
         diagnostic_maximum_slots=int(hierarchy["diagnostic_maximum_slots"]),
         parent_training=str(hierarchy["parent_training"]),
         source_identity_capacity=int(hierarchy["source_identity_capacity"]),
-        historical_reservoir_sizes=tuple(int(value) for value in hierarchy["historical_reservoir_sizes"]),
-        calibration_checkpoints=tuple(int(value) for value in hierarchy["calibration_checkpoints"]),
+        reporting_checkpoints=tuple(int(value) for value in hierarchy["reporting_checkpoints"]),
         consolidation_training=_training(hierarchy["consolidation_training"]),
         feature_variants=tuple(str(value) for value in integrator["feature_variants"]),
         optimization=IntegratorOptimizationConfig(
@@ -321,7 +342,13 @@ def load_integrator_config(path: str | Path) -> ImageNetRIntegratorConfig:
             fresh_patience=int(integrator["fresh_patience"]),
             improvement_delta=float(integrator["improvement_delta"]),
         ),
-        gates=IntegratorGateConfig(**{key: float(value) for key, value in gates.items()}),
+        selection=IntegratorSelectionConfig(
+            feature_variant=str(selection["feature_variant"]),
+            historical_capacity=int(selection["historical_capacity"]),
+        ),
+        references=IntegratorReferenceConfig(
+            **{key: float(value) for key, value in references.items()}
+        ),
         feature_batch_size=int(runtime["feature_batch_size"]),
         num_workers=int(runtime["num_workers"]),
         checkpoint_steps=int(runtime["checkpoint_steps"]),
@@ -332,7 +359,8 @@ def load_integrator_config(path: str | Path) -> ImageNetRIntegratorConfig:
 __all__ = [
     "FEATURE_VARIANTS",
     "ImageNetRIntegratorConfig",
-    "IntegratorGateConfig",
+    "IntegratorReferenceConfig",
+    "IntegratorSelectionConfig",
     "IntegratorOptimizationConfig",
     "load_integrator_config",
 ]

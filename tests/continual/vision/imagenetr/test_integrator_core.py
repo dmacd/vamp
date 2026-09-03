@@ -80,11 +80,14 @@ def _frontier() -> FrontierTensors:
 
 def test_resolved_config_and_capacity_one_topology_match_the_protocol() -> None:
     config = load_integrator_config(
-        "configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml"
+        "configs/vision/imagenetr/logt_prediction_integrator_full_union_ungated_v3.yaml"
     )
     policy = hierarchy_policy(config, "fit")
     assert policy.parent_training == "full_union"
     assert policy.source_identity_capacity == 24_000
+    assert config.selection.feature_variant == "scores"
+    assert config.selection.historical_capacity == 2048
+    assert not hasattr(config, "gates")
     events, snapshots = simulate_binary_topology(config.tasks)
     require_binary_work_bound(snapshots, events)
     assert len(events) == 47
@@ -178,7 +181,7 @@ def test_feature_selection_chooses_smallest_family_near_the_best() -> None:
 
 def test_persistent_training_is_independent_of_ambient_dropout_rng() -> None:
     config = load_integrator_config(
-        "configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml"
+        "configs/vision/imagenetr/logt_prediction_integrator_full_union_ungated_v3.yaml"
     )
     seen = torch.zeros(200, dtype=torch.bool)
     seen[:4] = True

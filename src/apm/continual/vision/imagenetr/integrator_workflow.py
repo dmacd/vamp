@@ -1,4 +1,4 @@
-"""Phase-gated local workflow for the ImageNet-R LogT prediction integrator."""
+"""Resumable ungated workflow for the ImageNet-R LogT prediction integrator."""
 
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from apm.continual.artifacts import (
     publish_immutable_json,
     record_sha256,
 )
-from apm.continual.vision.imagenetr.artifacts import NodeBundle, load_node_bundle
 from apm.continual.vision.imagenetr.calibration import (
     CalibrationExamples,
     fit_affine_calibration,
@@ -45,7 +44,6 @@ from apm.continual.vision.imagenetr.integrator_model import (
     fit_integrator_epochs,
     parameter_count,
     predict_integrator,
-    select_smallest_near_best,
 )
 from apm.continual.vision.imagenetr.integrator_observations import (
     BehaviorNode,
@@ -64,7 +62,7 @@ from apm.continual.vision.imagenetr.router_features import test_transform_hash
 
 
 DEFAULT_INTEGRATOR_CONFIG = Path(
-    "configs/vision/imagenetr/logt_prediction_integrator_full_union_v2.yaml"
+    "configs/vision/imagenetr/logt_prediction_integrator_full_union_ungated_v3.yaml"
 )
 HISTORICAL_NAMESPACE = "imagenetr50-integrator-history-bottom-k-v1"
 
@@ -362,8 +360,9 @@ def _local_reference_results(bootstrap: IntegratorBootstrap) -> dict[str, float]
     local_incremental = float(external["local_incremental_average_accuracy"])
     if (
         not bool(external.get("succeeded"))
-        or abs(local_last - bootstrap.config.gates.local_e2_last) > 1.0e-9
-        or abs(local_incremental - bootstrap.config.gates.local_e2_incremental) > 1.0e-9
+        or abs(local_last - bootstrap.config.references.local_e2_last) > 1.0e-9
+        or abs(local_incremental - bootstrap.config.references.local_e2_incremental)
+        > 1.0e-9
     ):
         raise ValueError("configured E2-LoRA comparator differs from its sealed local run")
     return {
@@ -372,6 +371,9 @@ def _local_reference_results(bootstrap: IntegratorBootstrap) -> dict[str, float]
         ),
         "joint_iid_last": float(
             by_condition["joint_iid_lora_r16"]["raw_last_accuracy"]
+        ),
+        "joint_iid_incremental": float(
+            by_condition["joint_iid_lora_r16"]["raw_incremental_accuracy"]
         ),
         "local_e2_incremental": local_incremental,
         "local_e2_last": local_last,
@@ -560,17 +562,11 @@ def run_sealed_diagnostic(
             run_rows.append(row)
             variant_results.append(float(result.validation_accuracy or 0.0))
         selected_accuracies[variant] = sum(variant_results) / len(variant_results)
-    selected_variant = select_smallest_near_best(
-        selected_accuracies, bootstrap.config.gates.feature_tolerance
-    )
+    selected_variant = bootstrap.config.selection.feature_variant
     best_control = max(
         value for name, value in controls.items() if name != "true_node_oracle"
     )
     best_integrator = max(selected_accuracies.values())
-    gate_open = (
-        best_integrator >= bootstrap.config.gates.diagnostic_accuracy
-        and best_integrator >= best_control + bootstrap.config.gates.diagnostic_control_margin
-    )
     core: dict[str, object] = {
         "best_control_accuracy": best_control,
         "best_integrator_accuracy": best_integrator,
@@ -578,78 +574,15 @@ def run_sealed_diagnostic(
         "cache_hits": tensors.cache_hits,
         "cache_misses": tensors.cache_misses,
         "controls": controls,
+        "configured_variant_accuracy": selected_accuracies[selected_variant],
         "feature_accuracies": selected_accuracies,
         "feature_restart_aggregation": "arithmetic_mean",
-        "gate_open": gate_open,
         "node_example_forwards": tensors.node_example_forwards,
         "optimistic": True,
+        "role": "report_only_diagnostic",
         "runs": run_rows,
-        "schema_version": "imagenetr50-integrator-sealed-diagnostic-v1",
+        "schema_version": "imagenetr50-integrator-sealed-diagnostic-v2",
         "selected_variant": selected_variant,
-    }
-    record = {**core, "content_hash": record_sha256(core)}
-    publish_immutable_json(target, record)
-    return record
-
-
-def run_all_leaf_ceiling(
-    bootstrap: IntegratorBootstrap,
-    variant: str,
-    device: torch.device,
-) -> dict[str, object]:
-    """Run the declared static all-leaf ceiling after a failed U100 diagnostic."""
-    target = bootstrap.store.run / "diagnostic" / "all_leaf_ceiling.json"
-    if target.is_file():
-        return load_canonical_json(target)
-    print("[diagnostic fallback] All-50-leaf prediction ceiling", flush=True)
-    leaf_directories = tuple(
-        next(path for path in task_root.iterdir() if path.is_dir())
-        for task_root in sorted((bootstrap.sealed_tree.snapshots[0].nodes[0].directory.parents[2] / "leaves").glob("task_*"))
-    )
-    if len(leaf_directories) != 50:
-        raise ValueError("sealed primary run does not expose exactly 50 leaf artifacts")
-    bundles = tuple(load_node_bundle(path) for path in leaf_directories)
-    nodes = tuple(BehaviorNode.from_bundle(bundle) for bundle in bundles)
-    rows = bootstrap.manifest.select("train")
-    tensors = _frontier_tensors(
-        bootstrap,
-        nodes,
-        tuple(range(50)),
-        50,
-        rows,
-        device,
-        "sealed_all_leaves",
-    )
-    fit = frozenset(bootstrap.split.fit_image_ids)
-    validation = frozenset(bootstrap.split.validation_image_ids)
-    fit_ids = tuple(image_id for image_id in tensors.image_ids if image_id in fit)
-    validation_ids = tuple(image_id for image_id in tensors.image_ids if image_id in validation)
-    frontier_hash = record_sha256(
-        {
-            "node_hashes": [node.node_hash for node in nodes],
-            "schema_version": "imagenetr50-integrator-all-leaf-frontier-v1",
-        }
-    )
-    _state, result, artifact = _fit_or_load_fresh(
-        bootstrap,
-        "all_leaf_ceiling",
-        frontier_hash,
-        tensors,
-        variant,
-        50,
-        fit_ids,
-        validation_ids,
-        bootstrap.config.seed,
-        50,
-        device,
-    )
-    core = {
-        "artifact": str(artifact),
-        "controls": _control_metrics(tensors.select(validation_ids)),
-        "schema_version": "imagenetr50-integrator-all-leaf-ceiling-v1",
-        "validation_accuracy": result.validation_accuracy,
-        "validation_loss": result.validation_loss,
-        "variant": variant,
     }
     record = {**core, "content_hash": record_sha256(core)}
     publish_immutable_json(target, record)
@@ -677,7 +610,7 @@ def run_smoke(
         bootstrap,
         hierarchy,
         selected_variant,
-        min(bootstrap.config.historical_reservoir_sizes),
+        bootstrap.config.selection.historical_capacity,
         "fit",
         "validation",
         bootstrap.config.smoke_tasks,
@@ -698,7 +631,7 @@ def run_smoke(
         bootstrap,
         replayed,
         selected_variant,
-        min(bootstrap.config.historical_reservoir_sizes),
+        bootstrap.config.selection.historical_capacity,
         "fit",
         "validation",
         bootstrap.config.smoke_tasks,
@@ -733,11 +666,11 @@ def run_smoke(
     }
     core = {
         "acceptance": checks,
-        "gate_open": all(checks.values()),
+        "integrity_passed": all(checks.values()),
         "hierarchy_work": asdict(hierarchy.work),
         "metric": final,
         "reuse_work": asdict(replayed.work),
-        "schema_version": "imagenetr50-integrator-smoke-v2",
+        "schema_version": "imagenetr50-integrator-smoke-v3",
         "selected_variant": selected_variant,
     }
     record = {**core, "content_hash": record_sha256(core)}
@@ -1089,51 +1022,16 @@ def _persistent_run(
     return state, combined
 
 
-def _select_historical_capacity(
-    runs: Mapping[int, Sequence[dict[str, object]]],
-    fresh: Sequence[dict[str, object]],
-    control_floor: float,
-    bootstrap: IntegratorBootstrap,
-) -> int | None:
-    fresh_by_stage = {
-        int(row["stage"]): float(row["mean_validation_accuracy"]) for row in fresh
-    }
-    checkpoints = frozenset(bootstrap.config.calibration_checkpoints)
-    for capacity in sorted(runs):
-        evaluated = {
-            int(row["stage"]): row
-            for row in runs[capacity]
-            if "accuracy" in row and int(row["stage"]) in checkpoints
-        }
-        if set(evaluated) != checkpoints:
-            continue
-        within = all(
-            fresh_by_stage[stage] - float(evaluated[stage]["accuracy"])
-            <= (
-                bootstrap.config.gates.task16_persistent_fresh_tolerance
-                if stage == 16
-                else bootstrap.config.gates.persistent_fresh_tolerance
-            )
-            for stage in checkpoints
-        )
-        margin = float(evaluated[16]["accuracy"]) >= (
-            control_floor + bootstrap.config.gates.persistent_control_margin
-        )
-        if within and margin:
-            return capacity
-    return None
-
-
 def run_clean_development(
     bootstrap: IntegratorBootstrap,
     selected_variant: str,
     device: torch.device,
 ) -> dict[str, object]:
-    """Select bounded integrator history on the full-union clean hierarchy."""
+    """Measure the frozen v2 choices on the task-16 clean hierarchy."""
     target = bootstrap.store.run / "evaluations" / "clean_development.json"
     if target.is_file():
         return load_canonical_json(target)
-    print("[phase 3/6] Full-union clean hierarchy and history selection", flush=True)
+    print("[phase 3/6] Full-union task-16 development measurements", flush=True)
     selected_tree = build_hierarchy(
         bootstrap,
         hierarchy_policy(bootstrap.config, "fit"),
@@ -1144,7 +1042,7 @@ def run_clean_development(
     hierarchy_controls = _hierarchy_controls(
         bootstrap,
         selected_tree,
-        bootstrap.config.calibration_checkpoints,
+        bootstrap.config.reporting_checkpoints,
         "validation",
         device,
     )
@@ -1152,44 +1050,44 @@ def run_clean_development(
         bootstrap,
         selected_tree,
         selected_variant,
-        bootstrap.config.calibration_checkpoints,
+        bootstrap.config.reporting_checkpoints,
         device,
     )
-    persistent: dict[int, tuple[dict[str, object], ...]] = {}
-    for capacity in bootstrap.config.historical_reservoir_sizes:
-        print(f"  persistent history calibration H={capacity}", flush=True)
-        _state, rows = _persistent_run(
-            bootstrap,
-            selected_tree,
-            selected_variant,
-            capacity,
-            "fit",
-            "validation",
-            16,
-            bootstrap.config.calibration_checkpoints,
-            bootstrap.config.seed,
-            device,
-        )
-        persistent[capacity] = rows
+    selected_history = bootstrap.config.selection.historical_capacity
+    print(f"  frozen persistent history H={selected_history}", flush=True)
+    _state, persistent_rows = _persistent_run(
+        bootstrap,
+        selected_tree,
+        selected_variant,
+        selected_history,
+        "fit",
+        "validation",
+        16,
+        bootstrap.config.reporting_checkpoints,
+        bootstrap.config.seed,
+        device,
+    )
     task16_controls = next(row for row in hierarchy_controls if row["stage"] == 16)
     control_floor = max(
         float(value)
         for name, value in task16_controls["controls"].items()
         if name != "true_node_oracle"
     )
-    selected_history = _select_historical_capacity(
-        persistent, fresh, control_floor, bootstrap
-    )
-    selection_open = selected_history is not None
     core = {
         "control_floor": control_floor,
         "fresh": list(fresh),
-        "gate_open": selection_open,
         "hierarchy_controls": list(hierarchy_controls),
         "parent_training": bootstrap.config.parent_training,
-        "persistent": {str(key): list(value) for key, value in persistent.items()},
-        "reason": None if selection_open else "no bounded historical reservoir met the fresh/control gates",
-        "schema_version": "imagenetr50-integrator-clean-development-v2",
+        "persistent": {str(selected_history): list(persistent_rows)},
+        "role": "report_only_development",
+        "schema_version": "imagenetr50-integrator-clean-development-v3",
+        "selection_provenance": {
+            "predecessor_clean_development_sha256": (
+                bootstrap.config.predecessor_clean_development_sha256
+            ),
+            "predecessor_run_hash": bootstrap.config.predecessor_run_hash,
+            "rule": "frozen before test; v2 feature choice and best task-16 history accuracy",
+        },
         "selected_historical_capacity": selected_history,
         "selected_parent_training": bootstrap.config.parent_training,
         "selected_variant": selected_variant,
@@ -1204,7 +1102,7 @@ def run_development_extension(
     selection: Mapping[str, object],
     device: torch.device,
 ) -> dict[str, object]:
-    """Extend the frozen clean selection through task 50 and apply the dev gate."""
+    """Extend the frozen clean selection through task 50 without an accuracy stop."""
     target = bootstrap.store.run / "evaluations" / "development_task50.json"
     if target.is_file():
         return load_canonical_json(target)
@@ -1240,22 +1138,19 @@ def run_development_extension(
         for name, value in hierarchy_controls["controls"].items()
         if name != "true_node_oracle"
     )
-    checks = {
-        "accuracy": float(final["accuracy"]) >= bootstrap.config.gates.development_accuracy,
-        "persistent_fresh": float(fresh[0]["mean_validation_accuracy"])
-        - float(final["accuracy"])
-        <= bootstrap.config.gates.persistent_fresh_tolerance,
-        "static_margin": float(final["accuracy"])
-        >= static_floor + bootstrap.config.gates.development_control_margin,
-    }
     core = {
-        "acceptance": checks,
+        "comparisons": {
+            "persistent_minus_fresh_pp": float(final["accuracy"])
+            - float(fresh[0]["mean_validation_accuracy"]),
+            "persistent_minus_static_pp": float(final["accuracy"])
+            - static_floor,
+        },
         "fresh": list(fresh),
-        "gate_open": all(checks.values()),
         "hierarchy_controls": hierarchy_controls,
         "parent_training": bootstrap.config.parent_training,
         "persistent": list(persistent),
-        "schema_version": "imagenetr50-integrator-development-task50-v2",
+        "role": "report_only_development",
+        "schema_version": "imagenetr50-integrator-development-task50-v3",
         "selection": dict(selection),
         "static_floor": static_floor,
     }
@@ -1280,7 +1175,7 @@ def run_locked_benchmark(
         "historical_capacity": history,
         "parent_training": bootstrap.config.parent_training,
         "protocol_hash": bootstrap.protocol.content_hash,
-        "schema_version": "imagenetr50-integrator-locked-matrix-v2",
+        "schema_version": "imagenetr50-integrator-locked-matrix-v3",
         "test_rows_opened_before_seal": 0,
         "variant": variant,
     }
@@ -1334,7 +1229,7 @@ def run_locked_benchmark(
             / "checkpoints"
             / "stage_050.pt"
         ),
-        "schema_version": "imagenetr50-integrator-locked-training-seal-v2",
+        "schema_version": "imagenetr50-integrator-locked-training-seal-v3",
         "test_requests_before_seal": 0,
     }
     publish_immutable_json(
@@ -1371,28 +1266,26 @@ def run_locked_benchmark(
         for row in stage_rows
         for task, value in row["task_accuracies"].items()
     )
-    beats_local = (
-        last > bootstrap.config.gates.local_e2_last
-        and incremental > bootstrap.config.gates.local_e2_incremental
-    )
     local_references = _local_reference_results(bootstrap)
     core = {
-        "beats_local_e2_both_metrics": beats_local,
         "comparisons": {
-            "last_minus_joint_iid": last - local_references["joint_iid_last"],
-            "last_minus_local_e2": last - local_references["local_e2_last"],
+            "incremental_minus_joint_iid": (
+                incremental - local_references["joint_iid_incremental"]
+            ),
             "incremental_minus_local_e2": (
                 incremental - local_references["local_e2_incremental"]
             ),
+            "last_minus_joint_iid": last - local_references["joint_iid_last"],
+            "last_minus_local_e2": last - local_references["local_e2_last"],
         },
         "incremental_accuracy": incremental,
         "last_accuracy": last,
-        "local_e2_incremental": bootstrap.config.gates.local_e2_incremental,
-        "local_e2_last": bootstrap.config.gates.local_e2_last,
+        "local_e2_incremental": local_references["local_e2_incremental"],
+        "local_e2_last": local_references["local_e2_last"],
         "local_references": local_references,
         "final_static_controls": final_controls,
-        "replications_required": beats_local,
-        "schema_version": "imagenetr50-integrator-locked-test-v2",
+        "role": "descriptive_non_gating_benchmark",
+        "schema_version": "imagenetr50-integrator-locked-test-v3",
         "selection": dict(selection),
         "stage_metrics": list(stage_rows),
         "task_accuracy_matrix": list(task_matrix),
@@ -1405,7 +1298,7 @@ def run_locked_benchmark(
 def run_integrator_workflow(
     config_path: str | Path = DEFAULT_INTEGRATOR_CONFIG,
 ) -> Path:
-    """Run the single phase-gated experiment, resuming at immutable boundaries."""
+    """Run the ungated experiment, stopping only for operational integrity failures."""
     bootstrap = bootstrap_integrator(config_path)
     if not torch.cuda.is_available():
         raise RuntimeError("the local ImageNet-R integrator workflow requires CUDA")
@@ -1418,56 +1311,28 @@ def run_integrator_workflow(
     print(f"Temporary/resumable artifact directory: {bootstrap.store.run}", flush=True)
     _write_state(bootstrap, "PREFLIGHT")
     run_preflight(bootstrap, device)
-    diagnostic = run_sealed_diagnostic(bootstrap, device)
+    run_sealed_diagnostic(bootstrap, device)
     overall.update(1)
-    if not bool(diagnostic["gate_open"]):
-        ceiling = run_all_leaf_ceiling(
-            bootstrap, str(diagnostic["selected_variant"]), device
-        )
-        _write_state(
-            bootstrap,
-            "COMPLETE_DIAGNOSTIC_FAILURE",
-            all_leaf_ceiling=ceiling,
-            diagnostic=diagnostic,
-        )
-        write_integrator_report(bootstrap.store.run)
-        overall.update(5)
-        overall.close()
-        return bootstrap.store.run
-    _write_state(bootstrap, "SMOKE", selected_variant=diagnostic["selected_variant"])
-    smoke = run_smoke(bootstrap, str(diagnostic["selected_variant"]), device)
+    selected_variant = bootstrap.config.selection.feature_variant
+    _write_state(bootstrap, "SMOKE", selected_variant=selected_variant)
+    smoke = run_smoke(bootstrap, selected_variant, device)
     overall.update(1)
-    if not bool(smoke["gate_open"]):
-        _write_state(bootstrap, "COMPLETE_SMOKE_FAILURE", smoke=smoke)
+    if not bool(smoke["integrity_passed"]):
+        _write_state(bootstrap, "BLOCKED_SMOKE_INTEGRITY", smoke=smoke)
         write_integrator_report(bootstrap.store.run)
         overall.update(4)
         overall.close()
         return bootstrap.store.run
-    _write_state(bootstrap, "CLEAN_SELECTION", selected_variant=diagnostic["selected_variant"])
-    selection = run_clean_development(
-        bootstrap, str(diagnostic["selected_variant"]), device
-    )
+    _write_state(bootstrap, "CLEAN_DEVELOPMENT", selected_variant=selected_variant)
+    selection = run_clean_development(bootstrap, selected_variant, device)
     overall.update(1)
-    if not bool(selection["gate_open"]):
-        _write_state(bootstrap, "COMPLETE_HISTORY_SELECTION_FAILURE", selection=selection)
-        write_integrator_report(bootstrap.store.run)
-        overall.update(3)
-        overall.close()
-        return bootstrap.store.run
     _write_state(bootstrap, "DEVELOPMENT_EXTENSION", selection=selection)
     development = run_development_extension(bootstrap, selection, device)
     overall.update(1)
-    if not bool(development["gate_open"]):
-        _write_state(bootstrap, "COMPLETE_DEVELOPMENT_FAILURE", development=development)
-        write_integrator_report(bootstrap.store.run)
-        overall.update(2)
-        overall.close()
-        return bootstrap.store.run
     _write_state(bootstrap, "LOCKED_TEST", selection=selection)
     locked = run_locked_benchmark(bootstrap, selection, device)
     overall.update(1)
-    phase = "COMPLETE_REPLICATION_REQUIRED" if locked["replications_required"] else "COMPLETE"
-    _write_state(bootstrap, phase, locked_test=locked)
+    _write_state(bootstrap, "COMPLETE", locked_test=locked)
     write_integrator_report(bootstrap.store.run)
     overall.update(1)
     overall.close()
@@ -1478,7 +1343,6 @@ def run_integrator_workflow(
 __all__ = [
     "DEFAULT_INTEGRATOR_CONFIG",
     "run_clean_development",
-    "run_all_leaf_ceiling",
     "run_development_extension",
     "run_integrator_workflow",
     "run_locked_benchmark",

@@ -62,7 +62,7 @@ class IntegratorProtocol:
     code_manifest_hash: str
     environment_manifest_hash: str
     reference_results_hash: str
-    schema_version: str = "imagenetr50-logt-integrator-protocol-v2"
+    schema_version: str = "imagenetr50-logt-integrator-protocol-v3"
 
     def __post_init__(self) -> None:
         for label, identity in (
@@ -80,7 +80,7 @@ class IntegratorProtocol:
         for identity in self.sealed_final_node_hashes:
             require_sha256(identity, "sealed final node")
         if (
-            self.schema_version != "imagenetr50-logt-integrator-protocol-v2"
+            self.schema_version != "imagenetr50-logt-integrator-protocol-v3"
             or not self.sealed_final_node_hashes
             or len(set(self.sealed_final_node_hashes)) != len(self.sealed_final_node_hashes)
         ):
@@ -288,7 +288,7 @@ def _material_paths(project_root: Path, config_path: Path) -> tuple[Path, ...]:
     script = project_root / "scripts/vision/imagenetr/run_integrator_local.sh"
     protocol = (
         project_root
-        / "docs/imagenetr50_logt_prediction_integrator_full_union_protocol.md"
+        / "docs/imagenetr50_logt_prediction_integrator_full_union_ungated_protocol.md"
     )
     optional = (script,) if script.is_file() else ()
     return (
@@ -353,11 +353,44 @@ def bootstrap_integrator(config_path: str | Path) -> IntegratorBootstrap:
         or not router_stage_metrics.is_file()
     ):
         raise FileNotFoundError("sealed local comparison results are unavailable")
+    predecessor_clean = (
+        config.predecessor_artifact_root
+        / "runs"
+        / config.predecessor_run_hash
+        / "evaluations"
+        / "clean_development.json"
+    )
+    if (
+        not predecessor_clean.is_file()
+        or file_sha256(predecessor_clean)
+        != config.predecessor_clean_development_sha256
+    ):
+        raise FileNotFoundError("frozen v2 selection evidence is unavailable or changed")
+    predecessor_record = load_canonical_json(predecessor_clean)
+    task16_by_history = {
+        int(capacity): float(
+            next(row for row in rows if int(row["stage"]) == 16)["accuracy"]
+        )
+        for capacity, rows in dict(predecessor_record.get("persistent", {})).items()
+    }
+    best_history = max(
+        sorted(task16_by_history), key=lambda capacity: task16_by_history[capacity]
+    )
+    if (
+        predecessor_record.get("schema_version")
+        != "imagenetr50-integrator-clean-development-v2"
+        or predecessor_record.get("selected_variant")
+        != config.selection.feature_variant
+        or best_history != config.selection.historical_capacity
+    ):
+        raise ValueError("frozen continuation choices differ from v2 evidence")
     reference_results = {
+        "predecessor_clean_development_sha256": file_sha256(predecessor_clean),
+        "predecessor_run_hash": config.predecessor_run_hash,
         "primary_preflight_sha256": file_sha256(primary_preflight),
         "primary_summary_sha256": file_sha256(primary_summary),
         "router_stage_metrics_sha256": file_sha256(router_stage_metrics),
-        "schema_version": "imagenetr50-integrator-reference-results-v1",
+        "schema_version": "imagenetr50-integrator-reference-results-v2",
     }
     reference_results = {
         **reference_results,
@@ -403,7 +436,7 @@ def bootstrap_integrator(config_path: str | Path) -> IntegratorBootstrap:
         canonical_json_bytes(
             {
                 "run_hash": protocol.content_hash,
-                "schema_version": "imagenetr50-integrator-latest-run-v2",
+                "schema_version": "imagenetr50-integrator-latest-run-v3",
             }
         ),
     )
@@ -433,7 +466,7 @@ def latest_integrator_run(
     """Resolve the latest prepared run without mutating local state."""
     config = load_integrator_config(config_path)
     record = load_canonical_json(config.artifact_root / "LATEST_RUN.json")
-    if record.get("schema_version") != "imagenetr50-integrator-latest-run-v2":
+    if record.get("schema_version") != "imagenetr50-integrator-latest-run-v3":
         raise ValueError("unknown integrator latest-run record")
     run_hash = str(record["run_hash"])
     require_sha256(run_hash, "latest integrator run")

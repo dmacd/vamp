@@ -75,7 +75,7 @@ def _write_tables(
 def _clean_history_rows(
     clean: Mapping[str, object] | None,
 ) -> tuple[tuple[int, ...], list[dict[str, object]]]:
-    """Project clean persistent-history selection into one row per checkpoint."""
+    """Project clean persistent-history measurements into one row per checkpoint."""
     if clean is None:
         return (), []
     persistent = dict(clean.get("persistent", {}))
@@ -475,7 +475,7 @@ def _accuracy_plot(
         axes[1].set(
             xlabel="Tasks seen",
             ylabel="Validation accuracy (%)",
-            title="Clean integrator-history selection",
+            title="Clean integrator-history measurements",
             xticks=stages,
         )
         axes[1].grid(alpha=0.2)
@@ -545,28 +545,59 @@ def write_integrator_report(run_root: str | Path) -> Path:
             (name, f"{float(value):.3f}")
             for name, value in dict(diagnostic.get("feature_accuracies", {})).items()
         ]
-    final_rows = []
+    comparison_rows = []
+    gap_rows = []
+    static_rows = []
     if locked:
         references = dict(locked["local_references"])
         static = dict(dict(locked["final_static_controls"])["controls"])
-        final_rows = [
-            ("LogT full-union integrator — Last", f"{float(locked['last_accuracy']):.3f}"),
-            ("LogT full-union integrator — Incremental", f"{float(locked['incremental_accuracy']):.3f}"),
-            ("Full-union hierarchy — raw union", f"{float(static['raw_union']):.3f}"),
-            ("Full-union hierarchy — cosine union", f"{float(static['cosine_union']):.3f}"),
+        comparison_rows = [
             (
-                "Full-union hierarchy — affine-calibrated union",
+                "LogT full-union integrator",
+                f"{float(locked['last_accuracy']):.3f}",
+                f"{float(locked['incremental_accuracy']):.3f}",
+                "evaluated method",
+            ),
+            (
+                "Offline joint-IID LoRA",
+                f"{float(references['joint_iid_last']):.3f}",
+                f"{float(references['joint_iid_incremental']):.3f}",
+                "primary ceiling",
+            ),
+            (
+                "Local E2-LoRA",
+                f"{float(locked['local_e2_last']):.3f}",
+                f"{float(locked['local_e2_incremental']):.3f}",
+                "secondary reference",
+            ),
+            (
+                "Published E2-LoRA",
+                f"{float(references['published_e2_last']):.3f}",
+                f"{float(references['published_e2_incremental']):.3f}",
+                "external context",
+            ),
+        ]
+        gaps = dict(locked["comparisons"])
+        gap_rows = [
+            (
+                "Integrator − offline joint-IID",
+                f"{float(gaps['last_minus_joint_iid']):+.3f}",
+                f"{float(gaps['incremental_minus_joint_iid']):+.3f}",
+            ),
+            (
+                "Integrator − local E2-LoRA",
+                f"{float(gaps['last_minus_local_e2']):+.3f}",
+                f"{float(gaps['incremental_minus_local_e2']):+.3f}",
+            ),
+        ]
+        static_rows = [
+            ("raw union", f"{float(static['raw_union']):.3f}"),
+            ("cosine union", f"{float(static['cosine_union']):.3f}"),
+            (
+                "affine-calibrated union",
                 f"{float(static['affine_calibrated_union']):.3f}",
             ),
-            (
-                "Full-union hierarchy — true-node oracle",
-                f"{float(static['true_node_oracle']):.3f}",
-            ),
-            ("Frozen-reference control — Last", f"{float(references['frozen_reference_last']):.3f}"),
-            ("Sequential LoRA control — Last", f"{float(references['sequential_last']):.3f}"),
-            ("Joint-IID LoRA control — Last", f"{float(references['joint_iid_last']):.3f}"),
-            ("Local E2-LoRA — Last", f"{float(locked['local_e2_last']):.3f}"),
-            ("Local E2-LoRA — Incremental", f"{float(locked['local_e2_incremental']):.3f}"),
+            ("true-node oracle", f"{float(static['true_node_oracle']):.3f}"),
         ]
     selected = None if clean is None else {
         "feature_variant": clean.get("selected_variant"),
@@ -592,12 +623,13 @@ def write_integrator_report(run_root: str | Path) -> Path:
                 )
             )
         history_table_rows.append(tuple(values))
-    clean_note = ""
-    if clean is not None:
-        clean_note = f"Gate open: {clean.get('gate_open')}."
-        if clean.get("reason"):
-            clean_note += f" Stop reason: {clean['reason']}."
-        clean_note += "\n\n"
+    clean_note = (
+        "The feature family and H were frozen from the authenticated v2 task-16 "
+        "development evidence before test access. All displayed fresh and static "
+        "differences are diagnostic, not thresholds.\n\n"
+        if clean is not None
+        else ""
+    )
     resource_summary = [
         (
             row.get("condition"),
@@ -616,16 +648,26 @@ def write_integrator_report(run_root: str | Path) -> Path:
         for row in resources
     ]
     markdown = (
-        "# ImageNet-R-50 LogT Prediction Integrator\n\n"
+        "# ImageNet-R-50 Full-Union LogT Prediction Integrator\n\n"
         f"Run: `{run.name}`  \nWorkflow state: `{state.get('phase', 'NOT_STARTED')}`\n\n"
         "This experiment replaces task-free node selection with a direct 200-way residual "
         "integrator over frozen node behavior. Its capacity-one binary counter retrains every "
         "parent on the complete represented training union; only persistent integrator history "
-        "uses a bounded replay reservoir.\n\n"
-        "## Sealed capacity diagnostic\n\n"
+        "uses a bounded replay reservoir. No accuracy or comparator value gates execution.\n\n"
+        "## Primary benchmark comparison\n\n"
+        + _markdown_table(
+            ("condition", "Last (%)", "Incremental (%)", "role"),
+            comparison_rows,
+        )
+        + "\n"
+        + _markdown_table(("descriptive difference", "Last (pp)", "Incremental (pp)"), gap_rows)
+        + "\nThe offline joint-IID rank-16 LoRA run is the primary ceiling. The local "
+        "E2-LoRA reproduction is secondary, and the published E2-LoRA values are "
+        "external context. None is a pass/fail condition.\n\n"
+        "## Report-only feature diagnostic\n\n"
         + _markdown_table(("feature family", "mean validation accuracy"), diagnostic_rows)
-        + (f"\nGate open: **{diagnostic.get('gate_open')}**. Selected: `{diagnostic.get('selected_variant')}`.\n" if diagnostic else "")
-        + "\n## Frozen clean selection\n\n"
+        + (f"\nConfigured feature family: `{diagnostic.get('selected_variant')}`.\n" if diagnostic else "")
+        + "\n## Frozen development choices\n\n"
         + (f"`{json.dumps(selected, sort_keys=True)}`\n\n" if selected else "_Not complete._\n\n")
         + clean_note
         + _markdown_table(tuple(history_headers), history_table_rows)
@@ -633,10 +675,9 @@ def write_integrator_report(run_root: str | Path) -> Path:
         + "Validation identities are excluded from every clean node and integrator update. "
         "Full-union parent retraining is the primary condition, matching the successful "
         "Permuted-MNIST consolidation methodology.\n\n"
-        + "## Locked local result\n\n"
-        + _markdown_table(("condition", "accuracy (%)"), final_rows)
-        + "\nPublished E2-LoRA values (78.58 Last / 83.96 Incremental) remain external context; "
-        "the paired local E2-LoRA rerun is the direct comparator.\n\n"
+        + "## Final-frontier diagnostics\n\n"
+        + _markdown_table(("task-free/oracle diagnostic", "Last (%)"), static_rows)
+        + "\nThese rows explain the hierarchy frontier; they do not define acceptance.\n\n"
         + "## Complexity boundary\n\n"
         + "The hierarchy retains at most `popcount(t)` live adapters and performs at most "
         "`bit_length(t)` carries per arrival. A carry retrains on its complete represented "
@@ -658,7 +699,15 @@ def write_integrator_report(run_root: str | Path) -> Path:
     atomic_write(reports / "REPORT.md", markdown.encode("utf-8"))
     diagnostic_html = _html_table(("feature family", "mean validation accuracy"), diagnostic_rows)
     history_html = _html_table(tuple(history_headers), history_table_rows)
-    final_html = _html_table(("condition", "accuracy (%)"), final_rows)
+    comparison_html = _html_table(
+        ("condition", "Last (%)", "Incremental (%)", "role"), comparison_rows
+    )
+    gap_html = _html_table(
+        ("descriptive difference", "Last (pp)", "Incremental (pp)"), gap_rows
+    )
+    static_html = _html_table(
+        ("task-free/oracle diagnostic", "Last (%)"), static_rows
+    )
     resource_html = _html_table(
         (
             "condition",
@@ -672,11 +721,12 @@ def write_integrator_report(run_root: str | Path) -> Path:
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ImageNet-R-50 LogT Prediction Integrator</title>
 <style>body{{font:16px/1.55 system-ui,sans-serif;max-width:1200px;margin:auto;padding:2rem;color:#17202a;background:#fafafa}}h1,h2{{color:#123b5d}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #ccd5dd;padding:.45rem;text-align:left}}th{{background:#e8f1f8}}details{{background:white;border:1px solid #d9e1e7;border-radius:8px;padding:1rem;margin:1rem 0}}summary{{font-weight:700;cursor:pointer}}img{{max-width:100%;height:auto}}code{{overflow-wrap:anywhere}}</style></head>
-<body><h1>ImageNet-R-50 LogT Prediction Integrator</h1><p><strong>Run:</strong> <code>{escape(run.name)}</code><br><strong>State:</strong> {escape(str(state.get('phase', 'NOT_STARTED')))}</p>
-<p>A direct 200-way residual integrator observes frozen LogT node behavior. Capacity-one parents retrain on every represented training example; only persistent integrator history is bounded.</p>
-<details open><summary>Sealed capacity diagnostic</summary>{diagnostic_html}<p>Gate open: {escape(str(None if diagnostic is None else diagnostic.get('gate_open')))}; selected feature family: <code>{escape(str(None if diagnostic is None else diagnostic.get('selected_variant')))}</code>.</p></details>
-<details open><summary>Clean selection</summary><p><code>{escape(json.dumps(selected, sort_keys=True))}</code></p><p>{escape(clean_note.strip())}</p>{history_html}<p>Validation identities are excluded from all clean trainable components.</p></details>
-<details open><summary>Locked local benchmark</summary>{final_html}<p>The common-split local E2-LoRA rerun is the direct comparator. Published 78.58/83.96 values are external context.</p></details>
+<body><h1>ImageNet-R-50 Full-Union LogT Prediction Integrator</h1><p><strong>Run:</strong> <code>{escape(run.name)}</code><br><strong>State:</strong> {escape(str(state.get('phase', 'NOT_STARTED')))}</p>
+<p>A direct 200-way residual integrator observes frozen LogT node behavior. Capacity-one parents retrain on every represented training example; only persistent integrator history is bounded. Accuracy never gates execution.</p>
+<details open><summary>Primary benchmark comparison</summary>{comparison_html}{gap_html}<p>Offline joint-IID is the primary ceiling; local E2-LoRA is secondary. All differences are descriptive.</p></details>
+<details><summary>Report-only feature diagnostic</summary>{diagnostic_html}<p>Configured feature family: <code>{escape(str(None if diagnostic is None else diagnostic.get('selected_variant')))}</code>.</p></details>
+<details open><summary>Frozen development choices</summary><p><code>{escape(json.dumps(selected, sort_keys=True))}</code></p><p>{escape(clean_note.strip())}</p>{history_html}<p>Validation identities are excluded from all clean trainable components.</p></details>
+<details><summary>Final-frontier diagnostics</summary>{static_html}<p>These rows explain the hierarchy frontier and do not define acceptance.</p></details>
 <details open><summary>Accuracy</summary><img alt="Diagnostic and locked accuracy plots" src="{_image_data(accuracy_plot)}"></details>
 <details><summary>Capacity-one lineage</summary><img alt="Capacity-one binary-counter lineage" src="{_image_data(lineage)}"></details>
 <details><summary>Complexity and resources</summary><p>There are at most bit_length(t) carries and popcount(t) live nodes. Full-union carry cost grows with interval size; cumulative parent presentations are O(N T log T) for N examples per task. Persistent observer work stays bounded by popcount(t) × (current + H).</p>{resource_html}<pre>{escape(json.dumps({'clean': clean, 'development': development}, indent=2, sort_keys=True))}</pre></details>
