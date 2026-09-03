@@ -4,6 +4,13 @@ from pathlib import Path
 
 import torch
 
+from apm.continual.artifacts import (
+    atomic_write,
+    canonical_json_bytes,
+    load_canonical_json,
+    publish_immutable_json,
+    record_sha256,
+)
 from apm.continual.vision.imagenetr.integrator_artifacts import IntegratorStore
 from apm.continual.vision.imagenetr.integrator_config import load_integrator_config
 from apm.continual.vision.imagenetr.integrator_model import (
@@ -17,8 +24,8 @@ from apm.continual.vision.imagenetr.integrator_persistence import (
     save_integrator_checkpoint,
 )
 from apm.continual.vision.imagenetr.integrator_reporting import write_integrator_report
+from apm.continual.vision.imagenetr.integrator_workflow import _json_capacity_rows
 from apm.continual.vision.imagenetr.proxy_memory import TensorCache
-from apm.continual.artifacts import atomic_write, canonical_json_bytes
 
 
 def test_checkpoint_and_immutable_safetensors_round_trip(tmp_path: Path) -> None:
@@ -119,3 +126,46 @@ def test_partial_report_is_markdown_and_self_contained_html(tmp_path: Path) -> N
     assert (tmp_path / "reports" / "REPORT.md").is_file()
     assert (tmp_path / "reports" / "lineage.png").is_file()
     assert (tmp_path / "reports" / "resource_accounting.json").is_file()
+
+
+def test_clean_capacity_record_round_trips_and_report_exposes_failed_gate(
+    tmp_path: Path,
+) -> None:
+    bounded = {
+        capacity: (
+            {
+                "controls": {"true_node_oracle": accuracy},
+                "stage": 16,
+            },
+        )
+        for capacity, accuracy in ((512, 68.0), (1024, 70.0), (2048, 73.0))
+    }
+    core: dict[str, object] = {
+        "bounded_controls": _json_capacity_rows(bounded),
+        "full_controls": [
+            {"controls": {"true_node_oracle": 77.25}, "stage": 16}
+        ],
+        "gate_open": False,
+        "hierarchy_oracle_tolerance": 2.0,
+        "reason": "no bounded consolidation reservoir passed",
+        "schema_version": "imagenetr50-integrator-clean-development-v1",
+        "selected_variant": "scores",
+    }
+    record = {**core, "content_hash": record_sha256(core)}
+    target = tmp_path / "evaluations" / "clean_development.json"
+    publish_immutable_json(target, record)
+    assert load_canonical_json(target) == record
+    (tmp_path / "state").mkdir()
+    atomic_write(
+        tmp_path / "state" / "workflow.json",
+        canonical_json_bytes({"phase": "COMPLETE_CLEAN_SELECTION_FAILURE"}),
+    )
+
+    write_integrator_report(tmp_path)
+
+    markdown = (tmp_path / "reports" / "REPORT.md").read_text(encoding="utf-8")
+    assert "K=2048 - full (pp)" in markdown
+    assert "-4.250" in markdown
+    assert "Gate open: False" in markdown
+    assert (tmp_path / "reports" / "clean_capacity_gate.csv").is_file()
+    assert (tmp_path / "reports" / "clean_capacity_gate.parquet").is_file()

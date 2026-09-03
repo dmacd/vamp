@@ -72,6 +72,66 @@ def _write_tables(
     return flattened, task_rows
 
 
+def _clean_capacity_rows(
+    clean: Mapping[str, object] | None,
+) -> tuple[tuple[int, ...], list[dict[str, object]]]:
+    """Project the clean hierarchy-capacity gate into one row per checkpoint."""
+    if clean is None:
+        return (), []
+    bounded = dict(clean.get("bounded_controls", {}))
+    full = tuple(dict(row) for row in clean.get("full_controls", ()))
+    if not bounded or not full:
+        return (), []
+    capacities = tuple(sorted((int(value) for value in bounded), key=int))
+    bounded_by_capacity = {
+        capacity: {
+            int(dict(row)["stage"]): dict(row)
+            for row in bounded[str(capacity)]
+        }
+        for capacity in capacities
+    }
+    rows: list[dict[str, object]] = []
+    for full_row in sorted(full, key=lambda row: int(row["stage"])):
+        stage = int(full_row["stage"])
+        full_accuracy = float(dict(full_row["controls"])["true_node_oracle"])
+        projected: dict[str, object] = {
+            "full_union_oracle_accuracy": full_accuracy,
+            "stage": stage,
+        }
+        for capacity in capacities:
+            bounded_accuracy = float(
+                dict(bounded_by_capacity[capacity][stage]["controls"])[
+                    "true_node_oracle"
+                ]
+            )
+            projected[f"k{capacity}_oracle_accuracy"] = bounded_accuracy
+            projected[f"k{capacity}_minus_full_pp"] = bounded_accuracy - full_accuracy
+        rows.append(projected)
+    return capacities, rows
+
+
+def _write_clean_capacity_tables(
+    report_root: Path,
+    capacities: Sequence[int],
+    rows: Sequence[Mapping[str, object]],
+) -> None:
+    """Write the clean gate evidence in CSV, JSON, and Parquet forms."""
+    _write_csv(report_root / "clean_capacity_gate.csv", rows)
+    atomic_write(
+        report_root / "clean_capacity_gate.json",
+        canonical_json_bytes({"capacities": list(capacities), "rows": list(rows)}),
+    )
+    if rows:
+        try:
+            import pandas as pd
+
+            pd.DataFrame(rows).to_parquet(
+                report_root / "clean_capacity_gate.parquet", index=False
+            )
+        except ImportError:  # pragma: no cover - environment preflight requires pandas
+            pass
+
+
 def _resource_rows(run: Path) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for policy_path in sorted((run / "hierarchies").glob("*/policy.json")):
@@ -338,6 +398,9 @@ def _accuracy_plot(
     path: Path,
     diagnostic: Mapping[str, object] | None,
     locked_rows: Sequence[Mapping[str, object]],
+    capacities: Sequence[int],
+    capacity_rows: Sequence[Mapping[str, object]],
+    hierarchy_tolerance: float | None,
 ) -> None:
     import matplotlib
 
@@ -376,6 +439,35 @@ def _accuracy_plot(
             )
         axes[1].set(xlabel="Tasks seen", ylabel="Test accuracy (%)", title="Locked local benchmark")
         axes[1].set_ylim(0, 100)
+        axes[1].grid(alpha=0.2)
+        axes[1].legend()
+    elif capacity_rows:
+        stages = [int(row["stage"]) for row in capacity_rows]
+        full = [float(row["full_union_oracle_accuracy"]) for row in capacity_rows]
+        axes[1].plot(stages, full, color="#263238", marker="o", label="full-union oracle")
+        if hierarchy_tolerance is not None:
+            axes[1].plot(
+                stages,
+                [value - hierarchy_tolerance for value in full],
+                color="#78909c",
+                linestyle=":",
+                label=f"full minus {hierarchy_tolerance:g} pp",
+            )
+        colors = ("#1565c0", "#ef6c00", "#2e7d32", "#6a1b9a")
+        for index, capacity in enumerate(capacities):
+            axes[1].plot(
+                stages,
+                [float(row[f"k{capacity}_oracle_accuracy"]) for row in capacity_rows],
+                color=colors[index % len(colors)],
+                marker="s",
+                label=f"bounded K={capacity}",
+            )
+        axes[1].set(
+            xlabel="Tasks seen",
+            ylabel="Validation accuracy (%)",
+            title="Clean hierarchy capacity gate",
+            xticks=stages,
+        )
         axes[1].grid(alpha=0.2)
         axes[1].legend()
     else:
@@ -423,12 +515,25 @@ def write_integrator_report(run_root: str | Path) -> Path:
     development = _load(run / "evaluations" / "development_task50.json")
     locked = _load(run / "evaluations" / "locked_test.json")
     stage_rows, _task_rows = _write_tables(reports, locked)
+    capacities, capacity_rows = _clean_capacity_rows(clean)
+    _write_clean_capacity_tables(reports, capacities, capacity_rows)
     resources = _resource_rows(run)
     _write_resource_tables(reports, resources)
     lineage = reports / "lineage.png"
     accuracy_plot = reports / "accuracy.png"
     _lineage_plot(lineage)
-    _accuracy_plot(accuracy_plot, diagnostic, stage_rows)
+    tolerance_value = None if clean is None else clean.get("hierarchy_oracle_tolerance")
+    hierarchy_tolerance = (
+        float(tolerance_value) if isinstance(tolerance_value, (int, float)) else None
+    )
+    _accuracy_plot(
+        accuracy_plot,
+        diagnostic,
+        stage_rows,
+        capacities,
+        capacity_rows,
+        hierarchy_tolerance,
+    )
     diagnostic_rows = []
     if diagnostic:
         diagnostic_rows = [
@@ -463,12 +568,45 @@ def write_integrator_report(run_root: str | Path) -> Path:
         "consolidation_capacity": clean.get("selected_consolidation_capacity"),
         "historical_capacity": clean.get("selected_historical_capacity"),
     }
+    capacity_headers = ["stage", "full-union oracle"]
+    for capacity in capacities:
+        capacity_headers.extend((f"K={capacity}", f"K={capacity} - full (pp)"))
+    capacity_table_rows = []
+    for row in capacity_rows:
+        values: list[object] = [row["stage"], f"{float(row['full_union_oracle_accuracy']):.3f}"]
+        for capacity in capacities:
+            values.extend(
+                (
+                    f"{float(row[f'k{capacity}_oracle_accuracy']):.3f}",
+                    f"{float(row[f'k{capacity}_minus_full_pp']):+.3f}",
+                )
+            )
+        capacity_table_rows.append(tuple(values))
+    clean_note = ""
+    if clean is not None:
+        clean_note = f"Gate open: {clean.get('gate_open')}."
+        if hierarchy_tolerance is not None:
+            clean_note += (
+                " Required every bounded-minus-full difference to be at least "
+                f"-{hierarchy_tolerance:g} percentage points."
+            )
+        if clean.get("reason"):
+            clean_note += f" Stop reason: {clean['reason']}."
+        clean_note += "\n\n"
     resource_summary = [
         (
             row.get("condition"),
-            row.get("node_example_forwards"),
-            row.get("hierarchy_training_image_presentations"),
-            row.get("integrator_backward_example_passes"),
+            "—" if row.get("node_example_forwards") is None else row["node_example_forwards"],
+            (
+                "—"
+                if row.get("hierarchy_training_image_presentations") is None
+                else row["hierarchy_training_image_presentations"]
+            ),
+            (
+                "—"
+                if row.get("integrator_backward_example_passes") is None
+                else row["integrator_backward_example_passes"]
+            ),
         )
         for row in resources
     ]
@@ -483,6 +621,9 @@ def write_integrator_report(run_root: str | Path) -> Path:
         + (f"\nGate open: **{diagnostic.get('gate_open')}**. Selected: `{diagnostic.get('selected_variant')}`.\n" if diagnostic else "")
         + "\n## Frozen clean selection\n\n"
         + (f"`{json.dumps(selected, sort_keys=True)}`\n\n" if selected else "_Not complete._\n\n")
+        + clean_note
+        + _markdown_table(tuple(capacity_headers), capacity_table_rows)
+        + "\n"
         + "Validation identities are excluded from every clean node and integrator update. "
         "Full-union training is an empirical ceiling and is excluded from the scalable claim.\n\n"
         + "## Locked local result\n\n"
@@ -508,6 +649,7 @@ def write_integrator_report(run_root: str | Path) -> Path:
     )
     atomic_write(reports / "REPORT.md", markdown.encode("utf-8"))
     diagnostic_html = _html_table(("feature family", "mean validation accuracy"), diagnostic_rows)
+    capacity_html = _html_table(tuple(capacity_headers), capacity_table_rows)
     final_html = _html_table(("condition", "accuracy (%)"), final_rows)
     resource_html = _html_table(
         (
@@ -525,7 +667,7 @@ def write_integrator_report(run_root: str | Path) -> Path:
 <body><h1>ImageNet-R-50 LogT Prediction Integrator</h1><p><strong>Run:</strong> <code>{escape(run.name)}</code><br><strong>State:</strong> {escape(str(state.get('phase', 'NOT_STARTED')))}</p>
 <p>A direct 200-way residual integrator observes frozen LogT node behavior. The scalable condition uses capacity-one consolidation and bounded replay; full-union training is a ceiling only.</p>
 <details open><summary>Sealed capacity diagnostic</summary>{diagnostic_html}<p>Gate open: {escape(str(None if diagnostic is None else diagnostic.get('gate_open')))}; selected feature family: <code>{escape(str(None if diagnostic is None else diagnostic.get('selected_variant')))}</code>.</p></details>
-<details open><summary>Clean selection</summary><p><code>{escape(json.dumps(selected, sort_keys=True))}</code></p><p>Validation identities are excluded from all clean trainable components.</p></details>
+<details open><summary>Clean selection</summary><p><code>{escape(json.dumps(selected, sort_keys=True))}</code></p><p>{escape(clean_note.strip())}</p>{capacity_html}<p>Validation identities are excluded from all clean trainable components.</p></details>
 <details open><summary>Locked local benchmark</summary>{final_html}<p>The common-split local E2-LoRA rerun is the direct comparator. Published 78.58/83.96 values are external context.</p></details>
 <details open><summary>Accuracy</summary><img alt="Diagnostic and locked accuracy plots" src="{_image_data(accuracy_plot)}"></details>
 <details><summary>Capacity-one lineage</summary><img alt="Capacity-one binary-counter lineage" src="{_image_data(lineage)}"></details>

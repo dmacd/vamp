@@ -1101,6 +1101,16 @@ def _select_consolidation_capacity(
     )
 
 
+def _json_capacity_rows(
+    rows_by_capacity: Mapping[int, Sequence[Mapping[str, object]]],
+) -> dict[str, list[dict[str, object]]]:
+    """Return a canonically reloadable JSON object keyed by replay capacity."""
+    return {
+        str(capacity): [dict(row) for row in rows_by_capacity[capacity]]
+        for capacity in sorted(rows_by_capacity)
+    }
+
+
 def _select_historical_capacity(
     runs: Mapping[int, Sequence[dict[str, object]]],
     fresh: Sequence[dict[str, object]],
@@ -1183,9 +1193,10 @@ def run_clean_development(
     )
     if selected_consolidation is None:
         core = {
-            "bounded_controls": bounded_controls,
-            "full_controls": full_controls,
+            "bounded_controls": _json_capacity_rows(bounded_controls),
+            "full_controls": list(full_controls),
             "gate_open": False,
+            "hierarchy_oracle_tolerance": bootstrap.config.gates.hierarchy_oracle_tolerance,
             "reason": "no bounded consolidation reservoir stayed within the hierarchy-oracle tolerance",
             "schema_version": "imagenetr50-integrator-clean-development-v1",
             "selected_variant": selected_variant,
@@ -1228,11 +1239,12 @@ def run_clean_development(
     )
     selection_open = selected_history is not None
     core = {
-        "bounded_controls": bounded_controls,
+        "bounded_controls": _json_capacity_rows(bounded_controls),
         "control_floor": control_floor,
         "fresh": list(fresh),
         "full_controls": list(full_controls),
         "gate_open": selection_open,
+        "hierarchy_oracle_tolerance": bootstrap.config.gates.hierarchy_oracle_tolerance,
         "persistent": {str(key): list(value) for key, value in persistent.items()},
         "reason": None if selection_open else "no bounded historical reservoir met the fresh/control gates",
         "schema_version": "imagenetr50-integrator-clean-development-v1",
