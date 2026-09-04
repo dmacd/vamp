@@ -1,0 +1,26 @@
+ImageNet-R-50 promoted fresh-parent persistent LogT run
+Run hash: 5fc6e1a57076f06a31da8b638207644109289a9b8888daf6b44934ade3c89320
+State: COMPLETE
+Started: 2026-09-03 19:06:56 PDT
+Finished: 2026-09-03 19:54:18 PDT
+Elapsed: approximately 47 minutes 21 seconds
+
+Phases:
+- preflight and authenticated setup: passed
+- eight-task smoke hierarchy: 15/15 nodes, approximately 2 minutes 40 seconds
+- full hierarchy: 97/97 nodes, approximately 23 minutes 5 seconds
+- persistent integrator: 50/50 stages, approximately 10 minutes 8 seconds
+- locked evaluation: 50/50 stages, approximately 10 minutes 14 seconds
+- report generation: passed
+
+Locked result:
+- persistent LogT: 69.433331% final, 75.708840% incremental
+- true-node oracle: 81.116664% final, 83.556356% incremental
+- stage-matched joint IID: 78.866667% final, 81.630384% incremental
+- local E2-LoRA: 78.100000% final, 82.995200% incremental
+
+Immediate unchanged-command resume:
+- exit code: 0
+- elapsed: 3.797693 seconds
+- new leaf, parent, and integrator optimizer steps: 0
+- node/checkpoint stat fingerprints: unchanged

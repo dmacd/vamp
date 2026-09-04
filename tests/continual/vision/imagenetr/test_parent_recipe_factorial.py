@@ -92,6 +92,7 @@ def test_promoted_report_aligns_persistent_oracle_and_joint_curves(
             {
                 "accuracy": 80.0 - stage / 10,
                 "controls": {"true_node_oracle": 85.0 - stage / 10},
+                "live_nodes": stage.bit_count(),
                 "stage": stage,
             }
             for stage in range(1, 51)
@@ -103,6 +104,7 @@ def test_promoted_report_aligns_persistent_oracle_and_joint_curves(
     assert len(rows) == 50
     assert rows[15] == {
         "joint_iid_minus_true_node_pp": 5.0,
+        "live_nodes": 1,
         "persistent_logt_accuracy": 78.4,
         "stage": 16,
         "stage_matched_joint_iid_accuracy": 88.4,

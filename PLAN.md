@@ -12,6 +12,42 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Outcome — ImageNet-R-50 Fresh-Parent Persistent Integrator
+
+- **The parent-recipe diagnosis and full 50-task confirmation completed on
+  2026-09-03.** Commit `d8924e8` freezes a clean task-8/16/32 2 x 2 x 2
+  factorial over fresh versus inherited heads, parent weight decay, and seed /
+  data-order schedule. The development-selected recipe is a fresh prefix-local
+  affine head, weight decay 5e-4, and the joint initialization/order schedule.
+  Head initialization dominated: inherited minus fresh averaged -1.413,
+  -3.243, and -5.581 points at tasks 8, 16, and 32; the other factors were
+  small.
+- The promoted run
+  `5fc6e1a57076f06a31da8b638207644109289a9b8888daf6b44934ade3c89320`
+  completed all 50 tasks in about 47 minutes. Persistent LogT reached
+  **69.433% final / 75.709% incremental accuracy**, up 3.867 / 2.694 points
+  from the inherited-head v3 run. The true-node oracle reached 81.117% /
+  83.556%, and stage-matched joint IID reached 78.867% / 81.630%. Local
+  E2-LoRA remains 78.100% / 82.995%. These references are descriptive, not
+  gates.
+- At every one-node power-of-two frontier (tasks 2/4/8/16/32), the fresh
+  parent and corresponding stage-matched joint model have bit-identical
+  classifier and adapter tensors and identical oracle accuracy. The
+  same-data parent gap is fully closed. Persistent LogT is within 1.067 points
+  of joint at all five and exceeds it at the first three.
+- The remaining failure is concentrated at fragmented frontiers. At task 31,
+  five live nodes yield 65.907% persistent accuracy versus 83.700% true-node
+  oracle and 80.294% joint IID; after the task-32 carry creates one
+  joint-identical root, persistent accuracy rebounds to 79.842%. R3
+  adapter-dependent routing / response integration is now the next main
+  matrix. More parent-initialization tuning is not the priority.
+- The locked training seal records zero test requests before completion. An
+  immediate unchanged-command resume took 3.798 seconds, performed zero leaf,
+  parent, or integrator optimizer steps, and left all recorded node/checkpoint
+  stat fingerprints unchanged. All 68 default focused ImageNet-R tests pass;
+  six real-model/GPU tests are opt-in. The four-page report, all figures, and
+  compact CSV/Parquet/JSON evidence have been rendered and inspected.
+
 ## Completed Outcome — ImageNet-R-50 Stage-Matched Joint-IID Curve
 
 - **The 50-stage post-hoc control completed on 2026-09-03.** It trains a fresh

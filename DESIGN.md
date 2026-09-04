@@ -574,6 +574,35 @@ separate main axis: a routing-only method cannot improve the owned adapter
 measured by the true-node diagnostic, whereas a response integrator may surpass
 it by using complementary evidence from non-owning adapters.
 
+The promoted consolidation recipe resolves the one-node ambiguity. A clean
+task-8/16/32 factorial showed that inherited classifier rows were the dominant
+difference from the joint fit; parent weight decay and seed/order had only
+small effects. New full-union parents therefore initialize both their prefix
+head and rank-16 adapter exactly as a stage-matched joint model, then use its
+five-epoch optimizer and deterministic sample schedule on the complete
+represented prefix. At tasks 2, 4, 8, 16, and 32, the resulting parent and the
+separately trained joint control have bit-identical classifier and adapter
+tensors. Fresh initialization is the durable parent recipe; inherited-head
+parents remain a historical ablation.
+
+That equivalence makes the remaining boundary observable. Power-of-two stages
+contain one joint-equivalent node and show no hierarchy-model gap. Immediately
+before those carries, multiple independently adapted nodes remain live and the
+task-free integrator can trail both the label-aware node oracle and joint IID
+by double digits. The strong 31-to-32 recovery is a frontier-fragmentation
+signature, not evidence that more parent training is needed. R3
+adapter-dependent routing and response integration is therefore the next main
+experimental axis. It must be judged across all stages, especially high-
+popcount frontiers, rather than only at final accuracy or one-node checkpoints.
+
+Material code bytes, not an informational commit annotation, define experiment
+identity. A run may span the commit that records already-running source, so
+individual immutable nodes may report different `git_commit` values without
+changing their content identity. The protocol code manifest remains
+authoritative and must match a named repository commit byte for byte; derived
+report presentation may be updated afterward without rewriting scientific
+artifacts.
+
 The locked run first rebuilds on all 24,000 training identities. Its hierarchy
 and all 50 persistent checkpoints are complete before a training-seal record is
 published and the 6,000 test identities can be requested. Training and
