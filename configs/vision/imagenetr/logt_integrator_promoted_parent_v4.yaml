@@ -1,0 +1,15 @@
+experiment:
+  name: imagenetr50_logt_integrator_promoted_parent_v4
+  protocol_revision: imagenetr50-logt-integrator-promoted-parent-v4
+
+paths:
+  artifact_root: artifacts/imagenetr50/integrator_promoted_parent_v4
+  factorial_config: configs/vision/imagenetr/parent_recipe_factorial_v1.yaml
+
+factorial_selection:
+  run_hash: cb53c4f2249ff420a83654f2ace7585d7ef7736f7636949ee5c3fe49d3d88aa8
+  summary_sha256: 5c2ce6083549340337efac5f93bad5c0fee3bcaf106f06d36db19860cfd28017
+  selected_condition: fresh__wd5e4__joint
+  head_initialization: fresh
+  weight_decay: 0.0005
+  seed_schedule: joint

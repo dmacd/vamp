@@ -19,6 +19,7 @@ from apm.continual.vision.imagenetr.artifacts import (
     write_node_work_directory,
 )
 from apm.continual.vision.imagenetr.bank import LogicalNode, MergeEvent
+from apm.continual.vision.imagenetr.config import TrainingConfig
 from apm.continual.vision.imagenetr.data import DatasetManifest, ImageRecord
 from apm.continual.vision.imagenetr.heads import ClassifierRows, union_classifier_rows
 from apm.continual.vision.imagenetr.integrator_artifacts import (
@@ -41,6 +42,38 @@ from apm.continual.vision.imagenetr.training import train_adapter_model
 
 
 RESERVOIR_NAMESPACE = "imagenetr50-integrator-full-source-identities-v2"
+
+
+@dataclass(frozen=True, slots=True)
+class HierarchyParentRecipe:
+    """Explicit initialization and optimization recipe for every consolidation parent."""
+
+    head_initialization: str
+    seed_schedule: str
+    training: TrainingConfig
+    schema_version: str = "imagenetr50-hierarchy-parent-recipe-v1"
+
+    def __post_init__(self) -> None:
+        if (
+            self.head_initialization not in {"fresh", "inherited_union"}
+            or self.seed_schedule not in {"joint", "parent"}
+            or self.schema_version != "imagenetr50-hierarchy-parent-recipe-v1"
+        ):
+            raise ValueError("invalid hierarchy parent recipe")
+
+    @property
+    def content_hash(self) -> str:
+        """Return the complete recipe identity for hierarchy-policy binding."""
+        return record_sha256(asdict(self))
+
+    def seeds(self, policy_seed: int, event_sequence: int) -> tuple[int, int]:
+        """Return model and augmentation/order seeds for one merge event."""
+        if policy_seed < 0 or event_sequence < 0:
+            raise ValueError("parent recipe seed inputs must be nonnegative")
+        if self.seed_schedule == "joint":
+            return policy_seed, policy_seed + 50_000
+        parent_seed = policy_seed + 300_000 + event_sequence
+        return parent_seed, parent_seed
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,6 +373,7 @@ def _train_parent(
     backbone_factory: Callable[[], torch.nn.Module],
     device: torch.device,
     progress: bool,
+    parent_recipe: HierarchyParentRecipe,
 ) -> tuple[NodeBundle, HierarchyWork]:
     target = bootstrap.store.hierarchy_node(policy.content_hash, event.parent.node_id)
     if target.is_dir():
@@ -362,14 +396,19 @@ def _train_parent(
     ):
         raise RuntimeError("full-union parent source identities are incomplete")
     classifier = union_classifier_rows((left.classifier, right.classifier))
-    seed = policy.seed + 300_000 + event.sequence
+    model_seed, training_seed = parent_recipe.seeds(policy.seed, event.sequence)
     job_hash = record_sha256(
         {
             "children": [left.artifact.content_hash, right.artifact.content_hash],
-            "initialization_seed": seed,
+            "model_initialization_seed": model_seed,
+            "parent_recipe": {
+                **asdict(parent_recipe),
+                "content_hash": parent_recipe.content_hash,
+            },
             "policy": policy.as_record(),
             "source_ids": [row.image_id for row in training_rows],
-            "schema_version": "imagenetr50-integrator-parent-job-v2",
+            "training_seed": training_seed,
+            "schema_version": "imagenetr50-integrator-parent-job-v3",
         }
     )
     model = AdapterVisionModel(
@@ -378,16 +417,16 @@ def _train_parent(
         bootstrap.primary_config.lora_rank,
         bootstrap.primary_config.lora_alpha,
         0.0,
-        seed,
-        classifier,
+        model_seed,
+        classifier if parent_recipe.head_initialization == "inherited_union" else None,
     )
     result = train_adapter_model(
         model,
         bootstrap.config.data_root / "imagenet-r",
         training_rows,
         bootstrap.train_transform,
-        bootstrap.config.consolidation_training,
-        seed,
+        parent_recipe.training,
+        training_seed,
         device,
         bootstrap.store.run / "checkpoints" / f"parent_{job_hash}.pt",
         num_workers=bootstrap.config.num_workers,
@@ -404,7 +443,7 @@ def _train_parent(
             bootstrap,
             event.parent,
             (left.artifact.content_hash, right.artifact.content_hash),
-            "full_union_retrain_union",
+            f"full_union_retrain_{parent_recipe.head_initialization}",
             job_hash,
             reservoir,
             represented_rows,
@@ -452,10 +491,14 @@ def build_hierarchy(
     backbone_factory: Callable[[], torch.nn.Module],
     device: torch.device,
     progress: bool = True,
+    parent_recipe: HierarchyParentRecipe | None = None,
 ) -> HierarchyBuildResult:
     """Train or reuse one prefix of the capacity-one hierarchy and seal every frontier."""
     if not 1 <= task_count <= bootstrap.config.tasks:
         raise ValueError("hierarchy task count is outside 1..50")
+    recipe = parent_recipe or HierarchyParentRecipe(
+        "inherited_union", "parent", bootstrap.config.consolidation_training
+    )
     root = bootstrap.store.hierarchy(policy.content_hash)
     publish_immutable_json(root / "policy.json", policy.as_record())
     events, logical_snapshots = simulate_binary_topology(task_count)
@@ -497,6 +540,7 @@ def build_hierarchy(
                 backbone_factory,
                 device,
                 progress,
+                recipe,
             )
             bundles[event.parent.node_id] = parent
             work += parent_work
@@ -544,6 +588,7 @@ def build_hierarchy(
 
 __all__ = [
     "HierarchyBuildResult",
+    "HierarchyParentRecipe",
     "HierarchyWork",
     "RESERVOIR_NAMESPACE",
     "build_hierarchy",

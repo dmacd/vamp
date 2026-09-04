@@ -1,0 +1,36 @@
+experiment:
+  name: imagenetr50_parent_recipe_factorial_v1
+  protocol_revision: imagenetr50-parent-recipe-factorial-v1
+  replication_seeds: [1993]
+
+paths:
+  artifact_root: artifacts/imagenetr50/parent_recipe_factorial_v1
+  source_integrator_config: configs/vision/imagenetr/logt_prediction_integrator_full_union_ungated_v3.yaml
+
+sealed_inputs:
+  source_integrator_run_hash: fd5cb0502d705bbd9662e197e9d867fda2b6c1b633c340f513be4b33579fd8b4
+  source_fit_policy_hash: 75d54abc0555939fd1087e49a740de3864c3578ff97db98f8c2ddb111e8eab98
+
+matrix:
+  stages: [8, 16, 32]
+  head_initializations: [fresh, inherited_union]
+  weight_decays: [0.0005, 0.0]
+  seed_schedules: [joint, parent]
+
+training:
+  epochs: 5
+  batch_size: 64
+  optimizer: sgd
+  momentum: 0.9
+  lora_lr: 0.0005
+  head_lr: 0.01
+
+evaluation:
+  partition: router_validation
+  checkpoints: [0, 5]
+  selection_stages: [16, 32]
+  substantial_gap_closure_fraction: 0.5
+
+runtime:
+  num_workers: 12
+  checkpoint_steps: 50
