@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 import math
@@ -35,7 +35,7 @@ from apm.continual.vision.imagenetr.integrator_hierarchy import HierarchyBuildRe
 from apm.continual.vision.imagenetr.integrator_model import (
     IntegratorFitResult,
     IntegratorState,
-    create_integrator_state,
+    VARIANT_SLOT_DIMS,
     fit_fresh_integrator,
     parameter_count,
     predict_integrator,
@@ -73,14 +73,13 @@ from apm.continual.vision.imagenetr.replay_adaptation_config import (
     load_replay_adaptation_config,
 )
 from apm.continual.vision.imagenetr.replay_adaptation_training import (
+    create_replay_integrator_state,
     fit_replay_epochs,
     reset_adamw,
     task_uniform_weights,
 )
 
 
-FEATURE_VARIANT = "behavior"
-COMMON_STATE_NAME = "persistent-node-adapted-behavior-common-seed-v1"
 FULL_HISTORY_CONDITION = "fresh_full_history"
 
 
@@ -223,6 +222,18 @@ def bootstrap_replay_adaptation(
     resolved = Path(config_path).resolve()
     project_root = resolved.parents[3]
     config = load_replay_adaptation_config(resolved)
+    return _bootstrap_loaded_replay_adaptation(
+        resolved, config, _material_paths(project_root, resolved)
+    )
+
+
+def _bootstrap_loaded_replay_adaptation(
+    resolved: Path,
+    config: ReplayAdaptationConfig,
+    material_paths: tuple[Path, ...],
+) -> ReplayAdaptationBootstrap:
+    """Build the common authenticated context for one replay representation."""
+    project_root = resolved.parents[3]
     current_source = bootstrap_promoted_integrator(config.source_config)
     source_store = IntegratorStore(
         current_source.promotion.artifact_root, config.promoted_run_hash
@@ -283,7 +294,7 @@ def bootstrap_replay_adaptation(
         != config.behavior_run_hash
     ):
         raise ValueError("source behavior run was not cleanly sealed")
-    code = material_tree_manifest(_material_paths(project_root, resolved))
+    code = material_tree_manifest(material_paths)
     environment = installed_environment_manifest(PROMOTED_PACKAGES)
     missing = tuple(
         str(row["name"])
@@ -475,11 +486,14 @@ def _task_accuracies(predictions: torch.Tensor, labels: torch.Tensor) -> dict[st
 
 
 def _evaluation_metrics(
-    state: IntegratorState, tensors: FrontierTensors, device: torch.device
+    state: IntegratorState,
+    tensors: FrontierTensors,
+    device: torch.device,
+    feature_variant: str,
 ) -> dict[str, object]:
     predictions = predict_integrator(
         state.model,
-        tensors.observations(FEATURE_VARIANT),
+        tensors.observations(feature_variant),
         512,
         device,
     )
@@ -515,10 +529,10 @@ def _checkpoint_path(
 def _new_online_state(
     bootstrap: ReplayAdaptationBootstrap, device: torch.device
 ) -> IntegratorState:
-    return create_integrator_state(
-        COMMON_STATE_NAME,
+    return create_replay_integrator_state(
+        bootstrap.config.common_state_name,
         bootstrap.integrator.config.maximum_levels,
-        FEATURE_VARIANT,
+        bootstrap.config.feature_variant,
         bootstrap.integrator.config.optimization,
         bootstrap.config.seed,
         device,
@@ -539,7 +553,7 @@ def _restore_online_state(
         _checkpoint_path(bootstrap, condition, stage),
         state,
         stage,
-        FEATURE_VARIANT,
+        bootstrap.config.feature_variant,
         frontier_hash,
         record_sha256([row.image_id for row in selected.rows]),
     )
@@ -603,8 +617,9 @@ def _train_online_condition(
             selected.rows,
             device,
             f"replay_adaptation_{condition.sampler}_fit",
+            bootstrap.config.feature_variant,
         )
-        supervision = _supervision(tensors, FEATURE_VARIANT)
+        supervision = _supervision(tensors, bootstrap.config.feature_variant)
         fit = fit_replay_epochs(
             state,
             supervision,
@@ -615,7 +630,9 @@ def _train_online_condition(
             device,
             condition.weighting,
         )
-        selected_metrics = _evaluation_metrics(state, tensors, device)
+        selected_metrics = _evaluation_metrics(
+            state, tensors, device, bootstrap.config.feature_variant
+        )
         weights = (
             torch.ones(len(tensors.labels))
             if condition.weighting == "example_uniform"
@@ -630,7 +647,7 @@ def _train_online_condition(
             checkpoint,
             state,
             stage,
-            FEATURE_VARIANT,
+            bootstrap.config.feature_variant,
             frontier_hash,
             str(selection_record["training_ids_hash"]),
         )
@@ -705,6 +722,7 @@ def _full_tensors(
         rows,
         device,
         f"replay_adaptation_{partition}_population",
+        bootstrap.config.feature_variant,
     )
 
 
@@ -713,7 +731,7 @@ def _fresh_job_hash(
 ) -> str:
     return record_sha256(
         {
-            "feature_variant": FEATURE_VARIANT,
+            "feature_variant": bootstrap.config.feature_variant,
             "protocol_hash": bootstrap.protocol.content_hash,
             "restart": restart,
             "schema_version": "imagenetr50-replay-adaptation-full-history-job-v1",
@@ -733,10 +751,10 @@ def _fit_or_load_full_history(
 ) -> tuple[IntegratorState, IntegratorFitResult, Path, bool]:
     job_hash = _fresh_job_hash(bootstrap, stage, restart)
     name = f"fresh-full-history-stage{stage}-restart{restart}"
-    state = create_integrator_state(
+    state = create_replay_integrator_state(
         name,
         bootstrap.integrator.config.maximum_levels,
-        FEATURE_VARIANT,
+        bootstrap.config.feature_variant,
         bootstrap.integrator.config.optimization,
         bootstrap.config.seed,
         device,
@@ -750,8 +768,8 @@ def _fit_or_load_full_history(
     checkpoint = bootstrap.store.run / "work" / f"fresh_{job_hash}.pt"
     result = fit_fresh_integrator(
         state,
-        _supervision(fitting, FEATURE_VARIANT),
-        _supervision(validation, FEATURE_VARIANT),
+        _supervision(fitting, bootstrap.config.feature_variant),
+        _supervision(validation, bootstrap.config.feature_variant),
         bootstrap.integrator.config.optimization,
         bootstrap.config.seed + restart,
         stage,
@@ -772,7 +790,7 @@ def _fit_or_load_full_history(
             "restart": restart,
             "stage": stage,
             "validation_ids_hash": validation_ids,
-            "variant": FEATURE_VARIANT,
+            "variant": bootstrap.config.feature_variant,
         },
     )
     if checkpoint.is_file():
@@ -859,10 +877,10 @@ def _load_selected_full_history(
 ) -> tuple[IntegratorState, IntegratorFitResult, dict[str, object]]:
     selection = load_canonical_json(_full_history_selection_path(bootstrap, stage))
     restart = int(selection["selected_restart"])
-    state = create_integrator_state(
+    state = create_replay_integrator_state(
         f"fresh-full-history-stage{stage}-restart{restart}",
         bootstrap.integrator.config.maximum_levels,
-        FEATURE_VARIANT,
+        bootstrap.config.feature_variant,
         bootstrap.integrator.config.optimization,
         bootstrap.config.seed,
         device,
@@ -908,11 +926,15 @@ def _development_evaluation(
             ledger.append(
                 {
                     "condition": condition.condition_id,
-                    "fit_population": _evaluation_metrics(state, fitting, device),
+                    "fit_population": _evaluation_metrics(
+                        state, fitting, device, bootstrap.config.feature_variant
+                    ),
                     "kind": "online",
                     "selected_training": selected_training,
                     "stage": stage,
-                    "validation": _evaluation_metrics(state, validation, device),
+                    "validation": _evaluation_metrics(
+                        state, validation, device, bootstrap.config.feature_variant
+                    ),
                     "validation_controls": _control_metrics(validation),
                 }
             )
@@ -923,7 +945,9 @@ def _development_evaluation(
         new_full_fits += fitted
         key = (FULL_HISTORY_CONDITION, stage)
         if key not in completed:
-            fit_metrics = _evaluation_metrics(full_state, fitting, device)
+            fit_metrics = _evaluation_metrics(
+                full_state, fitting, device, bootstrap.config.feature_variant
+            )
             ledger.append(
                 {
                     "condition": FULL_HISTORY_CONDITION,
@@ -934,7 +958,10 @@ def _development_evaluation(
                     "selected_training": fit_metrics,
                     "stage": stage,
                     "validation": _evaluation_metrics(
-                        full_state, validation, device
+                        full_state,
+                        validation,
+                        device,
+                        bootstrap.config.feature_variant,
                     ),
                     "validation_controls": _control_metrics(validation),
                 }
@@ -1020,7 +1047,9 @@ def _test_evaluation(
                 {
                     "condition": condition,
                     "controls": _control_metrics(tensors),
-                    "metrics": _evaluation_metrics(state, tensors, device),
+                    "metrics": _evaluation_metrics(
+                        state, tensors, device, bootstrap.config.feature_variant
+                    ),
                     "stage": stage,
                 }
             )
@@ -1074,7 +1103,9 @@ def _preflight(
         or core["condition_count"] != 8
         or core["fit_images"] != 19_200
         or core["validation_images"] != 4_800
-        or core["input_dimensions"] != 8_214
+        or core["input_dimensions"]
+        != bootstrap.integrator.config.maximum_levels
+        * VARIANT_SLOT_DIMS[bootstrap.config.feature_variant]
         or core["test_train_overlap"] != 0
         or replay_rotation <= 0
         or not math.isclose(task_totals[0], task_totals[1], abs_tol=1e-6)
@@ -1097,6 +1128,20 @@ def _copy_source_references(bootstrap: ReplayAdaptationBootstrap) -> None:
                 bootstrap.store.run / "evaluations" / f"source_{filename}",
                 source.read_bytes(),
             )
+    if bootstrap.config.comparison_run_hash is not None:
+        comparison = (
+            bootstrap.config.comparison_artifact_root
+            / "runs"
+            / bootstrap.config.comparison_run_hash
+            / "evaluations"
+            / "result.json"
+        )
+        publish_immutable_bytes(
+            bootstrap.store.run
+            / "evaluations"
+            / "source_single_layer_replay_result.json",
+            comparison.read_bytes(),
+        )
 
 
 def _publish_result(bootstrap: ReplayAdaptationBootstrap) -> dict[str, object]:
@@ -1132,8 +1177,28 @@ def _publish_result(bootstrap: ReplayAdaptationBootstrap) -> dict[str, object]:
         for row in joint_source["rows"]
         if int(row["stage"]) in bootstrap.config.diagnostic_stages
     }
+    representation_baseline = None
+    if bootstrap.config.comparison_run_hash is not None:
+        comparison_path = (
+            bootstrap.config.comparison_artifact_root
+            / "runs"
+            / bootstrap.config.comparison_run_hash
+            / "evaluations"
+            / "result.json"
+        )
+        comparison = load_canonical_json(comparison_path)
+        representation_baseline = {
+            "content_hash": comparison["content_hash"],
+            "development_metrics": comparison["development_metrics"],
+            "feature_variant": comparison.get("feature_variant", "behavior"),
+            "result_sha256": file_sha256(comparison_path),
+            "run_hash": bootstrap.config.comparison_run_hash,
+            "stage_matched_joint_iid": comparison["stage_matched_joint_iid"],
+            "test_metrics": comparison["test_metrics"],
+        }
     core: dict[str, object] = {
         "development_metrics": list(development.rows),
+        "feature_variant": bootstrap.config.feature_variant,
         "online_conditions": [
             asdict(condition) | {"condition_id": condition.condition_id}
             for condition in online_conditions(bootstrap.config)
@@ -1147,6 +1212,7 @@ def _publish_result(bootstrap: ReplayAdaptationBootstrap) -> dict[str, object]:
         },
         "prior_all_train_h8192": [prior_rows[stage] for stage in sorted(prior_rows)],
         "protocol_hash": bootstrap.protocol.content_hash,
+        "representation_baseline": representation_baseline,
         "role": "post_hoc_replay_adaptation_diagnosis",
         "schema_version": "imagenetr50-replay-adaptation-result-v1",
         "stage_matched_joint_iid": joint,
@@ -1219,10 +1285,24 @@ def run_replay_adaptation(
     config_path: str | Path = DEFAULT_REPLAY_ADAPTATION_CONFIG,
 ) -> Path:
     """Run or exactly resume the complete replay-adaptation diagnosis."""
+    bootstrap = bootstrap_replay_adaptation(config_path)
+    from apm.continual.vision.imagenetr.replay_adaptation_reporting import (
+        write_replay_adaptation_report,
+    )
+
+    return _run_loaded_replay_adaptation(
+        bootstrap, write_replay_adaptation_report
+    )
+
+
+def _run_loaded_replay_adaptation(
+    bootstrap: ReplayAdaptationBootstrap,
+    report_writer: Callable[[str | Path], tuple[Path, Path, Path]],
+) -> Path:
+    """Run the common sealed matrix for an authenticated representation context."""
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
         raise RuntimeError("the replay-adaptation diagnosis requires BF16 CUDA")
     started = time.monotonic()
-    bootstrap = bootstrap_replay_adaptation(config_path)
     device = torch.device("cuda:0")
     from tqdm.auto import tqdm
 
@@ -1320,11 +1400,7 @@ def run_replay_adaptation(
         ),
     )
     _write_state(bootstrap, "COMPLETE", result=result, reuse_proof=proof)
-    from apm.continual.vision.imagenetr.replay_adaptation_reporting import (
-        write_replay_adaptation_report,
-    )
-
-    write_replay_adaptation_report(bootstrap.store.run)
+    report_writer(bootstrap.store.run)
     overall.update(1)
     overall.close()
     print(f"Replay-adaptation report complete in {elapsed:.1f} seconds.", flush=True)

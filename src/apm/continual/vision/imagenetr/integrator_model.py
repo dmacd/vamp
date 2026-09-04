@@ -21,10 +21,12 @@ from apm.continual.vision.imagenetr.integrator_config import (
 
 CLASS_COUNT = 200
 PRELOGIT_DIM = 768
+CORE_VARIANTS = ("scores", "behavior", "behavior_base")
 VARIANT_SLOT_DIMS: Mapping[str, int] = {
     "scores": 2 * CLASS_COUNT + 1,
     "behavior": PRELOGIT_DIM + 3 * CLASS_COUNT + 1,
     "behavior_base": PRELOGIT_DIM + 4 * CLASS_COUNT + 1,
+    "behavior_two_layer": 2 * PRELOGIT_DIM + 3 * CLASS_COUNT + 1,
 }
 
 
@@ -497,12 +499,12 @@ def select_smallest_near_best(
     accuracies: Mapping[str, float], tolerance_points: float
 ) -> str:
     """Choose the lowest-dimensional feature family within tolerance of the best."""
-    if set(accuracies) != set(VARIANT_SLOT_DIMS) or tolerance_points < 0.0:
+    if set(accuracies) != set(CORE_VARIANTS) or tolerance_points < 0.0:
         raise ValueError("feature selection requires every predeclared variant")
     best = max(accuracies.values())
     eligible = tuple(
         variant
-        for variant in VARIANT_SLOT_DIMS
+        for variant in CORE_VARIANTS
         if accuracies[variant] >= best - tolerance_points
     )
     return min(eligible, key=lambda variant: VARIANT_SLOT_DIMS[variant])
@@ -510,6 +512,7 @@ def select_smallest_near_best(
 
 __all__ = [
     "CLASS_COUNT",
+    "CORE_VARIANTS",
     "PRELOGIT_DIM",
     "VARIANT_SLOT_DIMS",
     "ImageNetResidualIntegrator",

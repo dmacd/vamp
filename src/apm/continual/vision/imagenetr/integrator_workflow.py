@@ -121,6 +121,7 @@ def _frontier_tensors(
     rows: Sequence[ImageRecord],
     device: torch.device,
     cache_family: str,
+    feature_variant: str = "behavior",
 ) -> FrontierTensors:
     started = time.monotonic()
     tensors = build_frontier_tensors(
@@ -140,6 +141,7 @@ def _frontier_tensors(
         bootstrap.config.feature_batch_size,
         bootstrap.config.num_workers,
         device,
+        feature_variant,
     )
     ChainedJsonlLedger(
         bootstrap.store.run / "ledgers" / "behavior_requests.jsonl",
@@ -155,6 +157,7 @@ def _frontier_tensors(
             "image_ids_hash": record_sha256([row.image_id for row in rows]),
             "node_example_forwards": tensors.node_example_forwards,
             "node_hashes": [node.node_hash for node in nodes],
+            "feature_variant": feature_variant,
             "slots": list(slots),
             "splits": sorted({row.split for row in rows}),
         }

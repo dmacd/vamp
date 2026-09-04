@@ -47,6 +47,7 @@ def _row(class_id: int, index: int) -> ImageRecord:
 def _frontier() -> FrontierTensors:
     rows, slots = 5, 6
     normalized = torch.zeros(rows, slots, 768, dtype=torch.bfloat16)
+    penultimate = torch.zeros_like(normalized)
     raw = torch.zeros(rows, slots, 200)
     local = torch.zeros_like(raw)
     base = torch.zeros_like(raw)
@@ -54,6 +55,7 @@ def _frontier() -> FrontierTensors:
     active = torch.zeros(slots, dtype=torch.bool)
     for slot, class_ids in ((0, torch.arange(4)), (2, torch.arange(4, 8))):
         normalized[:, slot] = torch.randn(rows, 768).to(torch.bfloat16)
+        penultimate[:, slot] = torch.randn(rows, 768).to(torch.bfloat16)
         values = torch.randn(rows, 4)
         raw[:, slot, class_ids] = values
         local[:, slot, class_ids] = torch.log_softmax(values, dim=1)
@@ -75,6 +77,7 @@ def _frontier() -> FrontierTensors:
         3,
         5,
         15,
+        penultimate,
     )
 
 
@@ -143,6 +146,10 @@ def test_observation_variants_are_label_free_fixed_slots_with_exact_raw_parity()
             )
             assert torch.equal(
                 slots[:, 2, :768], frontier.normalized_prelogits[:, 2]
+            )
+        if variant == "behavior_two_layer":
+            assert torch.equal(
+                slots[:, 0, -768:], frontier.normalized_penultimate[:, 0]
             )
         assert torch.equal(slots[:, 1], torch.zeros_like(slots[:, 1]))
         assert torch.equal(slots[:, 3:], torch.zeros_like(slots[:, 3:]))

@@ -72,6 +72,7 @@ class FrontierTensors:
     cache_misses: int
     base_example_forwards: int
     node_example_forwards: int
+    normalized_penultimate: Tensor | None = None
 
     def __post_init__(self) -> None:
         rows, slots = len(self.image_ids), len(self.active_slot_mask)
@@ -97,6 +98,11 @@ class FrontierTensors:
             or self.cache_misses < 0
             or self.base_example_forwards < 0
             or self.node_example_forwards < 0
+            or (
+                self.normalized_penultimate is not None
+                and self.normalized_penultimate.shape
+                != (rows, slots, PRELOGIT_DIM)
+            )
         ):
             raise ValueError("frontier behavior tensors are malformed")
 
@@ -115,6 +121,10 @@ class FrontierTensors:
                 fields.append(self.base_scores)
             fields.append(ownership)
         fields.append(active)
+        if variant == "behavior_two_layer":
+            if self.normalized_penultimate is None:
+                raise ValueError("two-layer observations require penultimate node latents")
+            fields.append(self.normalized_penultimate)
         features = (
             torch.cat(tuple(fields), dim=2)
             .flatten(1)
@@ -157,6 +167,11 @@ class FrontierTensors:
             self.cache_misses,
             self.base_example_forwards,
             self.node_example_forwards,
+            (
+                None
+                if self.normalized_penultimate is None
+                else self.normalized_penultimate[indices]
+            ),
         )
 
     def control_predictions(self) -> dict[str, Tensor]:
@@ -253,6 +268,7 @@ def _adapted_behavior(
     batch_size: int,
     num_workers: int,
     device: torch.device,
+    include_penultimate: bool,
 ) -> dict[str, Tensor]:
     model = AdapterVisionModel(
         backbone_factory(),
@@ -264,28 +280,59 @@ def _adapted_behavior(
         node.classifier,
     ).to(device).eval()
     load_adapter_factors(model, node.adapter)
-    prelogits, raw_scores = [], []
+    prelogits, penultimate, raw_scores = [], [], []
+    blocks = getattr(model.backbone, "blocks", None)
+    if include_penultimate and (blocks is None or len(blocks) != 12):
+        raise ValueError("two-layer behavior requires the pinned 12-block ViT")
+    captured: list[Tensor] = []
+    handle = (
+        blocks[-2].register_forward_hook(
+            lambda _module, _inputs, output: captured.append(
+                output[:, 0].detach()
+            )
+        )
+        if include_penultimate
+        else None
+    )
     from tqdm.auto import tqdm
 
     loader = _loader(prepared_root, rows, transform, batch_size, num_workers, device)
-    with torch.inference_mode():
-        for images, _labels, _ids in tqdm(
-            loader,
-            desc=f"node {node.node_hash[:8]} behavior ({len(rows):,})",
-            leave=False,
-            unit="batch",
-        ):
-            with torch.autocast(
-                device_type=device.type, dtype=torch.bfloat16, enabled=device.type == "cuda"
+    try:
+        with torch.inference_mode():
+            for images, _labels, _ids in tqdm(
+                loader,
+                desc=f"node {node.node_hash[:8]} behavior ({len(rows):,})",
+                leave=False,
+                unit="batch",
             ):
-                features = model.features(images.to(device, non_blocking=True))
-                raw = model.classifier(features)
-            prelogits.append(features.cpu().to(torch.bfloat16))
-            raw_scores.append(raw.float().cpu())
+                if captured:
+                    raise RuntimeError("stale penultimate activation before model forward")
+                with torch.autocast(
+                    device_type=device.type,
+                    dtype=torch.bfloat16,
+                    enabled=device.type == "cuda",
+                ):
+                    features = model.features(images.to(device, non_blocking=True))
+                    raw = model.classifier(features)
+                prelogits.append(features.cpu().to(torch.bfloat16))
+                raw_scores.append(raw.float().cpu())
+                if include_penultimate:
+                    if len(captured) != 1 or captured[0].ndim != 2:
+                        raise RuntimeError("penultimate ViT block was not captured exactly once")
+                    penultimate.append(captured.pop().cpu().to(torch.bfloat16))
+    finally:
+        if handle is not None:
+            handle.remove()
     del model
     if device.type == "cuda":
         torch.cuda.empty_cache()
-    return {"prelogits": torch.cat(tuple(prelogits)), "raw_scores": torch.cat(tuple(raw_scores))}
+    result = {
+        "prelogits": torch.cat(tuple(prelogits)),
+        "raw_scores": torch.cat(tuple(raw_scores)),
+    }
+    if include_penultimate:
+        result["penultimate"] = torch.cat(tuple(penultimate))
+    return result
 
 
 def build_frontier_tensors(
@@ -305,6 +352,7 @@ def build_frontier_tensors(
     batch_size: int,
     num_workers: int,
     device: torch.device,
+    feature_variant: str = "behavior",
 ) -> FrontierTensors:
     """Load or compute every frozen behavior needed by a task-free frontier."""
     if (
@@ -316,13 +364,22 @@ def build_frontier_tensors(
         or not rows
         or len({row.image_id for row in rows}) != len(rows)
         or any(row.split != "train" and row.split != "test" for row in rows)
+        or feature_variant not in VARIANT_SLOT_DIMS
     ):
         raise ValueError("frontier observation request is invalid")
     all_classes = tuple(class_id for node in nodes for class_id in node.classifier.class_ids)
     if len(all_classes) != len(set(all_classes)):
         raise ValueError("live node classifier ownership overlaps")
     image_ids = tuple(row.image_id for row in rows)
-    cache = TensorCache(cache_root, "imagenetr50-integrator-node-behavior-v1")
+    include_penultimate = feature_variant == "behavior_two_layer"
+    cache = TensorCache(
+        cache_root,
+        (
+            "imagenetr50-integrator-node-two-layer-behavior-v1"
+            if include_penultimate
+            else "imagenetr50-integrator-node-behavior-v1"
+        ),
+    )
     base_cache = TensorCache(cache_root, "imagenetr50-integrator-frozen-prelogit-v1")
     rows_by_id = {row.image_id: row for row in rows}
     base_tensors, base_hits, base_misses = base_cache.get_or_compute_rows(
@@ -346,6 +403,11 @@ def build_frontier_tensors(
     base_prelogits = base_tensors["prelogits"].float()
     normalized = torch.zeros(
         (len(rows), maximum_slots, PRELOGIT_DIM), dtype=torch.bfloat16
+    )
+    normalized_penultimate = (
+        torch.zeros((len(rows), maximum_slots, PRELOGIT_DIM), dtype=torch.bfloat16)
+        if include_penultimate
+        else None
     )
     raw = torch.zeros((len(rows), maximum_slots, CLASS_COUNT), dtype=torch.float32)
     cosine = torch.zeros_like(raw)
@@ -379,12 +441,17 @@ def build_frontier_tensors(
                 batch_size,
                 num_workers,
                 device,
+                include_penultimate,
             ),
         )
         class_ids = torch.tensor(node.classifier.class_ids, dtype=torch.long)
         normalized[:, slot] = F.layer_norm(tensors["prelogits"].float(), (PRELOGIT_DIM,)).to(
             torch.bfloat16
         )
+        if normalized_penultimate is not None:
+            normalized_penultimate[:, slot] = F.layer_norm(
+                tensors["penultimate"].float(), (PRELOGIT_DIM,)
+            ).to(torch.bfloat16)
         raw[:, slot, class_ids] = tensors["raw_scores"].float()
         cosine[:, slot, class_ids] = cosine_scale * (
             F.normalize(tensors["prelogits"].float(), dim=1)
@@ -416,6 +483,7 @@ def build_frontier_tensors(
         misses,
         base_misses,
         node_forwards,
+        normalized_penultimate,
     )
 
 

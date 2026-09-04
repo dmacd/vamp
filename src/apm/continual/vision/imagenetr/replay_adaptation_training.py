@@ -16,10 +16,67 @@ from apm.continual.vision.imagenetr.integrator_model import (
     IntegratorFitResult,
     IntegratorState,
     IntegratorSupervision,
+    VARIANT_SLOT_DIMS,
     _derived_seed,
     _metrics,
+    create_integrator_state,
     fit_integrator_epochs,
 )
+
+
+TWO_LAYER_VARIANT = "behavior_two_layer"
+SINGLE_LAYER_VARIANT = "behavior"
+
+
+def create_replay_integrator_state(
+    name: str,
+    maximum_slots: int,
+    variant: str,
+    config: IntegratorOptimizationConfig,
+    seed: int,
+    device: torch.device,
+) -> IntegratorState:
+    """Create a replay integrator, nesting the single-layer initialization when expanded."""
+    if variant != TWO_LAYER_VARIANT:
+        return create_integrator_state(
+            name, maximum_slots, variant, config, seed, device
+        )
+    baseline = create_integrator_state(
+        name, maximum_slots, SINGLE_LAYER_VARIANT, config, seed, device
+    )
+    expanded = create_integrator_state(
+        name, maximum_slots, TWO_LAYER_VARIANT, config, seed, device
+    )
+    old_slot_dim = VARIANT_SLOT_DIMS[SINGLE_LAYER_VARIANT]
+    new_slot_dim = VARIANT_SLOT_DIMS[TWO_LAYER_VARIANT]
+    if new_slot_dim - old_slot_dim != 768:
+        raise ValueError("two-layer replay must add exactly one 768-value latent per slot")
+    with torch.no_grad():
+        expanded.model.input_layer.weight.zero_()
+        for slot in range(maximum_slots):
+            old_start = slot * old_slot_dim
+            new_start = slot * new_slot_dim
+            expanded.model.input_layer.weight[
+                :, new_start : new_start + old_slot_dim
+            ].copy_(
+                baseline.model.input_layer.weight[
+                    :, old_start : old_start + old_slot_dim
+                ]
+            )
+        expanded.model.input_layer.bias.copy_(baseline.model.input_layer.bias)
+        expanded.model.middle.load_state_dict(baseline.model.middle.state_dict())
+        expanded.model.output_layer.load_state_dict(
+            baseline.model.output_layer.state_dict()
+        )
+    return IntegratorState(
+        name,
+        expanded.model,
+        torch.optim.AdamW(
+            expanded.model.parameters(),
+            lr=config.learning_rate,
+            weight_decay=config.weight_decay,
+        ),
+    )
 
 
 def task_uniform_weights(labels: Tensor) -> Tensor:
@@ -151,6 +208,9 @@ def fit_replay_epochs(
 
 
 __all__ = [
+    "SINGLE_LAYER_VARIANT",
+    "TWO_LAYER_VARIANT",
+    "create_replay_integrator_state",
     "fit_replay_epochs",
     "reset_adamw",
     "task_uniform_weights",

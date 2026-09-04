@@ -1,0 +1,7 @@
+factor,mean_delta_pp,metric
+reset_minus_carried_adam,-0.16990378499031067,test_accuracy
+reset_minus_carried_adam,-0.18830299377441406,validation_accuracy
+rotating_minus_fixed,1.0087676346302032,test_accuracy
+rotating_minus_fixed,1.6266793012619019,validation_accuracy
+task_balanced_minus_example,0.42068883776664734,test_accuracy
+task_balanced_minus_example,0.28648823499679565,validation_accuracy
