@@ -7,16 +7,25 @@ import json
 from pathlib import Path
 
 from apm.continual.vision.imagenetr.integrator_artifacts import latest_integrator_run
+from apm.continual.vision.imagenetr.integrator_pdf import render_integrator_pdf
 from apm.continual.vision.imagenetr.integrator_reporting import write_integrator_report
 from apm.continual.vision.imagenetr.integrator_workflow import (
     DEFAULT_INTEGRATOR_CONFIG,
     run_integrator_workflow,
 )
+from apm.continual.vision.imagenetr.stage_matched_joint import (
+    run_stage_matched_joint_control,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="ImageNet-R-50 LogT prediction integrator")
-    parser.add_argument("command", choices=("run", "status", "report"), nargs="?", default="run")
+    parser.add_argument(
+        "command",
+        choices=("run", "stage-matched", "status", "report"),
+        nargs="?",
+        default="run",
+    )
     parser.add_argument(
         "config",
         type=Path,
@@ -32,6 +41,18 @@ def main() -> None:
     arguments = _parser().parse_args()
     if arguments.command == "run":
         print(run_integrator_workflow(arguments.config))
+        return
+    if arguments.command == "stage-matched":
+        summary = run_stage_matched_joint_control(arguments.config)
+        _config, run = latest_integrator_run(arguments.config)
+        report = write_integrator_report(run)
+        pdf = render_integrator_pdf(report)
+        print(
+            json.dumps(
+                {"html_report": str(report), "pdf_report": str(pdf), "summary": str(summary)},
+                indent=2,
+            )
+        )
         return
     _config, run = latest_integrator_run(arguments.config)
     if arguments.command == "status":

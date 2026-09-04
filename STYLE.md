@@ -123,6 +123,7 @@ tests should be parallelized if possible to reduce the run time.
 ## reports
 
 For long-running experiments with lots of data + results to communicate:
+- Write up the results in a pdf report as if this were a paper for publication
 - Generate separate markdown reports and self-contained html reports
 - Ensure tables in html reports are rendered properly with html and not just markdown
   dropped in a preformatted block
@@ -144,4 +145,4 @@ For long-running experiments with lots of data + results to communicate:
 
 
 On any turn when a report has been generated or updated, run xdg-open on the report html
-output artifact(s) without being asked.
+and pdf output artifact(s) without being asked.

@@ -7,6 +7,57 @@ history capacity (H=2,048), and full-union parent training before test access.
 The offline joint-IID result is the primary ceiling and local E2-LoRA is a
 secondary reference; neither controlled execution.
 
+## Stage-matched joint-IID follow-up
+
+The post-hoc available-data control is complete for all 50 stages. At each
+stage it fits a fresh rank-16 LoRA adapter and affine classifier for five
+epochs using only the immutable training examples from tasks available at
+that stage, then evaluates the matching test prefix. It uses the same ViT,
+LoRA targets, rank, optimizer, initialization seed, augmentation scheme, and
+prefix-wide softmax recipe as the offline joint-IID control. Stage 50 reuses
+and re-evaluates the authenticated offline model rather than fitting a second
+nominally equivalent endpoint.
+
+| tasks | true-node oracle | stage-matched joint | full-50 joint on prefix | future-data association | joint minus oracle |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 95.763% | 94.915% | 97.458% | +2.542 pp | -0.847 pp |
+| 2 | 88.710% | 88.710% | 97.177% | +8.468 pp | +0.000 pp |
+| 4 | 84.035% | 85.614% | 93.860% | +8.246 pp | +1.579 pp |
+| 8 | 81.801% | 84.803% | 91.651% | +6.848 pp | +3.002 pp |
+| 16 | 77.789% | 82.396% | 86.324% | +3.928 pp | +4.607 pp |
+| 32 | 74.917% | 80.276% | 81.577% | +1.301 pp | +5.359 pp |
+| 50 | 76.733% | 78.867% | 78.867% | +0.000 pp | +2.133 pp |
+
+The stage-matched curve reaches 78.867% final and 81.630% incremental
+accuracy. The retrospective full-50 model reaches 84.795% incremental
+accuracy, 3.164 points higher on average; over stages 1--49 its mean advantage
+is 3.229 points (range -0.441 to +9.169). Future-task examples are therefore
+associated with meaningful positive transfer at many prefixes, but they do
+not explain the endpoint: at task 50 no future benchmark tasks exist and the
+joint model still leads the true-node oracle by 2.133 points.
+
+The power-of-two stages isolate node quality particularly cleanly. Their
+frontier is one consolidated node, so correct-node routing and fragmentation
+are absent, while the joint control sees the same task horizon and image
+union. Across tasks 2/4/8/16/32, stage-matched joint exceeds the true-node
+oracle by 2.283 points on average. At task 32 specifically, the oracle node is
+the exact tasks-1--32 root retained at task 50: the full-50 model gains only
+1.301 points from later tasks on that prefix, while the fresh stage-32 model
+leads the same-data parent by 5.359 points. This directly identifies parent
+training/head construction or optimization as a larger issue than missing
+future information for the oldest final node.
+
+Likely contributors, not yet separately identified, are the hierarchy's
+union of child classifier rows instead of a freshly initialized global head;
+zero parent weight decay versus 5e-4 for joint IID; different initialization,
+sample order, and stateless augmentation seeds; repeated carry optimization;
+and a five-epoch, single-seed budget that may leave either recipe
+under-converged. Outside power-of-two stages, interval-local adapters also
+lack cross-interval representation sharing and global negative-class
+gradients. These are node-quality hypotheses: task-free routing cannot repair
+the true owned node itself, although an R3 response integrator could exploit
+complementary behavior from other nodes.
+
 ## Locked benchmark
 
 | condition | final accuracy | incremental accuracy | difference from integrator, final | difference from integrator, incremental |
@@ -61,25 +112,32 @@ close the full endpoint gap with the present consolidated parents.
 Keep method selection on the 19,200/4,800 fit/validation split and do not tune
 against this run's opened test results.
 
-1. **Separate replay capacity from optimization path.** At task 50, compare
-   fresh fitting, the current H=2,048 stream, full cumulative-history replay,
-   and a step-matched full-history stream on exactly the same frozen frontier.
-   This determines whether the 5.194-point loss comes from discarded observer
-   examples or from warm-started sequential optimization.
-2. **Make adapter-dependent R3 routing a main condition.** At tasks 16 and 32,
-   where a carry collapses the frontier to one root, expose authenticated child
-   responses to an R3 mixture teacher and distill that behavior into bounded
-   parent state. Compare the current root, root plus retired children, the R3
-   child mixture, and its deployable distilled parent. This tests whether a
-   carry discards the alternatives needed by a direct integrator.
-3. **Measure the parent ceiling explicitly.** Add an all-leaf true-task oracle
-   and interval joint-IID parent controls on validation. Their differences from
-   the current parent-node oracle quantify consolidation loss separately from
-   routing loss. If the parent ceiling remains below joint IID, change parent
-   training or distillation before tuning another router.
-4. **Lock a successor only after the two losses shrink on validation.** Freeze
-   its choices, then perform one paired test evaluation. Replicate across class
-   orders or seeds before making a publication-level comparison.
+1. **Run a one-node parent factorial at tasks 16 and 32.** Hold the exact image
+   union, task horizon, rank, epochs, and evaluation fixed while crossing fresh
+   versus inherited classifier rows, zero versus 5e-4 weight decay, and several
+   initialization/order seeds. Add a longer-budget arm only if the five-epoch
+   curves have not stabilized. This is the shortest experiment that can
+   attribute the 4.607/5.359-point same-data node deficits.
+2. **Complete an interval-local decomposition of task 50.** The stage-32 model
+   already supplies a fresh tasks-1--32 control. Fit only fresh tasks-33--48
+   and tasks-49--50 models, evaluate each against its corresponding final live
+   node, and also mask the full-50 joint model to the same intervals. This
+   separates consolidation quality, cross-interval transfer, and global-head
+   effects with two new fits instead of another full sweep.
+3. **Measure hierarchy capacity and routing independently.** Compare the
+   capacity-one and existing capacity-two true-node curves at matched stages,
+   then test the R3 adapter-response condition as a main deployable condition.
+   Preserve a true-node diagnostic alongside it: routing gains and stronger
+   owned-node representations answer different questions.
+4. **Only then revisit persistent integrator replay.** On the strongest frozen
+   frontier, compare H=2,048 with full cumulative-history replay and a
+   step-matched full-history stream. This isolates the already measured
+   5.194-point persistent-versus-fresh task-50 gap without confounding it with
+   an avoidably weak parent frontier.
+5. **Replicate before a publication claim.** Freeze choices on development,
+   run paired test evaluation once, and repeat across class orders or seeds.
+   Treat joint IID as a descriptive offline ceiling and local E2-LoRA as a
+   secondary comparator, never as execution gates.
 
 ## Integrity, reuse, and verification
 
@@ -88,14 +146,26 @@ against this run's opened test results.
   requests before that seal.
 - The locked result contains 50 stage metrics and all 1,275 stage/task cells.
 - The accuracy figure separates selected clean-validation full-replay
-  checkpoints from locked-test curves and includes the authenticated 50-stage
-  offline joint-IID ceiling; `stage_metrics.*` carries the same joint curve.
+  checkpoints from locked-test curves and includes both the authenticated
+  50-stage offline joint-IID reference and the independently trained
+  stage-matched joint curve; `stage_metrics.*` carries both joint curves.
+- The stage-matched control trained 49 fresh prefix models and reused the
+  authenticated task-50 model. It performed 3,020,210 image presentations and
+  47,330 optimizer steps in 4,656.731 training seconds plus 152.784 evaluation
+  seconds, with peak allocated VRAM of 4,144,351,232 bytes.
+- Its immediate authenticated resume completed in 2.95 seconds with zero
+  optimizer work. Protocol, 50-row ledger, and summary SHA-256 values remained
+  `bd4e903c...`, `5e6f5f5b...`, and `ede45ac3...`, respectively.
 - An identical rerun completed in 4.535 seconds, reused all six phases, and
   performed zero additional leaf, parent, or integrator optimizer steps.
 - Content and nanosecond mtimes were unchanged for 100 leaf checkpoints, 94
   parent checkpoints, 100 persistent-integrator checkpoints, 1,576 hierarchy
   metadata files, 15 scientific JSON records, and the behavior ledger. See
   `../evaluations/reuse_proof.json`.
-- All 53 focused serial ImageNet-R tests and both explicitly enabled real-model
-  integrator GPU tests passed. The Markdown/HTML report and both plots were
-  inspected.
+- All 61 focused ImageNet-R tests pass. The repository-wide suite has only the
+  31 already documented optional-environment failures: eight require FabricPC
+  and 23 require `tokenizers`; no unrelated assertion failed. The Markdown,
+  self-contained HTML, seven-page A4 PDF, and both plots were inspected. The
+  PDF's first render exposed a split-table header defect; the published rerender
+  shortens human-facing content hashes while preserving exact IDs in
+  `resource_accounting.*`, fits the table on one page, and has no clipping.

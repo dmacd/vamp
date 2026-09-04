@@ -1,0 +1,49 @@
+ImageNet-R-50 stage-matched joint-IID control
+=============================================
+
+Command
+-------
+scripts/vision/imagenetr/run_stage_matched_joint_local.sh
+
+Bound source run
+----------------
+integrator_run=fd5cb0502d705bbd9662e197e9d867fda2b6c1b633c340f513be4b33579fd8b4
+primary_run=08d22d66a713f9d3d45454935af6043a716a71888a169946ef5c2244af0809db
+control_protocol=92f4061ee1b7c9278c69e224e2d17062db3d011d033b166329929123ae22bbd4
+status=complete
+completed_at_utc=2026-09-04T00:42:48.882388Z
+
+Scientific result
+-----------------
+stages=50
+fresh_prefix_models=49
+reused_authenticated_task50_models=1
+incremental_accuracy_percent=81.63038444519043
+task50_accuracy_percent=78.86666655540466
+source_task50_accuracy_percent=78.86666655540466
+training_image_presentations=3020210
+optimizer_steps=47330
+training_seconds=4656.7309
+evaluation_seconds=152.7841
+peak_allocated_vram_bytes=4144351232
+summary_content_hash=d079245c9055da8aa0658995e7877389e8c5c943a635e8c06b448a35c891bd21
+
+Immediate resume proof
+----------------------
+resume_elapsed_seconds=2.95
+resume_optimizer_steps=0
+resume_image_presentations=0
+protocol_file_sha256=bd4e903c63ccda0c85b18553cba1e62100d3f3fb62f7af55514a28bc2bd690bb
+stage_ledger_file_sha256=5e6f5f5b21bb938b000efbc9b8bebce0e7f557cef0ad062c7ab6228187d59e9c
+summary_file_sha256=ede45ac3d46c501ea94464bfde3d03780b63e9cbdc27c3d4f0a3cc90ba74edb2
+resume_result=all 50 stages reused; no scientific artifact changed
+
+Interpretation
+--------------
+The full-50 joint model's earlier prefix points are retrospective and use
+future-task training examples. The stage-matched curve does not. Their mean
+difference is +3.164 percentage points across 50 stages and +3.229 points over
+stages 1--49. At task 50 the curves are the same authenticated model, yet it
+still exceeds the true-node oracle by 2.133 points. Missing future information
+therefore contributes before the endpoint but cannot explain the endpoint
+node-quality gap.

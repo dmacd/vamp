@@ -544,6 +544,36 @@ lost or left ambiguous across carries. Adapter-dependent R3 routing belongs in
 the main matrix whenever it is proposed as the mechanism for preserving that
 information.
 
+The post-hoc stage-matched joint-IID control separates task-horizon information
+from the misleading retrospective prefix curve of the single task-50 joint
+model. For each stage below 50, it initializes the same rank-16 QKV-plus-fc1
+LoRA and affine prefix head as the registered joint baseline, applies the same
+five-epoch SGD recipe to every official training image in the available task
+prefix, and evaluates only that test prefix after fitting is fixed. Stage 50
+reloads and re-evaluates the authenticated offline joint artifact as an exact
+endpoint check. The 50 model results form an immutable hash-chained ledger;
+models, optimizer checkpoints, and per-image predictions remain local while
+the authenticated protocol, ledger, compact projection, and reports are the
+portable evidence surface.
+
+The locked stage-matched comparison is data-matched. Both joint curves and the
+separately sealed locked hierarchy use every image in the 24,000-image training
+split; the 19,200/4,800 fit/validation hierarchy exists only in the clean
+development phase. Consequently, full-50 joint minus stage-matched joint
+measures task-horizon inclusion within a fixed joint recipe. That contrast
+bundles later-task examples, their additional global-softmax competitors, and
+the optimizer updates induced by those examples; it is not a pure causal
+estimate of semantic future information. At power-of-two stages,
+stage-matched joint minus true-node oracle additionally removes
+task-free routing and frontier fragmentation, leaving parent initialization,
+optimizer settings, and training order as the material implementation
+differences. A causal follow-up should vary those factors one at a time, then
+compare each final frontier node against an interval-only fresh model and the
+full joint model masked to the same class interval. R3 routing remains a
+separate main axis: a routing-only method cannot improve the owned adapter
+measured by the true-node diagnostic, whereas a response integrator may surpass
+it by using complementary evidence from non-owning adapters.
+
 The locked run first rebuilds on all 24,000 training identities. Its hierarchy
 and all 50 persistent checkpoints are complete before a training-seal record is
 published and the 6,000 test identities can be requested. Training and

@@ -12,6 +12,44 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Outcome — ImageNet-R-50 Stage-Matched Joint-IID Curve
+
+- **The 50-stage post-hoc control completed on 2026-09-03.** It trains a fresh
+  joint rank-16 LoRA model at every prefix from only the tasks available at
+  that stage, using the same immutable split and joint-IID recipe as the
+  authenticated offline ceiling. Stage 50 reuses and re-evaluates that
+  authenticated source model. The control is descriptive and never gates
+  execution or selects a method.
+- Stage-matched joint IID reached **78.867% final accuracy** and **81.630%
+  incremental accuracy**. The retrospective model trained through task 50
+  reached 84.795% incremental accuracy, 3.164 points higher across all stages
+  and 3.229 points higher over stages 1--49. Future-task training information
+  is associated with positive prefix transfer, but at task 50 it is absent by
+  definition and joint IID still leads the true-node oracle by 2.133 points.
+- The one-node power-of-two frontiers remove routing and fragmentation as
+  explanations. At tasks 2/4/8/16/32, stage-matched joint exceeds the matching
+  true-node parent by 2.283 points on average. At task 32 the same-data gap is
+  5.359 points while training through future tasks adds only 1.301 points to
+  that prefix. Parent/head construction and optimization are therefore the
+  first follow-up target; missing future information alone is insufficient.
+- Next, run a tasks-16/32 one-node factorial over inherited versus fresh heads,
+  parent versus joint weight decay, seeds/order, and (if needed) training
+  budget. Then fit only the two missing final-frontier interval controls for
+  tasks 33--48 and 49--50. Revisit R3 response integration and persistent
+  replay after establishing a stronger parent frontier.
+- The control trained 49 new prefix models in 4,656.731 training seconds and
+  152.784 evaluation seconds, totaling 3,020,210 image presentations and
+  47,330 optimizer steps. Peak allocated VRAM was 4,144,351,232 bytes. An
+  immediate authenticated resume completed in 2.95 seconds, reused every
+  stage, did zero optimizer work, and left its protocol, ledger, and summary
+  byte-identical.
+- The Markdown, self-contained HTML, seven-page A4 PDF, stage tables, two
+  accuracy figures, concise run log, and technical-writer handoff are published
+  with the bound parent report. All 61 focused ImageNet-R tests pass. The
+  repository-wide suite has no unrelated failure; its 31 failures are the
+  already documented optional-environment cases (eight need FabricPC and 23
+  need `tokenizers`). The PDF and plots were rendered and visually inspected.
+
 ## Completed Outcome — ImageNet-R-50 Ungated Full-Union Integrator
 
 - **The complete ungated benchmark finished on 2026-09-02.** Source commit

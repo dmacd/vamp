@@ -9,12 +9,15 @@ from math import fsum, isclose, isfinite
 from pathlib import Path
 import csv
 import json
+import re
 
 from apm.continual.artifacts import (
     ChainedJsonlLedger,
     atomic_write,
     canonical_json_bytes,
     file_sha256,
+    load_canonical_json,
+    record_sha256,
 )
 from apm.continual.vision.imagenetr.integrator_bank import simulate_binary_topology
 
@@ -29,34 +32,39 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = tuple(sorted({key for row in rows for key in row}))
     with path.open("w", encoding="utf-8", newline="") as output:
-        writer = csv.DictWriter(output, fieldnames=fields)
+        writer = csv.DictWriter(output, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
 
-def _joint_iid_stage_rows(
-    run: Path, locked: Mapping[str, object] | None
-) -> list[dict[str, object]]:
-    """Load and authenticate the sealed run's complete raw joint-IID test curve."""
-    if locked is None:
-        return []
+def _sealed_primary_report_path(run: Path, filename: str) -> Path | None:
+    """Resolve one report file from the primary run bound by the integrator config."""
     config = _load(run / "config_resolved.json")
     if config is None or not config.get("sealed_run_hash"):
-        return []
+        return None
     sealed_run_hash = str(config["sealed_run_hash"])
     configured_root = Path(str(config.get("inference_artifact_root", "")))
     candidate_roots = (
         ([configured_root] if configured_root.is_absolute() else [Path.cwd() / configured_root])
         + list(run.parents)
     )
-    source = next(
+    return next(
         (
-            root / "runs" / sealed_run_hash / "reports" / "stage_accuracy.csv"
+            root / "runs" / sealed_run_hash / "reports" / filename
             for root in candidate_roots
-            if (root / "runs" / sealed_run_hash / "reports" / "stage_accuracy.csv").is_file()
+            if (root / "runs" / sealed_run_hash / "reports" / filename).is_file()
         ),
         None,
     )
+
+
+def _joint_iid_stage_rows(
+    run: Path, locked: Mapping[str, object] | None
+) -> list[dict[str, object]]:
+    """Load the full-data joint model's future-informed prefix-evaluation curve."""
+    if locked is None:
+        return []
+    source = _sealed_primary_report_path(run, "stage_accuracy.csv")
     if source is None:
         return []
     with source.open(encoding="utf-8", newline="") as input_file:
@@ -95,15 +103,104 @@ def _joint_iid_stage_rows(
     return rows
 
 
+def _source_oracle_references(run: Path) -> list[dict[str, object]]:
+    """Load authenticated final oracle results from the less-compressed source hierarchy."""
+    source = _sealed_primary_report_path(run, "summary.json")
+    references = _load(run / "protocol" / "reference_results.json")
+    if source is None or references is None:
+        return []
+    if file_sha256(source) != references.get("primary_summary_sha256"):
+        raise ValueError("sealed primary summary differs from the integrator reference hash")
+    summary = load_canonical_json(source)
+    conditions = {
+        str(row["condition"]): row for row in summary.get("conditions", ())
+    }
+    requested = (
+        ("all-leaf true-task oracle", "leaf_bank_50", 50),
+        ("capacity-two retrained true-node oracle", "logt_retrain_union_r16", 8),
+    )
+    if any(condition not in conditions for _label, condition, _nodes in requested):
+        raise ValueError("sealed primary summary lacks expected oracle conditions")
+    return [
+        {
+            "condition": label,
+            "final_accuracy": float(conditions[condition]["true_node_oracle_last_accuracy"]),
+            "live_nodes": live_nodes,
+        }
+        for label, condition, live_nodes in requested
+    ]
+
+
+def _stage_matched_joint_rows(run: Path) -> list[dict[str, object]]:
+    """Load and authenticate fresh joint models trained separately at every stage."""
+    source = run / "evaluations" / "stage_matched_joint_iid.json"
+    if not source.is_file():
+        return []
+    record = load_canonical_json(source)
+    supplied_hash = str(record.get("content_hash", ""))
+    core = {
+        key: value
+        for key, value in record.items()
+        if key not in {"content_hash", "control_relative_path"}
+    }
+    if (
+        record.get("schema_version")
+        != "imagenetr50-stage-matched-joint-iid-summary-v1"
+        or supplied_hash != record_sha256(core)
+    ):
+        raise ValueError("stage-matched joint-IID summary does not authenticate")
+    rows = sorted(
+        (
+            {
+                "accuracy": float(row["accuracy"]),
+                "evaluation_seconds": float(row["evaluation_seconds"]),
+                "image_presentations": int(row["image_presentations"]),
+                "optimizer_steps": int(row["optimizer_steps"]),
+                "peak_vram_bytes": int(row["peak_vram_bytes"]),
+                "reused_source_model": bool(row["reused_source_model"]),
+                "stage": int(row["stage"]),
+                "test_examples": int(row["test_examples"]),
+                "train_examples": int(row["train_examples"]),
+                "last_minibatch_training_loss": (
+                    None
+                    if row.get("training_final_loss") is None
+                    else float(row["training_final_loss"])
+                ),
+                "training_seconds": float(row["training_seconds"]),
+            }
+            for row in record.get("rows", ())
+        ),
+        key=lambda row: int(row["stage"]),
+    )
+    if [int(row["stage"]) for row in rows] != list(range(1, 51)) or any(
+        not isfinite(float(row["accuracy"])) for row in rows
+    ):
+        raise ValueError("stage-matched joint-IID curve must contain stages 1..50")
+    expected_incremental = float(record["incremental_accuracy"])
+    if not isclose(
+        fsum(float(row["accuracy"]) for row in rows) / len(rows),
+        expected_incremental,
+        abs_tol=1e-9,
+    ):
+        raise ValueError("stage-matched joint-IID aggregate changed")
+    return rows
+
+
 def _write_tables(
     report_root: Path,
     locked: Mapping[str, object] | None,
-    joint_iid_rows: Sequence[Mapping[str, object]] = (),
+    future_informed_joint_rows: Sequence[Mapping[str, object]] = (),
+    stage_matched_joint_rows: Sequence[Mapping[str, object]] = (),
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     stage_rows = [] if locked is None else [dict(row) for row in locked.get("stage_metrics", ())]
     task_rows = [] if locked is None else [dict(row) for row in locked.get("task_accuracy_matrix", ())]
-    joint_iid_by_stage = {
-        int(row["stage"]): float(row["accuracy"]) for row in joint_iid_rows
+    future_informed_by_stage = {
+        int(row["stage"]): float(row["accuracy"])
+        for row in future_informed_joint_rows
+    }
+    stage_matched_by_stage = {
+        int(row["stage"]): float(row["accuracy"])
+        for row in stage_matched_joint_rows
     }
     flattened = [
         {
@@ -114,8 +211,26 @@ def _write_tables(
             "local_log_probability_union": dict(row.get("controls", {})).get(
                 "local_log_probability_union"
             ),
-            "offline_joint_iid": joint_iid_by_stage.get(int(row["stage"])),
+            "future_informed_joint_iid": future_informed_by_stage.get(
+                int(row["stage"])
+            ),
+            "future_information_effect_pp": (
+                None
+                if int(row["stage"]) not in stage_matched_by_stage
+                or int(row["stage"]) not in future_informed_by_stage
+                else future_informed_by_stage[int(row["stage"])]
+                - stage_matched_by_stage[int(row["stage"])]
+            ),
+            "frontier_hash": row.get("frontier_hash"),
             "raw_union": dict(row.get("controls", {})).get("raw_union"),
+            "stage_matched_joint_iid": stage_matched_by_stage.get(int(row["stage"])),
+            "stage_matched_minus_true_node_pp": (
+                None
+                if int(row["stage"]) not in stage_matched_by_stage
+                or dict(row.get("controls", {})).get("true_node_oracle") is None
+                else stage_matched_by_stage[int(row["stage"])]
+                - float(dict(row.get("controls", {}))["true_node_oracle"])
+            ),
             "stage": row.get("stage"),
             "true_node_oracle": dict(row.get("controls", {})).get("true_node_oracle"),
         }
@@ -138,6 +253,28 @@ def _write_tables(
         except ImportError:  # pragma: no cover - environment preflight requires pandas
             pass
     return flattened, task_rows
+
+
+def _write_stage_matched_tables(
+    report_root: Path, rows: Sequence[Mapping[str, object]]
+) -> None:
+    """Publish the compact stage-matched curve and its measured training work."""
+    if not rows:
+        return
+    projected = [dict(row) for row in rows]
+    _write_csv(report_root / "stage_matched_joint_iid.csv", projected)
+    atomic_write(
+        report_root / "stage_matched_joint_iid.json",
+        canonical_json_bytes({"rows": projected}),
+    )
+    try:
+        import pandas as pd
+
+        pd.DataFrame(projected).to_parquet(
+            report_root / "stage_matched_joint_iid.parquet", index=False
+        )
+    except ImportError:  # pragma: no cover - environment preflight requires pandas
+        pass
 
 
 def _clean_history_rows(
@@ -533,7 +670,8 @@ def _accuracy_plot(
     path: Path,
     diagnostic: Mapping[str, object] | None,
     locked_rows: Sequence[Mapping[str, object]],
-    joint_iid_rows: Sequence[Mapping[str, object]],
+    future_informed_joint_rows: Sequence[Mapping[str, object]],
+    stage_matched_joint_rows: Sequence[Mapping[str, object]],
     joint_iid_last: float | None,
     histories: Sequence[int],
     history_rows: Sequence[Mapping[str, object]],
@@ -594,7 +732,7 @@ def _accuracy_plot(
                 series_values(history_rows, key),
                 color=colors[index % len(colors)],
                 marker="s",
-                label=f"persistent H={capacity}",
+                label=f"persistent LogT integrator (H={capacity})",
             )
         axes[1].plot(
             stages,
@@ -602,7 +740,7 @@ def _accuracy_plot(
             color="#ef6c00",
             linestyle="--",
             marker="^",
-            label="raw union",
+            label="raw LogT union",
         )
         axes[1].plot(
             stages,
@@ -631,10 +769,10 @@ def _accuracy_plot(
             series_values(locked_rows, "accuracy"),
             color="#1565c0",
             linewidth=2.0,
-            label="persistent full-union integrator",
+            label="persistent LogT integrator (H=2048)",
         )
         for key, label, color, linestyle in (
-            ("raw_union", "raw union", "#ef6c00", "--"),
+            ("raw_union", "raw LogT union", "#ef6c00", "--"),
             ("true_node_oracle", "true-node oracle", "#2e7d32", ":"),
         ):
             axes[2].plot(
@@ -644,14 +782,22 @@ def _accuracy_plot(
                 label=label,
                 linestyle=linestyle,
             )
-        if joint_iid_rows:
+        if stage_matched_joint_rows:
             axes[2].plot(
-                [int(row["stage"]) for row in joint_iid_rows],
-                series_values(joint_iid_rows, "accuracy"),
-                color="#212121",
+                [int(row["stage"]) for row in stage_matched_joint_rows],
+                series_values(stage_matched_joint_rows, "accuracy"),
+                color="#7b1fa2",
                 linewidth=2.2,
+                label="joint-IID, stage-matched",
+            )
+        if future_informed_joint_rows:
+            axes[2].plot(
+                [int(row["stage"]) for row in future_informed_joint_rows],
+                series_values(future_informed_joint_rows, "accuracy"),
+                color="#212121",
+                linewidth=1.8,
                 linestyle="-.",
-                label="offline joint-IID ceiling",
+                label="joint-IID, trained through task 50",
             )
         elif joint_iid_last is not None:
             axes[2].axhline(
@@ -659,12 +805,12 @@ def _accuracy_plot(
                 color="#212121",
                 linewidth=2.2,
                 linestyle="-.",
-                label="offline joint-IID final ceiling",
+                label="joint-IID task-50 ceiling",
             )
         axes[2].set(
             xlabel="Tasks seen",
             ylabel="Test accuracy (%)",
-            title="Locked test with offline joint-IID ceiling",
+            title="Locked test: matched and future-informed controls",
         )
         axes[2].set_ylim(55, 100)
         axes[2].grid(alpha=0.2)
@@ -674,6 +820,77 @@ def _accuracy_plot(
         axes[2].set_axis_off()
     fig.tight_layout()
     fig.savefig(path, dpi=170)
+    plt.close(fig)
+
+
+def _joint_information_plot(
+    path: Path,
+    locked_rows: Sequence[Mapping[str, object]],
+    future_informed_rows: Sequence[Mapping[str, object]],
+    stage_matched_rows: Sequence[Mapping[str, object]],
+) -> None:
+    """Plot the direct future-information diagnostic and its residual oracle gap."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(2, 1, figsize=(12, 9), sharex=True)
+    if not (locked_rows and future_informed_rows and stage_matched_rows):
+        axes[0].text(0.5, 0.5, "Stage-matched control not complete", ha="center", va="center")
+        axes[0].set_axis_off()
+        axes[1].set_axis_off()
+    else:
+        stages = [int(row["stage"]) for row in locked_rows]
+        oracle = [float(row["true_node_oracle"]) for row in locked_rows]
+        future = [float(row["accuracy"]) for row in future_informed_rows]
+        matched = [float(row["accuracy"]) for row in stage_matched_rows]
+        axes[0].plot(
+            stages,
+            oracle,
+            color="#2e7d32",
+            linewidth=2.2,
+            label="true-node oracle",
+        )
+        axes[0].plot(
+            stages,
+            matched,
+            color="#7b1fa2",
+            linewidth=2.2,
+            label="joint-IID, stage-matched",
+        )
+        axes[0].plot(
+            stages,
+            future,
+            color="#212121",
+            linewidth=1.8,
+            linestyle="-.",
+            label="joint-IID, trained through task 50",
+        )
+        axes[0].set(ylabel="Test accuracy (%)", title="What does future training data explain?")
+        axes[0].grid(alpha=0.2)
+        axes[0].legend(fontsize=9)
+        axes[1].plot(
+            stages,
+            [future_value - matched_value for future_value, matched_value in zip(future, matched)],
+            color="#212121",
+            linestyle="-.",
+            label="future-data effect: full-50 joint − stage-matched joint",
+        )
+        axes[1].plot(
+            stages,
+            [matched_value - oracle_value for matched_value, oracle_value in zip(matched, oracle)],
+            color="#7b1fa2",
+            label="residual gap: stage-matched joint − true-node oracle",
+        )
+        for checkpoint in (1, 2, 4, 8, 16, 32, 50):
+            axes[1].axvline(checkpoint, color="#b0bec5", linewidth=0.55, alpha=0.35)
+        axes[1].axhline(0.0, color="#455a64", linewidth=0.8)
+        axes[1].set(xlabel="Tasks seen", ylabel="Difference (percentage points)")
+        axes[1].grid(alpha=0.2)
+        axes[1].legend(fontsize=9)
+    fig.tight_layout()
+    fig.savefig(path, dpi=180)
     plt.close(fig)
 
 
@@ -703,6 +920,29 @@ def _image_data(path: Path) -> str:
     return "data:image/png;base64," + b64encode(path.read_bytes()).decode("ascii")
 
 
+def write_report_manifest(report_root: str | Path) -> Path:
+    """Hash every compact report artifact after all requested formats exist."""
+    reports = Path(report_root)
+    files = tuple(
+        {
+            "path": path.name,
+            "sha256": file_sha256(path),
+            "size_bytes": path.stat().st_size,
+        }
+        for path in sorted(reports.iterdir())
+        if path.is_file() and path.name != "report_manifest.json"
+    )
+    return atomic_write(
+        reports / "report_manifest.json",
+        canonical_json_bytes(
+            {
+                "files": list(files),
+                "schema_version": "imagenetr50-integrator-report-manifest-v1",
+            }
+        ),
+    )
+
+
 def write_integrator_report(run_root: str | Path) -> Path:
     """Regenerate human-readable reports and machine-readable result projections."""
     run = Path(run_root)
@@ -713,20 +953,30 @@ def write_integrator_report(run_root: str | Path) -> Path:
     clean = _load(run / "evaluations" / "clean_development.json")
     development = _load(run / "evaluations" / "development_task50.json")
     locked = _load(run / "evaluations" / "locked_test.json")
-    joint_iid_rows = _joint_iid_stage_rows(run, locked)
-    stage_rows, _task_rows = _write_tables(reports, locked, joint_iid_rows)
+    future_informed_joint_rows = _joint_iid_stage_rows(run, locked)
+    stage_matched_joint_rows = _stage_matched_joint_rows(run)
+    source_oracles = _source_oracle_references(run)
+    stage_rows, _task_rows = _write_tables(
+        reports,
+        locked,
+        future_informed_joint_rows,
+        stage_matched_joint_rows,
+    )
+    _write_stage_matched_tables(reports, stage_matched_joint_rows)
     histories, history_rows = _clean_history_rows(clean, development)
     _write_clean_history_tables(reports, histories, history_rows)
     resources = _resource_rows(run)
     _write_resource_tables(reports, resources)
     lineage = reports / "lineage.png"
     accuracy_plot = reports / "accuracy.png"
+    information_plot = reports / "joint_information_gap.png"
     _lineage_plot(lineage)
     _accuracy_plot(
         accuracy_plot,
         diagnostic,
         stage_rows,
-        joint_iid_rows,
+        future_informed_joint_rows,
+        stage_matched_joint_rows,
         (
             None
             if locked is None
@@ -734,6 +984,12 @@ def write_integrator_report(run_root: str | Path) -> Path:
         ),
         histories,
         history_rows,
+    )
+    _joint_information_plot(
+        information_plot,
+        stage_rows,
+        future_informed_joint_rows,
+        stage_matched_joint_rows,
     )
     diagnostic_rows = []
     if diagnostic:
@@ -744,21 +1000,51 @@ def write_integrator_report(run_root: str | Path) -> Path:
     comparison_rows = []
     gap_rows = []
     static_rows = []
+    information_rows = []
+    frontier_gap_rows = []
+    hierarchy_context_rows = []
+    stage_control_work_rows = []
+    optimization_rows = []
+    information_conclusion = "The stage-matched control is not complete."
+    hierarchy_conclusion = "The authenticated source hierarchy is unavailable."
+    optimization_conclusion = "The task-32 recipe comparison is unavailable."
+    matched_incremental: float | None = None
     if locked:
         references = dict(locked["local_references"])
         static = dict(dict(locked["final_static_controls"])["controls"])
+        matched_incremental = (
+            None
+            if not stage_matched_joint_rows
+            else fsum(float(row["accuracy"]) for row in stage_matched_joint_rows)
+            / len(stage_matched_joint_rows)
+        )
+        oracle_incremental = fsum(
+            float(row["true_node_oracle"]) for row in stage_rows
+        ) / len(stage_rows)
         comparison_rows = [
             (
-                "LogT full-union integrator",
+                "persistent LogT integrator (H=2048)",
                 f"{float(locked['last_accuracy']):.3f}",
                 f"{float(locked['incremental_accuracy']):.3f}",
                 "evaluated method",
             ),
+            *(
+                [
+                    (
+                        "joint-IID, stage-matched",
+                        f"{float(stage_matched_joint_rows[-1]['accuracy']):.3f}",
+                        f"{float(matched_incremental):.3f}",
+                        "post-hoc available-data control",
+                    )
+                ]
+                if matched_incremental is not None
+                else []
+            ),
             (
-                "Offline joint-IID LoRA",
+                "joint-IID, trained through task 50",
                 f"{float(references['joint_iid_last']):.3f}",
                 f"{float(references['joint_iid_incremental']):.3f}",
-                "primary ceiling",
+                "offline ceiling; earlier points are future-informed",
             ),
             (
                 "Local E2-LoRA",
@@ -775,8 +1061,29 @@ def write_integrator_report(run_root: str | Path) -> Path:
         ]
         gaps = dict(locked["comparisons"])
         gap_rows = [
+            *(
+                [
+                    (
+                        "Persistent LogT − stage-matched joint",
+                        f"{float(locked['last_accuracy']) - float(stage_matched_joint_rows[-1]['accuracy']):+.3f}",
+                        f"{float(locked['incremental_accuracy']) - float(matched_incremental):+.3f}",
+                    ),
+                    (
+                        "True-node oracle − stage-matched joint",
+                        f"{float(static['true_node_oracle']) - float(stage_matched_joint_rows[-1]['accuracy']):+.3f}",
+                        f"{oracle_incremental - float(matched_incremental):+.3f}",
+                    ),
+                    (
+                        "Full-50 joint − stage-matched joint",
+                        f"{float(references['joint_iid_last']) - float(stage_matched_joint_rows[-1]['accuracy']):+.3f}",
+                        f"{float(references['joint_iid_incremental']) - float(matched_incremental):+.3f}",
+                    ),
+                ]
+                if matched_incremental is not None
+                else []
+            ),
             (
-                "Integrator − offline joint-IID",
+                "Persistent LogT − full-50 joint",
                 f"{float(gaps['last_minus_joint_iid']):+.3f}",
                 f"{float(gaps['incremental_minus_joint_iid']):+.3f}",
             ),
@@ -787,22 +1094,239 @@ def write_integrator_report(run_root: str | Path) -> Path:
             ),
         ]
         static_rows = [
-            ("raw union", f"{float(static['raw_union']):.3f}"),
-            ("cosine union", f"{float(static['cosine_union']):.3f}"),
+            ("raw LogT union", f"{float(static['raw_union']):.3f}"),
+            ("cosine LogT union", f"{float(static['cosine_union']):.3f}"),
             (
-                "affine-calibrated union",
+                "affine-calibrated LogT union",
                 f"{float(static['affine_calibrated_union']):.3f}",
             ),
             ("true-node oracle", f"{float(static['true_node_oracle']):.3f}"),
         ]
+        source_by_condition = {
+            str(row["condition"]): row for row in source_oracles
+        }
+        source_labels = (
+            "all-leaf true-task oracle",
+            "capacity-two retrained true-node oracle",
+        )
+        if all(label in source_by_condition for label in source_labels):
+            all_leaf_accuracy = float(
+                source_by_condition["all-leaf true-task oracle"]["final_accuracy"]
+            )
+            capacity_two_accuracy = float(
+                source_by_condition["capacity-two retrained true-node oracle"][
+                    "final_accuracy"
+                ]
+            )
+            capacity_one_accuracy = float(static["true_node_oracle"])
+            joint_accuracy = float(references["joint_iid_last"])
+            hierarchy_context_rows = [
+                (
+                    "all-leaf true-task oracle",
+                    50,
+                    f"{all_leaf_accuracy:.3f}",
+                    "no consolidation; diagnostic task identity",
+                ),
+                (
+                    "capacity-two retrained true-node oracle",
+                    8,
+                    f"{capacity_two_accuracy:.3f}",
+                    "less-compressed source hierarchy",
+                ),
+                (
+                    "capacity-one full-union true-node oracle",
+                    int(stage_rows[-1]["live_nodes"]),
+                    f"{capacity_one_accuracy:.3f}",
+                    "current hierarchy",
+                ),
+                (
+                    "joint-IID, trained through task 50",
+                    1,
+                    f"{joint_accuracy:.3f}",
+                    "one shared adapter and global head",
+                ),
+            ]
+            hierarchy_conclusion = (
+                "The no-consolidation leaf oracle reaches "
+                f"{all_leaf_accuracy:.3f}%. The capacity-two retrained hierarchy loses "
+                f"{all_leaf_accuracy - capacity_two_accuracy:.3f} points but still exceeds "
+                f"the offline joint model by {capacity_two_accuracy - joint_accuracy:+.3f} "
+                "points. Compressing further to the current capacity-one hierarchy loses "
+                f"another {capacity_two_accuracy - capacity_one_accuracy:.3f} points and "
+                f"finishes {capacity_one_accuracy - joint_accuracy:+.3f} points relative "
+                "to joint-IID. Thus neither true-node routing nor rank-16 LoRA inherently "
+                "prevents joint-level performance; the evidence points most strongly to "
+                "accuracy lost as represented intervals are enlarged and consolidated, "
+                "together with parent optimization. This is descriptive, not a clean "
+                "capacity ablation: the oracle candidate sets shrink as more nodes are kept; "
+                "the capacity-two parents used 5e-4 weight decay and distinct deterministic "
+                "initialization/order seeds, whereas the current capacity-one parents used "
+                "zero weight decay."
+            )
+        if stage_matched_joint_rows:
+            stage_control_work_rows = [
+                (
+                    sum(not bool(row["reused_source_model"]) for row in stage_matched_joint_rows),
+                    sum(int(row["image_presentations"]) for row in stage_matched_joint_rows),
+                    sum(int(row["optimizer_steps"]) for row in stage_matched_joint_rows),
+                    f"{fsum(float(row['training_seconds']) for row in stage_matched_joint_rows) / 60:.2f}",
+                    f"{max(int(row['peak_vram_bytes']) for row in stage_matched_joint_rows) / 2**30:.2f}",
+                )
+            ]
+            selected_stages = frozenset((1, 2, 4, 8, 16, 32, 50))
+            information_rows = [
+                (
+                    int(row["stage"]),
+                    f"{float(row['true_node_oracle']):.3f}",
+                    f"{float(row['stage_matched_joint_iid']):.3f}",
+                    f"{float(row['future_informed_joint_iid']):.3f}",
+                    f"{float(row['future_information_effect_pp']):+.3f}",
+                    f"{float(row['stage_matched_minus_true_node_pp']):+.3f}",
+                )
+                for row in stage_rows
+                if int(row["stage"]) in selected_stages
+            ]
+            future_effects = tuple(
+                float(row["future_information_effect_pp"])
+                for row in stage_rows[:-1]
+            )
+            residual_gaps = tuple(
+                float(row["stage_matched_minus_true_node_pp"])
+                for row in stage_rows
+            )
+            power_two_gaps = tuple(
+                float(row["stage_matched_minus_true_node_pp"])
+                for row in stage_rows
+                if int(row["stage"]) in {1, 2, 4, 8, 16, 32}
+            )
+            oldest_final_interval = stage_rows[31]
+            frontier_gap_rows = [
+                (
+                    live_nodes,
+                    len(group),
+                    f"{fsum(float(row['stage_matched_minus_true_node_pp']) for row in group) / len(group):+.3f}",
+                    f"{fsum(float(row['future_information_effect_pp']) for row in group) / len(group):+.3f}",
+                )
+                for live_nodes in sorted(
+                    {int(row["live_nodes"]) for row in stage_rows}
+                )
+                for group in (
+                    tuple(
+                        row
+                        for row in stage_rows
+                        if int(row["live_nodes"]) == live_nodes
+                    ),
+                )
+            ]
+            information_conclusion = (
+                "At task 50 the two joint controls are the same authenticated model, so "
+                f"their difference is {float(stage_rows[-1]['future_information_effect_pp']):+.3f} "
+                "point by construction, while it exceeds the true-node oracle by "
+                f"{residual_gaps[-1]:.3f} points. This rules out tasks beyond the benchmark "
+                "horizon, but not node-local missing transfer: the final older interval "
+                "nodes were frozen before later intervals arrived. Before task 50, training "
+                "through all 50 tasks changes prefix accuracy by "
+                f"{fsum(future_effects) / len(future_effects):+.3f} points on average "
+                f"(range {min(future_effects):+.3f} to {max(future_effects):+.3f}); "
+                f"the contrast is positive at {sum(value > 0 for value in future_effects)} "
+                f"stages and negative at {sum(value < 0 for value in future_effects)}. "
+                "At the one-node power-of-two frontiers, where routing and frontier "
+                "fragmentation disappear, the stage-matched joint-minus-oracle gaps average "
+                f"{fsum(power_two_gaps) / len(power_two_gaps):+.3f} points; those same-stage "
+                "gaps cannot be caused by unseen later tasks. The task-32 row is also an "
+                "exact decomposition of the oldest node retained at task 50 (tasks 1–32): "
+                "later-task co-training changes that interval by "
+                f"{float(oldest_final_interval['future_information_effect_pp']):+.3f} points, "
+                "while the matched fresh joint model differs from the hierarchy parent by "
+                f"{float(oldest_final_interval['stage_matched_minus_true_node_pp']):+.3f} points. "
+                "The live-node grouping is descriptive rather than causal because node count "
+                "is correlated with task stage."
+            )
+            matching_snapshots = tuple(
+                (path, snapshot)
+                for path in sorted(
+                    (run / "hierarchies").glob("*/snapshots/stage_032.json")
+                )
+                for snapshot in (_load(path),)
+                if snapshot is not None
+                and snapshot.get("content_hash")
+                == oldest_final_interval.get("frontier_hash")
+            )
+            if len(matching_snapshots) > 1:
+                raise ValueError("multiple hierarchies claim the locked task-32 frontier")
+            if matching_snapshots:
+                snapshot_path, snapshot = matching_snapshots[0]
+                logical_ids = tuple(snapshot.get("logical_node_ids", ()))
+                node_hashes = tuple(snapshot.get("node_hashes", ()))
+                if len(logical_ids) != 1 or len(node_hashes) != 1:
+                    raise ValueError("the task-32 frontier must contain exactly one node")
+                node_root = snapshot_path.parents[1] / "nodes" / str(logical_ids[0])
+                node = _load(node_root / "node.json")
+                parent_training = _load(node_root / "training_metrics.json")
+                if node is None or node.get("content_hash") != node_hashes[0]:
+                    raise ValueError("the task-32 snapshot does not authenticate its node")
+                if parent_training is None:
+                    raise ValueError("the task-32 parent lacks training measurements")
+                matched_stage32 = stage_matched_joint_rows[31]
+                if int(node.get("represented_train_image_count", -1)) != int(
+                    matched_stage32["train_examples"]
+                ):
+                    raise ValueError("the task-32 comparison does not use matched rows")
+                if (
+                    int(parent_training["image_presentations"]),
+                    int(parent_training["optimizer_steps"]),
+                ) != (
+                    int(matched_stage32["image_presentations"]),
+                    int(matched_stage32["optimizer_steps"]),
+                ):
+                    raise ValueError("the task-32 comparison does not have matched work")
+                optimization_rows = [
+                    (
+                        "capacity-one hierarchy parent",
+                        "unioned child classifier rows",
+                        "0",
+                        int(parent_training["image_presentations"]),
+                        int(parent_training["optimizer_steps"]),
+                        f"{float(oldest_final_interval['true_node_oracle']):.3f}",
+                    ),
+                    (
+                        "joint-IID, stage-matched",
+                        "fresh deterministic prefix head",
+                        "5e-4",
+                        int(matched_stage32["image_presentations"]),
+                        int(matched_stage32["optimizer_steps"]),
+                        f"{float(matched_stage32['accuracy']):.3f}",
+                    ),
+                ]
+                optimization_conclusion = (
+                    "Both task-32 fits receive the same training rows, presentations, and "
+                    "optimizer-step budget, yet the hierarchy parent tests "
+                    f"{float(oldest_final_interval['stage_matched_minus_true_node_pp']):.3f} "
+                    "points worse. Fewer examples or steps cannot explain this contrast. "
+                    "Convergence and under-training remain possible because classifier "
+                    "initialization, regularization, and deterministic seed/order differ; "
+                    "they require the proposed factorial and epoch sweep. The recorded "
+                    "final-loss field is a last-minibatch diagnostic and is deliberately "
+                    "not compared."
+                )
     selected = None if clean is None else {
         "feature_variant": clean.get("selected_variant"),
         "historical_capacity": clean.get("selected_historical_capacity"),
         "parent_training": clean.get("selected_parent_training"),
     }
-    history_headers = ["stage", "fresh mean", "raw union", "true-node oracle"]
+    history_headers = [
+        "stage",
+        "fresh full-replay integrator",
+        "raw LogT union",
+        "true-node oracle",
+    ]
     for capacity in histories:
-        history_headers.extend((f"H={capacity}", f"H={capacity} - fresh (pp)"))
+        history_headers.extend(
+            (
+                f"persistent LogT integrator (H={capacity})",
+                f"persistent H={capacity} − fresh (pp)",
+            )
+        )
 
     def accuracy_text(value: object) -> str:
         return "—" if value is None else f"{float(value):.3f}"
@@ -836,13 +1360,65 @@ def write_integrator_report(run_root: str | Path) -> Path:
     split_note = (
         "The middle accuracy panel shows fresh full-replay and persistent integrator "
         "measurements only at the selected clean-validation checkpoints (tasks "
-        "2/4/8/16/50). The right panel shows the complete locked-test curves, including "
-        "the offline joint-IID ceiling. Validation and test curves are deliberately kept "
-        "in separate panels and must not be compared point-for-point across splits."
+        "2/4/8/16/50). The right panel shows complete locked-test curves. ‘Joint-IID, "
+        "stage-matched’ means a separately initialized rank-16 model trained only on data "
+        "available through that stage. ‘Joint-IID, trained through task 50’ means the one "
+        "offline model trained on all tasks and then evaluated on each class prefix; its "
+        "points before task 50 use future training information. Validation and test curves "
+        "remain in separate panels and must not be compared point-for-point across splits."
+    )
+    stage_control_protocol_note = (
+        "The stage-matched control fits a fresh joint rank-16 LoRA adapter and affine "
+        "head for five epochs at every stage, using exactly the training examples from "
+        "tasks seen by that stage. The hierarchy nodes and both joint controls use the "
+        "same pinned ViT backbone, rank and alpha 16, and attention-QKV plus MLP-fc1 "
+        "adapter targets. Task 50 reuses and re-evaluates the authenticated offline "
+        "model, providing an endpoint identity check. Test labels never influence fitting "
+        "or model choice. The locked hierarchy and both joint curves use the same complete "
+        "24,000-image training population; the 19,200/4,800 split is confined to the "
+        "separate clean-development panel."
+    )
+    stage_control_estimand_note = (
+        "Full-50 joint minus stage-matched joint is a task-horizon contrast within one "
+        "joint-training recipe. It bundles later-task examples, their extra global-softmax "
+        "competitors, and the additional optimizer updates those examples induce; it is not "
+        "a pure causal estimate of semantic ‘future information.’ The compact table shows "
+        "task 1, every power-of-two frontier, and task 50. Power-of-two frontiers contain "
+        "exactly one hierarchy node, so they remove routing and multi-node score-combination "
+        "effects. The figure and machine-readable tables retain all 50 stages."
+    )
+    oracle_scope_note = (
+        "At task 50 the true-node oracle is given the correct one of three hierarchy "
+        "nodes and predicts within only 128, 64, or 8 owned classes, whereas the joint "
+        "model must choose among all 200 classes. The oracle therefore has an easier "
+        "decision problem. Finishing below joint-IID cannot be blamed on routing and is "
+        "direct evidence that the retained parent representations or classifier rows are "
+        "weaker; it is not evidence that label-aware routing itself is harmful."
+    )
+    information_headers = (
+        "tasks",
+        "true-node oracle",
+        "joint-IID, stage-matched",
+        "joint-IID, trained through task 50",
+        "future-data effect (pp)",
+        "matched joint − oracle (pp)",
+    )
+    optimization_headers = (
+        "task-32 condition",
+        "classifier initialization",
+        "weight decay",
+        "presentations",
+        "optimizer steps",
+        "test accuracy (%)",
+    )
+    abbreviated_condition = lambda value: re.sub(
+        r"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])",
+        lambda match: f"{match.group(0)[:12]}…",
+        str(value),
     )
     resource_summary = [
         (
-            row.get("condition"),
+            abbreviated_condition(row.get("condition")),
             "—" if row.get("node_example_forwards") is None else row["node_example_forwards"],
             (
                 "—"
@@ -857,23 +1433,138 @@ def write_integrator_report(run_root: str | Path) -> Path:
         )
         for row in resources
     ]
+    next_experiment_rows = (
+        (
+            "One-node parent-recipe factorial",
+            "union-head initialization, weight decay, order seed, or training budget",
+            "At tasks 16 and 32, vary one factor at a time between the parent and stage-matched recipes.",
+            "Attributes the routing-free same-data gap instead of treating it as hierarchy loss.",
+        ),
+        (
+            "Final-frontier interval decomposition",
+            "missing transfer from tasks outside each frozen node",
+            "Use the completed task-32 decomposition for tasks 1–32; train fresh offset "
+            "interval models only for tasks 33–48 and 49–50, then mask full-50 joint to each.",
+            "Separates parent-recipe loss from other-task co-training with matched output choices.",
+        ),
+        (
+            "Matched capacity-one/capacity-two rebuild",
+            "interval size and consolidation severity",
+            "Use identical parent initialization, optimizer, seed schedule, and epochs at both capacities.",
+            "Tests whether the observed 2.617-point capacity difference survives recipe matching.",
+        ),
+        (
+            "Replicated optimization sweep",
+            "single-seed variance or five-epoch under-training",
+            "Repeat decisive controls over fixed seeds and extend epochs with validation-only stopping.",
+            "Adds uncertainty and determines whether gaps are stable or optimization noise.",
+        ),
+    )
+    abstract = (
+        "We evaluate a capacity-one LogT hierarchy with full-union parent retraining and "
+        "a persistent prediction integrator on a fixed ImageNet-R-50 split. The integrator "
+        f"reaches {float(locked['last_accuracy']):.3f}% final and "
+        f"{float(locked['incremental_accuracy']):.3f}% mean stage accuracy. A new post-hoc curve trains "
+        "one fresh rank-16 joint model using exactly the tasks available at each stage, "
+        f"reaching {float(matched_incremental):.3f}% mean stage accuracy. Training one joint "
+        "model through task 50 and retrospectively restricting its output rows changes the "
+        f"mean by {float(dict(locked['local_references'])['joint_iid_incremental']) - float(matched_incremental):+.3f} "
+        "points, measuring the combined effect of future-task training under the joint "
+        "architecture. Same-stage gaps at one-node frontiers remain, so future information "
+        "is only one contributor; optimization path and shared-representation supervision "
+        "are independently implicated."
+        if locked is not None and matched_incremental is not None
+        else "This report evaluates a capacity-one LogT hierarchy and direct prediction integrator on a fixed ImageNet-R-50 split."
+    )
     markdown = (
         "# ImageNet-R-50 Full-Union LogT Prediction Integrator\n\n"
         f"Run: `{run.name}`  \nWorkflow state: `{state.get('phase', 'NOT_STARTED')}`\n\n"
+        "## Abstract\n\n"
+        + abstract
+        + "\n\n"
         "This experiment replaces task-free node selection with a direct 200-way residual "
         "integrator over frozen node behavior. Its capacity-one binary counter retrains every "
         "parent on the complete represented training union; only persistent integrator history "
         "uses a bounded replay reservoir. No accuracy or comparator value gates execution.\n\n"
         "## Primary benchmark comparison\n\n"
         + _markdown_table(
-            ("condition", "Last (%)", "Incremental (%)", "role"),
+            ("condition", "Last (%)", "Mean stage accuracy (%)", "role"),
             comparison_rows,
         )
         + "\n"
-        + _markdown_table(("descriptive difference", "Last (pp)", "Incremental (pp)"), gap_rows)
-        + "\nThe offline joint-IID rank-16 LoRA run is the primary ceiling. The local "
-        "E2-LoRA reproduction is secondary, and the published E2-LoRA values are "
-        "external context. None is a pass/fail condition.\n\n"
+        + _markdown_table(
+            ("descriptive difference", "Last (pp)", "Mean-stage (pp)"), gap_rows
+        )
+        + "\nThe task-50 offline joint-IID rank-16 LoRA result is the primary ceiling. "
+        "Its earlier prefix evaluations are future-informed references, not stage-matched "
+        "ceilings. The local E2-LoRA reproduction is secondary, and published E2-LoRA "
+        "values are external context. None is a pass/fail condition.\n\n"
+        "## Future-information diagnostic\n\n"
+        + stage_control_protocol_note
+        + "\n\n"
+        + stage_control_estimand_note
+        + "\n\n"
+        + _markdown_table(information_headers, information_rows)
+        + "\n"
+        + _markdown_table(
+            (
+                "fresh models",
+                "training presentations",
+                "optimizer steps",
+                "training minutes",
+                "peak VRAM (GiB)",
+            ),
+            stage_control_work_rows,
+        )
+        + "\n"
+        + _markdown_table(
+            (
+                "live hierarchy nodes",
+                "stages",
+                "mean matched joint − oracle (pp)",
+                "mean future-data effect (pp)",
+            ),
+            frontier_gap_rows,
+        )
+        + "\n"
+        + information_conclusion
+        + "\n\n### Task-32 recipe evidence\n\n"
+        + _markdown_table(optimization_headers, optimization_rows)
+        + "\n"
+        + optimization_conclusion
+        + "\n\n### Hierarchy-compression context\n\n"
+        + _markdown_table(
+            ("condition", "live adapters/models", "Last (%)", "role"),
+            hierarchy_context_rows,
+        )
+        + "\n"
+        + hierarchy_conclusion
+        + "\n\n"
+        + oracle_scope_note
+        + "\n\nThe remaining explanations are architectural and optimization differences, "
+        "not routing error: the joint model shares one adapter across every seen class and "
+        "receives global negative-class gradients; the oracle chooses among interval-local "
+        "adapters whose heads were trained with local softmax objectives. Consolidated "
+        "parents inherit unioned child head rows rather than initializing a fresh global "
+        "head, and their repeated carry path can land in a different optimum. The hierarchy "
+        "also uses zero weight decay while the joint control uses 5e-4. At non-power-of-two "
+        "stages, several independent live adapters additionally prevent cross-interval "
+        "representation sharing. Node-local absence of later-task transfer remains plausible "
+        "at the final fragmented frontier even though benchmark-level future data does not. "
+        "A single seed and untuned five-epoch budget leave optimizer variance and under-training "
+        "as unresolved contributors.\n\n"
+        + "### Discriminating next experiments\n\n"
+        + _markdown_table(
+            ("experiment", "hypothesis", "comparison", "decisive value"),
+            next_experiment_rows,
+        )
+        + "\nThe adapter-dependent R3 condition remains relevant to the separate "
+        "task-free routing gap. A routing-only change cannot strengthen the owned node used "
+        "by the true-node diagnostic; an R3 response integrator could nevertheless exceed "
+        "that diagnostic if it extracts complementary evidence from non-owning adapters. "
+        "The parent-quality and task-free routing questions should therefore be measured as "
+        "separate axes.\n\n"
+        + "![Joint information diagnostic](joint_information_gap.png)\n\n"
         "## Report-only feature diagnostic\n\n"
         + _markdown_table(("feature family", "mean validation accuracy"), diagnostic_rows)
         + (f"\nConfigured feature family: `{diagnostic.get('selected_variant')}`.\n" if diagnostic else "")
@@ -882,6 +1573,10 @@ def write_integrator_report(run_root: str | Path) -> Path:
         + clean_note
         + _markdown_table(tuple(history_headers), history_table_rows)
         + "\n"
+        + "Here ‘fresh full-replay integrator’ is a newly initialized three-hidden-layer "
+        "residual prediction MLP fit on all prefix observer examples; it is not a newly "
+        "trained LoRA adapter. ‘Persistent LogT integrator (H=2048)’ is the same MLP family "
+        "warm-started across arrivals with at most 2,048 historical examples. "
         + "Validation identities are excluded from every clean node and integrator update. "
         "Full-union parent retraining is the primary condition, matching the successful "
         "Permuted-MNIST consolidation methodology.\n\n"
@@ -912,10 +1607,40 @@ def write_integrator_report(run_root: str | Path) -> Path:
     diagnostic_html = _html_table(("feature family", "mean validation accuracy"), diagnostic_rows)
     history_html = _html_table(tuple(history_headers), history_table_rows)
     comparison_html = _html_table(
-        ("condition", "Last (%)", "Incremental (%)", "role"), comparison_rows
+        ("condition", "Last (%)", "Mean stage accuracy (%)", "role"),
+        comparison_rows,
     )
     gap_html = _html_table(
-        ("descriptive difference", "Last (pp)", "Incremental (pp)"), gap_rows
+        ("descriptive difference", "Last (pp)", "Mean-stage (pp)"), gap_rows
+    )
+    information_html = _html_table(information_headers, information_rows)
+    optimization_html = _html_table(optimization_headers, optimization_rows)
+    stage_control_work_html = _html_table(
+        (
+            "fresh models",
+            "training presentations",
+            "optimizer steps",
+            "training minutes",
+            "peak VRAM (GiB)",
+        ),
+        stage_control_work_rows,
+    )
+    frontier_gap_html = _html_table(
+        (
+            "live hierarchy nodes",
+            "stages",
+            "mean matched joint − oracle (pp)",
+            "mean future-data effect (pp)",
+        ),
+        frontier_gap_rows,
+    )
+    hierarchy_context_html = _html_table(
+        ("condition", "live adapters/models", "Last (%)", "role"),
+        hierarchy_context_rows,
+    )
+    next_experiment_html = _html_table(
+        ("experiment", "hypothesis", "comparison", "decisive value"),
+        next_experiment_rows,
     )
     static_html = _html_table(
         ("task-free/oracle diagnostic", "Last (%)"), static_rows
@@ -932,34 +1657,29 @@ def write_integrator_report(run_root: str | Path) -> Path:
     html = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ImageNet-R-50 LogT Prediction Integrator</title>
-<style>body{{font:16px/1.55 system-ui,sans-serif;max-width:1200px;margin:auto;padding:2rem;color:#17202a;background:#fafafa}}h1,h2{{color:#123b5d}}table{{border-collapse:collapse;width:100%}}th,td{{border:1px solid #ccd5dd;padding:.45rem;text-align:left}}th{{background:#e8f1f8}}details{{background:white;border:1px solid #d9e1e7;border-radius:8px;padding:1rem;margin:1rem 0}}summary{{font-weight:700;cursor:pointer}}img{{max-width:100%;height:auto}}code{{overflow-wrap:anywhere}}</style></head>
-<body><h1>ImageNet-R-50 Full-Union LogT Prediction Integrator</h1><p><strong>Run:</strong> <code>{escape(run.name)}</code><br><strong>State:</strong> {escape(str(state.get('phase', 'NOT_STARTED')))}</p>
+<style>
+body{{font:16px/1.55 system-ui,sans-serif;max-width:1200px;margin:auto;padding:2rem;color:#17202a;background:#fafafa}}
+h1,h2,h3{{color:#123b5d}}table{{border-collapse:collapse;width:100%}}
+th,td{{border:1px solid #ccd5dd;padding:.45rem;text-align:left;vertical-align:top;overflow-wrap:anywhere}}
+th{{background:#e8f1f8}}details{{background:white;border:1px solid #d9e1e7;border-radius:8px;padding:1rem;margin:1rem 0}}
+summary{{font-weight:700;cursor:pointer}}img{{max-width:100%;height:auto}}code{{overflow-wrap:anywhere}}
+@page{{size:A4;margin:14mm}}
+@media print{{body{{font:10pt/1.4 Georgia,serif;max-width:none;padding:0;background:white}}h1{{font-size:20pt}}h2{{font-size:16pt}}h3{{font-size:12pt}}details{{break-inside:auto;border:0;padding:0}}summary{{font:700 15pt/1.2 Georgia,serif;color:#123b5d;margin:1rem 0 .5rem;list-style:none;break-after:avoid}}summary::-webkit-details-marker{{display:none}}table{{font-size:8.2pt;break-inside:avoid}}thead{{display:table-row-group}}tr{{break-inside:avoid}}img{{break-inside:avoid;max-height:245mm;object-fit:contain}}.raw-data{{display:none}}}}
+</style></head>
+<body><h1>ImageNet-R-50 Full-Union LogT Prediction Integrator</h1><p><strong>Run:</strong> <code>{escape(run.name)}</code><br><strong>State:</strong> {escape(str(state.get('phase', 'NOT_STARTED')))}</p><h2>Abstract</h2><p>{escape(abstract)}</p>
 <p>A direct 200-way residual integrator observes frozen LogT node behavior. Capacity-one parents retrain on every represented training example; only persistent integrator history is bounded. Accuracy never gates execution.</p>
-<details open><summary>Primary benchmark comparison</summary>{comparison_html}{gap_html}<p>Offline joint-IID is the primary ceiling; local E2-LoRA is secondary. All differences are descriptive.</p></details>
-<details><summary>Report-only feature diagnostic</summary>{diagnostic_html}<p>Configured feature family: <code>{escape(str(None if diagnostic is None else diagnostic.get('selected_variant')))}</code>.</p></details>
-<details open><summary>Frozen development choices</summary><p><code>{escape(json.dumps(selected, sort_keys=True))}</code></p><p>{escape(clean_note.strip())}</p>{history_html}<p>Validation identities are excluded from all clean trainable components.</p></details>
-<details><summary>Final-frontier diagnostics</summary>{static_html}<p>These rows explain the hierarchy frontier and do not define acceptance.</p></details>
-<details open><summary>Accuracy</summary><p>{escape(split_note)}</p><img alt="Feature diagnostic, selected validation checkpoints, and locked test curves with the offline joint-IID ceiling" src="{_image_data(accuracy_plot)}"></details>
-<details><summary>Capacity-one lineage</summary><img alt="Capacity-one binary-counter lineage" src="{_image_data(lineage)}"></details>
-<details><summary>Complexity and resources</summary><p>There are at most bit_length(t) carries and popcount(t) live nodes. Full-union carry cost grows with interval size; cumulative parent presentations are O(N T log T) for N examples per task. Persistent observer work stays bounded by popcount(t) × (current + H).</p>{resource_html}<pre>{escape(json.dumps({'clean': clean, 'development': development}, indent=2, sort_keys=True))}</pre></details>
+<details open><summary>Primary benchmark comparison</summary>{comparison_html}{gap_html}<p>The task-50 offline joint-IID result is the primary ceiling. Earlier evaluations of that model are future-informed references. Local E2-LoRA is secondary; all differences are descriptive.</p></details>
+<details open><summary>Future-information diagnostic</summary><p>{escape(stage_control_protocol_note)}</p><p>{escape(stage_control_estimand_note)}</p>{information_html}{stage_control_work_html}{frontier_gap_html}<p>{escape(information_conclusion)}</p><h3>Task-32 recipe evidence</h3>{optimization_html}<p>{escape(optimization_conclusion)}</p><h3>Hierarchy-compression context</h3>{hierarchy_context_html}<p>{escape(hierarchy_conclusion)}</p><p>{escape(oracle_scope_note)}</p><p>The residual candidate explanations are shared-representation and global-softmax supervision in joint training; union-head initialization and repeated carry optimization in the hierarchy; zero hierarchy weight decay versus 5e-4 in the joint control; frontier fragmentation and node-local missing later-task transfer at non-power-of-two stages; and single-seed or fixed-budget optimization variance.</p><h3>Discriminating next experiments</h3>{next_experiment_html}<p>The adapter-dependent R3 condition targets the separate task-free routing gap. A routing-only change cannot strengthen the owned node used by the true-node diagnostic, although an R3 response integrator could exceed that diagnostic by extracting complementary evidence from non-owning adapters. Parent quality and task-free routing should be measured as separate axes.</p><img alt="Stage-matched joint-IID, future-informed joint-IID, and true-node-oracle curves with their signed gaps" src="{_image_data(information_plot)}"></details>
+<details open><summary>Report-only feature diagnostic</summary>{diagnostic_html}<p>Configured feature family: <code>{escape(str(None if diagnostic is None else diagnostic.get('selected_variant')))}</code>.</p></details>
+<details open><summary>Frozen development choices</summary><p><code>{escape(json.dumps(selected, sort_keys=True))}</code></p><p>{escape(clean_note.strip())}</p>{history_html}<p>“Fresh full-replay integrator” is a newly initialized three-hidden-layer residual prediction MLP fit on all prefix observer examples; it is not a fresh LoRA adapter. “Persistent LogT integrator (H=2048)” is the same MLP family warm-started with at most 2,048 historical examples. Validation identities are excluded from all clean trainable components.</p></details>
+<details open><summary>Final-frontier diagnostics</summary>{static_html}<p>These rows explain the hierarchy frontier and do not define acceptance.</p></details>
+<details open><summary>Accuracy</summary><p>{escape(split_note)}</p><img alt="Feature diagnostic, selected validation checkpoints, and locked test curves with stage-matched and future-informed joint controls" src="{_image_data(accuracy_plot)}"></details>
+<details open><summary>Capacity-one lineage</summary><img alt="Capacity-one binary-counter lineage" src="{_image_data(lineage)}"></details>
+<details open><summary>Complexity and resources</summary><p>There are at most bit_length(t) carries and popcount(t) live nodes. Full-union carry cost grows with interval size; cumulative parent presentations are O(N T log T) for N examples per task. Persistent observer work stays bounded by popcount(t) × (current + H).</p>{resource_html}<pre class="raw-data">{escape(json.dumps({'clean': clean, 'development': development}, indent=2, sort_keys=True))}</pre></details>
 </body></html>"""
     atomic_write(reports / "REPORT.html", html.encode("utf-8"))
-    files = tuple(
-        {
-            "path": path.name,
-            "sha256": file_sha256(path),
-            "size_bytes": path.stat().st_size,
-        }
-        for path in sorted(reports.iterdir())
-        if path.is_file() and path.name != "report_manifest.json"
-    )
-    atomic_write(
-        reports / "report_manifest.json",
-        canonical_json_bytes(
-            {"files": list(files), "schema_version": "imagenetr50-integrator-report-manifest-v1"}
-        ),
-    )
+    write_report_manifest(reports)
     return reports / "REPORT.html"
 
 
-__all__ = ["write_integrator_report"]
+__all__ = ["write_integrator_report", "write_report_manifest"]
