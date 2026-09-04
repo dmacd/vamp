@@ -12,6 +12,48 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Outcome — ImageNet-R-50 Two-Layer Node Latents
+
+- **The nested representation ablation completed on 2026-09-04.** Run
+  `ac512e02591dafce890b73ec1828263dafdd0a3446c1f66b300e7e85c5b2a7e5`
+  appends each live node's own LoRA-adapted class token after transformer block
+  11 of 12 to the existing final pre-classifier token. The replay identities,
+  weighting/optimizer factorial, H=8,192 budget, four-epoch arrival schedule,
+  hierarchy, and evaluation populations are unchanged from v6.
+- The expanded input is a strict nested initialization: all 8,214 old input
+  coordinates and all downstream parameters reproduce the v6 initialization,
+  while the 4,608 new coordinates start with zero input weights. The model
+  grows from 9,122,760 to 13,841,352 parameters. Its separate cache namespace
+  prevents final-only observations from masquerading as two-layer features.
+- Across the 16 matched online condition/checkpoint cells, the extra latent
+  improves validation accuracy by **1.680 points** but locked-test accuracy by
+  only **0.524 point** on average. The validation-selected two-layer condition
+  is rotating replay, task-balanced loss, and carried Adam; it reaches
+  **70.466% at task 31** and **73.983% at task 50**, only 0.235 and 0.283 point
+  above the separately selected v6 results.
+- On the original v6-selected rotating/example/carry recipe, the paired test
+  changes are **-0.157 point at task 31** and **+0.217 point at task 50**.
+  Fresh three-restart full-history fits also decline slightly, from
+  72.773/75.867% to **72.694/75.700%**. Thus the added representation does not
+  materially raise the integrator ceiling or explain the remaining gap.
+- The validation/test asymmetry is itself useful evidence. The 4,800-row
+  integrator validation partition was seen during upstream node fitting, and
+  the larger model benefits there much more than on test. The next structural
+  experiment should not add another raw latent by itself. It should rebuild
+  the hierarchy with an end-to-end clean validation partition and test a
+  shared per-node encoder plus an explicit task-free owner gate; an owner-probe
+  diagnostic should first measure whether the frozen node latents contain
+  enough routing information.
+- The complete run took 1,781.9 seconds on the local RTX 4090. Its training
+  seal records zero pre-seal test requests, and the immediate replay audit
+  performed zero new source-node, online-integrator, or full-history optimizer
+  work. All 79 default ImageNet-R tests pass. The broader repository suite
+  reports 925 passed and 276 skipped; its 31 failures are the already-known
+  optional-environment failures (8 missing `fabricpc`, 23 missing
+  `tokenizers`), with no ImageNet-R failure. The report includes Markdown,
+  standalone HTML, a visually inspected six-page PDF, figures, and
+  CSV/JSON/Parquet evidence; caches and model checkpoints remain local.
+
 ## Completed Outcome — ImageNet-R-50 Replay-Adaptation Diagnosis
 
 - **The replay-sampling diagnosis completed on 2026-09-04.** Run

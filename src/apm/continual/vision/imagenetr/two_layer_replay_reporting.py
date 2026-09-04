@@ -159,7 +159,7 @@ def _representation_plot(
             axis.plot((left, right), (index, index), color="#a8b3bd", linewidth=2)
         axis.scatter(single, y, color="#6c757d", marker="o", s=58, label="Final latent only")
         axis.scatter(two, y, color="#7b2cbf", marker="D", s=58, label="Final + penultimate")
-        axis.axvline(0.0, color="black", linewidth=0.5, alpha=0.0)
+        axis.margins(x=0.08)
         axis.set_title(f"Stage {stage}: {stage.bit_count()} live nodes")
         axis.set_xlabel("Locked-test accuracy (%)")
         axis.grid(axis="x", alpha=0.22)
@@ -225,6 +225,11 @@ def _report_content(
     primary = tuple(
         row for row in representation_rows if row["condition"] == single_best
     )
+    full_history = {
+        int(row["stage"]): row
+        for row in representation_rows
+        if row["condition"] == FULL_HISTORY_CONDITION
+    }
     summaries = _factor_summary(factors)
     condition_rows = tuple(
         (
@@ -249,11 +254,13 @@ This run appends each live node's LoRA-adapted penultimate ViT class token to th
 
 Across the 16 matched online cells (eight conditions at stages 31 and 50), adding the penultimate latent changes validation accuracy by **{mean_online_validation_delta:+.3f} points** and locked-test accuracy by **{mean_online_test_delta:+.3f} points** on average. For the original v6-selected condition, the task-31 and task-50 test changes are **{float(primary[0]['test_delta_pp']):+.3f}** and **{float(primary[1]['test_delta_pp']):+.3f} points**. These are paired results from one seed, not uncertainty estimates.
 
+The fresh full-history arm is the clearest ceiling diagnostic: its test changes are **{float(full_history[31]['test_delta_pp']):+.3f}** and **{float(full_history[50]['test_delta_pp']):+.3f} points**. The extra token therefore does not materially improve what this integrator can learn even when replay sampling is removed. Its much larger validation gain than test gain is also consistent with an optimistic validation partition: those identities were held out from integrator fitting but seen during upstream node fitting.
+
 ![Matched single-layer and two-layer results](representation_comparison.png)
 
 ## Exact representation change
 
-The added 768 values are the class token after transformer block 11 of 12, before the final block and final backbone normalization, captured while the evaluated node's own LoRA is installed. The existing final token and added penultimate token receive separate per-image layer normalization. Each slot grows from 1,369 to 2,137 values; six slots grow from 8,214 to 12,822. Existing input weights and every downstream parameter use the v6 initialization, while new-latent columns start at zero.
+The added 768 values are the class token after transformer block 11 of 12, before the final block and final backbone normalization, captured while the evaluated node's own LoRA is installed. The existing final token and added penultimate token receive separate per-image layer normalization. Each slot grows from 1,369 to 2,137 values; six slots grow from 8,214 to 12,822, and the MLP grows from 9,122,760 to 13,841,352 parameters. Existing input weights and every downstream parameter use the v6 initialization, while new-latent columns start at zero.
 
 {_markdown_table(("Stage", "Condition", "Single val", "Two-layer val", "Val delta", "Single test", "Two-layer test", "Test delta"), matched)}
 
@@ -319,10 +326,11 @@ figure {{ margin:18px 0 25px; break-inside:avoid; }} img {{ width:100%; height:a
 <h1>ImageNet-R-50 two-layer node-latent ablation</h1>
 <p class="lede">A nested representation expansion under the unchanged replay-adaptation matrix.</p>
 <div class="callout"><strong>Finding.</strong> The validation-selected two-layer condition is <strong>{escape(CONDITION_LABELS[best])}</strong>; v6 selected <strong>{escape(CONDITION_LABELS[single_best])}</strong>. Across 16 matched online stage/condition cells, the added layer changes locked-test accuracy by {float(context['mean_online_test_delta']):+.3f} points. For the v6-selected condition, the stage-31 and stage-50 changes are {float(primary[0]['test_delta_pp']):+.3f} and {float(primary[1]['test_delta_pp']):+.3f} points.</div>
+<p><strong>Interpretation.</strong> Fresh full-history test accuracy declines slightly at both checkpoints, so the extra token does not raise the observed integration ceiling. The substantially larger validation gain is consistent with the fact that upstream nodes saw those validation identities during fitting.</p>
 <h2>Headline comparison</h2>
 {_html_table(("Stage", "Single-layer selected", "Two-layer selected", "Single-layer full history", "Two-layer full history", "True-node oracle", "Joint IID"), context["headline"])}
 <figure><img src="{_image_uri(report_root / 'representation_comparison.png')}" alt="Matched one-layer and two-layer accuracy"><figcaption>Each line joins the same replay, weighting, optimizer, stage, and test identities.</figcaption></figure>
-<h2>Exact representation change</h2><p>The new 768-value class token is captured after the penultimate transformer block while the live node's own LoRA is installed. It is appended after the unchanged 1,369-value slot prefix and normalized separately. New input columns start at zero; all compatible input columns and downstream parameters copy the v6 initialization.</p>
+<h2>Exact representation change</h2><p>The new 768-value class token is captured after the penultimate transformer block while the live node's own LoRA is installed. It is appended after the unchanged 1,369-value slot prefix and normalized separately. The MLP grows from 9,122,760 to 13,841,352 parameters. New input columns start at zero; all compatible input columns and downstream parameters copy the v6 initialization.</p>
 {_html_table(("Stage", "Condition", "Single val", "Two-layer val", "Val delta", "Single test", "Two-layer test", "Test delta"), context["matched"])}
 <h2>Two-layer adaptation and generalization</h2>
 {_html_table(("Stage", "Condition", "Selected train", "Full fit", "Validation", "Test", "Old-task test", "Current-task test"), context["condition_rows"])}

@@ -13,11 +13,13 @@ This run appends each live node's LoRA-adapted penultimate ViT class token to th
 
 Across the 16 matched online cells (eight conditions at stages 31 and 50), adding the penultimate latent changes validation accuracy by **+1.680 points** and locked-test accuracy by **+0.524 points** on average. For the original v6-selected condition, the task-31 and task-50 test changes are **-0.157** and **+0.217 points**. These are paired results from one seed, not uncertainty estimates.
 
+The fresh full-history arm is the clearest ceiling diagnostic: its test changes are **-0.079** and **-0.167 points**. The extra token therefore does not materially improve what this integrator can learn even when replay sampling is removed. Its much larger validation gain than test gain is also consistent with an optimistic validation partition: those identities were held out from integrator fitting but seen during upstream node fitting.
+
 ![Matched single-layer and two-layer results](representation_comparison.png)
 
 ## Exact representation change
 
-The added 768 values are the class token after transformer block 11 of 12, before the final block and final backbone normalization, captured while the evaluated node's own LoRA is installed. The existing final token and added penultimate token receive separate per-image layer normalization. Each slot grows from 1,369 to 2,137 values; six slots grow from 8,214 to 12,822. Existing input weights and every downstream parameter use the v6 initialization, while new-latent columns start at zero.
+The added 768 values are the class token after transformer block 11 of 12, before the final block and final backbone normalization, captured while the evaluated node's own LoRA is installed. The existing final token and added penultimate token receive separate per-image layer normalization. Each slot grows from 1,369 to 2,137 values; six slots grow from 8,214 to 12,822, and the MLP grows from 9,122,760 to 13,841,352 parameters. Existing input weights and every downstream parameter use the v6 initialization, while new-latent columns start at zero.
 
 | Stage | Condition | Single val | Two-layer val | Val delta | Single test | Two-layer test | Test delta |
 | --- | --- | --- | --- | --- | --- | --- | --- |

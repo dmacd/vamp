@@ -657,6 +657,39 @@ but was seen by the frozen all-train LoRA nodes, so it measures integrator
 generalization only and must not be described as an end-to-end clean
 validation set.
 
+The nested two-layer representation ablation preserves that complete v6
+matrix and appends one additional 768-dimensional class token to every live
+node slot. The token is captured after transformer block 11 of the pinned
+12-block ViT, before the final block and final backbone normalization, while
+that node's own LoRA factors are installed. It therefore includes the base
+computation and node-specific adapter updates through the penultimate block;
+it is not a shared frozen-base feature. Final and penultimate tokens receive
+separate per-image layer normalization. A distinct row-cache namespace binds
+the added tensor so a final-only cache cannot satisfy a two-layer request.
+
+The expanded integrator is nested rather than independently reinitialized.
+Within each slot, the existing final-latent, raw-score, local-log-probability,
+ownership, and active-bit prefix remains in its original order. Every old
+input weight is copied to the corresponding prefix column, every new
+penultimate-token column starts at zero, and input bias plus all later layers
+copy exactly. The initial two-layer predictor consequently equals the
+single-layer predictor for arbitrary added-token values. This is an
+initialization guarantee, not a claim that subsequent optimizer trajectories
+remain identical after the new columns receive gradients.
+
+The measured result constrains follow-up architecture. Adding the token raises
+mean validation accuracy by 1.680 points but mean locked-test accuracy by only
+0.524 point across matched online cells, while fresh full-history accuracy
+falls by 0.079 and 0.167 point at tasks 31 and 50. The extra raw feature and
+4.72 million input weights therefore do not materially raise the observed
+integration ceiling. Because upstream nodes trained on the present integrator
+validation identities, the larger validation gain is compatible with
+representation-specific overfitting or selection bias. Further structural
+selection should use a hierarchy whose validation identities were excluded
+from node fitting. The next candidate remains a shared per-node encoder and
+explicit task-free owner gate, preceded by an owner-prediction probe that
+separates missing routing information from an ineffective integration rule.
+
 Material code bytes, not an informational commit annotation, define experiment
 identity. A run may span the commit that records already-running source, so
 individual immutable nodes may report different `git_commit` values without
