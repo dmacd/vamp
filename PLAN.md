@@ -12,6 +12,54 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Outcome — ImageNet-R-50 Replay-Adaptation Diagnosis
+
+- **The replay-sampling diagnosis completed on 2026-09-04.** Run
+  `f32b127b633ade1345927abd10dd4ea46d3ab0259638b699c02730b85074cf63`
+  crosses static versus stage-keyed rotating replay, example-uniform versus
+  task-uniform loss, and carried versus per-arrival-reset AdamW state. All
+  eight online cells use H=8,192, four epochs per task, identical initialization
+  and minibatch schedules, and the same node-specific LoRA-adapted latent
+  features.
+- The earlier ImageNet-R sampler reused a permanent-priority subset because
+  its hash namespace did not include the stage. That was not required for
+  determinism or content addressing. Permuted-MNIST already used a macro-step
+  seed and therefore drew a fresh reproducible historical subset at each
+  arrival. Stage-keyed deterministic replay is now the default scientific
+  design; the static reservoir is retained only as a historical control.
+- Rotation improves locked-test accuracy by **1.395 points on average** across
+  the matched task-31 and task-50 cells, and validation accuracy by 1.799
+  points. The validation-selected online condition is rotating replay,
+  example-uniform loss, and carried AdamW state. It reaches **70.231% at task
+  31** and **73.700% at task 50**, compared with 69.340% and 72.017% for the
+  old fixed-replay recipe.
+- Task-uniform weighting is a small positive effect (+0.231 test point), not a
+  primary explanation. Resetting AdamW state is counterproductive on average
+  (-0.549 test point). The task-50 rotating/task-uniform/carry cell reaches
+  74.050%, but it was not selected post hoc because the declared selection
+  criterion is mean validation accuracy.
+- Fresh three-restart full-history integrators reach **72.773% at task 31** and
+  **75.867% at task 50**. Thus replay identity reuse was a real adaptation
+  flaw, but not the whole fragmented-frontier deficit: even full-history
+  fitting remains 3.000 points below stage-matched joint IID and 5.250 points
+  below the true-node oracle at task 50. At task 31 those gaps are 7.521 and
+  10.927 points.
+- The next development experiment should retain rotating replay and carried
+  optimizer state, then test the planned shared per-node encoder and explicit
+  task-free gate. It should use a hierarchy whose integrator validation
+  identities were also held out from node fitting, add regularization or early
+  stopping selected only on that validation split, and repeat the promoted
+  cells over multiple seeds before another locked-test comparison. More
+  static replay, optimizer resets, and unconstrained MLP width are not current
+  priorities.
+- Train, validation, and test requests are separately sealed. The exact-reuse
+  audit performs zero new hierarchy or integrator optimizer steps and leaves
+  source and target checkpoints unchanged. The report includes Markdown,
+  standalone HTML, a rendered PDF, plots, and CSV/JSON/Parquet evidence.
+  All 76 default ImageNet-R tests pass. The broader repository run reports 922
+  passed and 276 skipped; its 31 failures are the unchanged optional-environment
+  set (8 FabricPC and 23 tokenizer tests).
+
 ## Completed Outcome — ImageNet-R-50 Node-Adapted Latent Replay Sweep
 
 - **The full 50-task replay sweep completed on 2026-09-03.** Run

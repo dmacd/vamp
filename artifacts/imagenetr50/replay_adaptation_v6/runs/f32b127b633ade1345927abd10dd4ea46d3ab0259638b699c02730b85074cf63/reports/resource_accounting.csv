@@ -1,0 +1,10 @@
+condition,condition_label,image_presentations,logical_node_example_bound,optimizer_steps,parameter_count,training_wall_seconds
+static__example_uniform__carry,Fixed replay / example loss / carry Adam,1375876,1005091,2760,9122760,14.990140972658992
+static__example_uniform__reset_each_stage,Fixed replay / example loss / reset Adam,1375876,1005091,2760,9122760,14.309934973716736
+static__task_uniform__carry,Fixed replay / task-balanced / carry Adam,1375876,1005091,2760,9122760,14.395966455340385
+static__task_uniform__reset_each_stage,Fixed replay / task-balanced / reset Adam,1375876,1005091,2760,9122760,14.418366983532906
+rotating__example_uniform__carry,Rotating replay / example loss / carry Adam,1375876,1005091,2760,9122760,14.402587603777647
+rotating__example_uniform__reset_each_stage,Rotating replay / example loss / reset Adam,1375876,1005091,2760,9122760,14.434060826897621
+rotating__task_uniform__carry,Rotating replay / task-balanced / carry Adam,1375876,1005091,2760,9122760,15.44732659868896
+rotating__task_uniform__reset_each_stage,Rotating replay / task-balanced / reset Adam,1375876,1005091,2760,9122760,15.309942077845335
+fresh_full_history,Fresh full-history integrator,1883640,,3720,9122760,49.122950706630945

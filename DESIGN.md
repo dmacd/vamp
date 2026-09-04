@@ -625,6 +625,38 @@ encoder with an explicitly supervised task-free gate is a distinct candidate
 from another unconstrained residual-width increase; class-owner targets may
 exist only behind the supervision boundary and never enter inference.
 
+Online historical replay uses a stage-keyed deterministic namespace. The
+namespace includes the experiment seed and arrival stage before the
+class-stratified priority draw, so an exact resume reproduces each draw while
+successive arrivals cover different historical identities. A namespace that
+is constant across stages creates a permanent bottom-priority subset; that
+behavior is retained only for an explicit static-replay control. This matches
+the established Permuted-MNIST macro-step sampling semantics and does not
+change the fixed-H cumulative O(T log T) work bound.
+
+The replay-adaptation factorial establishes why this distinction matters. At
+H=8,192 and four epochs per arrival, rotation improves locked-test accuracy by
+1.395 points averaged over matched task-31/task-50 weighting and optimizer
+cells. Equal task-mass weighting is only a small effect, while resetting AdamW
+moments at every arrival hurts on average; the promoted online recipe therefore
+uses rotating replay, example-uniform loss, and carried optimizer state. Static
+replay, task-uniform weighting, and optimizer reset remain named ablations
+rather than silent protocol variations.
+
+Replay coverage is not the remaining complete explanation. A fresh
+three-restart integrator trained on every fit identity reaches 75.867% at task
+50, versus 78.867% for stage-matched joint IID and 81.117% for the true-node
+oracle. At task 31 its corresponding 72.773% remains 7.521 and 10.927 points
+below those references. The current integration architecture therefore still
+has a representation, generalization, or optimization deficit even when
+historical sampling is removed. The next structural candidate is a shared
+per-node encoder plus explicit task-free gate, trained with rotating replay and
+validated on identities withheld from both the integrator and the upstream
+nodes. The existing 4,800-row split is held out from integrator optimization
+but was seen by the frozen all-train LoRA nodes, so it measures integrator
+generalization only and must not be described as an end-to-end clean
+validation set.
+
 Material code bytes, not an informational commit annotation, define experiment
 identity. A run may span the commit that records already-running source, so
 individual immutable nodes may report different `git_commit` values without
