@@ -595,6 +595,36 @@ adapter-dependent routing and response integration is therefore the next main
 experimental axis. It must be judged across all stages, especially high-
 popcount frontiers, rather than only at final accuracy or one-node checkpoints.
 
+The node-adapted replay successor makes that adapter dependence explicit. For
+each active level it installs the corresponding live node's LoRA before
+extracting the normalized 768-dimensional pre-classifier representation; it
+does not substitute one shared frozen-base latent. Raw affine scores, local log
+probabilities, classifier ownership, and an active bit follow that latent in
+the same slot. Six 1,369-value slots feed the residual MLP. Capacity arms share
+one initialization and random-number schedule, so replay size does not silently
+change model initialization.
+
+Historical capacities 2,048, 4,096, and 8,192 remain fixed constants with
+respect to stream length. At stage `t`, each arm observes the current task plus
+at most its capacity at `popcount(t)` nodes, preserving the cumulative
+O(T log T) claim while measuring the larger constant directly. The follow-up
+run hard-links authenticated row-cache shards in two phases: training-only
+shards before all three fits and test shards only after the common training
+seal. Source hierarchy artifacts remain read-only dependencies, and an exact
+resume must leave both their stat fingerprint and all target checkpoints
+unchanged.
+
+More replay improves the fragmented frontier but does not close it. The
+8,192-example arm gains 2.103 points over 2,048 on multi-node stages and only
+0.070 point on one-node stages; its remaining task-50 gaps are 6.917 points to
+stage-matched joint IID and 9.167 points to the label-aware oracle. Because its
+fragmented-stage training accuracy can exceed 99% while test accuracy remains
+far lower, future adapter-dependent integration should treat validation
+generalization and model structure as first-class concerns. A shared per-node
+encoder with an explicitly supervised task-free gate is a distinct candidate
+from another unconstrained residual-width increase; class-owner targets may
+exist only behind the supervision boundary and never enter inference.
+
 Material code bytes, not an informational commit annotation, define experiment
 identity. A run may span the commit that records already-running source, so
 individual immutable nodes may report different `git_commit` values without

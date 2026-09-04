@@ -12,6 +12,53 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Completed Outcome — ImageNet-R-50 Node-Adapted Latent Replay Sweep
+
+- **The full 50-task replay sweep completed on 2026-09-03.** Run
+  `ec116f57549d3f9f99e85d10f08d357eea9ff567e3521246c528f11d0a1aea65`
+  reuses the immutable fresh-parent hierarchy and changes the persistent
+  integrator input from scores alone to each live node's own LoRA-adapted,
+  normalized 768-dimensional pre-classifier representation plus its scores,
+  local log probabilities, ownership mask, and active bit. Six level slots
+  produce an 8,214-dimensional input to the existing 1,024/512/256 residual
+  MLP.
+- The three arms differ only in deterministic historical replay capacity and
+  share exact initial parameters and random-number schedules. H=2,048 reached
+  **69.750% final / 75.978% incremental accuracy**, H=4,096 reached
+  **71.550% / 77.473%**, and H=8,192 reached **71.950% / 77.837%**. The
+  stage-matched joint-IID reference remains 78.867% / 81.630%, and the
+  true-node oracle remains 81.117% / 83.556%.
+- Additional replay helps specifically at fragmented frontiers. H=8,192 gains
+  2.103 points over H=2,048 across the 44 multi-node stages but only 0.070
+  point across the six one-node stages. At task 31 it improves 66.536% to
+  69.104%, while the oracle is 83.700% and joint IID is 80.294%. At task 50
+  it improves 69.750% to 71.950%, leaving gaps of 9.167 points to the oracle
+  and 6.917 points to joint IID. H=4,096 captures 1.693 of the 2.103-point
+  fragmented gain with 844,640 versus 1,462,776 MLP image presentations.
+- The result supports replay scarcity as one contributor but rejects it as the
+  whole explanation. The incremental gain from 4,096 to 8,192 is only 0.365
+  point, and the H=8,192 stage-31 training accuracy is 99.757% while test
+  accuracy is 69.104%. The current objective is fit, not simply starved of
+  optimizer passes; generalization and cross-node integration structure are
+  now the larger concerns.
+- The next development matrix should use the 19,200/4,800 fit/validation split
+  and compare the current unrestricted residual MLP with a shared per-node
+  latent encoder plus explicit task-free gating. The gate should receive each
+  node's adapted latent (and optionally its adapted-minus-base residual), train
+  with an auxiliary class-owner target behind the supervision boundary, and
+  combine local node distributions. Regularization/early stopping and two or
+  more seeds should precede another locked-test run. H=4,096 is the efficient
+  development baseline; H=8,192 remains the full candidate.
+- All three integrators and the hierarchy trained or loaded before the test
+  cache was opened; the training seal records zero test requests. The immediate
+  reuse pass performed zero leaf, parent, or integrator optimizer steps and
+  left source-hierarchy and checkpoint fingerprints unchanged. All 71 default
+  ImageNet-R tests pass. The broader repository run reports 917 passed and 276
+  skipped; its 31 failures are the already-known optional-environment set (8
+  FabricPC and 23 tokenizer tests), with no new ImageNet-R failure. The
+  four-page PDF, standalone HTML, Markdown report, four figures, and
+  CSV/Parquet/JSON evidence were rendered and inspected.
+
 ## Completed Outcome — ImageNet-R-50 Fresh-Parent Persistent Integrator
 
 - **The parent-recipe diagnosis and full 50-task confirmation completed on

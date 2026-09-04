@@ -1,0 +1,5 @@
+integrity_passed=True
+new_leaf_optimizer_steps=0
+new_parent_optimizer_steps=0
+new_integrator_optimizer_steps=0
+new_evaluations=0

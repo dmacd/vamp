@@ -1,0 +1,4 @@
+base_example_forwards,cache_hits,cache_misses,condition,historical_capacity,image_presentations,node_example_forwards,node_example_forwards_bound,optimizer_steps,parameter_count,training_wall_seconds
+0,458370,0,"Adapted latent, H=2,048",2048,484988,0,337123,1024,9122760,5.245294274762273
+0,807520,0,"Adapted latent, H=4,096",4096,844640,0,596360,1728,9122760,8.963737659156322
+0,1197130,226015,"Adapted latent, H=8,192",8192,1462776,226015,1057451,2944,9122760,15.408336531370878

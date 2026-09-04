@@ -1,0 +1,23 @@
+experiment:
+  name: imagenetr50_logt_behavior_replay_v5
+  protocol_revision: imagenetr50-logt-behavior-replay-v5
+  seed: 1993
+
+paths:
+  artifact_root: artifacts/imagenetr50/behavior_replay_v5
+  source_config: configs/vision/imagenetr/logt_integrator_promoted_parent_v4.yaml
+
+source:
+  run_hash: 5fc6e1a57076f06a31da8b638207644109289a9b8888daf6b44934ade3c89320
+  protocol_sha256: 99c9405c2112f62075b387346d64c6fe18ef762b254e222d1c0056a01a700b15
+  hierarchy_policy_hash: b5b6520b6b47f78b26350499bee2c5c0493e7504179f5eb31e0671f5ac1d5d11
+  hierarchy_complete_sha256: a978487cd873de26d84f7d92aa418db391e0f1de446f37c0e27070c54bc10525
+  locked_test_sha256: 1b867b34f496d3c2a7ad9eb23bd6aba4041370960ef81a3a6d8d9ad0b0f3e8ec
+
+matrix:
+  feature_variant: behavior
+  historical_capacities: [2048, 4096, 8192]
+  tasks: 50
+
+runtime:
+  cache_seed_mode: hardlink_train_then_test

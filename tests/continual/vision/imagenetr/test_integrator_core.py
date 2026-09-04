@@ -137,6 +137,13 @@ def test_observation_variants_are_label_free_fixed_slots_with_exact_raw_parity()
         observations = frontier.observations(variant)
         assert observations.features.shape == (5, 6 * slot_dim)
         slots = observations.features.reshape(5, 6, slot_dim)
+        if variant != "scores":
+            assert torch.equal(
+                slots[:, 0, :768], frontier.normalized_prelogits[:, 0]
+            )
+            assert torch.equal(
+                slots[:, 2, :768], frontier.normalized_prelogits[:, 2]
+            )
         assert torch.equal(slots[:, 1], torch.zeros_like(slots[:, 1]))
         assert torch.equal(slots[:, 3:], torch.zeros_like(slots[:, 3:]))
         model = ImageNetResidualIntegrator(6, slot_dim, (1024, 512, 256), 0.0)
