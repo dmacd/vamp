@@ -13,6 +13,25 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## In Progress - ImageNet-R Stage-31 Macro-Token Convergence Audit
+
+- The clean-only v9 audit reuses the completed v8 fit hierarchy and keeps the
+  locked test sealed. It crosses effective batches 64/128/512 with peak AdamW
+  learning rates 3e-5/1e-4/3e-4 under a 50-epoch warmup-cosine schedule, while
+  rerunning the exact 20-epoch constant-learning-rate recipe as a control.
+- Seed 1993 screens the nine cells by best clean validation NLL. The selected
+  schedule is then repeated with seeds 1994 and 1995. Every epoch is written to
+  a resumable hash-chained history with training objective metrics, validation
+  metrics, optimizer updates, learning rate, and gradient norm.
+- A new clean joint-IID control trains a fresh rank-16 QKV-plus-fc1 LoRA and
+  affine 124-class head for the original fixed five epochs on exactly the same
+  12,194 fit identities, evaluating each epoch on the same 3,049 validation
+  identities. This removes the previous clean-split mismatch when diagnosing
+  convergence versus fixed-representation generalization.
+- Focused unit tests pass. The next action is the real RTX 4090 preflight and
+  resumable audit, followed by the PDF report, visual inspection, result
+  interpretation, and compact artifact publication.
+
 ## Completed Outcome — ImageNet-R-50 Macro-Token Integrator Ceiling
 
 - **The clean ceiling study completed on 2026-09-04.** Run

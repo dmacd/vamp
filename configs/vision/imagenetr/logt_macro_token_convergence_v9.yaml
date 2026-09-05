@@ -1,0 +1,47 @@
+experiment:
+  name: imagenetr50_logt_macro_token_convergence_v9
+  protocol_revision: imagenetr50-logt-macro-token-convergence-v9
+  stage: 31
+  depth: 1
+  screening_seed: 1993
+  replication_seeds: [1993, 1994, 1995]
+
+paths:
+  artifact_root: artifacts/imagenetr50/macro_token_convergence_v9
+  source_macro_config: configs/vision/imagenetr/logt_macro_token_integrator_v8.yaml
+  source_macro_artifact_root: artifacts/imagenetr50/macro_token_integrator_v8
+
+source:
+  macro_run_hash: 323104b00589e606b67a4e084c832a99166d161b68e1ff3fe19966793b4a18b2
+  macro_protocol_sha256: 9cfd66f86c8a0931038d4c10b1abcf044e48cc6c5900767a97d718183daf7d1e
+  clean_hierarchy_sha256: 166bd362ef68441db32816cc668527b9825305a719aedc42435dd6c9872625fd
+
+matrix:
+  effective_batch_sizes: [64, 128, 512]
+  learning_rates: [0.00003, 0.0001, 0.0003]
+  schedule: warmup_cosine
+  epochs: 50
+  warmup_fraction: 0.05
+  minimum_learning_rate_ratio: 0.01
+
+legacy_control:
+  learning_rate: 0.0003
+  effective_batch_size: 512
+  epochs: 20
+
+optimization:
+  microbatch_size: 64
+  dropout: 0.1
+  weight_decay: 0.0001
+  gradient_clip_norm: 1.0
+
+joint_iid_control:
+  fixed_epochs: 5
+
+runtime:
+  cache_dtype: bfloat16
+  cache_shard_size: 64
+  cache_limit_bytes: 68719476736
+  feature_batch_size: 64
+  num_workers: 12
+  checkpoint_every_epochs: 1
