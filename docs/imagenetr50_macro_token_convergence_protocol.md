@@ -18,6 +18,11 @@ Dropout 0.1, weight decay 0.0001, BF16 compute, and gradient clipping at 1.0
 remain fixed. A separate control exactly repeats the old constant-0.0003,
 effective-batch-512 recipe for 20 epochs.
 
+The original v8 fit-population hash remains the common shuffle namespace for
+every cell. Model initialization, shard order, within-shard order, and dropout
+therefore reproduce v8 for the legacy control and remain common random numbers
+within each seed even though this experiment stores tensors in a new cache.
+
 The screening winner has the lowest validation negative log likelihood (NLL)
 at any epoch. Ties prefer the smaller effective batch and then lower learning
 rate. The winning schedule is initialized independently and repeated with

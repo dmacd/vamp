@@ -15,6 +15,8 @@ source:
   macro_run_hash: 323104b00589e606b67a4e084c832a99166d161b68e1ff3fe19966793b4a18b2
   macro_protocol_sha256: 9cfd66f86c8a0931038d4c10b1abcf044e48cc6c5900767a97d718183daf7d1e
   clean_hierarchy_sha256: 166bd362ef68441db32816cc668527b9825305a719aedc42435dd6c9872625fd
+  clean_stage31_sha256: 20b74a3e9d9c9feb9c8c393c28adb27d9f1f317fb69c90f0e9bf9d3241189351
+  shuffle_population_hash: a3c79696a30925a01471ae2b8d35fb3f4e87bf5f959c17b6b3a10255e0ba3e21
 
 matrix:
   effective_batch_sizes: [64, 128, 512]

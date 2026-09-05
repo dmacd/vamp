@@ -23,7 +23,10 @@ from apm.continual.vision.imagenetr.lora import (
     load_adapter_factors,
     trainable_lora_parameters,
 )
-from apm.continual.vision.imagenetr.macro_token_cache import MacroTokenPopulation
+from apm.continual.vision.imagenetr.macro_token_cache import (
+    MacroTokenPopulation,
+    MacroTokenShard,
+)
 from apm.continual.vision.imagenetr.macro_token_model import MacroTokenClassifier
 from apm.continual.vision.imagenetr.macro_token_training import (
     PopulationMetrics,
@@ -204,8 +207,40 @@ def convergence_learning_rate(
     return cell.peak_learning_rate * multiplier
 
 
-def _derived_seed(*parts: object) -> int:
-    return int(record_sha256({"parts": [str(part) for part in parts]})[:15], 16)
+def _v8_derived_seed(seed: int, *parts: object) -> int:
+    return int(
+        record_sha256(
+            {
+                "parts": [str(part) for part in parts],
+                "schema_version": "imagenetr50-macro-token-derived-seed-v1",
+                "seed": seed,
+            }
+        )[:15],
+        16,
+    )
+
+
+def _ordered_shards(
+    population: MacroTokenPopulation,
+    seed: int,
+    epoch: int,
+    shuffle_population_hash: str,
+) -> tuple[MacroTokenShard, ...]:
+    generator = torch.Generator().manual_seed(
+        int(
+            record_sha256(
+                {
+                    "epoch": epoch,
+                    "population": shuffle_population_hash,
+                    "seed": seed,
+                    "schema_version": "imagenetr50-macro-token-shuffle-v1",
+                }
+            )[:15],
+            16,
+        )
+    )
+    order = torch.randperm(len(population.shards), generator=generator).tolist()
+    return tuple(population.shards[index] for index in order)
 
 
 def _restore_ledger_to_checkpoint(
@@ -228,16 +263,21 @@ def _train_macro_epoch(
     warmup_fraction: float,
     minimum_learning_rate_ratio: float,
     gradient_clip_norm: float,
+    shuffle_population_hash: str,
     device: torch.device,
 ) -> tuple[int, float, float, float, float]:
     """Train one deterministic epoch and return steps, objective metrics, and norm."""
     model.train()
-    ordered = population.ordered_shards(cell.seed, epoch, True)
+    ordered = _ordered_shards(
+        population, cell.seed, epoch, shuffle_population_hash
+    )
     examples = correct = 0
     nll_sum = gradient_norm_sum = 0.0
     device_ids = [device.index or 0] if device.type == "cuda" else []
     with torch.random.fork_rng(devices=device_ids):
-        torch.manual_seed(_derived_seed(cell.seed, cell.condition, "dropout", epoch))
+        torch.manual_seed(
+            _v8_derived_seed(cell.seed, "macro_classifier", "dropout", epoch)
+        )
         for offset in range(0, len(ordered), cell.accumulation_steps):
             window = ordered[offset : offset + cell.accumulation_steps]
             window_examples = sum(len(shard.rows) for shard in window)
@@ -254,12 +294,8 @@ def _train_macro_epoch(
             for local_index, shard in enumerate(window):
                 supervision = population.load(
                     shard,
-                    _derived_seed(
-                        cell.seed,
-                        cell.condition,
-                        "shuffle",
-                        epoch,
-                        offset + local_index,
+                    _v8_derived_seed(
+                        cell.seed, "epoch", epoch, "shard", offset + local_index
                     ),
                 )
                 moved = supervision.inputs.to(device)
@@ -303,6 +339,7 @@ def fit_macro_convergence_cell(
     gradient_clip_norm: float,
     warmup_fraction: float,
     minimum_learning_rate_ratio: float,
+    shuffle_population_hash: str,
     checkpoint_path: Path,
     history_path: Path,
     job_hash: str,
@@ -372,6 +409,7 @@ def fit_macro_convergence_cell(
                 warmup_fraction,
                 minimum_learning_rate_ratio,
                 gradient_clip_norm,
+                shuffle_population_hash,
                 device,
             )
         )

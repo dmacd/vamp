@@ -188,6 +188,7 @@ def bootstrap_macro_convergence(
     )
     source_protocol = configured_source / "protocol/protocol.json"
     source_hierarchy = configured_source / "protocol/clean_hierarchy.json"
+    source_clean_stage = configured_source / "evaluations/clean/stage_031.json"
     stored_source_record = load_canonical_json(source_protocol)
     stored_source = MacroTokenProtocol(
         **{
@@ -207,6 +208,9 @@ def bootstrap_macro_convergence(
         or current_source.source.integrator.split.content_hash != stored_source.split_hash
         or file_sha256(source_protocol) != config.source_macro_protocol_sha256
         or file_sha256(source_hierarchy) != config.source_clean_hierarchy_sha256
+        or file_sha256(source_clean_stage) != config.source_clean_stage31_sha256
+        or load_canonical_json(source_clean_stage).get("fitting_population")
+        != config.shuffle_population_hash
     ):
         raise ValueError("configured v8 source artifacts changed")
     source = replace(current_source, protocol=stored_source, run=configured_source)
@@ -367,7 +371,7 @@ def _population(
     )
     integrator = bootstrap.source.source.integrator
     return materialize_macro_population(
-        protocol_hash=bootstrap.protocol.content_hash,
+        protocol_hash=bootstrap.config.source_macro_run_hash,
         frontier_hash=frontier_hash,
         partition=partition,
         nodes=nodes,
@@ -501,6 +505,7 @@ def _fit_or_load_macro(
             else 0.0
         ),
         minimum_learning_rate_ratio=bootstrap.config.minimum_learning_rate_ratio,
+        shuffle_population_hash=bootstrap.config.shuffle_population_hash,
         checkpoint_path=checkpoint_path,
         history_path=history_path,
         job_hash=job_hash,

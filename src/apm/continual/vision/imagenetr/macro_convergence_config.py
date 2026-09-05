@@ -31,6 +31,8 @@ class MacroConvergenceConfig:
     source_macro_run_hash: str
     source_macro_protocol_sha256: str
     source_clean_hierarchy_sha256: str
+    source_clean_stage31_sha256: str
+    shuffle_population_hash: str
     effective_batch_sizes: tuple[int, ...]
     learning_rates: tuple[float, ...]
     schedule: str
@@ -57,6 +59,8 @@ class MacroConvergenceConfig:
             ("source macro run", self.source_macro_run_hash),
             ("source macro protocol", self.source_macro_protocol_sha256),
             ("source clean hierarchy", self.source_clean_hierarchy_sha256),
+            ("source clean stage 31", self.source_clean_stage31_sha256),
+            ("shuffle population", self.shuffle_population_hash),
         ):
             require_sha256(identity, label)
         if (
@@ -165,7 +169,13 @@ def load_macro_convergence_config(
     source = _mapping(
         root["source"],
         "source",
-        {"macro_run_hash", "macro_protocol_sha256", "clean_hierarchy_sha256"},
+        {
+            "macro_run_hash",
+            "macro_protocol_sha256",
+            "clean_hierarchy_sha256",
+            "clean_stage31_sha256",
+            "shuffle_population_hash",
+        },
     )
     matrix = _mapping(
         root["matrix"],
@@ -217,6 +227,8 @@ def load_macro_convergence_config(
         str(source["macro_run_hash"]),
         str(source["macro_protocol_sha256"]),
         str(source["clean_hierarchy_sha256"]),
+        str(source["clean_stage31_sha256"]),
+        str(source["shuffle_population_hash"]),
         tuple(int(value) for value in matrix["effective_batch_sizes"]),
         tuple(float(value) for value in matrix["learning_rates"]),
         str(matrix["schedule"]),
