@@ -2,3 +2,4 @@ docs/experiments/trace-logt-vamp/evidence-volume/runs/c9743521129b5c35389903eea8
 docs/experiments/trace-logt-vamp/evidence-volume/logs/*.log -text whitespace=-blank-at-eol,cr-at-eol
 output/pdf/*.pdf -diff -merge -text
 docs/ImageNetR_MacroToken_Integrator_Architecture_Reference.pdf -diff -merge -text
+artifacts/imagenetr50/**/reports/*.pdf -diff -merge -text

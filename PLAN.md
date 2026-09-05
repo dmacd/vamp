@@ -7,41 +7,61 @@
   MNIST/FabricPC, TinyShakespeare, TinyStories, and all other TinyWorlds work is
   explicitly labeled as a research proof of concept, negative result,
   notional design, or deprecated prototype rather than a supported benchmark.
-- Selected nouns-v2, TinyShakespeare, and MNIST/FabricPC reports are published
-  with only their directly referenced SVG/PNG and small text dependencies.
-  Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
-  and other generated artifacts remain excluded.
+- Selected reports are published with their directly referenced figures and
+  small text dependencies. Experiments with an explicit analysis-handoff
+  requirement may also publish a compact result/protocol ledger bundle. Raw
+  corpora, checkpoints, optimizer state, caches, and unselected generated
+  artifacts remain excluded.
 
-## Active Experiment — ImageNet-R-50 Macro-Token Integrator Ceiling
+## Completed Outcome — ImageNet-R-50 Macro-Token Integrator Ceiling
 
-- **Implementation and real smoke are complete (2026-09-04).** The new v8
-  experiment retains every live node's final 197-by-768 LoRA-adapted ViT token
-  sequence, fuses corresponding positions across six fixed hierarchy-level
-  slots, appends the compact behavior META token, and compares one versus two
-  transformer blocks. Exact trainable counts are 12,055,496 and 19,143,368.
-- The resolved experiment performs the approved clean stage-31/stage-50
-  depth-by-learning-rate selection on a hierarchy trained only on the 19,200
-  fit identities. It repeats the selected macro head over seeds 1993-1995,
-  trains a data-matched v6 final-CLS MLP control, and includes both a frozen
-  linear owner probe and a separately optimized end-to-end owner model.
-- Full adapted token sequences use 64-image BF16 safetensors shards and are
-  streamed without assembling a stage in RAM. The cache has a hard 64-GiB
-  bound and is deleted per completed stage only after immutable model and
-  evaluation records exist. Labels and owner targets remain outside the
-  inference input record.
-- The real RTX 4090 preflight passes exact final-token capture, zero train/test
-  and fit/validation overlap, BF16 forward/backward, parameter counts, and
-  nested shared initialization. The real three-node stage-7 smoke passed both
-  macro depths, the v6 control, end-to-end owner routing, cache round-trip, and
-  zero source-hierarchy optimizer work; peak measured head allocation was
-  1.53 GB.
-- Remaining work is resource execution rather than design: complete the
-  fit-only hierarchy from task 8 through 50; run the clean six-cell sweep and
-  replications; refit the selected macro/control/owner models on all prefix
-  training images; seal before locked test; generate and inspect the
-  Markdown/HTML/PDF report; run regressions; then commit, push, open the two
-  report formats, and send the requested desktop notification. No accuracy
-  threshold gates execution.
+- **The clean ceiling study completed on 2026-09-04.** Run
+  `323104b00589e606b67a4e084c832a99166d161b68e1ff3fe19966793b4a18b2`
+  took 4 hours 16 minutes 54 seconds on the local RTX 4090. It retains every
+  live node's final 197-by-768 LoRA-adapted ViT token sequence, fuses matching
+  positions across six stable hierarchy-level slots, appends the behavior META
+  token, and classifies with a small transformer. The selected one-block head
+  has 12,055,496 trainable parameters.
+- The predeclared seed-1993 sweep selected one transformer block at learning
+  rate 0.0003 by mean stage-31/stage-50 clean validation NLL 1.090314. The
+  hierarchy used to make that choice trained on only the 19,200 fit identities;
+  all 4,800 validation identities were absent from upstream node fitting.
+  Rejected depth/learning-rate cells never saw test.
+- At stage 31, macro-token locked-test accuracy is **75.122%** over seeds
+  1993-1995 (74.738%, 75.052%, and 75.577%). That is **2.123 points above** the
+  data-matched v6 final-CLS MLP, **5.171 points below** stage-matched joint IID,
+  and 8.578 points below the true-node oracle. At stage 50 it reaches
+  **77.889%** (79.167%, 76.833%, and 77.667%): **2.061 points above** v6,
+  **0.978 point below** joint IID, and 3.228 points below the true-node oracle.
+  It remains 5.106 points below the matched local E2-LoRA final result. The
+  2.333-point stage-50 seed range makes optimization stability a required
+  follow-up; the strongest seed individually exceeds joint IID by 0.300 point.
+- Patch-level adapted tokens therefore recover accuracy that final-CLS behavior
+  features discard, and nearly close the offline-joint gap at stage 50. They do
+  not close the maximally fragmented stage-31 gap. On locked test, the frozen
+  owner probe reaches 74.161%/84.450% owner accuracy at stages 31/50 and the
+  end-to-end owner model reaches 81.027%/86.600%, but hard predicted-owner
+  routing reaches only 72.956%/74.300%. Owner identity is available, while hard
+  routing throws away useful cross-node evidence; any owner supervision should
+  remain auxiliary to soft integration.
+- The training seal records zero test-token requests. Immediate replay reused
+  all 50 leaves and 47 parents in both clean and all-training hierarchies with
+  zero optimizer steps and zero new adapted-token requests; all 42 model
+  artifacts remained byte-identical and scratch caches were empty. The
+  visually inspected four-page PDF, self-contained HTML, Markdown handoff,
+  figures, and compact CSV/JSON/Parquet ledgers are the published evidence;
+  1.8 GB of checkpoints remains local.
+- The macro head costs about 2.04 billion dense MACs per stage-31 image and
+  1.81 billion per stage-50 image, versus 9.12 million for v6, in addition to
+  five or three node-adapted ViT forwards. The next experiment should first
+  stabilize the class objective across more seeds and test an auxiliary soft
+  owner loss at stage 31, then compress patch tokens or cross-slot attention so
+  the retained accuracy does not require a roughly 200-fold larger head. Only
+  after those ceiling tests should the design move into the full online matrix.
+- All 84 ImageNet-R tests pass. The broader repository suite reports 925 passed
+  and 276 skipped; its 31 failures are the already-known optional-environment
+  failures (8 missing `fabricpc`, 23 missing `tokenizers`), with no ImageNet-R
+  failure.
 
 ## Completed Outcome — ImageNet-R-50 Two-Layer Node Latents
 

@@ -1,0 +1,4 @@
+ImageNet-R macro-token ceiling study complete.
+Run: 323104b00589e606b67a4e084c832a99166d161b68e1ff3fe19966793b4a18b2
+Result: f83c26ae23f1e1bc8858390d9a9176e035e922cc1a3d7d2a44e399e11bc39c1a
+See resource_accounting.csv for every cache request and adapted-node forward.

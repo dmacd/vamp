@@ -1,0 +1,4 @@
+Immediate resume/reuse proof.
+Integrity passed: True
+Requests before/after: 11/11
+Acceptance: {'all_train_hierarchy_zero_optimizer_steps': True, 'clean_hierarchy_zero_optimizer_steps': True, 'model_artifacts_unchanged': True, 'no_new_token_requests': True, 'scratch_caches_cleared': True, 'source_frontiers_unchanged': True}

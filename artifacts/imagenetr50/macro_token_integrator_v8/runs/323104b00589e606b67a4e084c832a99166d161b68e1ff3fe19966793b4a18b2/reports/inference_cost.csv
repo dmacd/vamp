@@ -1,0 +1,5 @@
+active_node_vit_forwards_per_image,condition,head_dense_macs_per_image,stage
+5,Macro-token transformer (selected),2043889152,31
+5,v6 final-CLS behavior MLP,9117696,31
+3,Macro-token transformer (selected),1811498496,50
+3,v6 final-CLS behavior MLP,9117696,50
