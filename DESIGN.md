@@ -690,6 +690,50 @@ from node fitting. The next candidate remains a shared per-node encoder and
 explicit task-free owner gate, preceded by an owner-prediction probe that
 separates missing routing information from an ineffective integration rule.
 
+The macro-token ceiling successor changes both the retained information and
+the integration rule while leaving the upstream fresh-parent hierarchy fixed.
+For each image, every active node exposes its complete final 197-by-768 token
+sequence with that node's own LoRA installed. Parameter-free LayerNorm is
+applied independently to each token over its 768 features. Corresponding patch
+positions are fused across six stable level slots by one shared linear map from
+4,608 to 768 dimensions. The implementation selects only active slices of the
+same weight tensor, which is algebraically identical to concatenating six
+chunks with inactive chunks zeroed but avoids allocating those zeros.
+
+The existing nonlatent behavior fields remain explicit rather than being
+smuggled into patch channels. Six slots of raw affine scores, within-node log
+probabilities, classifier ownership, and one active bit form exactly 3,606
+values. A 3,606-to-256-to-768 encoder turns them into one META token appended
+after the 197 projected image tokens. Learned position embeddings apply only
+to image-token positions. One or two pre-normalized width-768, 12-head
+transformer blocks integrate the sequence, and a direct affine 200-way head
+reads macro-CLS. Unlike the residual v6 MLP, this head has no raw-union skip;
+raw scores remain available only through META. Name-derived component seeds
+make every shared initial parameter bit-identical across the one- and two-block
+models.
+
+Architecture selection is end-to-end clean. Upstream fit-hierarchy nodes,
+integrator fitting, and stopping use only the 19,200 fit identities; the
+disjoint 4,800 identities select depth, learning rate, and per-seed epoch.
+After selection, fresh copies of the winning macro head, the v6 final-CLS
+control, and both owner diagnostics refit on all arrived training images for
+their corresponding clean-selected epoch counts. Test tokens cannot be
+materialized until every refit is sealed. A frozen linear owner probe measures
+owner information already present in class-trained macro-CLS, while a separate
+end-to-end owner transformer measures what the same label-free inputs can
+expose under direct owner supervision. Owner targets remain behind the
+supervision boundary; reported predicted-owner class accuracy routes through
+raw rows without labels.
+
+Full token caches are reproducible stage-local scratch rather than durable
+model state. Immutable 64-image BF16 shards bind the node, fixed slot, exact
+image identities, transform, model, frontier, and protocol. Training streams
+one shard per microbatch and accumulates eight microbatches, so neither a full
+stage nor a six-slot zero tensor is assembled in host memory. The workflow
+enforces a 64-GiB scratch cap and clears only a named completed population after
+its model/evaluation artifact is immutable. Completed-run reuse must therefore
+need neither retained token caches nor another adapted-model forward.
+
 Material code bytes, not an informational commit annotation, define experiment
 identity. A run may span the commit that records already-running source, so
 individual immutable nodes may report different `git_commit` values without

@@ -12,6 +12,37 @@
   Raw corpora, checkpoints, manifests, CSV/JSON/JSONL ledgers, optimizer state,
   and other generated artifacts remain excluded.
 
+## Active Experiment — ImageNet-R-50 Macro-Token Integrator Ceiling
+
+- **Implementation and real smoke are complete (2026-09-04).** The new v8
+  experiment retains every live node's final 197-by-768 LoRA-adapted ViT token
+  sequence, fuses corresponding positions across six fixed hierarchy-level
+  slots, appends the compact behavior META token, and compares one versus two
+  transformer blocks. Exact trainable counts are 12,055,496 and 19,143,368.
+- The resolved experiment performs the approved clean stage-31/stage-50
+  depth-by-learning-rate selection on a hierarchy trained only on the 19,200
+  fit identities. It repeats the selected macro head over seeds 1993-1995,
+  trains a data-matched v6 final-CLS MLP control, and includes both a frozen
+  linear owner probe and a separately optimized end-to-end owner model.
+- Full adapted token sequences use 64-image BF16 safetensors shards and are
+  streamed without assembling a stage in RAM. The cache has a hard 64-GiB
+  bound and is deleted per completed stage only after immutable model and
+  evaluation records exist. Labels and owner targets remain outside the
+  inference input record.
+- The real RTX 4090 preflight passes exact final-token capture, zero train/test
+  and fit/validation overlap, BF16 forward/backward, parameter counts, and
+  nested shared initialization. The real three-node stage-7 smoke passed both
+  macro depths, the v6 control, end-to-end owner routing, cache round-trip, and
+  zero source-hierarchy optimizer work; peak measured head allocation was
+  1.53 GB.
+- Remaining work is resource execution rather than design: complete the
+  fit-only hierarchy from task 8 through 50; run the clean six-cell sweep and
+  replications; refit the selected macro/control/owner models on all prefix
+  training images; seal before locked test; generate and inspect the
+  Markdown/HTML/PDF report; run regressions; then commit, push, open the two
+  report formats, and send the requested desktop notification. No accuracy
+  threshold gates execution.
+
 ## Completed Outcome — ImageNet-R-50 Two-Layer Node Latents
 
 - **The nested representation ablation completed on 2026-09-04.** Run

@@ -84,9 +84,16 @@ class AdapterVisionModel(nn.Module):
             class_ids, feature_dim, initialization_seed + 10_000, initial_rows
         )
 
+    def token_sequence(self, images: Tensor) -> Tensor:
+        """Return all 197 final adapted ViT tokens before classifier pooling."""
+        tokens = self.backbone.forward_features(images)
+        if tokens.ndim != 3 or tuple(tokens.shape[1:]) != (197, 768):
+            raise ValueError("the pinned ViT must expose a 197-by-768 token sequence")
+        return tokens
+
     def features(self, images: Tensor) -> Tensor:
         """Return the pinned timm pre-logit class-token representation."""
-        tokens = self.backbone.forward_features(images)
+        tokens = self.token_sequence(images)
         return self.backbone.forward_head(tokens, pre_logits=True)
 
     def forward(self, images: Tensor) -> Tensor:
