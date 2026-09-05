@@ -124,17 +124,13 @@ tests should be parallelized if possible to reduce the run time.
 
 For long-running experiments with lots of data + results to communicate:
 - Write up the results in a pdf report as if this were a paper for publication
-- Generate separate markdown reports and self-contained html reports
-- Ensure tables in html reports are rendered properly with html and not just markdown
-  dropped in a preformatted block
 - Include renders of any relevant node-edge-like structures 
 - Use a proper plotting lib for normal graphs, dont fake it and construct 
   them manually
 - Include enough plain-language text context such that someone with only rough 
   familiarity with the project can understand the experiment and the results 
   being presented 
-- Use collapsible containers to organize sections and subsections
-- Double-check that text is legible (size, contrast, etc), especially on 
+- Double-check that text is legible (size, contrast, etc) on
   plots and renders 
 - When committing experimental artifacts, commit all generated figures and
   enough of the logs so that a human or agent can write a detailed
@@ -144,5 +140,5 @@ For long-running experiments with lots of data + results to communicate:
   in the tracked files in the artifacts path so that one can be generated.
 
 
-On any turn when a report has been generated or updated, run xdg-open on the report html
-and pdf output artifact(s) without being asked.
+On any turn when a report has been generated or updated, run xdg-open on pdf
+output artifact(s) without being asked.
