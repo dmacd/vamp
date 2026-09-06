@@ -1,2 +1,2 @@
 best_epoch,best_validation_accuracy,best_validation_nll,classifier_parameters,condition,epochs,fixed_validation_accuracy,fixed_validation_nll,frontier_active_parameters,frontier_integrator_parameters,image_presentations,lora_alpha,lora_parameters,lora_rank,parameter_difference,peak_vram_bytes,trainable_parameters,wall_seconds
-3,80.02623811085601,0.7953980834650657,95356,"Joint IID, rank 80 (5 epochs)",5,80.12463102656609,0.8339448211309596,18691016,12055496,60970,80,6635520,80,-11960140,4235089408,6730876,112.31550274603069
+3,81.69891767792718,0.7198539082047665,95356,"Joint IID, rank 224 (total-active match; 5 epochs)",5,81.10856018366678,0.7771629015708916,18691016,12055496,60970,224,18579456,224,-16204,4447763968,18674812,114.8816752769053

@@ -802,6 +802,19 @@ five separately pretrained adapters, runs five ViT paths, and trains the macro
 integrator, whereas the joint control begins from one zero-effect adapter,
 runs one ViT path, and trains an affine classifier.
 
+The total-active-parameter addendum counts every parameter updated by each
+condition. The adaptive side comprises the five live LoRAs and macro
+integrator; the joint side comprises one LoRA and its required affine
+classifier. Because LoRA rank is discrete, the control uses the integer rank
+whose complete trainable count is closest to the adaptive count, with the
+signed mismatch recorded rather than claiming exact equality. At stage 31
+this is rank 224: 18,674,812 joint parameters versus 18,691,016 adaptive
+parameters. It inherits the exact clean identities, deterministic order,
+five-epoch optimizer recipe, fixed endpoint, and no-test boundary from the
+aggregate-rank control. This removes a large active-count mismatch but does
+not equate a single fresh factorization with five pretrained node adapters,
+their macro-token composition, or their five-forward deployment cost.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under

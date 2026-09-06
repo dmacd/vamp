@@ -7,10 +7,11 @@ import pytest
 
 from apm.continual.artifacts import canonical_json_bytes, file_sha256, record_sha256
 from apm.continual.vision.imagenetr.frontier_adaptation_reporting import (
+    JOINT_CAPACITY_CONTROLS,
     RANK_MATCHED_LABEL,
-    _rank_matched_history,
-    _rank_matched_summary,
-    _validated_rank_matched_control,
+    _capacity_history,
+    _capacity_summary,
+    _validated_capacity_control,
 )
 from apm.continual.vision.imagenetr.frontier_rank_matched_config import (
     load_frontier_rank_matched_config,
@@ -27,6 +28,7 @@ from apm.continual.vision.imagenetr.frontier_rank_matched_workflow import (
 CONFIG = Path(
     "configs/vision/imagenetr/logt_frontier_rank_matched_control_v11.yaml"
 )
+RANK80_SPECIFICATION = JOINT_CAPACITY_CONTROLS[0]
 
 
 def test_rank_matched_config_freezes_capacity_data_and_optimization() -> None:
@@ -117,7 +119,12 @@ def test_report_authenticates_rank80_endpoint_and_history(tmp_path: Path) -> Non
     control_path.write_bytes(
         canonical_json_bytes({**core, "content_hash": record_sha256(core)})
     )
-    control = _validated_rank_matched_control(tmp_path, parent)
+    control = _validated_capacity_control(
+        tmp_path, parent, RANK80_SPECIFICATION
+    )
     assert control is not None
-    assert _rank_matched_summary(control)["condition"] == RANK_MATCHED_LABEL
-    assert len(_rank_matched_history(tmp_path, control)) == 5
+    assert (
+        _capacity_summary(control, RANK80_SPECIFICATION)["condition"]
+        == RANK_MATCHED_LABEL
+    )
+    assert len(_capacity_history(tmp_path, control, RANK80_SPECIFICATION)) == 5

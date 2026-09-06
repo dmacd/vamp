@@ -13,6 +13,50 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## Completed Outcome - ImageNet-R Stage-31 Total-Parameter Control
+
+- **The total-active-parameter control completed on 2026-09-06.** Protocol
+  `99fcb756b95b993b35500b60dd0ac24e60fffb8d940581796af36f7e9d0581a1`
+  trained one fresh rank-224, alpha-224 joint-IID adapter on the same immutable
+  12,194-fit / 3,049-validation population as rank 80 and the adaptive
+  full-history frontier. The control performed zero test evaluations. A
+  separate invocation authenticated and reused the completed model, history,
+  and sources with zero optimizer steps.
+- Rank 224 is the closest integer-rank match to the adaptive frontier's full
+  active parameter count. Its 18,579,456 LoRA parameters plus 95,356
+  classifier parameters total **18,674,812**, only 16,204 (0.087%) fewer than
+  the frontier's five LoRAs plus macro integrator, **18,691,016**. Rank 225
+  would overshoot by 66,740, so it is a worse total-count match.
+- At the fixed fifth epoch and 60,970 image presentations, rank 224 reaches
+  **81.109% accuracy / 0.7772 NLL**. Relative to rank 80, the extra capacity
+  adds **0.984 accuracy points** and lowers NLL by **0.0568**. Relative to rank
+  16, it recovers **46.3% of the adaptive frontier's accuracy advantage and
+  46.9% of its NLL advantage** at matched exposure.
+- The adaptive full-history frontier remains **3.772 accuracy points higher
+  and 0.1875 NLL lower** than rank 224 at epoch five, despite the active
+  parameter counts matching within 0.1%. Parameter count alone therefore does
+  not explain the frontier advantage under this shared five-epoch recipe. The
+  unresolved difference still combines five pretrained specializations, five
+  ViT paths plus macro integration, and a different parameter factorization.
+- Rank-224 validation NLL is best at epoch three, **0.7199** with **81.699%**
+  accuracy; accuracy peaks at epoch four, **82.060%**. Training continues to
+  improve while validation NLL rises 0.0573 from epoch three through epoch
+  five. The inherited rank-16 optimizer schedule therefore becomes a plausible
+  high-rank limitation, but selecting the best observed checkpoint still
+  leaves the adaptive epoch-five frontier 3.181 points higher and 0.1302 NLL
+  lower.
+- The existing five-page frontier report now includes rank 16, aggregate-rank
+  80, total-active-parameter rank 224, and adaptive full history under
+  reconciled labels and matched-exposure tables and plots. Every page was
+  rendered and visually checked. All 105 focused ImageNet-R tests pass. The
+  repository suite has 945 passing and 276 skipped tests; its same 31 unrelated
+  failures require the optional `fabricpc` or `tokenizers` packages in the
+  isolated vision environment. Next, audit rank-224 learning rate and
+  regularization with a predeclared validation-selection rule, then replicate
+  the capacity ladder and adaptive frontier over independent seeds. If the
+  residual persists, isolate pretrained specialization from multi-path macro
+  integration rather than attributing it to parameter count.
+
 ## Completed Outcome - ImageNet-R Stage-31 Aggregate-Rank Control
 
 - **The additive rank-matched control completed on 2026-09-06.** It was not

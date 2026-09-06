@@ -32,7 +32,7 @@ matched at this checkpoint. Compute is not: the frontier evaluates five
 specialized ViTs plus the macro transformer, while joint IID evaluates one
 ViT with one shared LoRA and classifier.
 
-## Aggregate-rank control
+## Joint-IID capacity controls
 
 The new rank-80 joint-IID control reaches
 **80.125% accuracy / 0.8339 NLL**
@@ -54,6 +54,25 @@ the same five epochs is 0.7954 with
 80.026% accuracy at epoch
 3; this diagnostic does not replace the fixed
 epoch-five comparison.
+
+The total-active-parameter control uses rank 224 and reaches
+**81.109% accuracy / 0.7772 NLL**
+at epoch five. Its 18,674,812 trainable parameters are 16,204
+(0.087%) fewer than the adaptive frontier's
+18,691,016, the closest possible match at integer rank. Relative to rank 80,
+the extra capacity changes accuracy by +0.984
+percentage points and NLL by -0.0568. Relative to rank
+16, rank 224 accounts for 46.3% of the adaptive
+frontier's accuracy difference and 46.9% of its NLL
+difference. At the same endpoint, the adaptive frontier remains 3.772 accuracy points higher, while
+the adaptive frontier is 0.1875 NLL lower. The rank-224 minimum NLL is
+0.7199 at epoch
+3; accuracy peaks at
+82.060% at epoch
+4. Validation NLL then rises by
+0.0573 through epoch five while the training objective
+continues to improve, which is consistent with late overfitting or
+miscalibration under the inherited rank-16 schedule.
 
 ![Accuracy and NLL versus H](accuracy_nll_vs_h.png)
 
@@ -91,5 +110,5 @@ LoRA adaptation. The five H cells differ in both unique identities and total
 optimizer updates because each receives 50 full passes. No test identity was
 requested. Exact replay authenticated all six cells with zero new optimizer
 steps and left the source hierarchy unchanged. A separate fresh process also
-authenticated the rank-80 result and its model artifact without an optimizer
-step.
+authenticated the rank-80 and rank-224 results and their model artifacts
+without an optimizer step.
