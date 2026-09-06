@@ -1,0 +1,2 @@
+best_epoch,best_validation_accuracy,best_validation_nll,classifier_parameters,condition,epochs,fixed_validation_accuracy,fixed_validation_nll,frontier_integrator_parameters_excluded_from_match,image_presentations,lora_alpha,lora_parameters,lora_rank,peak_vram_bytes,trainable_parameters,wall_seconds
+3,80.02623811085601,0.7953980834650657,95356,"Joint IID, rank 80 (5 epochs)",5,80.12463102656609,0.8339448211309596,12055496,60970,80,6635520,80,4235089408,6730876,112.31550274603069

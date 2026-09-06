@@ -12,6 +12,7 @@ from pathlib import Path
 from apm.continual.artifacts import (
     atomic_write,
     canonical_json_bytes,
+    file_sha256,
     load_canonical_json,
     record_sha256,
 )
@@ -27,7 +28,8 @@ CONDITION_LABELS = {
 }
 FROZEN_ONLINE_LABEL = "Frozen frontier, online full fit"
 FROZEN_CACHED_LABEL = "Frozen macro, cached full fit (seed 1993)"
-JOINT_LABEL = "Joint IID, one shared LoRA (5 epochs)"
+JOINT_LABEL = "Joint IID, rank 16 (5 epochs)"
+RANK_MATCHED_LABEL = "Joint IID, rank 80 (5 epochs)"
 
 
 def _validated_result(run: Path) -> dict[str, object]:
@@ -40,6 +42,79 @@ def _validated_result(run: Path) -> dict[str, object]:
     ):
         raise ValueError("frontier adaptation result does not authenticate")
     return result
+
+
+def _validated_rank_matched_control(
+    run: Path, parent_result: Mapping[str, object]
+) -> dict[str, object] | None:
+    path = run / "evaluations/joint_iid_lora_r80.json"
+    if not path.is_file():
+        return None
+    control = load_canonical_json(path)
+    core = {key: value for key, value in control.items() if key != "content_hash"}
+    architecture = dict(control.get("architecture", {}))
+    fit = dict(control.get("fit", {}))
+    if (
+        control.get("schema_version")
+        != "imagenetr50-frontier-rank-matched-control-v1"
+        or control.get("content_hash") != record_sha256(core)
+        or control.get("parent_result_hash") != parent_result.get("content_hash")
+        or control.get("test_evaluations") != 0
+        or architecture.get("lora_rank") != 80
+        or architecture.get("lora_alpha") != 80
+        or architecture.get("lora_parameters") != 6_635_520
+        or architecture.get("frontier_aggregate_lora_parameters") != 6_635_520
+        or fit.get("epochs") != 5
+        or fit.get("image_presentations") != 60_970
+    ):
+        raise ValueError("rank-matched joint-IID control does not authenticate")
+    return control
+
+
+def _rank_matched_summary(control: Mapping[str, object]) -> dict[str, object]:
+    architecture = dict(control["architecture"])
+    fit = dict(control["fit"])
+    return {
+        "best_epoch": int(fit["best_epoch"]),
+        "best_validation_accuracy": float(fit["best_validation_accuracy"]),
+        "best_validation_nll": float(fit["best_validation_nll"]),
+        "classifier_parameters": int(architecture["classifier_parameters"]),
+        "condition": RANK_MATCHED_LABEL,
+        "epochs": int(fit["epochs"]),
+        "fixed_validation_accuracy": float(fit["fixed_validation_accuracy"]),
+        "fixed_validation_nll": float(fit["fixed_validation_nll"]),
+        "frontier_integrator_parameters_excluded_from_match": int(
+            architecture["frontier_integrator_parameters_excluded_from_match"]
+        ),
+        "image_presentations": int(fit["image_presentations"]),
+        "lora_alpha": int(architecture["lora_alpha"]),
+        "lora_parameters": int(architecture["lora_parameters"]),
+        "lora_rank": int(architecture["lora_rank"]),
+        "peak_vram_bytes": int(fit["peak_vram_bytes"]),
+        "trainable_parameters": int(architecture["trainable_parameters"]),
+        "wall_seconds": float(fit["wall_seconds"]),
+    }
+
+
+def _rank_matched_history(
+    run: Path, control: Mapping[str, object]
+) -> tuple[dict[str, object], ...]:
+    """Load the authenticated five-epoch trajectory for the rank-80 control."""
+    history_path = (run / str(control["history"])).resolve()
+    if run not in history_path.parents or not history_path.is_file():
+        raise ValueError("rank-matched history escapes or is absent from the run")
+    if file_sha256(history_path) != control["history_sha256"]:
+        raise ValueError("rank-matched history hash changed")
+    rows = tuple(
+        json.loads(line)
+        for line in history_path.read_text(encoding="utf-8").splitlines()
+        if line
+    )
+    if len(rows) != 5 or tuple(int(row["epoch"]) for row in rows) != tuple(
+        range(1, 6)
+    ):
+        raise ValueError("rank-matched history is incomplete")
+    return tuple({**row, "condition": RANK_MATCHED_LABEL} for row in rows)
 
 
 def _history(run: Path, cell: Mapping[str, object]) -> tuple[dict[str, object], ...]:
@@ -195,6 +270,7 @@ def _plot_primary(
     path: Path,
     summaries: Sequence[Mapping[str, object]],
     references: Mapping[str, object],
+    rank_matched: Mapping[str, object] | None,
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -228,11 +304,23 @@ def _plot_primary(
         )
         axis.axhline(
             float(joint[reference_key]),
-            color="#b2182b",
+            color="#111111",
             linestyle="--",
             linewidth=1.8,
             label=JOINT_LABEL,
         )
+        if rank_matched is not None:
+            rank_metric = {
+                "accuracy": "fixed_validation_accuracy",
+                "nll": "fixed_validation_nll",
+            }[reference_key]
+            axis.axhline(
+                float(rank_matched[rank_metric]),
+                color="#1b7837",
+                linestyle="-.",
+                linewidth=1.8,
+                label=RANK_MATCHED_LABEL,
+            )
         axis.axhline(
             float(cached[reference_key]),
             color="#666666",
@@ -249,7 +337,7 @@ def _plot_primary(
     axes[1].set_title("Minimum validation NLL")
     handles, labels = axes[1].get_legend_handles_labels()
     figure.legend(handles, labels, loc="lower center", ncol=2, frameon=False)
-    figure.suptitle("Stage-31 representation adaptation versus replay population")
+    figure.suptitle("Selected frontier checkpoints versus five-epoch joint IID")
     figure.tight_layout(rect=(0, 0.14, 1, 0.94))
     figure.savefig(path, dpi=190, bbox_inches="tight")
     plt.close(figure)
@@ -259,6 +347,7 @@ def _plot_learning_curves(
     path: Path,
     histories: Sequence[Mapping[str, object]],
     references: Mapping[str, object],
+    rank_matched_history: Sequence[Mapping[str, object]],
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -266,7 +355,7 @@ def _plot_learning_curves(
     colors = {
         1024: "#4393c3",
         2048: "#2166ac",
-        4096: "#1b7837",
+        4096: "#f4a582",
         8192: "#e08214",
         11827: "#b2182b",
     }
@@ -313,6 +402,22 @@ def _plot_learning_curves(
         linewidth=1.5,
         label=JOINT_LABEL,
     )
+    if rank_matched_history:
+        for axis, metric in zip(
+            axes,
+            ("validation_accuracy", "validation_nll"),
+            strict=True,
+        ):
+            axis.plot(
+                [int(row["epoch"]) for row in rank_matched_history],
+                [float(row[metric]) for row in rank_matched_history],
+                color="#1b7837",
+                linestyle="-.",
+                marker="s",
+                markersize=3.5,
+                linewidth=1.7,
+                label=RANK_MATCHED_LABEL,
+            )
     axes[0].set(title="Accuracy over training", ylabel="Validation accuracy (%)")
     axes[1].set(title="NLL over training", ylabel="Validation NLL")
     for axis in axes:
@@ -320,7 +425,7 @@ def _plot_learning_curves(
         axis.grid(alpha=0.22)
     handles, labels = axes[1].get_legend_handles_labels()
     figure.legend(handles, labels, loc="lower center", ncol=2, frameon=False, fontsize=8)
-    figure.suptitle("All checkpoints; dashed black is the five-epoch joint-IID endpoint")
+    figure.suptitle("Frontier learning curves and joint-IID five-epoch controls")
     figure.tight_layout(rect=(0, 0.12, 1, 0.94))
     figure.savefig(path, dpi=190, bbox_inches="tight")
     plt.close(figure)
@@ -446,6 +551,17 @@ def write_frontier_adaptation_report(run: str | Path) -> Path:
     result = _validated_result(run_path)
     report_root = run_path / "reports"
     report_root.mkdir(parents=True, exist_ok=True)
+    rank_matched_control = _validated_rank_matched_control(run_path, result)
+    rank_matched = (
+        None
+        if rank_matched_control is None
+        else _rank_matched_summary(rank_matched_control)
+    )
+    rank_history = (
+        ()
+        if rank_matched_control is None
+        else _rank_matched_history(run_path, rank_matched_control)
+    )
     summaries = _summary_rows(run_path, result)
     histories = _history_rows(run_path, result)
     displacements = _displacement_rows(result)
@@ -455,10 +571,25 @@ def write_frontier_adaptation_report(run: str | Path) -> Path:
         ("adapter_displacements", displacements),
     ):
         _write_table_family(report_root, name, rows)
+    if rank_matched is not None:
+        _write_table_family(
+            report_root, "joint_iid_rank80_summary", (rank_matched,)
+        )
+        _write_table_family(
+            report_root, "joint_iid_rank80_history", rank_history
+        )
     references = dict(result["references"])
-    _plot_primary(report_root / "accuracy_nll_vs_h.png", summaries, references)
+    _plot_primary(
+        report_root / "accuracy_nll_vs_h.png",
+        summaries,
+        references,
+        rank_matched,
+    )
     _plot_learning_curves(
-        report_root / "validation_learning_curves.png", histories, references
+        report_root / "validation_learning_curves.png",
+        histories,
+        references,
+        rank_history,
     )
     _plot_displacements(
         report_root / "adapter_displacements.png", displacements
@@ -526,18 +657,174 @@ def write_frontier_adaptation_report(run: str | Path) -> Path:
         float(frozen_online["validation_nll_minimum"])
         - float(full_adaptive["validation_nll_minimum"])
     )
+    if rank_matched is None:
+        rank_markdown = (
+            "The aggregate-rank joint-IID control has not yet been run. All existing "
+            "same-split joint-IID references use one rank-16 adapter."
+        )
+        rank_table_html = f"<p>{escape(rank_markdown)}</p>"
+        rank_interpretation_html = rank_table_html
+        rank_history_html = ""
+        rank_callout = ""
+    else:
+        rank_accuracy_change = (
+            float(rank_matched["fixed_validation_accuracy"])
+            - float(joint["accuracy"])
+        )
+        rank_nll_change = (
+            float(rank_matched["fixed_validation_nll"]) - float(joint["nll"])
+        )
+        frontier_rank_accuracy_gap = (
+            float(full_at_matched_epoch["validation_accuracy"])
+            - float(rank_matched["fixed_validation_accuracy"])
+        )
+        frontier_rank_nll_gap = (
+            float(full_at_matched_epoch["validation_nll"])
+            - float(rank_matched["fixed_validation_nll"])
+        )
+        original_accuracy_gap = (
+            float(full_at_matched_epoch["validation_accuracy"])
+            - float(joint["accuracy"])
+        )
+        original_nll_advantage = (
+            float(joint["nll"])
+            - float(full_at_matched_epoch["validation_nll"])
+        )
+        rank_accuracy_fraction = 100.0 * rank_accuracy_change / original_accuracy_gap
+        rank_nll_fraction = 100.0 * -rank_nll_change / original_nll_advantage
+        rank_markdown = f"""The new rank-80 joint-IID control reaches
+**{float(rank_matched['fixed_validation_accuracy']):.3f}% accuracy / {float(rank_matched['fixed_validation_nll']):.4f} NLL**
+at the fixed epoch-five endpoint. Increasing the joint adapter from rank 16 to
+rank 80 raises accuracy by {rank_accuracy_change:.3f} percentage points and
+lowers NLL by {-rank_nll_change:.4f}. This recovers {rank_accuracy_fraction:.1f}%
+of the adaptive frontier's accuracy advantage and {rank_nll_fraction:.1f}% of
+its NLL advantage over rank-16 joint IID. At the same five-pass checkpoint,
+the adaptive frontier remains {frontier_rank_accuracy_gap:.3f} accuracy points
+higher and {-frontier_rank_nll_gap:.4f} NLL lower than rank-80 joint IID.
+
+Both sides expose exactly 6,635,520 trainable LoRA parameters and 60,970 image
+presentations. That is the full extent of the match. The adaptive frontier also
+trains a 12,055,496-parameter macro integrator, starts from five separately
+pretrained rank-16 adapters, and executes five ViT paths. Rank-80 joint IID
+starts one adapter from the standard zero-effect initialization, trains a
+95,356-parameter classifier, and executes one ViT path. Its minimum NLL within
+the same five epochs is {float(rank_matched['best_validation_nll']):.4f} with
+{float(rank_matched['best_validation_accuracy']):.3f}% accuracy at epoch
+{int(rank_matched['best_epoch'])}; this diagnostic does not replace the fixed
+epoch-five comparison."""
+        rank_rows = (
+            (
+                JOINT_LABEL,
+                "1 x 16",
+                1_327_104,
+                95_356,
+                float(joint["accuracy"]),
+                float(joint["nll"]),
+            ),
+            (
+                RANK_MATCHED_LABEL,
+                "1 x 80",
+                int(rank_matched["lora_parameters"]),
+                int(rank_matched["classifier_parameters"]),
+                float(rank_matched["fixed_validation_accuracy"]),
+                float(rank_matched["fixed_validation_nll"]),
+            ),
+            (
+                "Adaptive frontier, full history (epoch 5)",
+                "5 x 16",
+                int(rank_matched["lora_parameters"]),
+                int(
+                    rank_matched[
+                        "frontier_integrator_parameters_excluded_from_match"
+                    ]
+                ),
+                float(full_at_matched_epoch["validation_accuracy"]),
+                float(full_at_matched_epoch["validation_nll"]),
+            ),
+        )
+        rank_table_body = "".join(
+            "<tr>"
+            f"<td>{escape(condition)}</td><td>{layout}</td>"
+            f"<td>{lora_parameters:,}</td><td>{other_parameters:,}</td>"
+            f"<td>{accuracy:.3f}%</td><td>{nll:.4f}</td></tr>"
+            for (
+                condition,
+                layout,
+                lora_parameters,
+                other_parameters,
+                accuracy,
+                nll,
+            ) in rank_rows
+        )
+        rank_table_html = (
+            "<table><thead><tr><th>Condition</th><th>LoRA layout</th>"
+            "<th>LoRA parameters</th><th>Other trainable parameters</th>"
+            "<th>Epoch-5 accuracy</th><th>Epoch-5 NLL</th></tr></thead>"
+            f"<tbody>{rank_table_body}</tbody></table>"
+        )
+        rank_history_body = "".join(
+            "<tr>"
+            f"<td>{int(row['epoch'])}</td>"
+            f"<td>{float(row['train_objective_accuracy']):.3f}%</td>"
+            f"<td>{float(row['train_objective_nll']):.4f}</td>"
+            f"<td>{float(row['validation_accuracy']):.3f}%</td>"
+            f"<td>{float(row['validation_nll']):.4f}</td></tr>"
+            for row in rank_history
+        )
+        rank_history_html = (
+            "<h2>Rank-80 five-epoch trajectory</h2>"
+            "<table><thead><tr><th>Epoch</th><th>Train objective accuracy</th>"
+            "<th>Train objective NLL</th><th>Validation accuracy</th>"
+            "<th>Validation NLL</th></tr></thead>"
+            f"<tbody>{rank_history_body}</tbody></table>"
+            "<p class=\"small\">Epoch five is the predeclared comparison endpoint. "
+            "The minimum validation NLL occurs at epoch three; it is retained only "
+            "as a convergence diagnostic.</p>"
+        )
+        rank_interpretation_html = (
+            f"<p>The new rank-80 joint-IID control reaches <strong>"
+            f"{float(rank_matched['fixed_validation_accuracy']):.3f}% accuracy / "
+            f"{float(rank_matched['fixed_validation_nll']):.4f} NLL</strong> at the "
+            "fixed epoch-five endpoint. Increasing the joint adapter from rank 16 "
+            f"to rank 80 raises accuracy by {rank_accuracy_change:.3f} percentage "
+            f"points and lowers NLL by {-rank_nll_change:.4f}. This recovers "
+            f"{rank_accuracy_fraction:.1f}% of the frontier's accuracy advantage "
+            f"and {rank_nll_fraction:.1f}% of its NLL advantage over rank-16 joint "
+            f"IID. The frontier remains {frontier_rank_accuracy_gap:.3f} points "
+            f"higher and {-frontier_rank_nll_gap:.4f} NLL lower.</p>"
+            "<p>Both sides expose exactly 6,635,520 trainable LoRA parameters and "
+            "60,970 image presentations. That is the full extent of the match. The "
+            "adaptive frontier also trains a 12,055,496-parameter macro integrator, "
+            "starts from five separately pretrained rank-16 adapters, and executes "
+            "five ViT paths. Rank-80 joint IID starts one adapter from the standard "
+            "zero-effect initialization, trains a 95,356-parameter classifier, and "
+            f"executes one ViT path. Its diagnostic minimum NLL is "
+            f"{float(rank_matched['best_validation_nll']):.4f} with "
+            f"{float(rank_matched['best_validation_accuracy']):.3f}% accuracy at "
+            f"epoch {int(rank_matched['best_epoch'])}.</p>"
+        )
+        rank_callout = (
+            "<div class=\"callout rank\"><strong>Aggregate-rank result.</strong> "
+            f"Rank-80 joint IID reaches <strong>{float(rank_matched['fixed_validation_accuracy']):.3f}% / "
+            f"{float(rank_matched['fixed_validation_nll']):.4f} NLL</strong> at epoch five. "
+            f"The larger adapter recovers {rank_accuracy_fraction:.1f}% of the "
+            f"frontier's accuracy advantage and {rank_nll_fraction:.1f}% of its NLL "
+            "advantage over rank-16 joint IID."
+            "</div>"
+        )
     if first_match is None:
         match_sentence = (
-            "No adaptive checkpoint simultaneously reaches both joint-IID references."
+            "No adaptive checkpoint simultaneously reaches both rank-16 joint-IID metrics."
         )
     elif int(first_match["historical_capacity"]) < 11827:
         match_sentence = (
-            f"{first_match['condition']} is the smallest H to reach both joint-IID "
-            f"references, first doing so at epoch {first_match['simultaneous_joint_match_epoch']}."
+            f"{first_match['condition']} is the smallest H to reach both rank-16 "
+            "joint-IID metrics, first doing so at epoch "
+            f"{first_match['simultaneous_joint_match_epoch']}."
         )
     else:
         match_sentence = (
-            "Only the full-fit adaptive condition reaches both joint-IID references, "
+            "Only the full-fit adaptive condition reaches both rank-16 joint-IID metrics, "
             f"first doing so at epoch {first_match['simultaneous_joint_match_epoch']}."
         )
     markdown = f"""# ImageNet-R stage-31 frontier-LoRA adaptation
@@ -553,7 +840,7 @@ and **{float(best_nll['validation_nll_minimum']):.4f} NLL** at epoch
 where NLL is {float(best_accuracy['validation_nll_at_max_accuracy']):.4f}.
 {match_sentence}
 
-The matched joint-IID reference is {float(joint['accuracy']):.3f}% / {float(joint['nll']):.4f}
+The rank-16 joint-IID reference is {float(joint['accuracy']):.3f}% / {float(joint['nll']):.4f}
 NLL. The previous frozen cached macro result at the same seed is
 {float(cached['accuracy']):.3f}% / {float(cached['nll']):.4f}; the new
 augmentation-matched frozen control is
@@ -573,6 +860,10 @@ image presentations), the adaptive frontier reaches
 matched at this checkpoint. Compute is not: the frontier evaluates five
 specialized ViTs plus the macro transformer, while joint IID evaluates one
 ViT with one shared LoRA and classifier.
+
+## Aggregate-rank control
+
+{rank_markdown}
 
 ![Accuracy and NLL versus H](accuracy_nll_vs_h.png)
 
@@ -609,7 +900,9 @@ full-fit frozen control isolates online augmentation and image forwarding from
 LoRA adaptation. The five H cells differ in both unique identities and total
 optimizer updates because each receives 50 full passes. No test identity was
 requested. Exact replay authenticated all six cells with zero new optimizer
-steps and left the source hierarchy unchanged.
+steps and left the source hierarchy unchanged. A separate fresh process also
+authenticated the rank-80 result and its model artifact without an optimizer
+step.
 """
     atomic_write(report_root / "REPORT.md", markdown.encode("utf-8"))
     table = _table_html(summaries)
@@ -617,26 +910,29 @@ steps and left the source hierarchy unchanged.
 @page {{ size: Letter; margin: 0.55in; }}
 * {{ box-sizing: border-box; }} body {{ font-family: Arial, sans-serif; color:#17202a; margin:0; line-height:1.35; font-size:10.5pt; }}
 h1 {{ font-size:23pt; margin:0 0 5px; color:#16324f; }} h2 {{ font-size:15pt; color:#16324f; margin:16px 0 7px; }}
-.lede {{ font-size:12pt; color:#425466; margin:0 0 12px; }} .callout {{ background:#eef5f9; border-left:4px solid #2166ac; padding:10px 13px; margin:9px 0 12px; }}
+.lede {{ font-size:12pt; color:#425466; margin:0 0 12px; }} .callout {{ background:#eef5f9; border-left:4px solid #2166ac; padding:10px 13px; margin:9px 0 12px; }} .rank {{ background:#edf7ef; border-left-color:#1b7837; }}
 figure {{ margin:10px 0 12px; break-inside:avoid; }} figure img {{ width:100%; max-height:5.6in; object-fit:contain; }} figcaption {{ color:#59636e; font-size:8.5pt; margin-top:3px; }}
 table {{ width:100%; border-collapse:collapse; font-size:7.7pt; margin:8px 0 12px; }} th {{ background:#16324f; color:white; text-align:left; padding:5px; }} td {{ border-bottom:1px solid #ccd5dd; padding:5px; vertical-align:top; }}
 .page {{ break-before:page; }} .small {{ font-size:9pt; color:#44515e; }} footer {{ margin-top:12px; border-top:1px solid #ccd5dd; padding-top:5px; color:#687580; font-size:8pt; }}
 </style></head><body>
 <h1>ImageNet-R stage-31 frontier-LoRA adaptation</h1><p class="lede">Can jointly adapting five fragmented node representations close the same-split joint-IID accuracy and NLL gap?</p>
-<div class="callout"><strong>Primary result.</strong> The minimum-NLL adaptive condition is {escape(str(best_nll['condition']))}: <strong>{float(best_nll['validation_accuracy_at_best_nll']):.3f}% accuracy / {float(best_nll['validation_nll_minimum']):.4f} NLL</strong>. That is {best_accuracy_gain:.3f} percentage points higher and {best_nll_reduction:.4f} NLL lower than the five-epoch joint-IID reference. {escape(match_sentence)}</div>
-<figure><img src="{_image_uri(report_root / 'accuracy_nll_vs_h.png')}" alt="Accuracy and NLL versus replay population"><figcaption>All blue points jointly update the five frontier LoRAs and macro head. Checkpoints minimize validation NLL. Horizontal references use the identical fit/validation identities but different architectures.</figcaption></figure>
-<h2>Complete condition summary</h2>{table}<p class="small">Maximum accuracy and its NLL are reported separately to expose calibration tradeoffs. Every cell also includes all 367 current-task identities; maximum historical H=11,827 is exactly the 12,194-image full fit.</p>
+<div class="callout"><strong>Selected-checkpoint result.</strong> The minimum-NLL adaptive condition is {escape(str(best_nll['condition']))}: <strong>{float(best_nll['validation_accuracy_at_best_nll']):.3f}% accuracy / {float(best_nll['validation_nll_minimum']):.4f} NLL</strong>. That is {best_accuracy_gain:.3f} percentage points higher and {best_nll_reduction:.4f} NLL lower than the five-epoch rank-16 joint-IID reference. {escape(match_sentence)}</div>
+{rank_callout}
+<figure><img src="{_image_uri(report_root / 'accuracy_nll_vs_h.png')}" alt="Accuracy and NLL versus replay population"><figcaption>Blue frontier points use each condition's minimum-NLL checkpoint. Black rank-16 and green rank-80 joint-IID lines are fixed epoch-five endpoints on the identical fit and validation identities.</figcaption></figure>
+<h2>Aggregate-rank comparison</h2>{rank_table_html}<p class="small">All three rows use exactly five complete passes over the 12,194-image fit population. “Other” means the joint classifier or the frontier macro integrator; frozen base-model parameters are omitted.</p>
+<div class="page"><h2>Complete condition summary</h2>{table}<p class="small">Maximum accuracy and its NLL are reported separately to expose calibration tradeoffs. Every cell also includes all 367 current-task identities; maximum historical H=11,827 is exactly the 12,194-image full fit.</p>{rank_history_html}</div>
 <div class="page"><h2>Architecture and experimental boundary</h2><p>The task-31 frontier has five nodes at levels 0-4, covering task intervals 31, 29-30, 25-28, 17-24, and 1-16. Each node supplies its own final 197 x 768 LoRA-adapted token sequence and immutable local affine scores. The macro transformer combines them without task IDs or labels.</p>
 <figure><img src="{_image_uri(report_root / 'stage31_frontier.png')}" alt="Five nodes feeding the macro-token integrator"><figcaption>The base ViT and node classifiers are frozen. Only five rank-16 LoRAs and the shared 12.06M-parameter macro head can move.</figcaption></figure>
 <p>Every cell includes all 367 current-task images. H=1,024, 2,048, 4,096, 8,192, and 11,827 are nested prefixes of one deterministic uniform draw from the historical tasks without replacement. Maximum H therefore gives exactly all 12,194 fit identities. Every cell starts independently from identical sealed node tensors and macro initialization. The validation partition has 3,049 clean identities and never contributes gradients. No test image is opened.</p>
 <p><strong>Compute boundary.</strong> The adaptive frontier evaluates five node-specific ViTs and the macro transformer for every image. Joint IID evaluates one ViT with one shared LoRA and classifier. Their split and full-fit data exposure match, but parameter count, training compute, and deployment compute do not.</p>
 <h2>Why the frozen online control exists</h2><p>The previous frozen macro was trained from cached center-crop tokens. This run loads images online with deterministic random training augmentation. The purple full-fit control follows that new path while freezing the LoRAs, so its difference from the cached gray reference measures the pipeline/augmentation change rather than representation adaptation.</p></div>
-<div class="page"><h2>Optimization behavior</h2><figure><img src="{_image_uri(report_root / 'validation_learning_curves.png')}" alt="Validation learning curves"><figcaption>Every epoch is retained in a hash-chained history. The dashed black line is the five-epoch joint-IID endpoint, not a stopping gate.</figcaption></figure>
+<div class="page"><h2>Optimization behavior</h2><figure><img src="{_image_uri(report_root / 'validation_learning_curves.png')}" alt="Validation learning curves"><figcaption>Every frontier epoch and all five rank-80 joint-IID epochs are retained in hash-chained histories. The dashed black line is the rank-16 epoch-five endpoint, not a stopping gate.</figcaption></figure>
 <figure><img src="{_image_uri(report_root / 'adapter_displacements.png')}" alt="Relative LoRA update displacement"><figcaption>Scale-aware Frobenius movement of each dense LoRA update, measured from its sealed source node at the selected minimum-NLL checkpoint.</figcaption></figure></div>
-<div class="page"><h2>Interpretation</h2><p>Allowing the frontier LoRAs to move changes the result by {adaptation_accuracy_gain:.3f} percentage points and {adaptation_nll_reduction:.4f} NLL relative to the online frozen-LoRA control at their minimum-NLL checkpoints. H=4,096 is the smallest tested historical population to cross both joint-IID values. At exactly {matched_epoch} full-fit passes ({matched_presentations:,} image presentations), adaptive full history is {float(full_at_matched_epoch['validation_accuracy']):.3f}% / {float(full_at_matched_epoch['validation_nll']):.4f}, frozen full history is {float(frozen_at_matched_epoch['validation_accuracy']):.3f}% / {float(frozen_at_matched_epoch['validation_nll']):.4f}, and joint IID is {float(joint['accuracy']):.3f}% / {float(joint['nll']):.4f}. This isolates feature adaptation from training exposure, but not the frontier's extra model and deployment compute.</p>
+<div class="page"><h2>Interpretation</h2><p>Allowing the frontier LoRAs to move changes the result by {adaptation_accuracy_gain:.3f} percentage points and {adaptation_nll_reduction:.4f} NLL relative to the online frozen-LoRA control at their minimum-NLL checkpoints. H=4,096 is the smallest tested historical population to cross both rank-16 joint-IID values. At exactly {matched_epoch} full-fit passes ({matched_presentations:,} image presentations), adaptive full history is {float(full_at_matched_epoch['validation_accuracy']):.3f}% / {float(full_at_matched_epoch['validation_nll']):.4f}, frozen full history is {float(frozen_at_matched_epoch['validation_accuracy']):.3f}% / {float(frozen_at_matched_epoch['validation_nll']):.4f}, and rank-16 joint IID is {float(joint['accuracy']):.3f}% / {float(joint['nll']):.4f}. This isolates feature adaptation from training exposure, but not the frontier's extra model and deployment compute.</p>
+<h2>What the rank match does—and does not—show</h2>{rank_interpretation_html}
 <p>The head schedule is the previous minimum-NLL winner: effective batch 64, peak AdamW LR 3e-5, 50 epochs, 5% warmup, and cosine decay. The LoRA peak LR 5e-4 is imported from the same-split joint recipe but run here in AdamW under the shared schedule. It has not been tuned for this coupled model.</p>
 <p><strong>Limits.</strong> This is a one-seed validation screen. The H cells change both unique data and total optimizer updates. Maximum accuracy is exploratory because all 50 validation checkpoints are visible. A promising condition needs replication and a focused LoRA/head learning-rate audit before any locked-test use.</p>
-<h2>Integrity and reuse</h2><p>The training seal records zero fit-validation overlap, zero test overlap, zero test evaluations, and unchanged source hierarchy files. A second pass authenticated all six completed cells without constructing their five ViTs or taking an optimizer step. Large checkpoints and model weights remain local; compact histories, tables, plots, and protocol records are the report surface.</p>
+<h2>Integrity and reuse</h2><p>The training seals record zero fit-validation overlap, zero test overlap, zero test evaluations, and unchanged source hierarchy files. Fresh-process replay authenticated all six frontier cells and the rank-80 control without taking an optimizer step. Large checkpoints and model weights remain local; compact histories, tables, plots, and protocol records are the report surface.</p>
 <footer>Protocol {escape(str(result['content_hash']))[:16]}... | stage 31 | seed 1993 | generated from authenticated result and history ledgers</footer></div>
 </body></html>"""
     atomic_write(report_root / "REPORT.html", html.encode("utf-8"))
@@ -648,5 +944,6 @@ __all__ = [
     "FROZEN_CACHED_LABEL",
     "FROZEN_ONLINE_LABEL",
     "JOINT_LABEL",
+    "RANK_MATCHED_LABEL",
     "write_frontier_adaptation_report",
 ]

@@ -9,9 +9,9 @@ and **0.5710 NLL** at epoch
 **85.864%** from
 **Frontier LoRA adaptation (H=11,827; full fit)** at epoch 13,
 where NLL is 0.5710.
-Frontier LoRA adaptation (H=4,096) is the smallest H to reach both joint-IID references, first doing so at epoch 6.
+Frontier LoRA adaptation (H=4,096) is the smallest H to reach both rank-16 joint-IID metrics, first doing so at epoch 6.
 
-The matched joint-IID reference is 77.862% / 0.9425
+The rank-16 joint-IID reference is 77.862% / 0.9425
 NLL. The previous frozen cached macro result at the same seed is
 74.483% / 1.0903; the new
 augmentation-matched frozen control is
@@ -31,6 +31,29 @@ image presentations), the adaptive frontier reaches
 matched at this checkpoint. Compute is not: the frontier evaluates five
 specialized ViTs plus the macro transformer, while joint IID evaluates one
 ViT with one shared LoRA and classifier.
+
+## Aggregate-rank control
+
+The new rank-80 joint-IID control reaches
+**80.125% accuracy / 0.8339 NLL**
+at the fixed epoch-five endpoint. Increasing the joint adapter from rank 16 to
+rank 80 raises accuracy by 2.263 percentage points and
+lowers NLL by 0.1085. This recovers 32.2%
+of the adaptive frontier's accuracy advantage and 30.8% of
+its NLL advantage over rank-16 joint IID. At the same five-pass checkpoint,
+the adaptive frontier remains 4.756 accuracy points
+higher and 0.2443 NLL lower than rank-80 joint IID.
+
+Both sides expose exactly 6,635,520 trainable LoRA parameters and 60,970 image
+presentations. That is the full extent of the match. The adaptive frontier also
+trains a 12,055,496-parameter macro integrator, starts from five separately
+pretrained rank-16 adapters, and executes five ViT paths. Rank-80 joint IID
+starts one adapter from the standard zero-effect initialization, trains a
+95,356-parameter classifier, and executes one ViT path. Its minimum NLL within
+the same five epochs is 0.7954 with
+80.026% accuracy at epoch
+3; this diagnostic does not replace the fixed
+epoch-five comparison.
 
 ![Accuracy and NLL versus H](accuracy_nll_vs_h.png)
 
@@ -67,4 +90,6 @@ full-fit frozen control isolates online augmentation and image forwarding from
 LoRA adaptation. The five H cells differ in both unique identities and total
 optimizer updates because each receives 50 full passes. No test identity was
 requested. Exact replay authenticated all six cells with zero new optimizer
-steps and left the source hierarchy unchanged.
+steps and left the source hierarchy unchanged. A separate fresh process also
+authenticated the rank-80 result and its model artifact without an optimizer
+step.

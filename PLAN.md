@@ -13,6 +13,44 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## Completed Outcome - ImageNet-R Stage-31 Aggregate-Rank Control
+
+- **The additive rank-matched control completed on 2026-09-06.** It was not
+  subsumed by an earlier artifact: all prior exact same-split stage-31 joint-
+  IID references used one rank-16 adapter. Control protocol
+  `b19f61bccefd7b7231b84604468c23dae65fa372aa028bb41aeb219277d524e5`
+  trained one fresh rank-80, alpha-80 adapter on the parent run's immutable
+  12,194-fit / 3,049-validation population and never requested test data.
+- At the fixed five-epoch endpoint, rank-80 joint IID reaches **80.125%
+  accuracy / 0.8339 NLL**, versus **77.862% / 0.9425** for rank 16. The larger
+  joint adapter therefore adds 2.263 accuracy points and lowers NLL by 0.1085.
+  It recovers **32.2% of the adaptive frontier's accuracy advantage and 30.8%
+  of its NLL advantage** over rank-16 joint IID at the same five-pass exposure.
+- Adaptive full history remains **4.756 points higher and 0.2443 NLL lower**
+  than rank-80 joint IID at epoch five. Both expose exactly 6,635,520 trainable
+  LoRA parameters and 60,970 image presentations. The residual still bundles
+  the frontier's 12,055,496-parameter macro head, five separately pretrained
+  adapter initializations, and five ViT paths; this is an aggregate-rank match,
+  not a functional, initialization, or compute match.
+- Rank-80 minimum validation NLL is 0.7954 at epoch three with 80.026%
+  accuracy, while epoch-four accuracy peaks at 80.354%. Thus the model learns
+  promptly and then mildly loses calibration; the predeclared epoch-five
+  endpoint remains primary. Training took 112.3 seconds and peaked at 4.23 GB
+  allocated VRAM. A fresh process authenticated the result, history, and local
+  model artifact with zero optimizer steps and unchanged parent hashes.
+- The existing frontier report now contains the capacity table, rank-80
+  trajectory, reconciled condition labels, and fixed-versus-selected
+  checkpoint explanation. All five PDF pages were rendered and visually
+  inspected. All **102** focused ImageNet-R tests pass. The repository suite
+  reports 942 passed and 276 skipped; its unrelated 31 failures still require
+  optional `fabricpc`/`tokenizers`, and one existing calibration test has a
+  `scripts` import collection error in this environment.
+- Next, replicate the rank-16/rank-80/full-adaptive fixed-epoch comparison over
+  independent seeds before treating the roughly one-third capacity recovery
+  as an estimate. Then isolate pretrained adapter specialization from the
+  macro integrator and five-forward compute advantage rather than describing
+  the remaining two-thirds as a single causal effect.
+
 ## Completed Outcome - ImageNet-R Stage-31 Frontier-LoRA Adaptation
 
 - **The clean validation sweep completed on 2026-09-06.** Run

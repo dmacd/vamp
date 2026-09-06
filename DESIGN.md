@@ -790,6 +790,18 @@ Reports must also count live ViT forwards and adapted parameters explicitly:
 matching split membership or image presentations does not make a five-node
 frontier compute-equivalent to a one-adapter joint-IID model.
 
+The aggregate-rank joint-IID addendum isolates one narrower capacity confound.
+At stage 31, one fresh rank-80, alpha-80 QKV-plus-fc1 adapter has exactly the
+same 6,635,520 LoRA parameters as the five live rank-16, alpha-16 frontier
+adapters together; alpha tracks rank so both use unit LoRA scale. It trains
+with the existing five-epoch joint-IID SGD recipe on the identical clean fit
+and validation identities. The fixed fifth epoch is the primary comparison,
+while the best validation-NLL epoch remains diagnostic. This is an aggregate
+parameter match, not a functional or compute match: the frontier begins from
+five separately pretrained adapters, runs five ViT paths, and trains the macro
+integrator, whereas the joint control begins from one zero-effect adapter,
+runs one ViT path, and trains an affine classifier.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under

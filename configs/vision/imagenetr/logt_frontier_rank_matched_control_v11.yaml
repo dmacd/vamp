@@ -1,0 +1,33 @@
+experiment:
+  name: imagenetr50_stage31_joint_iid_rank_matched_v11
+  protocol_revision: imagenetr50-stage31-joint-iid-rank-matched-v11
+  stage: 31
+  seed: 1993
+
+parent:
+  config: configs/vision/imagenetr/logt_frontier_lora_adaptation_v10.yaml
+  artifact_root: artifacts/imagenetr50/frontier_lora_adaptation_v10
+  run_hash: 4fd84ed287dcbaf8cec6ac5be3a2de502ba6ebb72b0c2f3ef38728e46d0af543
+  protocol_sha256: 7841cbb76893ed97bc75590748629a731221d8fc9e5d821d8a0b5351d6aba6db
+  result_sha256: 621638e8c577136e4b6bda810495a723a57129e2941cf82f6babafe8c5a90e8c
+  replay_sha256: 18625ea001ff9aa161b35b4c3f6a9917cabafd3d4156e7e40a79cbf397ac6df6
+
+capacity:
+  source_rank: 16
+  frontier_adapters: 5
+  target_rank: 80
+  target_alpha: 80
+  dropout: 0.0
+
+training:
+  epochs: 5
+  batch_size: 64
+  optimizer: sgd
+  momentum: 0.9
+  weight_decay: 5.0e-4
+  lora_lr: 5.0e-4
+  head_lr: 1.0e-2
+
+runtime:
+  num_workers: 12
+
