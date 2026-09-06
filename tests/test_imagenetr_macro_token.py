@@ -82,6 +82,26 @@ def test_positionwise_slot_projection_equals_dense_zero_padded_linear() -> None:
     assert captured[0].shape == (2, TOKEN_COUNT + 1, TOKEN_DIMENSION)
 
 
+def test_attached_components_match_cache_forward_and_preserve_gradients() -> None:
+    inputs = _inputs(2)
+    model = MacroTokenClassifier(1, 0.0, 19)
+    expected = model(inputs)
+    attached_tokens = inputs.node_tokens.detach().clone().requires_grad_(True)
+    attached_meta = inputs.meta_features.detach().clone().requires_grad_(True)
+    observed = model.forward_components(
+        attached_tokens,
+        inputs.slot_indices,
+        attached_meta,
+        inputs.seen_class_mask,
+    )
+    assert torch.equal(expected, observed)
+    observed[:, :12].square().mean().backward()
+    assert attached_tokens.grad is not None
+    assert attached_meta.grad is not None
+    assert torch.isfinite(attached_tokens.grad).all()
+    assert torch.isfinite(attached_meta.grad).all()
+
+
 def test_meta_and_v6_control_layout_preserve_stable_slots() -> None:
     inputs = _inputs(2)
     assert inputs.meta_features.shape == (2, META_INPUT_DIMENSION)
@@ -92,6 +112,15 @@ def test_meta_and_v6_control_layout_preserve_stable_slots() -> None:
     assert baseline.shape == (2, CLASS_COUNT)
     assert torch.isneginf(baseline[:, 12:]).all()
     assert torch.equal(features.reshape(2, MAXIMUM_SLOTS, 1369)[:, 1], torch.zeros(2, 1369))
+
+
+def test_meta_layout_is_differentiable_for_attached_node_scores() -> None:
+    inputs = _inputs(2)
+    raw = inputs.raw_scores.detach().clone().requires_grad_(True)
+    meta = behavior_meta_features(raw, inputs.ownership, inputs.active_slot_mask)
+    meta.square().mean().backward()
+    assert raw.grad is not None
+    assert torch.isfinite(raw.grad).all()
 
 
 def test_owner_targets_and_predicted_owner_routing_are_separate_from_inputs() -> None:

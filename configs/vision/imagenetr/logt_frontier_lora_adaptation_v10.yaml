@@ -1,0 +1,44 @@
+experiment:
+  name: imagenetr50_logt_frontier_lora_adaptation_v10
+  protocol_revision: imagenetr50-logt-frontier-lora-adaptation-v10
+  stage: 31
+  seed: 1993
+
+paths:
+  artifact_root: artifacts/imagenetr50/frontier_lora_adaptation_v10
+  source_macro_config: configs/vision/imagenetr/logt_macro_token_integrator_v8.yaml
+  source_macro_artifact_root: artifacts/imagenetr50/macro_token_integrator_v8
+  source_convergence_artifact_root: artifacts/imagenetr50/macro_token_convergence_v9
+
+source:
+  macro_run_hash: 323104b00589e606b67a4e084c832a99166d161b68e1ff3fe19966793b4a18b2
+  macro_protocol_sha256: 9cfd66f86c8a0931038d4c10b1abcf044e48cc6c5900767a97d718183daf7d1e
+  clean_hierarchy_sha256: 166bd362ef68441db32816cc668527b9825305a719aedc42435dd6c9872625fd
+  clean_stage31_sha256: 20b74a3e9d9c9feb9c8c393c28adb27d9f1f317fb69c90f0e9bf9d3241189351
+  convergence_run_hash: c2c71248fc52b0d4a6c4528228fed49f09d6278edeffe205606f379b5df06a3e
+  convergence_protocol_sha256: 932cbb4adfaf615bdd5485ff02ae82c018a299a95897448f0b26e0258cf71535
+  convergence_result_sha256: 90b526f373bd26002e39bf56080986e45ed43d9e9eb320fddc06d2cab6bb1cb8
+
+matrix:
+  historical_capacities: [1024, 2048, 4096, 8192, 12194]
+  full_fit_examples: 12194
+  frozen_full_fit_control: true
+
+optimization:
+  effective_batch_size: 64
+  microbatch_size: 64
+  epochs: 50
+  schedule: warmup_cosine
+  macro_peak_learning_rate: 0.00003
+  lora_peak_learning_rate: 0.0005
+  warmup_fraction: 0.05
+  minimum_learning_rate_ratio: 0.01
+  dropout: 0.1
+  weight_decay: 0.0001
+  gradient_clip_norm: 1.0
+  activation_recomputation: true
+
+runtime:
+  evaluation_batch_size: 64
+  num_workers: 12
+  checkpoint_every_epochs: 1

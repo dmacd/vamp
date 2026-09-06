@@ -113,10 +113,21 @@ def behavior_meta_features(
         or active_slot_mask.dtype != torch.bool
     ):
         raise ValueError("META source tensors have the wrong shape")
-    local = torch.zeros_like(raw_scores)
-    for slot in torch.where(active_slot_mask)[0].tolist():
-        owned = ownership[slot]
-        local[:, slot, owned] = F.log_softmax(raw_scores[:, slot, owned].float(), dim=1)
+    local = torch.stack(
+        tuple(
+            torch.zeros_like(raw_scores[:, slot]).index_copy(
+                1,
+                torch.where(ownership[slot])[0],
+                F.log_softmax(raw_scores[:, slot, ownership[slot]].float(), dim=1).to(
+                    raw_scores.dtype
+                ),
+            )
+            if active_slot_mask[slot]
+            else torch.zeros_like(raw_scores[:, slot])
+            for slot in range(MAXIMUM_SLOTS)
+        ),
+        dim=1,
+    )
     repeated_ownership = ownership.to(raw_scores.dtype)[None].expand(batch_size, -1, -1)
     repeated_active = active_slot_mask.to(raw_scores.dtype)[None, :, None].expand(
         batch_size, -1, -1
@@ -303,14 +314,43 @@ class MacroTokenClassifier(nn.Module):
 
     def encode(self, inputs: MacroTokenInputs) -> Tensor:
         """Expose macro-CLS for the explicitly diagnostic frozen linear probe."""
-        return self.encoder(
+        return self.encode_components(
             inputs.node_tokens, inputs.slot_indices, inputs.meta_features
         )
 
+    def encode_components(
+        self, node_tokens: Tensor, slot_indices: Tensor, meta_features: Tensor
+    ) -> Tensor:
+        """Encode either detached caches or attached node outputs identically."""
+        return self.encoder(node_tokens, slot_indices, meta_features)
+
+    def forward_components(
+        self,
+        node_tokens: Tensor,
+        slot_indices: Tensor,
+        meta_features: Tensor,
+        seen_class_mask: Tensor,
+    ) -> Tensor:
+        """Classify differentiable node components without weakening cache checks."""
+        if (
+            seen_class_mask.shape != (CLASS_COUNT,)
+            or seen_class_mask.dtype != torch.bool
+            or not bool(seen_class_mask.any())
+        ):
+            raise ValueError("macro-token seen-class mask is malformed")
+        logits = self.classifier(
+            self.encode_components(node_tokens, slot_indices, meta_features)
+        )
+        return logits.masked_fill(~seen_class_mask, -torch.inf)
+
     def forward(self, inputs: MacroTokenInputs) -> Tensor:
         """Return direct class logits with classes outside the frontier masked."""
-        logits = self.classifier(self.encode(inputs))
-        return logits.masked_fill(~inputs.seen_class_mask, -torch.inf)
+        return self.forward_components(
+            inputs.node_tokens,
+            inputs.slot_indices,
+            inputs.meta_features,
+            inputs.seen_class_mask,
+        )
 
 
 class MacroOwnerClassifier(nn.Module):

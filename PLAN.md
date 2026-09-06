@@ -13,6 +13,26 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## Active Experiment - ImageNet-R Stage-31 Frontier-LoRA Adaptation
+
+- Run `9832e20312141985b5575186d774ba36a8ef623d8e50f4cd9afab634f5ea1667`
+  is executing on the local RTX 4090 at reduced CPU priority. Its real BF16
+  preflight passed with all 265 parameter tensors receiving finite gradients,
+  exact activation-recomputation logits, and 5.44 GiB peak allocated VRAM at
+  physical/effective batch 64.
+- The five adaptive conditions use nested deterministic uniform populations at
+  H=1,024, 2,048, 4,096, 8,192, and all 12,194 clean fit identities. They train
+  the five sealed stage-31 frontier LoRAs jointly with the one-block macro head
+  for 50 warmup-cosine epochs. The base ViT and node classifiers remain frozen.
+- A sixth all-fit condition freezes the frontier LoRAs while retaining the same
+  online image loader and augmentation path. It separates representation
+  adaptation from the earlier cached center-crop fitting path. The 3,049-image
+  validation population is fixed, and the test split remains unopened.
+- Remaining work is to complete and exactly replay all six fits, publish the
+  accuracy/NLL and adapter-displacement evidence, render and inspect the PDF,
+  run the focused and repository regression suites, replace this live section
+  with measured conclusions, and commit/push the compact report surface.
+
 ## Completed Outcome - ImageNet-R Stage-31 Macro-Token Convergence Audit
 
 - **The clean-only v9 audit completed on 2026-09-05.** Run

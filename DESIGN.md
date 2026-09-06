@@ -756,6 +756,30 @@ O(N log T), apart from fixed epoch factors. Persisted reports keep exact model
 passes, integrator forward/backward presentations, classifier-row copies, live
 memory, and archive storage separate.
 
+### Differentiable fragmented-frontier adaptation
+
+The clean task-31 diagnostic may update each live node's LoRA jointly with the
+macro-token head, but never its pinned base ViT or immutable local classifier.
+The cache-facing `MacroTokenInputs` contract continues to reject attached
+tensors. A separate component-forward surface admits differentiable node tokens
+and META fields without weakening that boundary or introducing labels and task
+IDs into inference.
+
+Each node forward remains semantically independent and uses its own installed
+adapter. Non-reentrant activation recomputation rebuilds those node activations
+during backward, bounding peak device memory without changing logits or
+gradients. Checkpoints persist only macro parameters, node LoRA factors, and
+optimizer state; they never duplicate frozen backbone or classifier weights.
+
+Replay-capacity comparisons use prefixes of one deterministic uniform
+without-replacement ordering. This makes H populations nested while keeping the
+full-H member exactly equal to the complete fit partition. A full-H frozen-LoRA
+online control distinguishes joint feature adaptation from changes caused by
+online augmentation. Minimum validation NLL selects checkpoints; maximum
+accuracy is always labeled as a separate diagnostic. Training-material
+identity excludes report projection code, so presentation fixes cannot rename
+or invalidate expensive scientific fits.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under
