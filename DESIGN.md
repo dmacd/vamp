@@ -815,6 +815,37 @@ aggregate-rank control. This removes a large active-count mismatch but does
 not equate a single fresh factorization with five pretrained node adapters,
 their macro-token composition, or their five-forward deployment cost.
 
+The single-layer pre-classifier addendum isolates the integration head while
+preserving adapter-dependent routing. At stage 31, each of the five frontier
+nodes independently runs the pinned ViT with its own rank-16 LoRA installed.
+The final 768-value `pre_logits` vector from each path is concatenated in
+ascending hierarchy-level order into 3,840 values. One affine map produces the
+200 global logits, after which classes absent from the current 124-class
+frontier are masked. There is no hidden layer, activation, dropout, token
+transformer, local-score input, META field, task ID, or label-derived routing
+input.
+
+The affine map starts as the exact union of the five immutable local
+classifiers: every represented classifier row is copied into its owner's input
+block, all cross-node blocks start at zero, and its bias is copied unchanged.
+The pinned base ViT and node classifiers stay frozen; all five frontier LoRAs
+and the 768,200-parameter affine map train jointly. This gives 7,403,720 active
+parameters and retains five ViT forwards, so it is an architecture ablation,
+not a compute-matched joint-IID control. It uses the full 12,194-image clean fit
+population, the same 3,049-image validation population, augmentation,
+50-epoch AdamW schedule, minimum-NLL selection rule, and fixed epoch-five
+comparison as the macro full-history condition. Its artifact namespace and
+material hash are independent of reporting code.
+
+This condition answers whether trainable frontier representations plus the
+simplest cross-node linear boundary reproduce the macro-token gain. It does
+not isolate input depth, nonlinear capacity, or regularization separately:
+the affine head observes only final pre-classifier vectors and has 93.6% fewer
+parameters than the macro head. Consequently, a gap between the two supports
+the value of richer integration under the tested recipe but cannot by itself
+establish whether patch tokens, nonlinear composition, parameter count, or
+their interaction is causal.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under

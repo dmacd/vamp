@@ -13,6 +13,56 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## Completed Outcome - ImageNet-R Stage-31 Single-Layer Integrator
+
+- **The full-history architecture ablation completed on 2026-09-06.** Protocol
+  `b10a7ee94183317c8be7a45c6313d6c3f526bf0c4dd5992eb7e975f82f8cd35e`
+  reused the immutable stage-31 frontier and the exact 12,194-fit /
+  3,049-validation population from the macro-token adaptation study. It
+  performed zero test evaluations and left every source leaf and parent
+  unchanged. A fresh process authenticated the completed result and model with
+  zero optimizer steps.
+- Each of the five frontier nodes runs the pinned ViT with its own trainable
+  rank-16 LoRA. Their five 768-value final pre-classifier vectors are
+  concatenated in hierarchy-level order and sent through one affine
+  3,840-to-200 layer. The head contains no hidden layer, activation, token
+  transformer, node scores, META fields, task IDs, or label-derived routing.
+  Its initialization reproduces the exact local-classifier union to within
+  8.6e-6 in the real BF16 GPU preflight.
+- The five LoRAs contribute 6,635,520 trainable parameters and the affine head
+  contributes 768,200, for **7,403,720 active parameters**. The base ViT and
+  local node classifiers remain frozen. Training uses the macro condition's
+  full-history data, online augmentation, effective batch 64, 50-epoch AdamW
+  schedule, and minimum-validation-NLL checkpoint rule.
+- The minimum-NLL checkpoint occurs at epoch three and reaches **79.239%
+  accuracy / 0.8907 NLL**. Maximum accuracy is **79.895%** at epoch 15, where
+  NLL has already worsened to 1.0568. At the fixed five-pass comparison point
+  it reaches **78.649% / 0.9560**, after the same 60,970 image presentations as
+  all joint-IID controls and the macro full-history condition.
+- Against macro full history, the single layer is **6.625 accuracy points lower
+  and 0.3197 NLL higher** at each condition's selected checkpoint. At epoch
+  five the gap is 6.232 points and 0.3664 NLL. It is 0.787 point above rank-16
+  joint IID at epoch five, but has 0.0136 worse NLL; it remains 1.476 points /
+  0.1221 NLL behind rank 80 and 2.460 points / 0.1789 NLL behind rank 224.
+- This rules out ordinary lack of convergence as the main explanation under
+  the tested schedule: validation NLL is best after only three epochs and then
+  degrades while the fit objective continues to improve. The result supports
+  a real held-out benefit from the macro head's richer patch-token nonlinear
+  integration. It does not separately identify patch-token depth, nonlinearity,
+  parameter count, or regularization as the cause, and it remains a one-seed
+  validation result.
+- The existing five-page frontier report now integrates the new condition into
+  both accuracy/NLL figures, the complete summary, the matched-exposure
+  capacity table, and the interpretation. Every final PDF page was rendered
+  and visually inspected. All **109** ImageNet-R tests pass. The repository
+  suite has **949 passing and 276 skipped tests**; its unchanged 31 failures are
+  the optional-environment tests requiring `fabricpc` or `tokenizers`.
+- Next, replicate the full-history macro and single-layer pair across seeds
+  before using the 6.6-point gap as an estimate. If it holds, use a small
+  predeclared ladder between the affine and macro extremes—normalization and a
+  regularized nonlinear bottleneck first—to separate representation richness
+  from head size without opening the locked test split.
+
 ## Completed Outcome - ImageNet-R Stage-31 Total-Parameter Control
 
 - **The total-active-parameter control completed on 2026-09-06.** Protocol

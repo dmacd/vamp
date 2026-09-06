@@ -34,6 +34,9 @@ RANK_MATCHED_LABEL = "Joint IID, rank 80 (5 epochs)"
 TOTAL_PARAM_MATCHED_LABEL = (
     "Joint IID, rank 224 (total-active match; 5 epochs)"
 )
+LINEAR_PRECLASSIFIER_LABEL = (
+    "Single-layer pre-classifier integrator, adaptive LoRAs (full fit)"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,6 +208,109 @@ def _capacity_history(
     return tuple({**row, "condition": specification.label} for row in rows)
 
 
+def _validated_linear_preclassifier_control(
+    run: Path, parent_result: Mapping[str, object]
+) -> dict[str, object] | None:
+    """Authenticate the optional full-fit linear-integrator result."""
+    path = run / "evaluations/frontier_linear_preclassifier.json"
+    if not path.is_file():
+        return None
+    control = load_canonical_json(path)
+    core = {key: value for key, value in control.items() if key != "content_hash"}
+    architecture = dict(control.get("architecture", {}))
+    fit = dict(control.get("fit", {}))
+    requirements = {
+        "active_nodes": 5,
+        "feature_dimension": 768,
+        "feature_normalization": "none_after_pinned_vit_pre_logits",
+        "feature_source": "node_preclassifier",
+        "frontier_lora_parameters": 6_635_520,
+        "initialization": "exact_local_classifier_union",
+        "input_dimension": 3_840,
+        "input_order": "ascending_frontier_level",
+        "integrator_kind": "single_affine",
+        "integrator_parameters": 768_200,
+        "output_classes": 200,
+        "source_rank": 16,
+        "train_base_vit": False,
+        "train_frontier_loras": True,
+        "train_integrator": True,
+        "train_node_classifiers": False,
+        "trainable_parameters": 7_403_720,
+    }
+    if (
+        control.get("schema_version")
+        != "imagenetr50-frontier-linear-preclassifier-control-v1"
+        or control.get("content_hash") != record_sha256(core)
+        or control.get("parent_result_hash") != parent_result.get("content_hash")
+        or control.get("test_evaluations") != 0
+        or any(architecture.get(key) != value for key, value in requirements.items())
+        or fit.get("epochs") != 50
+        or fit.get("image_presentations") != 609_700
+        or fit.get("fixed_epoch") != 5
+        or fit.get("fixed_image_presentations") != 60_970
+    ):
+        raise ValueError("linear pre-classifier control does not authenticate")
+    return control
+
+
+def _linear_preclassifier_history(
+    run: Path, control: Mapping[str, object]
+) -> tuple[dict[str, object], ...]:
+    """Load the authenticated 50-epoch architecture-ablation trajectory."""
+    history_path = (run / str(control["history"])).resolve()
+    if (
+        run not in history_path.parents
+        or not history_path.is_file()
+        or file_sha256(history_path) != control["history_sha256"]
+    ):
+        raise ValueError("linear pre-classifier history changed or escaped the run")
+    rows = tuple(
+        json.loads(line)
+        for line in history_path.read_text(encoding="utf-8").splitlines()
+        if line
+    )
+    if len(rows) != 50 or tuple(int(row["epoch"]) for row in rows) != tuple(
+        range(1, 51)
+    ):
+        raise ValueError("linear pre-classifier history is incomplete")
+    return tuple({**row, "condition": LINEAR_PRECLASSIFIER_LABEL} for row in rows)
+
+
+def _linear_preclassifier_summary(
+    control: Mapping[str, object]
+) -> dict[str, object]:
+    """Project the linear-integrator result into the common frontier table."""
+    fit = dict(control["fit"])
+    return {
+        "accuracy_gap_to_joint_at_min_nll_pp": None,
+        "adapt_lora": True,
+        "best_nll_epoch": int(fit["best_nll_epoch"]),
+        "condition": LINEAR_PRECLASSIFIER_LABEL,
+        "historical_capacity": 11_827,
+        "image_presentations": int(fit["image_presentations"]),
+        "max_accuracy_epoch": int(fit["max_accuracy_epoch"]),
+        "max_validation_accuracy": float(fit["max_validation_accuracy"]),
+        "nll_gap_to_joint": None,
+        "peak_vram_bytes": int(fit["peak_vram_bytes"]),
+        "simultaneous_joint_match_epoch": None,
+        "train_accuracy_at_best": float(fit["train_accuracy_at_best"]),
+        "train_nll_at_best": float(fit["train_nll_at_best"]),
+        "trainable_parameters": int(fit["trainable_parameters"]),
+        "training_examples": 12_194,
+        "validation_accuracy_at_best_nll": float(
+            fit["validation_accuracy_at_best_nll"]
+        ),
+        "validation_nll_at_max_accuracy": float(
+            fit["validation_nll_at_max_accuracy"]
+        ),
+        "validation_nll_minimum": float(fit["best_validation_nll"]),
+        "wall_seconds": float(fit["wall_seconds"]),
+        "fixed_validation_accuracy": float(fit["fixed_validation_accuracy"]),
+        "fixed_validation_nll": float(fit["fixed_validation_nll"]),
+    }
+
+
 def _history(run: Path, cell: Mapping[str, object]) -> tuple[dict[str, object], ...]:
     rows = tuple(
         json.loads(line)
@@ -361,6 +467,7 @@ def _plot_primary(
     capacity_controls: Sequence[
         tuple[JointCapacityControlSpec, Mapping[str, object]]
     ],
+    linear_preclassifier: Mapping[str, object] | None,
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -392,6 +499,18 @@ def _plot_primary(
             label=FROZEN_ONLINE_LABEL,
             zorder=4,
         )
+        if linear_preclassifier is not None:
+            axis.scatter(
+                [int(linear_preclassifier["historical_capacity"])],
+                [float(linear_preclassifier[metric])],
+                color="#008b8b",
+                edgecolor="white",
+                linewidth=0.7,
+                marker="*",
+                s=120,
+                label=LINEAR_PRECLASSIFIER_LABEL,
+                zorder=5,
+            )
         axis.axhline(
             float(joint[reference_key]),
             color="#111111",
@@ -430,12 +549,12 @@ def _plot_primary(
         handles,
         labels,
         loc="lower center",
-        ncol=2,
+        ncol=3,
         frameon=False,
-        fontsize=8,
+        fontsize=7.4,
     )
     figure.suptitle("Selected frontier checkpoints versus five-epoch joint IID")
-    figure.tight_layout(rect=(0, 0.14, 1, 0.94))
+    figure.tight_layout(rect=(0, 0.18, 1, 0.94))
     figure.savefig(path, dpi=190, bbox_inches="tight")
     plt.close(figure)
 
@@ -447,6 +566,7 @@ def _plot_learning_curves(
     capacity_histories: Sequence[
         tuple[JointCapacityControlSpec, Sequence[Mapping[str, object]]]
     ],
+    linear_preclassifier_history: Sequence[Mapping[str, object]],
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -487,6 +607,15 @@ def _plot_learning_curves(
             linewidth=1.8,
             label=FROZEN_ONLINE_LABEL,
         )
+        if linear_preclassifier_history:
+            axis.plot(
+                [int(row["epoch"]) for row in linear_preclassifier_history],
+                [float(row[metric]) for row in linear_preclassifier_history],
+                color="#008b8b",
+                linestyle="--",
+                linewidth=2.1,
+                label=LINEAR_PRECLASSIFIER_LABEL,
+            )
     axes[0].axhline(
         float(joint["accuracy"]),
         color="#111111",
@@ -529,10 +658,10 @@ def _plot_learning_curves(
         loc="lower center",
         ncol=3,
         frameon=False,
-        fontsize=7.4,
+        fontsize=7.0,
     )
     figure.suptitle("Frontier learning curves and joint-IID five-epoch controls")
-    figure.tight_layout(rect=(0, 0.24, 1, 0.94))
+    figure.tight_layout(rect=(0, 0.28, 1, 0.94))
     figure.savefig(path, dpi=190, bbox_inches="tight")
     plt.close(figure)
 
@@ -675,6 +804,17 @@ def write_frontier_adaptation_report(run: str | Path) -> Path:
         (specification, _capacity_history(run_path, control, specification))
         for specification, control in capacity_controls
     )
+    linear_control = _validated_linear_preclassifier_control(run_path, result)
+    linear_summary = (
+        None
+        if linear_control is None
+        else _linear_preclassifier_summary(linear_control)
+    )
+    linear_history = (
+        ()
+        if linear_control is None
+        else _linear_preclassifier_history(run_path, linear_control)
+    )
     summaries = _summary_rows(run_path, result)
     histories = _history_rows(run_path, result)
     displacements = _displacement_rows(result)
@@ -696,18 +836,27 @@ def write_frontier_adaptation_report(run: str | Path) -> Path:
         _write_table_family(
             report_root, f"{specification.table_name}_history", history
         )
+    if linear_summary is not None:
+        _write_table_family(
+            report_root, "frontier_linear_preclassifier_summary", (linear_summary,)
+        )
+        _write_table_family(
+            report_root, "frontier_linear_preclassifier_history", linear_history
+        )
     references = dict(result["references"])
     _plot_primary(
         report_root / "accuracy_nll_vs_h.png",
         summaries,
         references,
         capacity_summaries,
+        linear_summary,
     )
     _plot_learning_curves(
         report_root / "validation_learning_curves.png",
         histories,
         references,
         capacity_histories,
+        linear_history,
     )
     _plot_displacements(
         report_root / "adapter_displacements.png", displacements
@@ -757,6 +906,97 @@ def write_frontier_adaptation_report(run: str | Path) -> Path:
         for row in _history(run_path, frozen_online_cell)
         if int(row["epoch"]) == matched_epoch
     )
+    if linear_summary is None:
+        linear_markdown = (
+            "The single-layer pre-classifier condition has not yet been run."
+        )
+        linear_interpretation_html = f"<p>{escape(linear_markdown)}</p>"
+        linear_callout = ""
+        linear_capacity_row: tuple[
+            tuple[str, str, int, int, int, float, float], ...
+        ] = ()
+    else:
+        linear_selected_accuracy_gap = (
+            float(linear_summary["validation_accuracy_at_best_nll"])
+            - float(full_adaptive["validation_accuracy_at_best_nll"])
+        )
+        linear_selected_nll_gap = (
+            float(linear_summary["validation_nll_minimum"])
+            - float(full_adaptive["validation_nll_minimum"])
+        )
+        linear_fixed_accuracy_gap = (
+            float(linear_summary["fixed_validation_accuracy"])
+            - float(full_at_matched_epoch["validation_accuracy"])
+        )
+        linear_fixed_nll_gap = (
+            float(linear_summary["fixed_validation_nll"])
+            - float(full_at_matched_epoch["validation_nll"])
+        )
+        integrator_parameter_reduction = 100.0 * (
+            1.0 - 768_200 / 12_055_496
+        )
+        linear_markdown = f"""The single-layer pre-classifier integrator reaches
+**{float(linear_summary['validation_accuracy_at_best_nll']):.3f}% accuracy / {float(linear_summary['validation_nll_minimum']):.4f} NLL** at its
+minimum-NLL checkpoint, epoch {int(linear_summary['best_nll_epoch'])}. Relative
+to the macro-token full-history checkpoint selected by the same rule, this is
+{linear_selected_accuracy_gap:+.3f} accuracy points and
+{linear_selected_nll_gap:+.4f} NLL. At epoch five, where both have exactly
+60,970 image presentations, the linear head reaches
+{float(linear_summary['fixed_validation_accuracy']):.3f}% /
+{float(linear_summary['fixed_validation_nll']):.4f}, a change of
+{linear_fixed_accuracy_gap:+.3f} points and {linear_fixed_nll_gap:+.4f} NLL
+from the macro head.
+
+The linear head maps five concatenated 768-value node pre-classifier vectors
+directly to 200 logits. Its exact-union initialization copies each frozen local
+classifier into its owning input block; every cross-node block starts at zero.
+It has 768,200 parameters, {integrator_parameter_reduction:.1f}% fewer than the
+12,055,496-parameter macro head. Both conditions train the same five source
+LoRAs from the same initial tensors and use the same full-fit data, augmentation,
+optimizer schedule, and validation selection rule."""
+        linear_interpretation_html = (
+            "<p>The single-layer pre-classifier integrator reaches <strong>"
+            f"{float(linear_summary['validation_accuracy_at_best_nll']):.3f}% "
+            "accuracy / "
+            f"{float(linear_summary['validation_nll_minimum']):.4f} NLL</strong> "
+            f"at its minimum-NLL checkpoint, epoch "
+            f"{int(linear_summary['best_nll_epoch'])}. Relative to the macro-token "
+            "full-history checkpoint selected by the same rule, this changes "
+            f"accuracy by {linear_selected_accuracy_gap:+.3f} points and NLL by "
+            f"{linear_selected_nll_gap:+.4f}. At epoch five it reaches "
+            f"{float(linear_summary['fixed_validation_accuracy']):.3f}% / "
+            f"{float(linear_summary['fixed_validation_nll']):.4f}, changing accuracy "
+            f"by {linear_fixed_accuracy_gap:+.3f} points and NLL by "
+            f"{linear_fixed_nll_gap:+.4f} at identical exposure.</p>"
+            "<p>The head is one affine map from five concatenated 768-value "
+            "pre-classifier vectors to 200 logits. It starts as the exact union of "
+            "the frozen local classifiers and can then learn cross-node weights. "
+            f"Its 768,200 parameters are {integrator_parameter_reduction:.1f}% fewer "
+            "than the macro head's 12,055,496. Both conditions start from the same "
+            "five source LoRAs and use the same data, augmentation, optimizer "
+            "schedule, and checkpoint rule.</p>"
+        )
+        linear_callout = (
+            "<div class=\"callout linear\"><strong>Integrator architecture "
+            "ablation.</strong> The single-layer head reaches <strong>"
+            f"{float(linear_summary['validation_accuracy_at_best_nll']):.3f}% / "
+            f"{float(linear_summary['validation_nll_minimum']):.4f} NLL</strong> "
+            f"at its selected checkpoint ({linear_selected_accuracy_gap:+.3f} "
+            "accuracy points and "
+            f"{linear_selected_nll_gap:+.4f} NLL versus selected macro full "
+            "history).</div>"
+        )
+        linear_capacity_row = (
+            (
+                "Single-layer pre-classifier, adaptive LoRAs (epoch 5)",
+                "5 x 16",
+                6_635_520,
+                768_200,
+                7_403_720,
+                float(linear_summary["fixed_validation_accuracy"]),
+                float(linear_summary["fixed_validation_nll"]),
+            ),
+        )
     fit_examples = int(dict(result["training_seal"])["fit_examples"])
     matched_presentations = matched_epoch * fit_examples
     best_accuracy_gain = (
@@ -1034,6 +1274,7 @@ epoch-five comparison.{total_markdown}"""
                 float(rank_matched["fixed_validation_nll"]),
             ),
             *total_rows,
+            *linear_capacity_row,
             (
                 "Adaptive frontier, full history (epoch 5)",
                 "5 x 16",
@@ -1091,20 +1332,15 @@ epoch-five comparison.{total_markdown}"""
             f"<p>The rank-80 joint-IID control reaches <strong>"
             f"{float(rank_matched['fixed_validation_accuracy']):.3f}% accuracy / "
             f"{float(rank_matched['fixed_validation_nll']):.4f} NLL</strong> at the "
-            "fixed epoch-five endpoint. Increasing the joint adapter from rank 16 "
-            f"to rank 80 raises accuracy by {rank_accuracy_change:.3f} percentage "
-            f"points and lowers NLL by {-rank_nll_change:.4f}. This recovers "
-            f"{rank_accuracy_fraction:.1f}% of the frontier's accuracy advantage "
-            f"and {rank_nll_fraction:.1f}% of its NLL advantage over rank-16 joint "
-            f"IID. The frontier remains {frontier_rank_accuracy_gap:.3f} points "
-            f"higher and {-frontier_rank_nll_gap:.4f} NLL lower.</p>"
-            "<p>Both sides expose exactly 6,635,520 trainable LoRA parameters and "
-            "60,970 image presentations. That is the full extent of the match. The "
-            "adaptive frontier also trains a 12,055,496-parameter macro integrator, "
-            "starts from five separately pretrained rank-16 adapters, and executes "
-            "five ViT paths. Rank-80 joint IID starts one adapter from the standard "
-            "zero-effect initialization, trains a 95,356-parameter classifier, and "
-            f"executes one ViT path. Its diagnostic minimum NLL is "
+            f"fixed epoch-five endpoint: {rank_accuracy_change:+.3f} accuracy points "
+            f"and {rank_nll_change:+.4f} NLL versus rank 16. The frontier remains "
+            f"{frontier_rank_accuracy_gap:.3f} points higher and "
+            f"{-frontier_rank_nll_gap:.4f} NLL lower.</p>"
+            "<p>Rank 80 and the frontier each expose 6,635,520 LoRA parameters and "
+            "60,970 image presentations. The frontier additionally trains a "
+            "12,055,496-parameter macro head, starts from five pretrained adapters, "
+            "and executes five ViT paths; rank 80 starts one zero-effect adapter and "
+            f"uses one path. Its diagnostic minimum NLL is "
             f"{float(rank_matched['best_validation_nll']):.4f} with "
             f"{float(rank_matched['best_validation_accuracy']):.3f}% accuracy at "
             f"epoch {int(rank_matched['best_epoch'])}.</p>"
@@ -1167,6 +1403,10 @@ ViT with one shared LoRA and classifier.
 
 {rank_markdown}
 
+## Single-layer integrator ablation
+
+{linear_markdown}
+
 ![Accuracy and NLL versus H](accuracy_nll_vs_h.png)
 
 ## What changed
@@ -1175,6 +1415,8 @@ The task-31 frontier contains five sealed rank-16 LoRAs over disjoint task
 intervals. Every adaptive condition starts from those exact tensors and the
 same seed-1993 macro head. The base ViT and all five node classifiers stay
 frozen; the five node LoRAs and macro head train jointly from task-free inputs.
+The architecture ablation instead reads only the five final pre-classifier
+vectors with one direct affine layer, while retaining the same trainable LoRAs.
 Every population includes all 367 current-task images. H is a nested uniform
 hash-order prefix of the 11,827-image historical partition, so maximum H is
 exactly the 12,194-image full fit. The 3,049 validation identities remain
@@ -1204,37 +1446,41 @@ optimizer updates because each receives 50 full passes. No test identity was
 requested. Exact replay authenticated all six cells with zero new optimizer
 steps and left the source hierarchy unchanged. A separate fresh process also
 authenticated the rank-80 and rank-224 results and their model artifacts
-without an optimizer step.
+without an optimizer step. The linear-integrator condition likewise records
+zero test evaluations and authenticates without another optimizer step.
 """
     atomic_write(report_root / "REPORT.md", markdown.encode("utf-8"))
-    table = _table_html(summaries)
+    table = _table_html(
+        (*summaries, *((linear_summary,) if linear_summary is not None else ()))
+    )
     html = f"""<!doctype html><html><head><meta charset="utf-8"><title>ImageNet-R frontier-LoRA adaptation</title><style>
 @page {{ size: Letter; margin: 0.55in; }}
 * {{ box-sizing: border-box; }} body {{ font-family: Arial, sans-serif; color:#17202a; margin:0; line-height:1.35; font-size:10.5pt; }}
 h1 {{ font-size:23pt; margin:0 0 5px; color:#16324f; }} h2 {{ font-size:15pt; color:#16324f; margin:16px 0 7px; }}
-.lede {{ font-size:12pt; color:#425466; margin:0 0 12px; }} .callout {{ background:#eef5f9; border-left:4px solid #2166ac; padding:10px 13px; margin:9px 0 12px; }} .rank {{ background:#edf7ef; border-left-color:#1b7837; }}
+.lede {{ font-size:12pt; color:#425466; margin:0 0 12px; }} .callout {{ background:#eef5f9; border-left:4px solid #2166ac; padding:10px 13px; margin:9px 0 12px; }} .rank {{ background:#edf7ef; border-left-color:#1b7837; }} .linear {{ background:#e8f6f6; border-left-color:#008b8b; }}
 figure {{ margin:10px 0 12px; break-inside:avoid; }} figure img {{ width:100%; max-height:5.6in; object-fit:contain; }} figcaption {{ color:#59636e; font-size:8.5pt; margin-top:3px; }}
 table {{ width:100%; border-collapse:collapse; font-size:7.7pt; margin:8px 0 12px; }} th {{ background:#16324f; color:white; text-align:left; padding:5px; }} td {{ border-bottom:1px solid #ccd5dd; padding:5px; vertical-align:top; }}
-.page {{ break-before:page; }} .small {{ font-size:9pt; color:#44515e; }} footer {{ margin-top:12px; border-top:1px solid #ccd5dd; padding-top:5px; color:#687580; font-size:8pt; }}
+.page {{ break-before:page; }} .small {{ font-size:9pt; color:#44515e; }} .dense {{ font-size:9.5pt; line-height:1.28; }} .dense h2 {{ margin:12px 0 6px; }} .dense p {{ margin:7px 0; }} footer {{ margin-top:12px; border-top:1px solid #ccd5dd; padding-top:5px; color:#687580; font-size:8pt; }}
 </style></head><body>
 <h1>ImageNet-R stage-31 frontier-LoRA adaptation</h1><p class="lede">Can jointly adapting five fragmented node representations close the same-split joint-IID accuracy and NLL gap?</p>
 <div class="callout"><strong>Selected-checkpoint result.</strong> The minimum-NLL adaptive condition is {escape(str(best_nll['condition']))}: <strong>{float(best_nll['validation_accuracy_at_best_nll']):.3f}% accuracy / {float(best_nll['validation_nll_minimum']):.4f} NLL</strong>. That is {best_accuracy_gain:.3f} percentage points higher and {best_nll_reduction:.4f} NLL lower than the five-epoch rank-16 joint-IID reference. {escape(match_sentence)}</div>
-{rank_callout}
-<figure><img src="{_image_uri(report_root / 'accuracy_nll_vs_h.png')}" alt="Accuracy and NLL versus replay population"><figcaption>Blue frontier points use each condition's minimum-NLL checkpoint. Black rank-16, green rank-80, and ochre rank-224 joint-IID lines are fixed epoch-five endpoints on the identical fit and validation identities.</figcaption></figure>
-<h2>Joint-IID capacity comparison</h2>{rank_table_html}<p class="small">Every row uses exactly five complete passes over the 12,194-image fit population. “Other” means the trainable joint classifier or frontier macro integrator; frozen parameters are omitted. Rank 80 matches aggregate node-LoRA capacity. Rank 224 is the closest total-active-parameter match.</p>
+{linear_callout}
+<figure><img src="{_image_uri(report_root / 'accuracy_nll_vs_h.png')}" alt="Accuracy and NLL versus replay population"><figcaption>Blue macro-frontier points and the teal single-layer point use each condition's minimum-NLL checkpoint. Black rank-16, green rank-80, and ochre rank-224 joint-IID lines are fixed epoch-five endpoints.</figcaption></figure>
+<h2>Matched-exposure architecture and capacity comparison</h2>{rank_table_html}<p class="small">Every row uses exactly five complete passes over the 12,194-image fit population. "Other" means the trainable joint classifier, linear integrator, or macro integrator; frozen parameters are omitted. Rank 80 matches aggregate node-LoRA capacity. Rank 224 is the closest total-active-parameter match.</p>
 <div class="page"><h2>Complete condition summary</h2>{table}<p class="small">Maximum accuracy and its NLL are reported separately to expose calibration tradeoffs. Every cell also includes all 367 current-task identities; maximum historical H=11,827 is exactly the 12,194-image full fit.</p>{rank_history_html}</div>
-<div class="page"><h2>Architecture and experimental boundary</h2><p>The task-31 frontier has five nodes at levels 0-4, covering task intervals 31, 29-30, 25-28, 17-24, and 1-16. Each node supplies its own final 197 x 768 LoRA-adapted token sequence and immutable local affine scores. The macro transformer combines them without task IDs or labels.</p>
-<figure><img src="{_image_uri(report_root / 'stage31_frontier.png')}" alt="Five nodes feeding the macro-token integrator"><figcaption>The base ViT and node classifiers are frozen. Only five rank-16 LoRAs and the shared 12.06M-parameter macro head can move.</figcaption></figure>
+<div class="page"><h2>Architecture and experimental boundary</h2><p>The task-31 frontier has five nodes at levels 0-4, covering task intervals 31, 29-30, 25-28, 17-24, and 1-16. Each node supplies its own final 197 x 768 LoRA-adapted token sequence and immutable local affine scores to the macro transformer. The new condition instead concatenates only the five 768-value pre-classifier outputs and maps the resulting 3,840 values directly to 200 logits. Neither head receives task IDs or labels.</p>
+<figure><img src="{_image_uri(report_root / 'stage31_frontier.png')}" alt="Five nodes feeding the macro-token integrator"><figcaption>This diagram shows the macro condition: the base ViT and node classifiers are frozen, while five rank-16 LoRAs and the shared 12.06M-parameter macro head can move. The single-layer condition replaces that head with one affine map.</figcaption></figure>
 <p>Every cell includes all 367 current-task images. H=1,024, 2,048, 4,096, 8,192, and 11,827 are nested prefixes of one deterministic uniform draw from the historical tasks without replacement. Maximum H therefore gives exactly all 12,194 fit identities. Every cell starts independently from identical sealed node tensors and macro initialization. The validation partition has 3,049 clean identities and never contributes gradients. No test image is opened.</p>
-<p><strong>Compute boundary.</strong> The adaptive frontier evaluates five node-specific ViTs and the macro transformer for every image. Joint IID evaluates one ViT with one shared LoRA and classifier. Their split and full-fit data exposure match. Rank 224 also nearly matches total active parameter count, but training history, factorization, initialization, and deployment compute remain different.</p>
+<p><strong>Compute boundary.</strong> Both adaptive frontier heads evaluate the same five node-specific ViTs for every image. The linear condition then runs one 768,200-parameter affine map; the macro condition runs its 12,055,496-parameter transformer. Joint IID evaluates one ViT with one shared LoRA and classifier. Their split and full-fit data exposure match, but deployment compute remains different.</p>
 <h2>Why the frozen online control exists</h2><p>The previous frozen macro was trained from cached center-crop tokens. This run loads images online with deterministic random training augmentation. The purple full-fit control follows that new path while freezing the LoRAs, so its difference from the cached gray reference measures the pipeline/augmentation change rather than representation adaptation.</p></div>
-<div class="page"><h2>Optimization behavior</h2><figure><img src="{_image_uri(report_root / 'validation_learning_curves.png')}" alt="Validation learning curves"><figcaption>Every frontier epoch and all five epochs for both joint-IID capacity controls are retained in hash-chained histories. The horizontal black line is the rank-16 epoch-five endpoint, not a stopping gate.</figcaption></figure>
-<figure><img src="{_image_uri(report_root / 'adapter_displacements.png')}" alt="Relative LoRA update displacement"><figcaption>Scale-aware Frobenius movement of each dense LoRA update, measured from its sealed source node at the selected minimum-NLL checkpoint.</figcaption></figure></div>
-<div class="page"><h2>Interpretation</h2><p>Allowing the frontier LoRAs to move changes the result by {adaptation_accuracy_gain:.3f} percentage points and {adaptation_nll_reduction:.4f} NLL relative to the online frozen-LoRA control at their minimum-NLL checkpoints. H=4,096 is the smallest tested historical population to cross both rank-16 joint-IID values. At exactly {matched_epoch} full-fit passes ({matched_presentations:,} image presentations), adaptive full history is {float(full_at_matched_epoch['validation_accuracy']):.3f}% / {float(full_at_matched_epoch['validation_nll']):.4f}, frozen full history is {float(frozen_at_matched_epoch['validation_accuracy']):.3f}% / {float(frozen_at_matched_epoch['validation_nll']):.4f}, and rank-16 joint IID is {float(joint['accuracy']):.3f}% / {float(joint['nll']):.4f}. This isolates feature adaptation from training exposure, but not the frontier's extra model and deployment compute.</p>
+<div class="page"><h2>Optimization behavior</h2><figure><img src="{_image_uri(report_root / 'validation_learning_curves.png')}" alt="Validation learning curves"><figcaption>Every macro-frontier and single-layer epoch and all five epochs for both joint-IID capacity controls are retained in hash-chained histories. The horizontal black line is the rank-16 epoch-five endpoint, not a stopping gate.</figcaption></figure>
+<figure><img src="{_image_uri(report_root / 'adapter_displacements.png')}" alt="Relative LoRA update displacement"><figcaption>Macro-condition H sweep: scale-aware Frobenius movement of each dense LoRA update, measured from its sealed source node at the selected minimum-NLL checkpoint.</figcaption></figure></div>
+<div class="page dense"><h2>Interpretation</h2><p>Allowing the frontier LoRAs to move changes the result by {adaptation_accuracy_gain:.3f} percentage points and {adaptation_nll_reduction:.4f} NLL relative to the online frozen-LoRA control at their minimum-NLL checkpoints. H=4,096 is the smallest tested historical population to cross both rank-16 joint-IID values. At exactly {matched_epoch} full-fit passes ({matched_presentations:,} image presentations), adaptive full history is {float(full_at_matched_epoch['validation_accuracy']):.3f}% / {float(full_at_matched_epoch['validation_nll']):.4f}, frozen full history is {float(frozen_at_matched_epoch['validation_accuracy']):.3f}% / {float(frozen_at_matched_epoch['validation_nll']):.4f}, and rank-16 joint IID is {float(joint['accuracy']):.3f}% / {float(joint['nll']):.4f}. This isolates feature adaptation from training exposure, but not the frontier's extra model and deployment compute.</p>
+<h2>What the single-layer condition establishes</h2>{linear_interpretation_html}
 <h2>What the capacity controls establish</h2>{rank_interpretation_html}
 <p>The head schedule is the previous minimum-NLL winner: effective batch 64, peak AdamW LR 3e-5, 50 epochs, 5% warmup, and cosine decay. The LoRA peak LR 5e-4 is imported from the same-split joint recipe but run here in AdamW under the shared schedule. It has not been tuned for this coupled model.</p>
 <p><strong>Limits.</strong> This is a one-seed validation screen. The H cells change both unique data and total optimizer updates. Maximum accuracy is exploratory because all 50 validation checkpoints are visible. A promising condition needs replication and a focused LoRA/head learning-rate audit before any locked-test use.</p>
-<h2>Integrity and reuse</h2><p>The training seals record zero fit-validation overlap, zero test overlap, zero test evaluations, and unchanged source hierarchy files. Fresh-process replay authenticated all six frontier cells plus the rank-80 and rank-224 controls without taking an optimizer step. Large checkpoints and model weights remain local; compact histories, tables, plots, and protocol records are the report surface.</p>
+<h2>Integrity and reuse</h2><p>The training seals record zero fit-validation overlap, zero test overlap, zero test evaluations, and unchanged source hierarchy files. Fresh-process replay authenticated all six macro-frontier cells, the single-layer condition, and the rank-80 and rank-224 controls without taking an optimizer step. Large checkpoints and model weights remain local; compact histories, tables, plots, and protocol records are the report surface.</p>
 <footer>Protocol {escape(str(result['content_hash']))[:16]}... | stage 31 | seed 1993 | generated from authenticated result and history ledgers</footer></div>
 </body></html>"""
     atomic_write(report_root / "REPORT.html", html.encode("utf-8"))
@@ -1247,6 +1493,7 @@ __all__ = [
     "FROZEN_ONLINE_LABEL",
     "JOINT_LABEL",
     "JOINT_CAPACITY_CONTROLS",
+    "LINEAR_PRECLASSIFIER_LABEL",
     "RANK_MATCHED_LABEL",
     "TOTAL_PARAM_MATCHED_LABEL",
     "write_frontier_adaptation_report",

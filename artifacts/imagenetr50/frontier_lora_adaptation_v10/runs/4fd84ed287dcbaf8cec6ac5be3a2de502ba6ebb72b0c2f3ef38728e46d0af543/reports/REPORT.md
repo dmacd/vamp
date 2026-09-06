@@ -74,6 +74,28 @@ the adaptive frontier is 0.1875 NLL lower. The rank-224 minimum NLL is
 continues to improve, which is consistent with late overfitting or
 miscalibration under the inherited rank-16 schedule.
 
+## Single-layer integrator ablation
+
+The single-layer pre-classifier integrator reaches
+**79.239% accuracy / 0.8907 NLL** at its
+minimum-NLL checkpoint, epoch 3. Relative
+to the macro-token full-history checkpoint selected by the same rule, this is
+-6.625 accuracy points and
++0.3197 NLL. At epoch five, where both have exactly
+60,970 image presentations, the linear head reaches
+78.649% /
+0.9560, a change of
+-6.232 points and +0.3664 NLL
+from the macro head.
+
+The linear head maps five concatenated 768-value node pre-classifier vectors
+directly to 200 logits. Its exact-union initialization copies each frozen local
+classifier into its owning input block; every cross-node block starts at zero.
+It has 768,200 parameters, 93.6% fewer than the
+12,055,496-parameter macro head. Both conditions train the same five source
+LoRAs from the same initial tensors and use the same full-fit data, augmentation,
+optimizer schedule, and validation selection rule.
+
 ![Accuracy and NLL versus H](accuracy_nll_vs_h.png)
 
 ## What changed
@@ -82,6 +104,8 @@ The task-31 frontier contains five sealed rank-16 LoRAs over disjoint task
 intervals. Every adaptive condition starts from those exact tensors and the
 same seed-1993 macro head. The base ViT and all five node classifiers stay
 frozen; the five node LoRAs and macro head train jointly from task-free inputs.
+The architecture ablation instead reads only the five final pre-classifier
+vectors with one direct affine layer, while retaining the same trainable LoRAs.
 Every population includes all 367 current-task images. H is a nested uniform
 hash-order prefix of the 11,827-image historical partition, so maximum H is
 exactly the 12,194-image full fit. The 3,049 validation identities remain
@@ -111,4 +135,5 @@ optimizer updates because each receives 50 full passes. No test identity was
 requested. Exact replay authenticated all six cells with zero new optimizer
 steps and left the source hierarchy unchanged. A separate fresh process also
 authenticated the rank-80 and rank-224 results and their model artifacts
-without an optimizer step.
+without an optimizer step. The linear-integrator condition likewise records
+zero test evaluations and authenticates without another optimizer step.
