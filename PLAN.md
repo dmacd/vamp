@@ -13,24 +13,52 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
-## In Progress - ImageNet-R Stage-31 Macro-Token Convergence Audit
+## Completed Outcome - ImageNet-R Stage-31 Macro-Token Convergence Audit
 
-- The clean-only v9 audit reuses the completed v8 fit hierarchy and keeps the
-  locked test sealed. It crosses effective batches 64/128/512 with peak AdamW
-  learning rates 3e-5/1e-4/3e-4 under a 50-epoch warmup-cosine schedule, while
-  rerunning the exact 20-epoch constant-learning-rate recipe as a control.
-- Seed 1993 screens the nine cells by best clean validation NLL. The selected
-  schedule is then repeated with seeds 1994 and 1995. Every epoch is written to
-  a resumable hash-chained history with training objective metrics, validation
-  metrics, optimizer updates, learning rate, and gradient norm.
-- A new clean joint-IID control trains a fresh rank-16 QKV-plus-fc1 LoRA and
-  affine 124-class head for the original fixed five epochs on exactly the same
-  12,194 fit identities, evaluating each epoch on the same 3,049 validation
-  identities. This removes the previous clean-split mismatch when diagnosing
-  convergence versus fixed-representation generalization.
-- Focused unit tests pass. The next action is the real RTX 4090 preflight and
-  resumable audit, followed by the PDF report, visual inspection, result
-  interpretation, and compact artifact publication.
+- **The clean-only v9 audit completed on 2026-09-05.** Run
+  `c2c71248fc52b0d4a6c4528228fed49f09d6278edeffe205606f379b5df06a3e`
+  took 6 hours 18 minutes on the local RTX 4090. It reused the complete v8
+  fit-only hierarchy, trained on exactly 12,194 fit identities, evaluated on
+  3,049 clean validation identities, and never requested a locked-test image.
+- The predeclared minimum-validation-NLL rule selected effective batch 64 and
+  peak AdamW learning rate 3e-5 from the nine-cell, 50-epoch warmup-cosine
+  screen. At each selected seed's minimum-NLL checkpoint, validation accuracy
+  was 74.483%, 74.549%, and 73.991% for seeds 1993--1995: **74.341% mean**.
+  Mean validation NLL was 1.0929. The exact legacy recipe reproduced its v8
+  result, 73.762% and 1.0947 NLL at epoch 2.
+- The matched joint-IID control used the same fit and validation identities but
+  trained a fresh rank-16 QKV-plus-fc1 LoRA and affine 124-class head. Its fixed
+  five-epoch endpoint reached **77.862% accuracy and 0.9425 NLL**. The selected
+  macro estimate remains 3.520 accuracy points and 0.1504 NLL behind it.
+- More epochs do not explain that probabilistic gap. The selected seeds reached
+  minimum validation NLL by epochs 7, 9, and 7 while their fit accuracy was
+  already near saturation. Their per-seed maximum validation accuracy later
+  averaged **76.233%**, still 1.629 points below joint IID, while NLL worsened.
+- Checkpoint choice materially changes the top-1 story. The exploratory
+  batch-128, peak-LR-3e-4 cell reached **78.091% at epoch 33**, 0.230 point above
+  the joint endpoint, but its NLL was 1.1902. This one-seed, post-screen maximum
+  is not a replicated estimate. It shows that the frozen macro inputs can
+  support a competitive decision boundary, while the joint model's much lower
+  NLL exposes substantially cleaner feature adaptation and calibration.
+- A post-run reporting correction now labels accuracy at the minimum-NLL
+  checkpoint separately from maximum accuracy over epochs and publishes both.
+  It reads only the sealed histories and leaves the authenticated experiment
+  result hash unchanged.
+- Every epoch is preserved in hash-chained histories. The cache proof records
+  76,215 hits, zero misses, zero adapted-token forwards, unchanged fit and
+  validation populations, and zero test requests. A fresh process replay took
+  6.0 seconds and explicitly repeated no optimizer work.
+- The four-page PDF, self-contained HTML, Markdown analysis, figures, and
+  compact CSV/JSON/Parquet ledgers are published with the run. Every page was
+  rendered and visually inspected. All **89** default ImageNet-R tests pass.
+  The repository-wide suite has the same 31 optional-environment failures as
+  before (`fabricpc` and `tokenizers`) and no ImageNet-R failure.
+- The next audit should not merely extend training. Predeclare and replicate an
+  accuracy-selected batch-128/3e-4 condition, separate calibration fitting from
+  evaluation, and test whether regularization or limited shared feature
+  adaptation can retain its top-1 boundary while closing the NLL gap. The
+  longer-term architecture priority remains end-to-end node-conditioned feature
+  adaptation rather than a larger frozen-feature classifier.
 
 ## Completed Outcome — ImageNet-R-50 Macro-Token Integrator Ceiling
 

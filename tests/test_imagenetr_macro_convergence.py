@@ -12,6 +12,9 @@ from apm.continual.vision.imagenetr.macro_convergence_training import (
     MacroConvergenceCell,
     convergence_learning_rate,
 )
+from apm.continual.vision.imagenetr.macro_convergence_reporting import (
+    _maximum_accuracy_row,
+)
 
 
 CONFIG = Path("configs/vision/imagenetr/logt_macro_token_convergence_v9.yaml")
@@ -73,3 +76,25 @@ def test_convergence_fit_rejects_a_best_step_after_total_work() -> None:
             wall_seconds=1.0,
             history_rows=20,
         )
+
+
+def test_report_accuracy_optimum_uses_the_earliest_tied_epoch(
+    tmp_path: Path,
+) -> None:
+    history = tmp_path / "history.jsonl"
+    history.write_text(
+        "\n".join(
+            (
+                '{"epoch":1,"optimizer_steps":10,"validation_accuracy":70.0,"validation_nll":1.2}',
+                '{"epoch":2,"optimizer_steps":20,"validation_accuracy":75.0,"validation_nll":1.1}',
+                '{"epoch":3,"optimizer_steps":30,"validation_accuracy":75.0,"validation_nll":1.3}',
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    optimum = _maximum_accuracy_row(tmp_path, {"history": history.name})
+
+    assert optimum["epoch"] == 2
+    assert optimum["validation_nll"] == 1.1

@@ -1,0 +1,7 @@
+command: scripts/vision/imagenetr/run_macro_convergence_local.sh
+runtime_nice_value: 10
+status: complete
+elapsed_seconds: 22687.739260908216
+result_hash: 19073a4eab2e8000bf7bf74406ea80d0dfb0d3765796898a1da54b8f0508715b
+test_evaluations: 0
+terminal_summary: Clean convergence report complete in 378.1 minutes.

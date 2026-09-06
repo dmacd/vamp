@@ -93,50 +93,100 @@ def _write_table_family(
         pass
 
 
-def _candidate_rows(result: Mapping[str, object]) -> tuple[dict[str, object], ...]:
-    return tuple(
-        {
-            "best_epoch": int(dict(entry["fit"])["best_epoch"]),
-            "best_optimizer_steps": int(
-                dict(entry["fit"])["best_optimizer_steps"]
+def _maximum_accuracy_row(
+    run: Path, entry: Mapping[str, object]
+) -> dict[str, object]:
+    history_path = run / str(entry["history"])
+    rows = tuple(
+        json.loads(line)
+        for line in history_path.read_text(encoding="utf-8").splitlines()
+        if line
+    )
+    if not rows:
+        raise ValueError(f"empty convergence history: {history_path}")
+    return dict(
+        max(
+            rows,
+            key=lambda row: (
+                float(row["validation_accuracy"]),
+                -int(row["epoch"]),
             ),
-            "effective_batch_size": int(
-                dict(entry["cell"])["effective_batch_size"]
-            ),
-            "fit_accuracy": float(dict(entry["fit"])["train_accuracy"]),
-            "fit_minus_validation_accuracy": float(
-                dict(entry["fit"])["train_accuracy"]
-            )
-            - float(dict(entry["fit"])["validation_accuracy"]),
-            "learning_rate": float(dict(entry["cell"])["peak_learning_rate"]),
-            "optimizer_steps": int(dict(entry["fit"])["optimizer_steps"]),
-            "validation_accuracy": float(
-                dict(entry["fit"])["validation_accuracy"]
-            ),
-            "validation_nll": float(dict(entry["fit"])["validation_nll"]),
-            "wall_seconds": float(dict(entry["fit"])["wall_seconds"]),
-        }
-        for entry in result["screening_candidates"]
+        )
     )
 
 
-def _replication_rows(result: Mapping[str, object]) -> tuple[dict[str, object], ...]:
-    return tuple(
-        {
-            "best_epoch": int(dict(entry["fit"])["best_epoch"]),
-            "fit_accuracy": float(dict(entry["fit"])["train_accuracy"]),
-            "fit_minus_validation_accuracy": float(
-                dict(entry["fit"])["train_accuracy"]
-            )
-            - float(dict(entry["fit"])["validation_accuracy"]),
-            "seed": int(dict(entry["cell"])["seed"]),
-            "validation_accuracy": float(
-                dict(entry["fit"])["validation_accuracy"]
-            ),
-            "validation_nll": float(dict(entry["fit"])["validation_nll"]),
-        }
-        for entry in result["replications"]
-    )
+def _candidate_rows(
+    run: Path, result: Mapping[str, object]
+) -> tuple[dict[str, object], ...]:
+    rows = []
+    for raw_entry in result["screening_candidates"]:
+        entry = dict(raw_entry)
+        fit = dict(entry["fit"])
+        cell = dict(entry["cell"])
+        accuracy_best = _maximum_accuracy_row(run, entry)
+        rows.append(
+            {
+                "effective_batch_size": int(cell["effective_batch_size"]),
+                "fit_accuracy_at_min_nll": float(fit["train_accuracy"]),
+                "fit_minus_validation_accuracy_at_min_nll": float(
+                    fit["train_accuracy"]
+                )
+                - float(fit["validation_accuracy"]),
+                "learning_rate": float(cell["peak_learning_rate"]),
+                "max_accuracy_epoch": int(accuracy_best["epoch"]),
+                "max_accuracy_optimizer_steps": int(
+                    accuracy_best["optimizer_steps"]
+                ),
+                "max_validation_accuracy": float(
+                    accuracy_best["validation_accuracy"]
+                ),
+                "min_nll_epoch": int(fit["best_epoch"]),
+                "min_nll_optimizer_steps": int(fit["best_optimizer_steps"]),
+                "min_validation_nll": float(fit["validation_nll"]),
+                "total_optimizer_steps": int(fit["optimizer_steps"]),
+                "validation_accuracy_at_min_nll": float(
+                    fit["validation_accuracy"]
+                ),
+                "validation_nll_at_max_accuracy": float(
+                    accuracy_best["validation_nll"]
+                ),
+                "wall_seconds": float(fit["wall_seconds"]),
+            }
+        )
+    return tuple(rows)
+
+
+def _replication_rows(
+    run: Path, result: Mapping[str, object]
+) -> tuple[dict[str, object], ...]:
+    rows = []
+    for raw_entry in result["replications"]:
+        entry = dict(raw_entry)
+        fit = dict(entry["fit"])
+        accuracy_best = _maximum_accuracy_row(run, entry)
+        rows.append(
+            {
+                "fit_accuracy_at_min_nll": float(fit["train_accuracy"]),
+                "fit_minus_validation_accuracy_at_min_nll": float(
+                    fit["train_accuracy"]
+                )
+                - float(fit["validation_accuracy"]),
+                "max_accuracy_epoch": int(accuracy_best["epoch"]),
+                "max_validation_accuracy": float(
+                    accuracy_best["validation_accuracy"]
+                ),
+                "min_nll_epoch": int(fit["best_epoch"]),
+                "min_validation_nll": float(fit["validation_nll"]),
+                "seed": int(dict(entry["cell"])["seed"]),
+                "validation_accuracy_at_min_nll": float(
+                    fit["validation_accuracy"]
+                ),
+                "validation_nll_at_max_accuracy": float(
+                    accuracy_best["validation_nll"]
+                ),
+            }
+        )
+    return tuple(rows)
 
 
 def _plot_learning_curves(
@@ -254,7 +304,7 @@ def _plot_summary(
         [
             [
                 next(
-                    float(row["validation_accuracy"])
+                    float(row["max_validation_accuracy"])
                     for row in candidates
                     if row["effective_batch_size"] == batch
                     and row["learning_rate"] == rate
@@ -286,32 +336,56 @@ def _plot_summary(
     axes[0].set(
         xlabel="Peak learning rate",
         ylabel="Effective batch size",
-        title="Best seed-1993 validation accuracy (%)",
+        title="Maximum seed-1993 validation accuracy (%)",
     )
     figure.colorbar(image, ax=axes[0], fraction=0.046, pad=0.04)
     joint_fit = dict(dict(result["clean_joint"])["fit"])
     legacy_fit = dict(dict(result["legacy_control"])["fit"])
-    labels = ("Legacy\nmacro", "Selected\nmacro mean", "Joint IID\nepoch 5")
-    macro_values = tuple(float(row["validation_accuracy"]) for row in replications)
+    labels = (
+        "Legacy @\nmin NLL",
+        "Selected @\nmin NLL",
+        "Selected\nmax-epoch",
+        "Best screen\nmax-epoch",
+        "Joint IID\nepoch 5",
+    )
+    macro_values = tuple(
+        float(row["validation_accuracy_at_min_nll"]) for row in replications
+    )
+    macro_max_values = tuple(
+        float(row["max_validation_accuracy"]) for row in replications
+    )
+    best_screen_accuracy = max(
+        float(row["max_validation_accuracy"]) for row in candidates
+    )
     values = (
         float(legacy_fit["validation_accuracy"]),
         math.fsum(macro_values) / len(macro_values),
+        math.fsum(macro_max_values) / len(macro_max_values),
+        best_screen_accuracy,
         float(joint_fit["fixed_validation_accuracy"]),
     )
-    axes[1].bar(labels, values, color=("#999999", "#4c78a8", "#e45756"))
-    axes[1].errorbar(
-        1,
-        values[1],
-        yerr=[[values[1] - min(macro_values)], [max(macro_values) - values[1]]],
-        color="black",
-        capsize=5,
-        fmt="none",
+    axes[1].bar(
+        labels,
+        values,
+        color=("#999999", "#4c78a8", "#72a0cf", "#59a14f", "#e45756"),
     )
+    for index, samples in ((1, macro_values), (2, macro_max_values)):
+        axes[1].errorbar(
+            index,
+            values[index],
+            yerr=[
+                [values[index] - min(samples)],
+                [max(samples) - values[index]],
+            ],
+            color="black",
+            capsize=4,
+            fmt="none",
+        )
     for index, value in enumerate(values):
         axes[1].text(index, value + 0.25, f"{value:.2f}", ha="center")
     axes[1].set(
         ylabel="Clean validation accuracy (%)",
-        title="Same-split validation comparison",
+        title="Checkpoint-policy sensitivity",
     )
     axes[1].grid(axis="y", alpha=0.2)
     figure.tight_layout()
@@ -328,40 +402,56 @@ def _candidate_table(rows: Sequence[Mapping[str, object]]) -> str:
         "<tr>"
         f"<td>{int(row['effective_batch_size'])}</td>"
         f"<td>{float(row['learning_rate']):g}</td>"
-        f"<td>{int(row['best_epoch'])}</td>"
-        f"<td>{int(row['best_optimizer_steps']):,}</td>"
-        f"<td>{float(row['fit_accuracy']):.3f}</td>"
-        f"<td>{float(row['validation_accuracy']):.3f}</td>"
-        f"<td>{float(row['validation_nll']):.4f}</td>"
+        f"<td>{int(row['min_nll_epoch'])}</td>"
+        f"<td>{float(row['validation_accuracy_at_min_nll']):.3f}</td>"
+        f"<td>{float(row['min_validation_nll']):.4f}</td>"
+        f"<td>{int(row['max_accuracy_epoch'])}</td>"
+        f"<td>{float(row['max_validation_accuracy']):.3f}</td>"
+        f"<td>{float(row['validation_nll_at_max_accuracy']):.4f}</td>"
         "</tr>"
         for row in rows
     )
     return (
-        "<table><thead><tr><th>Batch</th><th>Peak LR</th><th>Best epoch</th>"
-        "<th>Best updates</th><th>Fit acc.</th><th>Validation acc.</th>"
-        f"<th>Validation NLL</th></tr></thead><tbody>{body}</tbody></table>"
+        "<table><thead><tr><th>Batch</th><th>Peak LR</th><th>Min-NLL epoch</th>"
+        "<th>Acc. @ min NLL</th><th>Min NLL</th><th>Max-acc. epoch</th>"
+        f"<th>Max acc.</th><th>NLL @ max acc.</th></tr></thead><tbody>{body}</tbody></table>"
     )
 
 
 def _report_text(
     result: Mapping[str, object],
+    candidates: Sequence[Mapping[str, object]],
     replications: Sequence[Mapping[str, object]],
 ) -> str:
     winner = dict(dict(result["selection"])["winner"])
     joint_fit = dict(dict(result["clean_joint"])["fit"])
     legacy_fit = dict(dict(result["legacy_control"])["fit"])
     mean_accuracy = math.fsum(
-        float(row["validation_accuracy"]) for row in replications
+        float(row["validation_accuracy_at_min_nll"]) for row in replications
     ) / len(replications)
-    mean_nll = math.fsum(float(row["validation_nll"]) for row in replications) / len(
-        replications
-    )
+    mean_nll = math.fsum(
+        float(row["min_validation_nll"]) for row in replications
+    ) / len(replications)
+    mean_max_accuracy = math.fsum(
+        float(row["max_validation_accuracy"]) for row in replications
+    ) / len(replications)
     gap = mean_accuracy - float(joint_fit["fixed_validation_accuracy"])
+    max_accuracy_gap = (
+        mean_max_accuracy - float(joint_fit["fixed_validation_accuracy"])
+    )
     seed_values = ", ".join(
-        f"{int(row['seed'])}: {float(row['validation_accuracy']):.3f}%"
+        f"{int(row['seed'])}: {float(row['validation_accuracy_at_min_nll']):.3f}%"
         for row in replications
     )
-    best_epochs = tuple(int(row["best_epoch"]) for row in replications)
+    seed_max_values = ", ".join(
+        f"{int(row['seed'])}: {float(row['max_validation_accuracy']):.3f}%"
+        for row in replications
+    )
+    best_screen = max(
+        candidates,
+        key=lambda row: float(row["max_validation_accuracy"]),
+    )
+    best_epochs = tuple(int(row["min_nll_epoch"]) for row in replications)
     convergence_statement = (
         "At least one selected run reached its best validation NLL at epoch 50, so the audit does not establish convergence."
         if max(best_epochs) == 50
@@ -371,9 +461,11 @@ def _report_text(
 
 ## Main result
 
-The clean-selected warmup-cosine schedule used effective batch {int(winner['effective_batch_size'])} and peak learning rate {float(winner['peak_learning_rate']):g}. It reached {mean_accuracy:.3f}% mean validation accuracy and {mean_nll:.4f} mean validation NLL over three seeds ({seed_values}). The same-split joint-IID control reached {float(joint_fit['fixed_validation_accuracy']):.3f}% after its fixed fifth epoch. The macro mean therefore differed from joint IID by {gap:+.3f} percentage points.
+The predeclared selection rule minimized clean validation NLL. It chose effective batch {int(winner['effective_batch_size'])} and peak learning rate {float(winner['peak_learning_rate']):g}. At each seed's minimum-NLL checkpoint, this schedule reached {mean_accuracy:.3f}% mean validation accuracy and {mean_nll:.4f} mean NLL ({seed_values}). The same-split joint-IID control reached {float(joint_fit['fixed_validation_accuracy']):.3f}% accuracy and {float(joint_fit['fixed_validation_nll']):.4f} NLL after its fixed fifth epoch. The selected macro mean therefore differed from joint IID by {gap:+.3f} accuracy points and {mean_nll - float(joint_fit['fixed_validation_nll']):+.4f} NLL.
 
-The exact legacy rerun reached {float(legacy_fit['validation_accuracy']):.3f}% at epoch {int(legacy_fit['best_epoch'])}. The selected screening cell changed seed-1993 validation accuracy by {float(winner['validation_accuracy']) - float(legacy_fit['validation_accuracy']):+.3f} points. {convergence_statement}
+Checkpoint policy changes the accuracy diagnosis. The selected schedule's per-seed maximum accuracy averaged {mean_max_accuracy:.3f}% ({seed_max_values}), still {max_accuracy_gap:+.3f} points from joint IID. In the exploratory nine-cell screen, batch {int(best_screen['effective_batch_size'])} with peak learning rate {float(best_screen['learning_rate']):g} reached {float(best_screen['max_validation_accuracy']):.3f}% at epoch {int(best_screen['max_accuracy_epoch'])}, {float(best_screen['max_validation_accuracy']) - float(joint_fit['fixed_validation_accuracy']):+.3f} points relative to joint IID, but its NLL was {float(best_screen['validation_nll_at_max_accuracy']):.4f}. That one-seed, post-screen maximum was not replicated and is not the selected estimate.
+
+The exact legacy rerun reached {float(legacy_fit['validation_accuracy']):.3f}% at its minimum-NLL checkpoint (epoch {int(legacy_fit['best_epoch'])}). The selected screening cell changed seed-1993 accuracy at minimum NLL by {float(winner['validation_accuracy']) - float(legacy_fit['validation_accuracy']):+.3f} points. {convergence_statement}
 
 ## What was tested
 
@@ -383,7 +475,9 @@ The joint-IID control used the identical 12,194 fit and 3,049 validation identit
 
 ## Interpretation
 
-The training and validation curves distinguish insufficient fitting from poor generalization. A macro model that continues reducing fit NLL while validation NLL rises has passed its useful fitting point. A schedule that keeps improving validation NLL near epoch 50 remains a convergence candidate. The comparison cannot isolate architecture from representation quality because joint IID updates its LoRA features while the macro classifier receives fixed node-specific features.
+The macro models reached near-perfect fit accuracy, while every selected seed minimized validation NLL by epoch 9. More optimizer work therefore does not close the probabilistic gap: after those checkpoints, validation NLL rises even when top-1 accuracy sometimes improves. The exploratory 78.091% maximum shows that the fixed macro inputs can support a competitive decision boundary on this development split, but its much worse NLL and lack of replication point to calibration and generalization instability rather than simple non-convergence.
+
+The comparison cannot isolate classifier architecture from representation quality. Joint IID adapts one LoRA jointly over all 124 classes, while the macro classifier receives frozen node-specific features. The joint model's 0.9425 validation NLL, achieved before its fit accuracy saturated, is evidence that joint feature adaptation produces a cleaner representation than merely fitting the macro classifier longer.
 
 The experiment never requested a test image. These are development measurements only and do not revise the locked-test result from v8.
 
@@ -427,11 +521,12 @@ th:first-child, td:first-child {{ text-align: center; }}
 </style></head><body>
 <h1>{escape(title)}</h1><div class="subtitle">Clean-only optimization audit - stage 31 - locked test unopened</div>
 {''.join(rendered_sections[:2])}
-<div class="figure"><img src="{_image_uri(summary)}"><div class="caption">Figure 1. Best clean validation accuracy across the optimizer matrix and the same-split comparison. The macro error bar is the observed three-seed range, not a confidence interval.</div></div>
+<div class="page"><div class="figure"><img src="{_image_uri(summary)}"><div class="caption">Figure 1. Left: maximum seed-1993 validation accuracy over 50 epochs. Right: accuracy at the predeclared minimum-NLL checkpoints, per-seed maximum accuracy for the selected schedule, the unreplicated best screened maximum, and the fixed joint-IID endpoint. Macro error bars show observed three-seed ranges, not confidence intervals.</div></div>
+{rendered_sections[2]}</div>
 <div class="page"><h2>Full optimizer matrix</h2>{_candidate_table(candidates)}
 <div class="figure"><img src="{_image_uri(curves)}"><div class="caption">Figure 2. Validation accuracy and negative log likelihood (NLL) through every scheduled epoch. The dashed legacy curve appears only in the effective-batch-512 panel.</div></div></div>
 <div class="page"><h2>Update-count view</h2><div class="figure"><img src="{_image_uri(updates)}"><div class="caption">Figure 3. The same validation measurements indexed by optimizer updates rather than epochs.</div></div>
-{''.join(rendered_sections[2:])}</div>
+{''.join(rendered_sections[3:])}</div>
 </body></html>"""
 
 
@@ -441,8 +536,8 @@ def write_macro_convergence_report(run: str | Path) -> Path:
     report_root = run_path / "reports"
     report_root.mkdir(parents=True, exist_ok=True)
     result = _validated_result(run_path)
-    candidates = _candidate_rows(result)
-    replications = _replication_rows(result)
+    candidates = _candidate_rows(run_path, result)
+    replications = _replication_rows(run_path, result)
     all_macro_entries = (
         dict(result["legacy_control"]),
         *(dict(row) for row in result["screening_candidates"]),
@@ -465,7 +560,7 @@ def write_macro_convergence_report(run: str | Path) -> Path:
     _plot_learning_curves(curves, histories)
     _plot_update_curves(updates, histories)
     _plot_summary(summary, candidates, replications, result)
-    markdown = _report_text(result, replications)
+    markdown = _report_text(result, candidates, replications)
     atomic_write(report_root / "REPORT.md", markdown.encode("utf-8"))
     atomic_write(
         report_root / "REPORT.html",

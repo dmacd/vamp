@@ -1,0 +1,5 @@
+command: nice -n 10 scripts/vision/imagenetr/run_macro_convergence_local.sh
+elapsed_seconds: 6.011830615
+exit_code: 0
+result_hash: 19073a4eab2e8000bf7bf74406ea80d0dfb0d3765796898a1da54b8f0508715b
+terminal_summary: Completed audit authenticated; no optimizer work was repeated.
