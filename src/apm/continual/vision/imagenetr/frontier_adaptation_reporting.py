@@ -23,7 +23,7 @@ CONDITION_LABELS = {
     2048: "Frontier LoRA adaptation (H=2,048)",
     4096: "Frontier LoRA adaptation (H=4,096)",
     8192: "Frontier LoRA adaptation (H=8,192)",
-    12194: "Frontier LoRA adaptation (H=12,194; full fit)",
+    11827: "Frontier LoRA adaptation (H=11,827; full fit)",
 }
 FROZEN_ONLINE_LABEL = "Frozen frontier, online full fit"
 FROZEN_CACHED_LABEL = "Frozen macro, cached full fit (seed 1993)"
@@ -237,8 +237,8 @@ def _plot_primary(
             label=FROZEN_CACHED_LABEL,
         )
         axis.set_xscale("log", base=2)
-        axis.set_xticks(x_values, ["1k", "2k", "4k", "8k", "full\n12,194"])
-        axis.set_xlabel("Unique fit identities (H)")
+        axis.set_xticks(x_values, ["1k", "2k", "4k", "8k", "full\n11,827"])
+        axis.set_xlabel("Historical replay identities (H)")
         axis.set_ylabel(ylabel)
         axis.grid(alpha=0.22)
     axes[0].set_title("Minimum-NLL checkpoint accuracy")
@@ -264,7 +264,7 @@ def _plot_learning_curves(
         2048: "#2166ac",
         4096: "#1b7837",
         8192: "#e08214",
-        12194: "#b2182b",
+        11827: "#b2182b",
     }
     figure, axes = plt.subplots(1, 2, figsize=(11.6, 4.6))
     for capacity in colors:
@@ -281,7 +281,7 @@ def _plot_learning_curves(
                 [row[metric] for row in curve],
                 color=colors[capacity],
                 linewidth=1.7,
-                label=f"H={capacity:,}" if capacity < 12194 else "H=12,194 (full)",
+                label=CONDITION_LABELS[capacity],
             )
     frozen = tuple(row for row in histories if not row["adapt_lora"])
     for axis, metric in zip(
@@ -296,10 +296,18 @@ def _plot_learning_curves(
             label=FROZEN_ONLINE_LABEL,
         )
     axes[0].axhline(
-        float(joint["accuracy"]), color="#111111", linestyle="--", linewidth=1.5
+        float(joint["accuracy"]),
+        color="#111111",
+        linestyle="--",
+        linewidth=1.5,
+        label=JOINT_LABEL,
     )
     axes[1].axhline(
-        float(joint["nll"]), color="#111111", linestyle="--", linewidth=1.5
+        float(joint["nll"]),
+        color="#111111",
+        linestyle="--",
+        linewidth=1.5,
+        label=JOINT_LABEL,
     )
     axes[0].set(title="Accuracy over training", ylabel="Validation accuracy (%)")
     axes[1].set(title="NLL over training", ylabel="Validation NLL")
@@ -307,7 +315,7 @@ def _plot_learning_curves(
         axis.set_xlabel("Epoch")
         axis.grid(alpha=0.22)
     handles, labels = axes[1].get_legend_handles_labels()
-    figure.legend(handles, labels, loc="lower center", ncol=3, frameon=False)
+    figure.legend(handles, labels, loc="lower center", ncol=2, frameon=False, fontsize=8)
     figure.suptitle("All checkpoints; dashed black is the five-epoch joint-IID endpoint")
     figure.tight_layout(rect=(0, 0.12, 1, 0.94))
     figure.savefig(path, dpi=190, bbox_inches="tight")
@@ -338,11 +346,11 @@ def _plot_displacements(
         )
     axis.set_xscale("log", base=2)
     axis.set_xticks(
-        [1024, 2048, 4096, 8192, 12194],
-        ["1k", "2k", "4k", "8k", "full\n12,194"],
+        [1024, 2048, 4096, 8192, 11827],
+        ["1k", "2k", "4k", "8k", "full\n11,827"],
     )
     axis.set(
-        xlabel="Unique fit identities (H)",
+        xlabel="Historical replay identities (H)",
         ylabel="Relative dense LoRA-update change",
         title="How far each sealed frontier adapter moved",
     )
@@ -457,23 +465,31 @@ def write_frontier_adaptation_report(run: str | Path) -> Path:
     best_accuracy = max(
         adaptive, key=lambda row: float(row["max_validation_accuracy"])
     )
-    finite_match = next(
+    first_match = next(
         (
             row
             for row in adaptive
             if row["simultaneous_joint_match_epoch"] is not None
-            and int(row["historical_capacity"]) < 12194
         ),
         None,
     )
     joint = dict(references["joint_iid"])
     cached = dict(references["frozen_macro_seed1993"])
     frozen_online = next(row for row in summaries if not row["adapt_lora"])
-    match_sentence = (
-        "No sub-full H checkpoint simultaneously reaches both joint-IID references."
-        if finite_match is None
-        else f"{finite_match['condition']} first reaches both joint-IID references at epoch {finite_match['simultaneous_joint_match_epoch']}."
-    )
+    if first_match is None:
+        match_sentence = (
+            "No adaptive checkpoint simultaneously reaches both joint-IID references."
+        )
+    elif int(first_match["historical_capacity"]) < 11827:
+        match_sentence = (
+            f"{first_match['condition']} is the smallest H to reach both joint-IID "
+            f"references, first doing so at epoch {first_match['simultaneous_joint_match_epoch']}."
+        )
+    else:
+        match_sentence = (
+            "Only the full-fit adaptive condition reaches both joint-IID references, "
+            f"first doing so at epoch {first_match['simultaneous_joint_match_epoch']}."
+        )
     markdown = f"""# ImageNet-R stage-31 frontier-LoRA adaptation
 
 ## Result
@@ -502,8 +518,10 @@ The task-31 frontier contains five sealed rank-16 LoRAs over disjoint task
 intervals. Every adaptive condition starts from those exact tensors and the
 same seed-1993 macro head. The base ViT and all five node classifiers stay
 frozen; the five node LoRAs and macro head train jointly from task-free inputs.
-H populations are nested uniform hash-order prefixes of the 12,194-image fit
-partition. The 3,049 validation identities remain excluded from optimization.
+Every population includes all 367 current-task images. H is a nested uniform
+hash-order prefix of the 11,827-image historical partition, so maximum H is
+exactly the 12,194-image full fit. The 3,049 validation identities remain
+excluded from optimization.
 
 ![Stage-31 frontier](stage31_frontier.png)
 
@@ -543,10 +561,10 @@ table {{ width:100%; border-collapse:collapse; font-size:7.7pt; margin:8px 0 12p
 <h1>ImageNet-R stage-31 frontier-LoRA adaptation</h1><p class="lede">Can jointly adapting five fragmented node representations close the same-split joint-IID accuracy and NLL gap?</p>
 <div class="callout"><strong>Primary result.</strong> The minimum-NLL adaptive condition is {escape(str(best_nll['condition']))}: <strong>{float(best_nll['validation_accuracy_at_best_nll']):.3f}% accuracy / {float(best_nll['validation_nll_minimum']):.4f} NLL</strong>. The joint-IID reference is {float(joint['accuracy']):.3f}% / {float(joint['nll']):.4f}. {escape(match_sentence)}</div>
 <figure><img src="{_image_uri(report_root / 'accuracy_nll_vs_h.png')}" alt="Accuracy and NLL versus replay population"><figcaption>All blue points jointly update the five frontier LoRAs and macro head. Checkpoints minimize validation NLL. Horizontal references use the identical fit/validation identities but different architectures.</figcaption></figure>
-<h2>Complete condition summary</h2>{table}<p class="small">Maximum accuracy and its NLL are reported separately to expose calibration tradeoffs. "Full fit" is exactly all 12,194 clean fitting identities.</p>
+<h2>Complete condition summary</h2>{table}<p class="small">Maximum accuracy and its NLL are reported separately to expose calibration tradeoffs. Every cell also includes all 367 current-task identities; maximum historical H=11,827 is exactly the 12,194-image full fit.</p>
 <div class="page"><h2>Architecture and experimental boundary</h2><p>The task-31 frontier has five nodes at levels 0-4, covering task intervals 31, 29-30, 25-28, 17-24, and 1-16. Each node supplies its own final 197 x 768 LoRA-adapted token sequence and immutable local affine scores. The macro transformer combines them without task IDs or labels.</p>
 <figure><img src="{_image_uri(report_root / 'stage31_frontier.png')}" alt="Five nodes feeding the macro-token integrator"><figcaption>The base ViT and node classifiers are frozen. Only five rank-16 LoRAs and the shared 12.06M-parameter macro head can move.</figcaption></figure>
-<p>H=1,024, 2,048, 4,096, 8,192, and 12,194 are nested prefixes of one deterministic uniform draw without replacement. Every cell starts independently from identical sealed node tensors and macro initialization. The validation partition has 3,049 clean identities and never contributes gradients. No test image is opened.</p>
+<p>Every cell includes all 367 current-task images. H=1,024, 2,048, 4,096, 8,192, and 11,827 are nested prefixes of one deterministic uniform draw from the historical tasks without replacement. Maximum H therefore gives exactly all 12,194 fit identities. Every cell starts independently from identical sealed node tensors and macro initialization. The validation partition has 3,049 clean identities and never contributes gradients. No test image is opened.</p>
 <h2>Why the frozen online control exists</h2><p>The previous frozen macro was trained from cached center-crop tokens. This run loads images online with deterministic random training augmentation. The purple full-fit control follows that new path while freezing the LoRAs, so its difference from the cached gray reference measures the pipeline/augmentation change rather than representation adaptation.</p></div>
 <div class="page"><h2>Optimization behavior</h2><figure><img src="{_image_uri(report_root / 'validation_learning_curves.png')}" alt="Validation learning curves"><figcaption>Every epoch is retained in a hash-chained history. The dashed black line is the five-epoch joint-IID endpoint, not a stopping gate.</figcaption></figure>
 <figure><img src="{_image_uri(report_root / 'adapter_displacements.png')}" alt="Relative LoRA update displacement"><figcaption>Scale-aware Frobenius movement of each dense LoRA update, measured from its sealed source node at the selected minimum-NLL checkpoint.</figcaption></figure></div>

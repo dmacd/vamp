@@ -130,14 +130,14 @@ class AdaptationFit:
         return asdict(self)
 
 
-def nested_replay_order(
+def nested_historical_order(
     rows: Sequence[ImageRecord], seed: int
 ) -> tuple[ImageRecord, ...]:
     """Return one deterministic uniform ordering whose prefixes define every H."""
     if not rows or seed < 0 or any(row.split != "train" for row in rows):
-        raise ValueError("nested replay requires nonempty training-derived rows")
+        raise ValueError("nested history requires nonempty training-derived rows")
     if len({row.image_id for row in rows}) != len(rows):
-        raise ValueError("nested replay rows contain duplicate identities")
+        raise ValueError("nested history rows contain duplicate identities")
     return tuple(
         sorted(
             rows,
@@ -531,7 +531,8 @@ def fit_adaptation_cell(
 ]:
     """Fit or exactly resume one nested-H cell and restore its minimum-NLL state."""
     if (
-        len(training_rows) != cell.historical_capacity
+        len(training_rows)
+        != cell.historical_capacity + config.current_task_examples
         or len(validation_rows) != 3049
         or any(row.split != "train" for row in (*training_rows, *validation_rows))
         or set(row.image_id for row in training_rows)
@@ -810,7 +811,7 @@ __all__ = [
     "adapter_displacements",
     "evaluate_frontier",
     "fit_adaptation_cell",
-    "nested_replay_order",
+    "nested_historical_order",
     "require_frontier_trainable_boundary",
     "warmup_cosine_multiplier",
 ]

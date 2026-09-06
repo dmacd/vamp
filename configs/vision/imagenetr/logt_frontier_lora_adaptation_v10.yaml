@@ -20,7 +20,8 @@ source:
   convergence_result_sha256: 90b526f373bd26002e39bf56080986e45ed43d9e9eb320fddc06d2cab6bb1cb8
 
 matrix:
-  historical_capacities: [1024, 2048, 4096, 8192, 12194]
+  historical_capacities: [1024, 2048, 4096, 8192, 11827]
+  current_task_examples: 367
   full_fit_examples: 12194
   frozen_full_fit_control: true
 

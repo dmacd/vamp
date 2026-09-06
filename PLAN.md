@@ -15,13 +15,17 @@
 
 ## Active Experiment - ImageNet-R Stage-31 Frontier-LoRA Adaptation
 
-- Run `9832e20312141985b5575186d774ba36a8ef623d8e50f4cd9afab634f5ea1667`
-  is executing on the local RTX 4090 at reduced CPU priority. Its real BF16
-  preflight passed with all 265 parameter tensors receiving finite gradients,
-  exact activation-recomputation logits, and 5.44 GiB peak allocated VRAM at
-  physical/effective batch 64.
-- The five adaptive conditions use nested deterministic uniform populations at
-  H=1,024, 2,048, 4,096, 8,192, and all 12,194 clean fit identities. They train
+- Corrected run `de226b00851ccdcf59ea426aeadd0db9a1f8b688f9f2b1d4b28cec9b4601dc70`
+  is queued for the local RTX 4090 at reduced CPU priority. The earlier pilot
+  incorrectly treated H as total population size and was stopped; none of its
+  measurements are part of this protocol. Its real BF16 implementation
+  preflight nevertheless established finite gradients for all 265 trainable
+  tensors, exact activation-recomputation logits, and 5.44 GiB peak allocated
+  VRAM at physical/effective batch 64.
+- The five adaptive conditions include all 367 current-task rows and use nested
+  deterministic uniform historical populations at H=1,024, 2,048, 4,096,
+  8,192, and all 11,827 old-task rows. Maximum H gives exactly all 12,194 clean
+  fit identities. They train
   the five sealed stage-31 frontier LoRAs jointly with the one-block macro head
   for 50 warmup-cosine epochs. The base ViT and node classifiers remain frozen.
 - A sixth all-fit condition freezes the frontier LoRAs while retaining the same

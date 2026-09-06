@@ -771,9 +771,10 @@ during backward, bounding peak device memory without changing logits or
 gradients. Checkpoints persist only macro parameters, node LoRA factors, and
 optimizer state; they never duplicate frozen backbone or classifier weights.
 
-Replay-capacity comparisons use prefixes of one deterministic uniform
-without-replacement ordering. This makes H populations nested while keeping the
-full-H member exactly equal to the complete fit partition. A full-H frozen-LoRA
+Replay-capacity comparisons retain every current-task row and use prefixes of
+one deterministic uniform without-replacement historical ordering. This makes
+H populations nested while keeping the maximum-H member exactly equal to the
+complete fit partition. A full-H frozen-LoRA
 online control distinguishes joint feature adaptation from changes caused by
 online augmentation. Minimum validation NLL selects checkpoints; maximum
 accuracy is always labeled as a separate diagnostic. Training-material

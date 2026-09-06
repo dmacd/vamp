@@ -38,7 +38,7 @@ from apm.continual.vision.imagenetr.frontier_adaptation_training import (
     AdaptationCell,
     AdaptiveFrontierModel,
     fit_adaptation_cell,
-    nested_replay_order,
+    nested_historical_order,
 )
 from apm.continual.vision.imagenetr.integrator_hierarchy import HierarchyBuildResult
 from apm.continual.vision.imagenetr.integrator_observations import BehaviorNode
@@ -352,13 +352,16 @@ def _clean_rows(
 
 
 def _replay_manifest(
-    bootstrap: FrontierAdaptationBootstrap, fitting_rows: Sequence[ImageRecord]
+    bootstrap: FrontierAdaptationBootstrap,
+    current_rows: Sequence[ImageRecord],
+    historical_rows: Sequence[ImageRecord],
 ) -> tuple[ImageRecord, ...]:
     """Publish the exact nested population order and per-budget diagnostics."""
-    ordered = nested_replay_order(fitting_rows, bootstrap.config.seed)
+    current = tuple(sorted(current_rows, key=lambda row: row.image_id))
+    ordered = nested_historical_order(historical_rows, bootstrap.config.seed)
     entries = []
     for capacity in bootstrap.config.historical_capacities:
-        selected = ordered[:capacity]
+        selected = _training_rows(current, ordered, capacity)
         class_counts = {
             str(class_id): sum(row.remapped_class_index == class_id for row in selected)
             for class_id in range(4 * bootstrap.config.stage)
@@ -371,16 +374,23 @@ def _replay_manifest(
             {
                 "class_counts": class_counts,
                 "historical_capacity": capacity,
+                "historical_image_ids_hash": record_sha256(
+                    [row.image_id for row in ordered[:capacity]]
+                ),
                 "image_ids_hash": record_sha256(
                     [row.image_id for row in selected]
                 ),
                 "task_counts": task_counts,
+                "training_examples": len(selected),
             }
         )
     core: dict[str, object] = {
+        "current_image_ids": [row.image_id for row in current],
+        "current_task_examples": len(current),
         "entries": entries,
-        "full_fit_examples": len(ordered),
-        "nested_order_image_ids": [row.image_id for row in ordered],
+        "full_fit_examples": len(current) + len(ordered),
+        "historical_examples": len(ordered),
+        "nested_historical_image_ids": [row.image_id for row in ordered],
         "nested_prefixes": all(
             tuple(ordered[:smaller])
             == tuple(ordered[:larger])[:smaller]
@@ -395,8 +405,11 @@ def _replay_manifest(
         "seed": bootstrap.config.seed,
     }
     if (
-        len(ordered) != bootstrap.config.full_fit_examples
+        len(current) != bootstrap.config.current_task_examples
+        or len(current) + len(ordered) != bootstrap.config.full_fit_examples
         or bootstrap.config.historical_capacities[-1] != len(ordered)
+        or set(row.image_id for row in current)
+        & set(row.image_id for row in ordered)
         or not core["nested_prefixes"]
     ):
         raise RuntimeError("nested replay manifest differs from the declared matrix")
@@ -405,6 +418,20 @@ def _replay_manifest(
         {**core, "content_hash": record_sha256(core)},
     )
     return ordered
+
+
+def _training_rows(
+    current_rows: Sequence[ImageRecord],
+    ordered_history: Sequence[ImageRecord],
+    historical_capacity: int,
+) -> tuple[ImageRecord, ...]:
+    """Combine every current-task row with one nested historical prefix."""
+    if historical_capacity < 1 or historical_capacity > len(ordered_history):
+        raise ValueError("historical capacity is outside the available archive")
+    selected = (*current_rows, *ordered_history[:historical_capacity])
+    if len({row.image_id for row in selected}) != len(selected):
+        raise ValueError("current and historical training rows overlap")
+    return tuple(sorted(selected, key=lambda row: row.image_id))
 
 
 def _frontier(
@@ -443,7 +470,7 @@ def _new_model(
 def _preflight(
     bootstrap: FrontierAdaptationBootstrap,
     hierarchy: HierarchyBuildResult,
-    ordered_fit: Sequence[ImageRecord],
+    full_fit: Sequence[ImageRecord],
     validation_rows: Sequence[ImageRecord],
     device: torch.device,
 ) -> dict[str, object]:
@@ -456,11 +483,11 @@ def _preflight(
     test_ids = frozenset(
         row.image_id for row in integrator.manifest.images if row.split == "test"
     )
-    fit_ids = frozenset(row.image_id for row in ordered_fit)
+    fit_ids = frozenset(row.image_id for row in full_fit)
     validation_ids = frozenset(row.image_id for row in validation_rows)
     model = _new_model(bootstrap, nodes, slots, device)
     model.set_lora_trainable(True)
-    real_rows = tuple(ordered_fit[: bootstrap.config.microbatch_size])
+    real_rows = tuple(full_fit[: bootstrap.config.microbatch_size])
     loader = DataLoader(
         ManifestDataset(
             integrator.config.data_root / "imagenet-r",
@@ -515,7 +542,7 @@ def _preflight(
             value is not None and bool(torch.isfinite(value).all())
             for value in gradient_tensors
         ),
-        "fit_examples": len(ordered_fit),
+        "fit_examples": len(full_fit),
         "fit_validation_overlap": len(fit_ids & validation_ids),
         "frontier_hash": frontier_hash,
         "frontier_node_hashes": [node.node_hash for node in nodes],
@@ -752,7 +779,7 @@ def _references(bootstrap: FrontierAdaptationBootstrap) -> dict[str, object]:
 
 def _seal(
     bootstrap: FrontierAdaptationBootstrap,
-    ordered_fit: Sequence[ImageRecord],
+    full_fit: Sequence[ImageRecord],
     validation_rows: Sequence[ImageRecord],
     source_hashes_before: Mapping[str, str],
 ) -> dict[str, object]:
@@ -760,7 +787,7 @@ def _seal(
     test_ids = frozenset(
         row.image_id for row in integrator.manifest.images if row.split == "test"
     )
-    fitting_ids = frozenset(row.image_id for row in ordered_fit)
+    fitting_ids = frozenset(row.image_id for row in full_fit)
     validation_ids = frozenset(row.image_id for row in validation_rows)
     source_paths = {
         "clean_hierarchy": bootstrap.source.run / "protocol/clean_hierarchy.json",
@@ -779,7 +806,7 @@ def _seal(
         "test_fit_overlap": len(test_ids & fitting_ids),
         "test_validation_overlap": len(test_ids & validation_ids),
         "training_derived_only": all(
-            row.split == "train" for row in (*ordered_fit, *validation_rows)
+            row.split == "train" for row in (*full_fit, *validation_rows)
         ),
         "validation_examples": len(validation_ids),
     }
@@ -874,12 +901,19 @@ def run_frontier_adaptation(
     _phase(bootstrap, 2, 8, "Freeze nested fit populations and the validation boundary")
     fit_rows = _clean_rows(bootstrap, "fit")
     validation_rows = _clean_rows(bootstrap, "validation")
-    ordered_fit = _replay_manifest(bootstrap, fit_rows)
+    current_rows = tuple(row for row in fit_rows if row.task_index == 30)
+    historical_rows = tuple(row for row in fit_rows if row.task_index < 30)
+    ordered_history = _replay_manifest(
+        bootstrap, current_rows, historical_rows
+    )
+    full_fit = _training_rows(
+        current_rows, ordered_history, bootstrap.config.historical_capacities[-1]
+    )
     overall.update(1)
 
     _phase(bootstrap, 3, 8, "Run real BF16 attached-gradient and memory preflight")
     preflight = _preflight(
-        bootstrap, hierarchy, ordered_fit, validation_rows, device
+        bootstrap, hierarchy, full_fit, validation_rows, device
     )
     overall.update(1)
 
@@ -898,7 +932,7 @@ def run_frontier_adaptation(
             slots,
             frontier_hash,
             AdaptationCell(capacity, True, bootstrap.config.seed),
-            ordered_fit[:capacity],
+            _training_rows(current_rows, ordered_history, capacity),
             validation_rows,
             "adaptive_h_sweep",
             device,
@@ -907,9 +941,15 @@ def run_frontier_adaptation(
         if index == 1 and not reused:
             elapsed = time.monotonic() - sweep_started
             relative_work = sum(
-                capacity_value + len(validation_rows)
+                capacity_value
+                + bootstrap.config.current_task_examples
+                + len(validation_rows)
                 for capacity_value in bootstrap.config.historical_capacities[1:]
-            ) / (capacity + len(validation_rows))
+            ) / (
+                capacity
+                + bootstrap.config.current_task_examples
+                + len(validation_rows)
+            )
             print(
                 f"Measured remaining adaptive-sweep ETA: {elapsed * relative_work / 3600:.2f} h",
                 flush=True,
@@ -922,8 +962,12 @@ def run_frontier_adaptation(
         nodes,
         slots,
         frontier_hash,
-        AdaptationCell(bootstrap.config.full_fit_examples, False, bootstrap.config.seed),
-        ordered_fit,
+        AdaptationCell(
+            bootstrap.config.historical_capacities[-1],
+            False,
+            bootstrap.config.seed,
+        ),
+        full_fit,
         validation_rows,
         "frozen_online_control",
         device,
@@ -943,7 +987,11 @@ def run_frontier_adaptation(
                 bool(dict(row["cell"])["adapt_lora"]),
                 bootstrap.config.seed,
             ),
-            ordered_fit[: int(dict(row["cell"])["historical_capacity"])],
+            _training_rows(
+                current_rows,
+                ordered_history,
+                int(dict(row["cell"])["historical_capacity"]),
+            ),
             validation_rows,
             str(row["role"]),
             device,
@@ -963,7 +1011,7 @@ def run_frontier_adaptation(
     reuse = {**reuse_core, "content_hash": record_sha256(reuse_core)}
     publish_immutable_json(bootstrap.run / "protocol/reuse_proof.json", reuse)
     seal = _seal(
-        bootstrap, ordered_fit, validation_rows, source_hashes_before
+        bootstrap, full_fit, validation_rows, source_hashes_before
     )
     overall.update(1)
 

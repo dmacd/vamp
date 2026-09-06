@@ -35,6 +35,7 @@ class FrontierAdaptationConfig:
     source_convergence_protocol_sha256: str
     source_convergence_result_sha256: str
     historical_capacities: tuple[int, ...]
+    current_task_examples: int
     full_fit_examples: int
     frozen_full_fit_control: bool
     effective_batch_size: int
@@ -70,8 +71,11 @@ class FrontierAdaptationConfig:
             != "imagenetr50-logt-frontier-lora-adaptation-v10"
             or self.stage != 31
             or self.seed != 1993
-            or self.historical_capacities != (1024, 2048, 4096, 8192, 12194)
+            or self.historical_capacities != (1024, 2048, 4096, 8192, 11827)
+            or self.current_task_examples != 367
             or self.full_fit_examples != 12194
+            or self.historical_capacities[-1] + self.current_task_examples
+            != self.full_fit_examples
             or not self.frozen_full_fit_control
             or self.effective_batch_size != 64
             or self.microbatch_size != 64
@@ -171,7 +175,12 @@ def load_frontier_adaptation_config(
     matrix = _mapping(
         root["matrix"],
         "matrix",
-        {"historical_capacities", "full_fit_examples", "frozen_full_fit_control"},
+        {
+            "historical_capacities",
+            "current_task_examples",
+            "full_fit_examples",
+            "frozen_full_fit_control",
+        },
     )
     optimization = _mapping(
         root["optimization"],
@@ -213,6 +222,7 @@ def load_frontier_adaptation_config(
         str(source["convergence_protocol_sha256"]),
         str(source["convergence_result_sha256"]),
         tuple(int(value) for value in matrix["historical_capacities"]),
+        int(matrix["current_task_examples"]),
         int(matrix["full_fit_examples"]),
         bool(matrix["frozen_full_fit_control"]),
         int(optimization["effective_batch_size"]),
