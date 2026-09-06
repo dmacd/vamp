@@ -13,29 +13,54 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
-## Active Experiment - ImageNet-R Stage-31 Frontier-LoRA Adaptation
+## Completed Outcome - ImageNet-R Stage-31 Frontier-LoRA Adaptation
 
-- Corrected run `de226b00851ccdcf59ea426aeadd0db9a1f8b688f9f2b1d4b28cec9b4601dc70`
-  is queued for the local RTX 4090 at reduced CPU priority. The earlier pilot
-  incorrectly treated H as total population size and was stopped; none of its
-  measurements are part of this protocol. Its real BF16 implementation
-  preflight nevertheless established finite gradients for all 265 trainable
-  tensors, exact activation-recomputation logits, and 5.44 GiB peak allocated
-  VRAM at physical/effective batch 64.
-- The five adaptive conditions include all 367 current-task rows and use nested
-  deterministic uniform historical populations at H=1,024, 2,048, 4,096,
-  8,192, and all 11,827 old-task rows. Maximum H gives exactly all 12,194 clean
-  fit identities. They train
-  the five sealed stage-31 frontier LoRAs jointly with the one-block macro head
-  for 50 warmup-cosine epochs. The base ViT and node classifiers remain frozen.
-- A sixth all-fit condition freezes the frontier LoRAs while retaining the same
-  online image loader and augmentation path. It separates representation
-  adaptation from the earlier cached center-crop fitting path. The 3,049-image
-  validation population is fixed, and the test split remains unopened.
-- Remaining work is to complete and exactly replay all six fits, publish the
-  accuracy/NLL and adapter-displacement evidence, render and inspect the PDF,
-  run the focused and repository regression suites, replace this live section
-  with measured conclusions, and commit/push the compact report surface.
+- **The clean validation sweep completed on 2026-09-06.** Run
+  `4fd84ed287dcbaf8cec6ac5be3a2de502ba6ebb72b0c2f3ef38728e46d0af543`
+  took 5 hours 55 minutes end to end on the local RTX 4090 at reduced CPU
+  priority. Its real BF16 preflight established finite gradients for all 265
+  trainable tensors, exact activation-recomputation logits, and 5.58 GiB peak
+  allocated VRAM. The stopped pilot that gave H the wrong semantics remains
+  excluded from every result.
+- Every adaptive cell retains all 367 current-task rows and adds a nested,
+  deterministic historical population. At the predeclared minimum-validation-
+  NLL checkpoints, H=1,024, 2,048, 4,096, 8,192, and 11,827 reach respectively
+  **57.330%, 71.564%, 80.125%, 83.601%, and 85.864% accuracy**, with NLL
+  **1.9572, 1.2565, 0.8360, 0.6430, and 0.5710**. H=4,096 is the smallest tested
+  population to exceed both the stage-matched joint-IID endpoint, 77.862% and
+  0.9425 NLL.
+- Full-history joint adaptation improves on the otherwise matched online
+  frozen-LoRA control by **10.331 accuracy points** and **0.4257 NLL** at their
+  selected checkpoints. It also finishes 8.003 points above and 0.3715 NLL
+  below the five-epoch joint-IID endpoint. After exactly five full-fit passes
+  and 60,970 presentations, adaptive full history is already **84.880% /
+  0.5897**, versus **72.155% / 1.1788** for the frozen frontier and **77.862% /
+  0.9425** for joint IID. Data exposure matches at that checkpoint; compute and
+  deployed architecture do not, because the frontier evaluates five
+  node-specific ViTs plus the macro transformer while joint IID evaluates one
+  ViT with one shared LoRA.
+- This supports the representation-misalignment hypothesis: making the same
+  five node LoRAs differentiable closes the frozen frontier's accuracy and NLL
+  deficits. It is not yet a replicated generalization estimate or a final
+  benchmark result. The six cells use one seed, repeatedly expose the clean
+  validation partition for checkpoint selection, and vary both unique replay
+  identities and total optimizer updates. No locked-test image was requested.
+- The training seal records zero fit-validation, fit-test, and validation-test
+  overlap, zero test evaluations, and unchanged source hierarchy files. A
+  fresh-process replay authenticated all six cells with zero optimizer steps
+  and no hierarchy retraining. The four-page PDF was rendered page by page and
+  visually inspected, and all **98** focused ImageNet-R tests pass. The broader
+  suite retains its 31 optional-environment failures from missing `fabricpc`
+  and `tokenizers`, with no ImageNet-R failure. Compact histories, tables,
+  plots, and protocol ledgers are the publication surface while 429 MB of model
+  checkpoints remain local.
+- Next, replicate H=4,096, H=8,192, and full history over independent seeds,
+  then make a focused LoRA/head learning-rate audit around the replicated
+  frontier. If the gain holds, carry the selected finite-H recipe through all
+  50 arrivals, publish its incremental-work and deployment-cost accounting,
+  and reserve the locked test split until those choices are frozen. A sparse
+  router or distillation control is needed before comparing the five-ViT
+  frontier to joint IID as though their inference costs were equal.
 
 ## Completed Outcome - ImageNet-R Stage-31 Macro-Token Convergence Audit
 

@@ -27,7 +27,7 @@ CONDITION_LABELS = {
 }
 FROZEN_ONLINE_LABEL = "Frozen frontier, online full fit"
 FROZEN_CACHED_LABEL = "Frozen macro, cached full fit (seed 1993)"
-JOINT_LABEL = "Joint IID, one shared LoRA"
+JOINT_LABEL = "Joint IID, one shared LoRA (5 epochs)"
 
 
 def _validated_result(run: Path) -> dict[str, object]:
@@ -66,6 +66,9 @@ def _summary_rows(
         history = _history(run, cell)
         capacity = int(specification["historical_capacity"])
         adapted = bool(specification["adapt_lora"])
+        image_presentations = int(fit["image_presentations"])
+        if image_presentations % len(history):
+            raise ValueError("cell image presentations do not encode full epochs")
         simultaneous = tuple(
             row
             for row in history
@@ -84,7 +87,7 @@ def _summary_rows(
                     CONDITION_LABELS[capacity] if adapted else FROZEN_ONLINE_LABEL
                 ),
                 "historical_capacity": capacity,
-                "image_presentations": int(fit["image_presentations"]),
+                "image_presentations": image_presentations,
                 "max_accuracy_epoch": int(fit["max_accuracy_epoch"]),
                 "max_validation_accuracy": float(fit["max_validation_accuracy"]),
                 "nll_gap_to_joint": float(fit["best_validation_nll"])
@@ -96,6 +99,7 @@ def _summary_rows(
                 "train_accuracy_at_best": float(fit["train_accuracy_at_best"]),
                 "train_nll_at_best": float(fit["train_nll_at_best"]),
                 "trainable_parameters": int(fit["trainable_parameters"]),
+                "training_examples": image_presentations // len(history),
                 "validation_accuracy_at_best_nll": float(
                     fit["validation_accuracy_at_best_nll"]
                 ),
@@ -476,6 +480,52 @@ def write_frontier_adaptation_report(run: str | Path) -> Path:
     joint = dict(references["joint_iid"])
     cached = dict(references["frozen_macro_seed1993"])
     frozen_online = next(row for row in summaries if not row["adapt_lora"])
+    full_adaptive = next(
+        row
+        for row in adaptive
+        if int(row["historical_capacity"]) == 11827
+    )
+    result_cells = tuple(dict(row) for row in result["cells"])
+    full_adaptive_cell = next(
+        row
+        for row in result_cells
+        if bool(dict(row["cell"])["adapt_lora"])
+        and int(dict(row["cell"])["historical_capacity"]) == 11827
+    )
+    frozen_online_cell = next(
+        row
+        for row in result_cells
+        if not bool(dict(row["cell"])["adapt_lora"])
+    )
+    matched_epoch = int(joint["epochs"])
+    full_at_matched_epoch = next(
+        row
+        for row in _history(run_path, full_adaptive_cell)
+        if int(row["epoch"]) == matched_epoch
+    )
+    frozen_at_matched_epoch = next(
+        row
+        for row in _history(run_path, frozen_online_cell)
+        if int(row["epoch"]) == matched_epoch
+    )
+    fit_examples = int(dict(result["training_seal"])["fit_examples"])
+    matched_presentations = matched_epoch * fit_examples
+    best_accuracy_gain = (
+        float(best_nll["validation_accuracy_at_best_nll"])
+        - float(joint["accuracy"])
+    )
+    best_nll_reduction = (
+        float(joint["nll"])
+        - float(best_nll["validation_nll_minimum"])
+    )
+    adaptation_accuracy_gain = (
+        float(full_adaptive["validation_accuracy_at_best_nll"])
+        - float(frozen_online["validation_accuracy_at_best_nll"])
+    )
+    adaptation_nll_reduction = (
+        float(frozen_online["validation_nll_minimum"])
+        - float(full_adaptive["validation_nll_minimum"])
+    )
     if first_match is None:
         match_sentence = (
             "No adaptive checkpoint simultaneously reaches both joint-IID references."
@@ -509,6 +559,20 @@ NLL. The previous frozen cached macro result at the same seed is
 augmentation-matched frozen control is
 {float(frozen_online['validation_accuracy_at_best_nll']):.3f}% /
 {float(frozen_online['validation_nll_minimum']):.4f}.
+
+At the selected full-history checkpoint, LoRA adaptation gains
+{adaptation_accuracy_gain:.3f} percentage points and reduces NLL by
+{adaptation_nll_reduction:.4f} relative to the otherwise matched frozen-LoRA
+control. At exactly {matched_epoch} full-fit passes ({matched_presentations:,}
+image presentations), the adaptive frontier reaches
+{float(full_at_matched_epoch['validation_accuracy']):.3f}% /
+{float(full_at_matched_epoch['validation_nll']):.4f}; the frozen frontier reaches
+{float(frozen_at_matched_epoch['validation_accuracy']):.3f}% /
+{float(frozen_at_matched_epoch['validation_nll']):.4f}; and joint IID reaches
+{float(joint['accuracy']):.3f}% / {float(joint['nll']):.4f}. The data exposure is
+matched at this checkpoint. Compute is not: the frontier evaluates five
+specialized ViTs plus the macro transformer, while joint IID evaluates one
+ViT with one shared LoRA and classifier.
 
 ![Accuracy and NLL versus H](accuracy_nll_vs_h.png)
 
@@ -559,16 +623,18 @@ table {{ width:100%; border-collapse:collapse; font-size:7.7pt; margin:8px 0 12p
 .page {{ break-before:page; }} .small {{ font-size:9pt; color:#44515e; }} footer {{ margin-top:12px; border-top:1px solid #ccd5dd; padding-top:5px; color:#687580; font-size:8pt; }}
 </style></head><body>
 <h1>ImageNet-R stage-31 frontier-LoRA adaptation</h1><p class="lede">Can jointly adapting five fragmented node representations close the same-split joint-IID accuracy and NLL gap?</p>
-<div class="callout"><strong>Primary result.</strong> The minimum-NLL adaptive condition is {escape(str(best_nll['condition']))}: <strong>{float(best_nll['validation_accuracy_at_best_nll']):.3f}% accuracy / {float(best_nll['validation_nll_minimum']):.4f} NLL</strong>. The joint-IID reference is {float(joint['accuracy']):.3f}% / {float(joint['nll']):.4f}. {escape(match_sentence)}</div>
+<div class="callout"><strong>Primary result.</strong> The minimum-NLL adaptive condition is {escape(str(best_nll['condition']))}: <strong>{float(best_nll['validation_accuracy_at_best_nll']):.3f}% accuracy / {float(best_nll['validation_nll_minimum']):.4f} NLL</strong>. That is {best_accuracy_gain:.3f} percentage points higher and {best_nll_reduction:.4f} NLL lower than the five-epoch joint-IID reference. {escape(match_sentence)}</div>
 <figure><img src="{_image_uri(report_root / 'accuracy_nll_vs_h.png')}" alt="Accuracy and NLL versus replay population"><figcaption>All blue points jointly update the five frontier LoRAs and macro head. Checkpoints minimize validation NLL. Horizontal references use the identical fit/validation identities but different architectures.</figcaption></figure>
 <h2>Complete condition summary</h2>{table}<p class="small">Maximum accuracy and its NLL are reported separately to expose calibration tradeoffs. Every cell also includes all 367 current-task identities; maximum historical H=11,827 is exactly the 12,194-image full fit.</p>
 <div class="page"><h2>Architecture and experimental boundary</h2><p>The task-31 frontier has five nodes at levels 0-4, covering task intervals 31, 29-30, 25-28, 17-24, and 1-16. Each node supplies its own final 197 x 768 LoRA-adapted token sequence and immutable local affine scores. The macro transformer combines them without task IDs or labels.</p>
 <figure><img src="{_image_uri(report_root / 'stage31_frontier.png')}" alt="Five nodes feeding the macro-token integrator"><figcaption>The base ViT and node classifiers are frozen. Only five rank-16 LoRAs and the shared 12.06M-parameter macro head can move.</figcaption></figure>
 <p>Every cell includes all 367 current-task images. H=1,024, 2,048, 4,096, 8,192, and 11,827 are nested prefixes of one deterministic uniform draw from the historical tasks without replacement. Maximum H therefore gives exactly all 12,194 fit identities. Every cell starts independently from identical sealed node tensors and macro initialization. The validation partition has 3,049 clean identities and never contributes gradients. No test image is opened.</p>
+<p><strong>Compute boundary.</strong> The adaptive frontier evaluates five node-specific ViTs and the macro transformer for every image. Joint IID evaluates one ViT with one shared LoRA and classifier. Their split and full-fit data exposure match, but parameter count, training compute, and deployment compute do not.</p>
 <h2>Why the frozen online control exists</h2><p>The previous frozen macro was trained from cached center-crop tokens. This run loads images online with deterministic random training augmentation. The purple full-fit control follows that new path while freezing the LoRAs, so its difference from the cached gray reference measures the pipeline/augmentation change rather than representation adaptation.</p></div>
 <div class="page"><h2>Optimization behavior</h2><figure><img src="{_image_uri(report_root / 'validation_learning_curves.png')}" alt="Validation learning curves"><figcaption>Every epoch is retained in a hash-chained history. The dashed black line is the five-epoch joint-IID endpoint, not a stopping gate.</figcaption></figure>
 <figure><img src="{_image_uri(report_root / 'adapter_displacements.png')}" alt="Relative LoRA update displacement"><figcaption>Scale-aware Frobenius movement of each dense LoRA update, measured from its sealed source node at the selected minimum-NLL checkpoint.</figcaption></figure></div>
-<div class="page"><h2>Interpretation</h2><p>The head schedule is the previous minimum-NLL winner: effective batch 64, peak AdamW LR 3e-5, 50 epochs, 5% warmup, and cosine decay. The LoRA peak LR 5e-4 is imported from the same-split joint recipe but run here in AdamW under the shared schedule. It has not been tuned for this coupled model.</p>
+<div class="page"><h2>Interpretation</h2><p>Allowing the frontier LoRAs to move changes the result by {adaptation_accuracy_gain:.3f} percentage points and {adaptation_nll_reduction:.4f} NLL relative to the online frozen-LoRA control at their minimum-NLL checkpoints. H=4,096 is the smallest tested historical population to cross both joint-IID values. At exactly {matched_epoch} full-fit passes ({matched_presentations:,} image presentations), adaptive full history is {float(full_at_matched_epoch['validation_accuracy']):.3f}% / {float(full_at_matched_epoch['validation_nll']):.4f}, frozen full history is {float(frozen_at_matched_epoch['validation_accuracy']):.3f}% / {float(frozen_at_matched_epoch['validation_nll']):.4f}, and joint IID is {float(joint['accuracy']):.3f}% / {float(joint['nll']):.4f}. This isolates feature adaptation from training exposure, but not the frontier's extra model and deployment compute.</p>
+<p>The head schedule is the previous minimum-NLL winner: effective batch 64, peak AdamW LR 3e-5, 50 epochs, 5% warmup, and cosine decay. The LoRA peak LR 5e-4 is imported from the same-split joint recipe but run here in AdamW under the shared schedule. It has not been tuned for this coupled model.</p>
 <p><strong>Limits.</strong> This is a one-seed validation screen. The H cells change both unique data and total optimizer updates. Maximum accuracy is exploratory because all 50 validation checkpoints are visible. A promising condition needs replication and a focused LoRA/head learning-rate audit before any locked-test use.</p>
 <h2>Integrity and reuse</h2><p>The training seal records zero fit-validation overlap, zero test overlap, zero test evaluations, and unchanged source hierarchy files. A second pass authenticated all six completed cells without constructing their five ViTs or taking an optimizer step. Large checkpoints and model weights remain local; compact histories, tables, plots, and protocol records are the report surface.</p>
 <footer>Protocol {escape(str(result['content_hash']))[:16]}... | stage 31 | seed 1993 | generated from authenticated result and history ledgers</footer></div>

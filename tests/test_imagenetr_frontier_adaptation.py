@@ -153,7 +153,7 @@ def test_report_keeps_minimum_nll_and_maximum_accuracy_distinct(
                 "fit": {
                     "best_nll_epoch": 25,
                     "best_validation_nll": 0.9,
-                    "image_presentations": 51200,
+                    "image_presentations": 69550,
                     "max_accuracy_epoch": 25,
                     "max_validation_accuracy": 78.0,
                     "peak_vram_bytes": 10,
@@ -170,5 +170,6 @@ def test_report_keeps_minimum_nll_and_maximum_accuracy_distinct(
     }
     summary = _summary_rows(tmp_path, result)[0]
     assert summary["condition"] == CONDITION_LABELS[1024]
+    assert summary["training_examples"] == 1391
     assert summary["simultaneous_joint_match_epoch"] == 25
     assert summary["max_validation_accuracy"] == 78.0

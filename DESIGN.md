@@ -781,6 +781,15 @@ accuracy is always labeled as a separate diagnostic. Training-material
 identity excludes report projection code, so presentation fixes cannot rename
 or invalidate expensive scientific fits.
 
+The persistent successor treats frontier-adapter co-adaptation as the primary
+integration path, with frozen adapters retained as a named diagnostic control.
+The task-31 screen shows that this distinction can dominate both accuracy and
+NLL, but one seed is not enough to freeze a replay capacity or optimizer
+recipe. Any promoted condition must therefore replicate before locked-test use.
+Reports must also count live ViT forwards and adapted parameters explicitly:
+matching split membership or image presentations does not make a five-node
+frontier compute-equivalent to a one-adapter joint-IID model.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under
