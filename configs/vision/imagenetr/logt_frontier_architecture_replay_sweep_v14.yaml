@@ -1,0 +1,30 @@
+experiment:
+  name: imagenetr50_stage31_frontier_architecture_replay_sweep_v14
+  protocol_revision: imagenetr50-stage31-frontier-architecture-replay-sweep-v14
+  stage: 31
+  seed: 1993
+
+sources:
+  linear_config: configs/vision/imagenetr/logt_frontier_linear_preclassifier_v13.yaml
+  linear_config_sha256: ad2549297196271660097ed97a0b7983db7e8ac1a3041629a9a78a47510ecd66
+  rank80_config: configs/vision/imagenetr/logt_frontier_rank_matched_control_v11.yaml
+  rank80_config_sha256: a440018a9c9a974ba20647846ab97c487486f48b5364e29d9a08ccf41c68e00a
+  parent_artifact_root: artifacts/imagenetr50/frontier_lora_adaptation_v10
+  parent_run_hash: 4fd84ed287dcbaf8cec6ac5be3a2de502ba6ebb72b0c2f3ef38728e46d0af543
+  parent_replay_sha256: 18625ea001ff9aa161b35b4c3f6a9917cabafd3d4156e7e40a79cbf397ac6df6
+  parent_replay_content_hash: 94d9b1d4b5bd4636c2015ef5f926357949b3e9ea01775d0fb44bd194230e1c02
+  linear_full_result_sha256: 67c484d862ec9d4edfc4edf12bf97ecfa69ce136db85f66adb593938d5b214fd
+  linear_full_result_content_hash: 1bce33dd120de20373a2de0e40ebec730e443f8a54fbc15d2cbc9cc7afd8c256
+  rank80_full_result_sha256: 4ab715eed615dca56afaa0478af3669dc258a03d46ba6cca977424a79b6d2964
+  rank80_full_result_content_hash: 5e54b471ae56d09b3ca27b0f068c7e524b79f896bc66ddfbfe32de42c0c5df77
+
+matrix:
+  historical_capacities: [1024, 2048, 4096, 8192]
+  current_task_examples: 367
+  available_historical_examples: 11827
+  validation_examples: 3049
+  linear_epochs: 50
+  rank80_epochs: 5
+  linear_checkpoint_rule: minimum_validation_nll
+  rank80_primary_endpoint: fixed_epoch_5
+

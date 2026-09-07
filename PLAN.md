@@ -13,6 +13,57 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## Completed Outcome - ImageNet-R Stage-31 Matched-H Architecture Replay Sweep
+
+- **The matched-H architecture sweep completed on 2026-09-06.** Aggregate
+  protocol `ff3a6448142753dc31be7ed25cebae68f0c7b6876044f57533a00b2cdb6e9876`
+  adds four single-affine and four joint-IID rank-80 cells at H=1,024, 2,048,
+  4,096, and 8,192. It authenticates rather than retrains the existing
+  macro-token ladder and both full-history controls, producing one 15-row
+  comparison from immutable source results. The eight new cells took 196.0
+  minutes on the local RTX 4090 at reduced CPU priority.
+- Every H row contains all 367 current-task images plus the same nested prefix
+  of one deterministic historical ordering, for 1,391, 2,415, 4,463, and
+  8,559 total fit identities. Validation always uses the same disjoint 3,049
+  identities. No test image was opened. Each cell starts independently:
+  affine cells restore the same five sealed frontier LoRAs and exact-union
+  head, while rank-80 cells start the same zero-effect shared adapter and
+  classifier initialization.
+- The single-affine minimum-NLL checkpoints reach, in ascending H order,
+  **71.925% / 1.2792**, **73.434% / 1.2058**, **75.992% / 1.0586**, and
+  **78.944% / 0.9737**. Their selected epochs are 2, 3, 4, and 5 despite the
+  complete 50-epoch schedule. Continuing the small-H fits therefore rules out
+  delayed convergence under this recipe: they overfit rapidly rather than
+  discovering a later better validation solution.
+- At the predeclared fixed epoch-five endpoint, rank-80 joint IID reaches
+  **48.049% / 2.7526**, **60.512% / 1.8930**, **70.548% / 1.3572**, and
+  **76.812% / 1.0353** across H=1,024 through 8,192. It trails both frontier
+  heads on both metrics at every truncated H. At full history the existing
+  rank-80 result, **80.125% / 0.8339**, passes the affine result,
+  **78.649% / 0.9560**, but remains below macro-token,
+  **84.880% / 0.5897**.
+- The central result is a replay-dependent architecture crossover under both
+  checkpoint views. At fixed epoch five, affine leads macro-token by 20.630
+  accuracy points at H=1,024 and 4.952 at H=2,048. Macro-token reverses the
+  order at H=4,096 by 1.476 points and leads by 4.788 at H=8,192 and 6.232 at
+  full history, with the same direction in NLL. The simple affine map is a much
+  stronger low-data inductive bias; the macro head needs more replay but then
+  converts it into a substantially better held-out model.
+- Real BF16 preflight verifies exact affine-union logits to 8.6e-6, exact
+  zero-LoRA rank-80 parity, finite CUDA execution, zero split overlap, and
+  unchanged source-hierarchy optimizer counters. A fresh process authenticated
+  all eight new cells in 9.4 seconds with zero optimizer steps. The rebuilt
+  six-page PDF was rendered and visually inspected page by page. All **115**
+  ImageNet-R tests pass. The repository suite has **961 passing and 276
+  skipped tests**; its unchanged 31 failures require optional `fabricpc` or
+  `tokenizers` packages and contain no ImageNet-R failure.
+- Next, replicate the H=2,048/4,096 crossover neighborhood and H=8,192/full
+  endpoints across seeds before choosing a persistent recipe. A follow-up
+  should also separate optimizer effects from architecture: rank 80 retained
+  its five-epoch SGD protocol while both frontier heads used 50-epoch AdamW.
+  The fixed-five-pass panel matches identities and exposure, not optimizer,
+  initialization, trainable head capacity, or inference compute.
+
 ## Completed Outcome - ImageNet-R Stage-31 Single-Layer Integrator
 
 - **The full-history architecture ablation completed on 2026-09-06.** Protocol

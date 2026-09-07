@@ -846,6 +846,48 @@ the value of richer integration under the tested recipe but cannot by itself
 establish whether patch tokens, nonlinear composition, parameter count, or
 their interaction is causal.
 
+### Matched-H architecture replay ladder
+
+The stage-31 architecture comparison uses one shared replay coordinate rather
+than independently sampled populations. Every condition receives all 367
+current-task identities and the first H identities from the parent study's
+immutable uniform historical ordering, for H=1,024, 2,048, 4,096, 8,192, and
+11,827. Prefix nesting is authenticated by both historical-ID and complete-fit
+ID hashes. H=11,827 is exactly the full 12,194-image fit partition; it is not a
+sampled approximation. The disjoint 3,049-image validation partition never
+contributes gradients, and the test partition is outside this experiment.
+
+Each architecture starts independently at every H. Macro-token and
+single-affine frontiers restore identical sealed node tensors, then jointly
+adapt the five node LoRAs and their own head with the frozen 50-epoch AdamW
+schedule. Their primary selected statistic is accuracy and NLL at minimum
+validation NLL; epoch-five values are also retained. Rank-80 joint IID restores
+the frozen five-epoch SGD recipe, one zero-effect rank-80 adapter, and the same
+classifier initialization for every population. Its fixed epoch-five endpoint
+is primary and its within-five-epoch minimum NLL is diagnostic. Rank 80 is
+therefore absent from minimum-NLL plots that would otherwise compare five
+visible checkpoints with fifty, but it is present in the matched five-pass
+plots and tables.
+
+The aggregate sweep is a derived authenticated view over immutable cell
+results. Four new H values per affine and rank-80 family are content addressed
+by their exact population, source result, configuration, environment, and
+material training code. Existing macro and full-history results enter only
+after their own hashes authenticate. Reporting code is deliberately outside
+training identity, so label, table, and layout corrections can rebuild the
+report without renaming expensive fits. A valid completed-state replay must
+authenticate every cell, report zero new optimizer steps, preserve the source
+hierarchy counters, and reproduce the 15-row ledger.
+
+The fixed-epoch comparison has a deliberately narrow interpretation. It
+matches identity membership and five complete passes at each H. It does not
+match optimizer family, initialization history, trainable head parameters, or
+deployment compute: each frontier image uses five node-specific ViT paths,
+whereas joint IID uses one. The selected-frontier view instead compares what
+the two 50-epoch frontier fits achieve under the same checkpoint rule. Reports
+must keep these views separate and use the same architecture names, H colors,
+and endpoint language in figures and tables.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under

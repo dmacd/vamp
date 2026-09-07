@@ -18,24 +18,31 @@ from apm.continual.artifacts import (
     record_sha256,
 )
 from apm.continual.vision.imagenetr.integrator_pdf import render_integrator_pdf
+from apm.continual.vision.imagenetr.frontier_architecture_replay_reporting import (
+    ArchitectureReplayReport,
+    load_architecture_replay_report,
+)
 
 
+MACRO_FAMILY_LABEL = "Macro-token frontier, adaptive LoRAs"
+LINEAR_FAMILY_LABEL = "Single-affine frontier, adaptive LoRAs"
+RANK80_FAMILY_LABEL = "Joint IID, rank 80"
 CONDITION_LABELS = {
-    1024: "Frontier LoRA adaptation (H=1,024)",
-    2048: "Frontier LoRA adaptation (H=2,048)",
-    4096: "Frontier LoRA adaptation (H=4,096)",
-    8192: "Frontier LoRA adaptation (H=8,192)",
-    11827: "Frontier LoRA adaptation (H=11,827; full fit)",
+    1024: f"{MACRO_FAMILY_LABEL} (H=1,024)",
+    2048: f"{MACRO_FAMILY_LABEL} (H=2,048)",
+    4096: f"{MACRO_FAMILY_LABEL} (H=4,096)",
+    8192: f"{MACRO_FAMILY_LABEL} (H=8,192)",
+    11827: f"{MACRO_FAMILY_LABEL} (H=11,827; full fit)",
 }
 FROZEN_ONLINE_LABEL = "Frozen frontier, online full fit"
 FROZEN_CACHED_LABEL = "Frozen macro, cached full fit (seed 1993)"
-JOINT_LABEL = "Joint IID, rank 16 (5 epochs)"
-RANK_MATCHED_LABEL = "Joint IID, rank 80 (5 epochs)"
+JOINT_LABEL = "Joint IID, rank 16 (full fit; 5 epochs)"
+RANK_MATCHED_LABEL = f"{RANK80_FAMILY_LABEL} (H=11,827; full fit; 5 epochs)"
 TOTAL_PARAM_MATCHED_LABEL = (
-    "Joint IID, rank 224 (total-active match; 5 epochs)"
+    "Joint IID, rank 224 (full fit; total-active match; 5 epochs)"
 )
 LINEAR_PRECLASSIFIER_LABEL = (
-    "Single-layer pre-classifier integrator, adaptive LoRAs (full fit)"
+    f"{LINEAR_FAMILY_LABEL} (H=11,827; full fit)"
 )
 
 
@@ -311,6 +318,231 @@ def _linear_preclassifier_summary(
     }
 
 
+def _capacity_text(capacity: int) -> str:
+    return "11,827; full fit" if capacity == 11_827 else f"{capacity:,}"
+
+
+def _architecture_condition(family: str, capacity: int) -> str:
+    labels = {
+        "macro_token": MACRO_FAMILY_LABEL,
+        "single_affine": LINEAR_FAMILY_LABEL,
+        "joint_iid_rank80": RANK80_FAMILY_LABEL,
+    }
+    suffix = "; 5 epochs" if family == "joint_iid_rank80" else ""
+    return f"{labels[family]} (H={_capacity_text(capacity)}{suffix})"
+
+
+def _architecture_scaling_rows(
+    summaries: Sequence[Mapping[str, object]],
+    histories: Sequence[Mapping[str, object]],
+    linear_summary: Mapping[str, object] | None,
+    linear_history: Sequence[Mapping[str, object]],
+    rank80_summary: Mapping[str, object] | None,
+    rank80_history: Sequence[Mapping[str, object]],
+    replay: ArchitectureReplayReport | None,
+) -> tuple[dict[str, object], ...]:
+    """Build one common selected/fixed schema across the three architectures."""
+    rows = []
+    for summary in (row for row in summaries if row["adapt_lora"]):
+        capacity = int(summary["historical_capacity"])
+        fixed = next(
+            row
+            for row in histories
+            if row["adapt_lora"]
+            and int(row["historical_capacity"]) == capacity
+            and int(row["epoch"]) == 5
+        )
+        rows.append(
+            {
+                "checkpoint_rule": "minimum_validation_nll_over_50_epochs",
+                "condition": _architecture_condition("macro_token", capacity),
+                "epochs": 50,
+                "family": "macro_token",
+                "fixed_epoch": 5,
+                "fixed_image_presentations": 5 * int(summary["training_examples"]),
+                "fixed_validation_accuracy": float(fixed["validation_accuracy"]),
+                "fixed_validation_nll": float(fixed["validation_nll"]),
+                "historical_capacity": capacity,
+                "image_presentations": int(summary["image_presentations"]),
+                "max_accuracy_epoch": int(summary["max_accuracy_epoch"]),
+                "max_validation_accuracy": float(
+                    summary["max_validation_accuracy"]
+                ),
+                "nll_at_max_accuracy": float(
+                    summary["validation_nll_at_max_accuracy"]
+                ),
+                "peak_vram_bytes": int(summary["peak_vram_bytes"]),
+                "selected_accuracy": float(
+                    summary["validation_accuracy_at_best_nll"]
+                ),
+                "selected_epoch": int(summary["best_nll_epoch"]),
+                "selected_nll": float(summary["validation_nll_minimum"]),
+                "trainable_parameters": int(summary["trainable_parameters"]),
+                "training_examples": int(summary["training_examples"]),
+                "wall_seconds": float(summary["wall_seconds"]),
+            }
+        )
+    if linear_summary is not None:
+        rows.append(
+            {
+                "checkpoint_rule": "minimum_validation_nll_over_50_epochs",
+                "condition": _architecture_condition("single_affine", 11_827),
+                "epochs": 50,
+                "family": "single_affine",
+                "fixed_epoch": 5,
+                "fixed_image_presentations": 60_970,
+                "fixed_validation_accuracy": float(
+                    linear_summary["fixed_validation_accuracy"]
+                ),
+                "fixed_validation_nll": float(
+                    linear_summary["fixed_validation_nll"]
+                ),
+                "historical_capacity": 11_827,
+                "image_presentations": int(linear_summary["image_presentations"]),
+                "max_accuracy_epoch": int(linear_summary["max_accuracy_epoch"]),
+                "max_validation_accuracy": float(
+                    linear_summary["max_validation_accuracy"]
+                ),
+                "nll_at_max_accuracy": float(
+                    linear_summary["validation_nll_at_max_accuracy"]
+                ),
+                "peak_vram_bytes": int(linear_summary["peak_vram_bytes"]),
+                "selected_accuracy": float(
+                    linear_summary["validation_accuracy_at_best_nll"]
+                ),
+                "selected_epoch": int(linear_summary["best_nll_epoch"]),
+                "selected_nll": float(linear_summary["validation_nll_minimum"]),
+                "trainable_parameters": int(linear_summary["trainable_parameters"]),
+                "training_examples": int(linear_summary["training_examples"]),
+                "wall_seconds": float(linear_summary["wall_seconds"]),
+            }
+        )
+    if rank80_summary is not None:
+        maximum = max(
+            rank80_history,
+            key=lambda row: (
+                float(row["validation_accuracy"]),
+                -int(row["epoch"]),
+            ),
+        )
+        rows.append(
+            {
+                "checkpoint_rule": "fixed_epoch_5_primary;minimum_nll_diagnostic",
+                "condition": _architecture_condition("joint_iid_rank80", 11_827),
+                "epochs": 5,
+                "family": "joint_iid_rank80",
+                "fixed_epoch": 5,
+                "fixed_image_presentations": 60_970,
+                "fixed_validation_accuracy": float(
+                    rank80_summary["fixed_validation_accuracy"]
+                ),
+                "fixed_validation_nll": float(
+                    rank80_summary["fixed_validation_nll"]
+                ),
+                "historical_capacity": 11_827,
+                "image_presentations": int(rank80_summary["image_presentations"]),
+                "max_accuracy_epoch": int(maximum["epoch"]),
+                "max_validation_accuracy": float(maximum["validation_accuracy"]),
+                "nll_at_max_accuracy": float(maximum["validation_nll"]),
+                "peak_vram_bytes": int(rank80_summary["peak_vram_bytes"]),
+                "selected_accuracy": float(
+                    rank80_summary["best_validation_accuracy"]
+                ),
+                "selected_epoch": int(rank80_summary["best_epoch"]),
+                "selected_nll": float(rank80_summary["best_validation_nll"]),
+                "trainable_parameters": int(rank80_summary["trainable_parameters"]),
+                "training_examples": 12_194,
+                "wall_seconds": float(rank80_summary["wall_seconds"]),
+            }
+        )
+    if replay is not None:
+        rows.extend(
+            {
+                **summary,
+                "condition": _architecture_condition(
+                    str(summary["family"]),
+                    int(summary["historical_capacity"]),
+                ),
+            }
+            for summary in replay.summaries
+        )
+    family_order = {
+        "macro_token": 0,
+        "single_affine": 1,
+        "joint_iid_rank80": 2,
+    }
+    projected = tuple(
+        sorted(
+            rows,
+            key=lambda row: (
+                family_order[str(row["family"])],
+                int(row["historical_capacity"]),
+            ),
+        )
+    )
+    expected_counts = {
+        "macro_token": 5,
+        "single_affine": 5 if replay is not None else int(linear_summary is not None),
+        "joint_iid_rank80": 5 if replay is not None else int(rank80_summary is not None),
+    }
+    if any(
+        sum(row["family"] == family for row in projected) != count
+        for family, count in expected_counts.items()
+    ):
+        raise ValueError("architecture scaling rows are incomplete or duplicated")
+    return projected
+
+
+def _architecture_history_rows(
+    histories: Sequence[Mapping[str, object]],
+    linear_history: Sequence[Mapping[str, object]],
+    rank80_history: Sequence[Mapping[str, object]],
+    replay: ArchitectureReplayReport | None,
+) -> tuple[dict[str, object], ...]:
+    """Label all per-epoch trajectories with one family and H schema."""
+    rows = [
+        {**row, "family": "macro_token"}
+        for row in histories
+        if row["adapt_lora"]
+    ]
+    rows.extend(
+        {**row, "family": "single_affine", "historical_capacity": 11_827}
+        for row in linear_history
+    )
+    rows.extend(
+        {**row, "family": "joint_iid_rank80", "historical_capacity": 11_827}
+        for row in rank80_history
+    )
+    if replay is not None:
+        rows.extend(replay.histories)
+    return tuple(rows)
+
+
+def _architecture_displacement_rows(
+    macro_displacements: Sequence[Mapping[str, object]],
+    linear_control: Mapping[str, object] | None,
+    replay: ArchitectureReplayReport | None,
+) -> tuple[dict[str, object], ...]:
+    """Return matched macro and affine adapter movements over all H values."""
+    rows = [
+        {**row, "family": "macro_token"}
+        for row in macro_displacements
+        if row["adapt_lora"]
+    ]
+    if linear_control is not None:
+        rows.extend(
+            {
+                **dict(displacement),
+                "family": "single_affine",
+                "historical_capacity": 11_827,
+            }
+            for displacement in linear_control["displacements"]
+        )
+    if replay is not None:
+        rows.extend(replay.displacements)
+    return tuple(rows)
+
+
 def _history(run: Path, cell: Mapping[str, object]) -> tuple[dict[str, object], ...]:
     rows = tuple(
         json.loads(line)
@@ -462,99 +694,67 @@ def _write_table_family(
 
 def _plot_primary(
     path: Path,
-    summaries: Sequence[Mapping[str, object]],
-    references: Mapping[str, object],
-    capacity_controls: Sequence[
-        tuple[JointCapacityControlSpec, Mapping[str, object]]
-    ],
-    linear_preclassifier: Mapping[str, object] | None,
+    scaling_rows: Sequence[Mapping[str, object]],
 ) -> None:
     import matplotlib.pyplot as plt
 
-    adapted = tuple(row for row in summaries if row["adapt_lora"])
-    frozen = next(row for row in summaries if not row["adapt_lora"])
-    joint = dict(references["joint_iid"])
-    cached = dict(references["frozen_macro_seed1993"])
-    figure, axes = plt.subplots(1, 2, figsize=(11.6, 4.6))
-    x_values = [int(row["historical_capacity"]) for row in adapted]
-    specifications = (
-        ("validation_accuracy_at_best_nll", "Validation accuracy (%)", "accuracy"),
-        ("validation_nll_minimum", "Validation NLL", "nll"),
+    styles = {
+        "macro_token": (MACRO_FAMILY_LABEL, "#2166ac", "o", "-"),
+        "single_affine": (LINEAR_FAMILY_LABEL, "#008b8b", "*", "--"),
+        "joint_iid_rank80": (RANK80_FAMILY_LABEL, "#1b7837", "s", "-."),
+    }
+    figure, axes = plt.subplots(2, 2, figsize=(11.6, 7.4), sharex=True)
+    panels = (
+        (axes[0, 0], "selected_accuracy", "Validation accuracy (%)"),
+        (axes[0, 1], "selected_nll", "Validation NLL"),
+        (axes[1, 0], "fixed_validation_accuracy", "Validation accuracy (%)"),
+        (axes[1, 1], "fixed_validation_nll", "Validation NLL"),
     )
-    for axis, (metric, ylabel, reference_key) in zip(axes, specifications, strict=True):
-        axis.plot(
-            x_values,
-            [float(row[metric]) for row in adapted],
-            color="#2166ac",
-            marker="o",
-            linewidth=2.2,
-            label="Frontier LoRA adaptation",
+    for axis, metric, ylabel in panels:
+        families = (
+            ("macro_token", "single_affine")
+            if metric.startswith("selected")
+            else tuple(styles)
         )
-        axis.scatter(
-            [int(frozen["historical_capacity"])],
-            [float(frozen[metric])],
-            color="#7b3294",
-            marker="D",
-            s=62,
-            label=FROZEN_ONLINE_LABEL,
-            zorder=4,
-        )
-        if linear_preclassifier is not None:
-            axis.scatter(
-                [int(linear_preclassifier["historical_capacity"])],
-                [float(linear_preclassifier[metric])],
-                color="#008b8b",
-                edgecolor="white",
-                linewidth=0.7,
-                marker="*",
-                s=120,
-                label=LINEAR_PRECLASSIFIER_LABEL,
-                zorder=5,
+        for family in families:
+            label, color, marker, linestyle = styles[family]
+            rows = tuple(
+                row for row in scaling_rows if row["family"] == family
             )
-        axis.axhline(
-            float(joint[reference_key]),
-            color="#111111",
-            linestyle="--",
-            linewidth=1.8,
-            label=JOINT_LABEL,
-        )
-        capacity_metric = {
-            "accuracy": "fixed_validation_accuracy",
-            "nll": "fixed_validation_nll",
-        }[reference_key]
-        for specification, control in capacity_controls:
-            axis.axhline(
-                float(control[capacity_metric]),
-                color=specification.color,
-                linestyle=specification.linestyle,
-                linewidth=1.8,
-                label=specification.label,
+            axis.plot(
+                [int(row["historical_capacity"]) for row in rows],
+                [float(row[metric]) for row in rows],
+                color=color,
+                linestyle=linestyle,
+                marker=marker,
+                markersize=7 if marker == "*" else 4.5,
+                linewidth=2.0,
+                label=label,
             )
-        axis.axhline(
-            float(cached[reference_key]),
-            color="#666666",
-            linestyle=":",
-            linewidth=1.8,
-            label=FROZEN_CACHED_LABEL,
-        )
         axis.set_xscale("log", base=2)
-        axis.set_xticks(x_values, ["1k", "2k", "4k", "8k", "full\n11,827"])
-        axis.set_xlabel("Historical replay identities (H)")
+        axis.set_xticks(
+            [1_024, 2_048, 4_096, 8_192, 11_827],
+            ["1k", "2k", "4k", "8k", "full\n11,827"],
+        )
         axis.set_ylabel(ylabel)
         axis.grid(alpha=0.22)
-    axes[0].set_title("Minimum-NLL checkpoint accuracy")
-    axes[1].set_title("Minimum validation NLL")
-    handles, labels = axes[1].get_legend_handles_labels()
+    axes[0, 0].set_title("Minimum-NLL selection: accuracy")
+    axes[0, 1].set_title("Minimum-NLL selection: NLL")
+    axes[1, 0].set_title("Fixed epoch 5: accuracy")
+    axes[1, 1].set_title("Fixed epoch 5: NLL")
+    for axis in axes[1]:
+        axis.set_xlabel("Historical replay identities (H)")
+    handles, labels = axes[1, 1].get_legend_handles_labels()
     figure.legend(
         handles,
         labels,
         loc="lower center",
         ncol=3,
         frameon=False,
-        fontsize=7.4,
+        fontsize=8.2,
     )
-    figure.suptitle("Selected frontier checkpoints versus five-epoch joint IID")
-    figure.tight_layout(rect=(0, 0.18, 1, 0.94))
+    figure.suptitle("Replay scaling under selected and matched five-pass checkpoints")
+    figure.tight_layout(rect=(0, 0.08, 1, 0.96))
     figure.savefig(path, dpi=190, bbox_inches="tight")
     plt.close(figure)
 
@@ -562,15 +762,9 @@ def _plot_primary(
 def _plot_learning_curves(
     path: Path,
     histories: Sequence[Mapping[str, object]],
-    references: Mapping[str, object],
-    capacity_histories: Sequence[
-        tuple[JointCapacityControlSpec, Sequence[Mapping[str, object]]]
-    ],
-    linear_preclassifier_history: Sequence[Mapping[str, object]],
 ) -> None:
     import matplotlib.pyplot as plt
 
-    joint = dict(references["joint_iid"])
     colors = {
         1024: "#4393c3",
         2048: "#2166ac",
@@ -578,90 +772,54 @@ def _plot_learning_curves(
         8192: "#e08214",
         11827: "#b2182b",
     }
-    figure, axes = plt.subplots(1, 2, figsize=(11.6, 4.6))
-    for capacity in colors:
-        curve = tuple(
-            row
-            for row in histories
-            if row["adapt_lora"] and row["historical_capacity"] == capacity
-        )
-        for axis, metric in zip(
-            axes, ("validation_accuracy", "validation_nll"), strict=True
-        ):
-            axis.plot(
-                [row["epoch"] for row in curve],
-                [row[metric] for row in curve],
-                color=colors[capacity],
-                linewidth=1.7,
-                label=CONDITION_LABELS[capacity],
-            )
-    frozen = tuple(row for row in histories if not row["adapt_lora"])
-    for axis, metric in zip(
-        axes, ("validation_accuracy", "validation_nll"), strict=True
-    ):
-        axis.plot(
-            [row["epoch"] for row in frozen],
-            [row[metric] for row in frozen],
-            color="#7b3294",
-            linestyle=":",
-            linewidth=1.8,
-            label=FROZEN_ONLINE_LABEL,
-        )
-        if linear_preclassifier_history:
-            axis.plot(
-                [int(row["epoch"]) for row in linear_preclassifier_history],
-                [float(row[metric]) for row in linear_preclassifier_history],
-                color="#008b8b",
-                linestyle="--",
-                linewidth=2.1,
-                label=LINEAR_PRECLASSIFIER_LABEL,
-            )
-    axes[0].axhline(
-        float(joint["accuracy"]),
-        color="#111111",
-        linestyle="--",
-        linewidth=1.5,
-        label=JOINT_LABEL,
+    families = (
+        ("macro_token", "Macro-token frontier"),
+        ("single_affine", "Single-affine frontier"),
+        ("joint_iid_rank80", "Joint IID, rank 80"),
     )
-    axes[1].axhline(
-        float(joint["nll"]),
-        color="#111111",
-        linestyle="--",
-        linewidth=1.5,
-        label=JOINT_LABEL,
-    )
-    for specification, capacity_history in capacity_histories:
-        for axis, metric in zip(
-            axes,
-            ("validation_accuracy", "validation_nll"),
-            strict=True,
-        ):
-            axis.plot(
-                [int(row["epoch"]) for row in capacity_history],
-                [float(row[metric]) for row in capacity_history],
-                color=specification.color,
-                linestyle=specification.linestyle,
-                marker=specification.marker,
-                markersize=3.5,
-                linewidth=1.7,
-                label=specification.label,
+    figure, axes = plt.subplots(3, 2, figsize=(11.6, 8.0))
+    for row_index, (family, family_label) in enumerate(families):
+        for capacity, color in colors.items():
+            curve = tuple(
+                row
+                for row in histories
+                if row["family"] == family
+                and int(row["historical_capacity"]) == capacity
             )
-    axes[0].set(title="Accuracy over training", ylabel="Validation accuracy (%)")
-    axes[1].set(title="NLL over training", ylabel="Validation NLL")
-    for axis in axes:
+            if not curve:
+                continue
+            label = _capacity_text(capacity)
+            for axis, metric in zip(
+                axes[row_index],
+                ("validation_accuracy", "validation_nll"),
+                strict=True,
+            ):
+                axis.plot(
+                    [int(row["epoch"]) for row in curve],
+                    [float(row[metric]) for row in curve],
+                    color=color,
+                    linewidth=1.7,
+                    label=f"H={label}",
+                )
+        axes[row_index, 0].set_ylabel(f"{family_label}\naccuracy (%)")
+        axes[row_index, 1].set_ylabel(f"{family_label}\nNLL")
+        for axis in axes[row_index]:
+            axis.grid(alpha=0.22)
+    for axis in axes[-1]:
         axis.set_xlabel("Epoch")
-        axis.grid(alpha=0.22)
-    handles, labels = axes[1].get_legend_handles_labels()
+    axes[0, 0].set_title("Validation accuracy")
+    axes[0, 1].set_title("Validation negative log likelihood")
+    handles, labels = axes[0, 1].get_legend_handles_labels()
     figure.legend(
         handles,
         labels,
         loc="lower center",
-        ncol=3,
+        ncol=5,
         frameon=False,
-        fontsize=7.0,
+        fontsize=8.0,
     )
-    figure.suptitle("Frontier learning curves and joint-IID five-epoch controls")
-    figure.tight_layout(rect=(0, 0.28, 1, 0.94))
+    figure.suptitle("Per-architecture learning curves across replay populations")
+    figure.tight_layout(rect=(0, 0.07, 1, 0.96))
     figure.savefig(path, dpi=190, bbox_inches="tight")
     plt.close(figure)
 
@@ -671,36 +829,59 @@ def _plot_displacements(
 ) -> None:
     import matplotlib.pyplot as plt
 
-    adapted = tuple(row for row in displacements if row["adapt_lora"])
-    figure, axis = plt.subplots(figsize=(9.8, 4.8))
-    for level in range(5):
-        rows = tuple(row for row in adapted if int(row["level"]) == level)
-        tasks = rows[0]["represented_task_ids"]
-        label = (
-            f"level {level}, task {int(tasks[0]) + 1}"
-            if len(tasks) == 1
-            else f"level {level}, tasks {int(tasks[0]) + 1}-{int(tasks[-1]) + 1}"
-        )
-        axis.plot(
-            [int(row["historical_capacity"]) for row in rows],
-            [float(row["dense_update_relative_change"]) for row in rows],
-            marker="o",
-            linewidth=1.8,
-            label=label,
-        )
-    axis.set_xscale("log", base=2)
-    axis.set_xticks(
-        [1024, 2048, 4096, 8192, 11827],
-        ["1k", "2k", "4k", "8k", "full\n11,827"],
+    families = (
+        ("macro_token", "Macro-token frontier"),
+        ("single_affine", "Single-affine frontier"),
     )
-    axis.set(
-        xlabel="Historical replay identities (H)",
-        ylabel="Relative dense LoRA-update change",
-        title="How far each sealed frontier adapter moved",
+    colors = ("#2166ac", "#e08214", "#1b7837", "#b2182b", "#7b3294")
+    figure, axes = plt.subplots(1, 2, figsize=(11.6, 4.8), sharey=True)
+    for axis, (family, title) in zip(axes, families, strict=True):
+        family_rows = tuple(
+            row for row in displacements if row["family"] == family
+        )
+        for level, color in enumerate(colors):
+            rows = tuple(
+                sorted(
+                    (row for row in family_rows if int(row["level"]) == level),
+                    key=lambda row: int(row["historical_capacity"]),
+                )
+            )
+            if not rows:
+                continue
+            tasks = rows[0]["represented_task_ids"]
+            label = (
+                f"level {level}, task {int(tasks[0]) + 1}"
+                if len(tasks) == 1
+                else f"level {level}, tasks {int(tasks[0]) + 1}-{int(tasks[-1]) + 1}"
+            )
+            axis.plot(
+                [int(row["historical_capacity"]) for row in rows],
+                [float(row["dense_update_relative_change"]) for row in rows],
+                color=color,
+                marker="o",
+                linewidth=1.8,
+                label=label,
+            )
+        axis.set_xscale("log", base=2)
+        axis.set_xticks(
+            [1_024, 2_048, 4_096, 8_192, 11_827],
+            ["1k", "2k", "4k", "8k", "full\n11,827"],
+        )
+        axis.set_xlabel("Historical replay identities (H)")
+        axis.set_title(title)
+        axis.grid(alpha=0.22)
+    axes[0].set_ylabel("Relative dense LoRA-update change")
+    handles, labels = axes[1].get_legend_handles_labels()
+    figure.legend(
+        handles,
+        labels,
+        loc="lower center",
+        ncol=3,
+        frameon=False,
+        fontsize=7.8,
     )
-    axis.grid(alpha=0.22)
-    axis.legend(frameon=False, ncol=2, fontsize=8)
-    figure.tight_layout()
+    figure.suptitle("How far each sealed frontier adapter moved")
+    figure.tight_layout(rect=(0, 0.13, 1, 0.94))
     figure.savefig(path, dpi=190, bbox_inches="tight")
     plt.close(figure)
 
@@ -759,25 +940,138 @@ def _image_uri(path: Path) -> str:
     return "data:image/png;base64," + b64encode(path.read_bytes()).decode("ascii")
 
 
-def _table_html(rows: Sequence[Mapping[str, object]]) -> str:
-    body = "".join(
-        "<tr>"
-        f"<td>{escape(str(row['condition']))}</td>"
-        f"<td>{int(row['best_nll_epoch'])}</td>"
-        f"<td>{float(row['validation_accuracy_at_best_nll']):.3f}%</td>"
-        f"<td>{float(row['validation_nll_minimum']):.4f}</td>"
-        f"<td>{float(row['max_validation_accuracy']):.3f}%</td>"
-        f"<td>{float(row['validation_nll_at_max_accuracy']):.4f}</td>"
-        f"<td>{float(row['wall_seconds']) / 60:.1f} min</td>"
-        "</tr>"
+def _architecture_tables_html(
+    rows: Sequence[Mapping[str, object]],
+) -> tuple[str, str]:
+    """Render checkpoint-explicit replay tables for the three model families."""
+    indexed = {
+        (str(row["family"]), int(row["historical_capacity"])): row
         for row in rows
+    }
+    capacities = tuple(
+        sorted({int(row["historical_capacity"]) for row in rows})
     )
-    return (
-        "<table><thead><tr><th>Condition</th><th>Min-NLL epoch</th>"
-        "<th>Accuracy at min NLL</th><th>Minimum NLL</th>"
-        "<th>Maximum accuracy</th><th>NLL at max accuracy</th><th>Runtime</th>"
-        f"</tr></thead><tbody>{body}</tbody></table>"
+
+    def selected_cells(family: str, capacity: int) -> str:
+        row = indexed.get((family, capacity))
+        if row is None:
+            return "<td>n/a</td><td>n/a</td><td>n/a</td>"
+        return (
+            f"<td>{int(row['selected_epoch'])}</td>"
+            f"<td>{float(row['selected_accuracy']):.3f}%</td>"
+            f"<td>{float(row['selected_nll']):.4f}</td>"
+        )
+
+    selected_body = "".join(
+        "<tr>"
+        f"<td>{escape(_capacity_text(capacity))}</td>"
+        f"{selected_cells('macro_token', capacity)}"
+        f"{selected_cells('single_affine', capacity)}"
+        "</tr>"
+        for capacity in capacities
     )
+    selected = (
+        "<table><thead><tr><th rowspan=\"2\">H</th>"
+        f"<th colspan=\"3\">{escape(MACRO_FAMILY_LABEL)}</th>"
+        f"<th colspan=\"3\">{escape(LINEAR_FAMILY_LABEL)}</th></tr>"
+        "<tr><th>Selected epoch</th><th>Accuracy</th><th>NLL</th>"
+        "<th>Selected epoch</th><th>Accuracy</th><th>NLL</th></tr></thead>"
+        f"<tbody>{selected_body}</tbody></table>"
+    )
+
+    def fixed_cells(family: str, capacity: int) -> str:
+        row = indexed.get((family, capacity))
+        if row is None:
+            return "<td>n/a</td><td>n/a</td>"
+        return (
+            f"<td>{float(row['fixed_validation_accuracy']):.3f}%</td>"
+            f"<td>{float(row['fixed_validation_nll']):.4f}</td>"
+        )
+
+    fixed_body = "".join(
+        "<tr>"
+        f"<td>{escape(_capacity_text(capacity))}</td>"
+        f"<td>{capacity + 367:,}</td>"
+        f"{fixed_cells('macro_token', capacity)}"
+        f"{fixed_cells('single_affine', capacity)}"
+        f"{fixed_cells('joint_iid_rank80', capacity)}"
+        "</tr>"
+        for capacity in capacities
+    )
+    fixed = (
+        "<table><thead><tr><th rowspan=\"2\">H</th>"
+        "<th rowspan=\"2\">Fit identities</th>"
+        f"<th colspan=\"2\">{escape(MACRO_FAMILY_LABEL)}</th>"
+        f"<th colspan=\"2\">{escape(LINEAR_FAMILY_LABEL)}</th>"
+        f"<th colspan=\"2\">{escape(RANK80_FAMILY_LABEL)}</th></tr>"
+        "<tr><th>Accuracy</th><th>NLL</th><th>Accuracy</th><th>NLL</th>"
+        "<th>Accuracy</th><th>NLL</th></tr></thead>"
+        f"<tbody>{fixed_body}</tbody></table>"
+    )
+    return selected, fixed
+
+
+def _architecture_tables_markdown(
+    rows: Sequence[Mapping[str, object]],
+) -> str:
+    """Render the same two checkpoint-explicit tables for Markdown readers."""
+    indexed = {
+        (str(row["family"]), int(row["historical_capacity"])): row
+        for row in rows
+    }
+    capacities = tuple(
+        sorted({int(row["historical_capacity"]) for row in rows})
+    )
+
+    def selected(family: str, capacity: int) -> str:
+        row = indexed.get((family, capacity))
+        if row is None:
+            return "n/a"
+        return (
+            f"e{int(row['selected_epoch'])}: "
+            f"{float(row['selected_accuracy']):.3f}% / "
+            f"{float(row['selected_nll']):.4f}"
+        )
+
+    def fixed(family: str, capacity: int) -> str:
+        row = indexed.get((family, capacity))
+        if row is None:
+            return "n/a"
+        return (
+            f"{float(row['fixed_validation_accuracy']):.3f}% / "
+            f"{float(row['fixed_validation_nll']):.4f}"
+        )
+
+    selected_rows = "\n".join(
+        f"| {_capacity_text(capacity)} | {selected('macro_token', capacity)} | "
+        f"{selected('single_affine', capacity)} |"
+        for capacity in capacities
+    )
+    fixed_rows = "\n".join(
+        f"| {_capacity_text(capacity)} | {capacity + 367:,} | "
+        f"{fixed('macro_token', capacity)} | "
+        f"{fixed('single_affine', capacity)} | "
+        f"{fixed('joint_iid_rank80', capacity)} |"
+        for capacity in capacities
+    )
+    return f"""### Minimum-NLL-selected frontier checkpoints
+
+| H | Macro-token frontier | Single-affine frontier |
+|---:|:---|:---|
+{selected_rows}
+
+Each cell is `epoch: accuracy / NLL`. Rank 80 is omitted here because its
+predeclared primary endpoint is epoch five, not a 50-epoch selected checkpoint.
+
+### Fixed epoch-five checkpoints
+
+| H | Fit identities | Macro-token frontier | Single-affine frontier | Joint IID, rank 80 |
+|---:|---:|:---|:---|:---|
+{fixed_rows}
+
+Each metric cell is `accuracy / NLL`. All three models have completed five
+passes over exactly the same identity set within each row.
+"""
 
 
 def write_frontier_adaptation_report(run: str | Path) -> Path:
@@ -818,6 +1112,60 @@ def write_frontier_adaptation_report(run: str | Path) -> Path:
     summaries = _summary_rows(run_path, result)
     histories = _history_rows(run_path, result)
     displacements = _displacement_rows(result)
+    rank80_summary = next(
+        (
+            summary
+            for specification, summary in capacity_summaries
+            if specification.rank == 80
+        ),
+        None,
+    )
+    rank80_history = next(
+        (
+            rows
+            for specification, rows in capacity_histories
+            if specification.rank == 80
+        ),
+        (),
+    )
+    architecture_replay = (
+        None
+        if linear_control is None or rank80_summary is None
+        else load_architecture_replay_report(
+            run_path,
+            str(result["content_hash"]),
+            {
+                "single_affine": str(linear_control["content_hash"]),
+                "joint_iid_rank80": str(
+                    next(
+                        control["content_hash"]
+                        for specification, control in capacity_controls
+                        if specification.rank == 80
+                    )
+                ),
+            },
+        )
+    )
+    architecture_scaling = _architecture_scaling_rows(
+        summaries,
+        histories,
+        linear_summary,
+        linear_history,
+        rank80_summary,
+        rank80_history,
+        architecture_replay,
+    )
+    architecture_histories = _architecture_history_rows(
+        histories,
+        linear_history,
+        rank80_history,
+        architecture_replay,
+    )
+    architecture_displacements = _architecture_displacement_rows(
+        displacements,
+        linear_control,
+        architecture_replay,
+    )
     for name, rows in (
         ("condition_summary", summaries),
         ("epoch_history", histories),
@@ -843,25 +1191,91 @@ def write_frontier_adaptation_report(run: str | Path) -> Path:
         _write_table_family(
             report_root, "frontier_linear_preclassifier_history", linear_history
         )
+    for name, rows in (
+        ("architecture_replay_summary", architecture_scaling),
+        ("architecture_replay_history", architecture_histories),
+        ("architecture_replay_displacements", architecture_displacements),
+    ):
+        _write_table_family(report_root, name, rows)
     references = dict(result["references"])
-    _plot_primary(
-        report_root / "accuracy_nll_vs_h.png",
-        summaries,
-        references,
-        capacity_summaries,
-        linear_summary,
-    )
+    _plot_primary(report_root / "accuracy_nll_vs_h.png", architecture_scaling)
     _plot_learning_curves(
         report_root / "validation_learning_curves.png",
-        histories,
-        references,
-        capacity_histories,
-        linear_history,
+        architecture_histories,
     )
     _plot_displacements(
-        report_root / "adapter_displacements.png", displacements
+        report_root / "adapter_displacements.png", architecture_displacements
     )
     _plot_frontier(report_root / "stage31_frontier.png")
+    architecture_selected_table, architecture_fixed_table = (
+        _architecture_tables_html(architecture_scaling)
+    )
+    architecture_markdown = _architecture_tables_markdown(
+        architecture_scaling
+    )
+    if architecture_replay is None:
+        architecture_crossover_markdown = ""
+        architecture_crossover_html = ""
+    else:
+        architecture_by_key = {
+            (str(row["family"]), int(row["historical_capacity"])): row
+            for row in architecture_scaling
+        }
+        macro_1024 = architecture_by_key[("macro_token", 1_024)]
+        macro_2048 = architecture_by_key[("macro_token", 2_048)]
+        macro_4096 = architecture_by_key[("macro_token", 4_096)]
+        macro_8192 = architecture_by_key[("macro_token", 8_192)]
+        macro_full = architecture_by_key[("macro_token", 11_827)]
+        affine_1024 = architecture_by_key[("single_affine", 1_024)]
+        affine_2048 = architecture_by_key[("single_affine", 2_048)]
+        affine_4096 = architecture_by_key[("single_affine", 4_096)]
+        affine_8192 = architecture_by_key[("single_affine", 8_192)]
+        affine_full = architecture_by_key[("single_affine", 11_827)]
+        rank80_full = architecture_by_key[("joint_iid_rank80", 11_827)]
+        fixed_affine_lead_1024 = float(
+            affine_1024["fixed_validation_accuracy"]
+        ) - float(macro_1024["fixed_validation_accuracy"])
+        fixed_affine_lead_2048 = float(
+            affine_2048["fixed_validation_accuracy"]
+        ) - float(macro_2048["fixed_validation_accuracy"])
+        fixed_macro_lead_4096 = float(
+            macro_4096["fixed_validation_accuracy"]
+        ) - float(affine_4096["fixed_validation_accuracy"])
+        fixed_macro_lead_8192 = float(
+            macro_8192["fixed_validation_accuracy"]
+        ) - float(affine_8192["fixed_validation_accuracy"])
+        architecture_crossover_markdown = f"""Under both checkpoint views, the
+single-affine frontier wins at H=1,024 and H=2,048, while the macro-token
+frontier wins from H=4,096 onward. At fixed epoch five, the affine accuracy
+lead falls from {fixed_affine_lead_1024:.3f} to
+{fixed_affine_lead_2048:.3f} points between H=1,024 and H=2,048; the macro
+lead is then {fixed_macro_lead_4096:.3f} points at H=4,096 and
+{fixed_macro_lead_8192:.3f} points at H=8,192. Rank-80 joint IID trails both
+frontier heads at every truncated H. At full history it passes the affine head
+({float(rank80_full['fixed_validation_accuracy']):.3f}% /
+{float(rank80_full['fixed_validation_nll']):.4f} versus
+{float(affine_full['fixed_validation_accuracy']):.3f}% /
+{float(affine_full['fixed_validation_nll']):.4f}), but still trails the macro
+head ({float(macro_full['fixed_validation_accuracy']):.3f}% /
+{float(macro_full['fixed_validation_nll']):.4f})."""
+        architecture_crossover_html = (
+            '<div class="callout linear"><strong>Matched-H replay '
+            "crossover.</strong> Under both checkpoint views, the single-affine "
+            "frontier wins at H=1,024 and H=2,048; the macro-token frontier wins "
+            "from H=4,096 onward. At fixed epoch five, the affine accuracy lead "
+            f"falls from {fixed_affine_lead_1024:.3f} to "
+            f"{fixed_affine_lead_2048:.3f} points, then the macro lead grows from "
+            f"{fixed_macro_lead_4096:.3f} points at H=4,096 to "
+            f"{fixed_macro_lead_8192:.3f} at H=8,192. Rank 80 trails both at "
+            "every truncated H; at full history it passes the affine head but "
+            "remains behind the macro head.</div>"
+        )
+    architecture_protocol_footer = (
+        " | matched-H protocol "
+        f"{str(architecture_replay.result['protocol_hash'])[:16]}..."
+        if architecture_replay is not None
+        else ""
+    )
     adaptive = tuple(row for row in summaries if row["adapt_lora"])
     best_nll = min(adaptive, key=lambda row: float(row["validation_nll_minimum"]))
     best_accuracy = max(
@@ -911,7 +1325,6 @@ def write_frontier_adaptation_report(run: str | Path) -> Path:
             "The single-layer pre-classifier condition has not yet been run."
         )
         linear_interpretation_html = f"<p>{escape(linear_markdown)}</p>"
-        linear_callout = ""
         linear_capacity_row: tuple[
             tuple[str, str, int, int, int, float, float], ...
         ] = ()
@@ -976,19 +1389,10 @@ optimizer schedule, and validation selection rule."""
             "five source LoRAs and use the same data, augmentation, optimizer "
             "schedule, and checkpoint rule.</p>"
         )
-        linear_callout = (
-            "<div class=\"callout linear\"><strong>Integrator architecture "
-            "ablation.</strong> The single-layer head reaches <strong>"
-            f"{float(linear_summary['validation_accuracy_at_best_nll']):.3f}% / "
-            f"{float(linear_summary['validation_nll_minimum']):.4f} NLL</strong> "
-            f"at its selected checkpoint ({linear_selected_accuracy_gap:+.3f} "
-            "accuracy points and "
-            f"{linear_selected_nll_gap:+.4f} NLL versus selected macro full "
-            "history).</div>"
-        )
         linear_capacity_row = (
             (
-                "Single-layer pre-classifier, adaptive LoRAs (epoch 5)",
+                f"{_architecture_condition('single_affine', 11_827)} "
+                "(epoch 5)",
                 "5 x 16",
                 6_635_520,
                 768_200,
@@ -1276,7 +1680,8 @@ epoch-five comparison.{total_markdown}"""
             *total_rows,
             *linear_capacity_row,
             (
-                "Adaptive frontier, full history (epoch 5)",
+                f"{_architecture_condition('macro_token', 11_827)} "
+                "(epoch 5)",
                 "5 x 16",
                 int(rank_matched["lora_parameters"]),
                 int(rank_matched["frontier_integrator_parameters"]),
@@ -1369,10 +1774,10 @@ epoch-five comparison.{total_markdown}"""
 
 ## Result
 
-The minimum-NLL adaptive condition is **{best_nll['condition']}**, with
+The minimum-NLL macro-token condition is **{best_nll['condition']}**, with
 **{float(best_nll['validation_accuracy_at_best_nll']):.3f}% validation accuracy**
 and **{float(best_nll['validation_nll_minimum']):.4f} NLL** at epoch
-{int(best_nll['best_nll_epoch'])}. The largest observed adaptive accuracy is
+{int(best_nll['best_nll_epoch'])}. The largest observed macro-token accuracy is
 **{float(best_accuracy['max_validation_accuracy']):.3f}%** from
 **{best_accuracy['condition']}** at epoch {int(best_accuracy['max_accuracy_epoch'])},
 where NLL is {float(best_accuracy['validation_nll_at_max_accuracy']):.4f}.
@@ -1399,6 +1804,14 @@ matched at this checkpoint. Compute is not: the frontier evaluates five
 specialized ViTs plus the macro transformer, while joint IID evaluates one
 ViT with one shared LoRA and classifier.
 
+## Replay scaling across architectures
+
+{architecture_markdown}
+
+{architecture_crossover_markdown}
+
+![Accuracy and NLL versus H](accuracy_nll_vs_h.png)
+
 ## Joint-IID capacity controls
 
 {rank_markdown}
@@ -1407,20 +1820,18 @@ ViT with one shared LoRA and classifier.
 
 {linear_markdown}
 
-![Accuracy and NLL versus H](accuracy_nll_vs_h.png)
-
 ## What changed
 
 The task-31 frontier contains five sealed rank-16 LoRAs over disjoint task
-intervals. Every adaptive condition starts from those exact tensors and the
-same seed-1993 macro head. The base ViT and all five node classifiers stay
-frozen; the five node LoRAs and macro head train jointly from task-free inputs.
-The architecture ablation instead reads only the five final pre-classifier
-vectors with one direct affine layer, while retaining the same trainable LoRAs.
-Every population includes all 367 current-task images. H is a nested uniform
-hash-order prefix of the 11,827-image historical partition, so maximum H is
-exactly the 12,194-image full fit. The 3,049 validation identities remain
-excluded from optimization.
+intervals. Every adaptive frontier cell starts from those exact tensors. The
+base ViT and all five node classifiers stay frozen; the five node LoRAs and
+either the macro-token or affine head train jointly from task-free inputs. The
+affine head reads only the five final pre-classifier vectors. Rank-80 joint IID
+instead starts one zero-effect adapter and a 124-way classifier. Every
+population includes all 367 current-task images. H is the same nested uniform
+hash-order prefix of the 11,827-image historical partition for all three
+architectures, so maximum H is exactly the 12,194-image full fit. The 3,049
+validation identities remain excluded from optimization.
 
 ![Stage-31 frontier](stage31_frontier.png)
 
@@ -1430,28 +1841,27 @@ excluded from optimization.
 
 ![Adapter displacement](adapter_displacements.png)
 
-The head uses the previous minimum-NLL winner: effective batch 64, peak AdamW
-learning rate 3e-5, and 50 warmup-cosine epochs. Newly adaptive LoRAs use peak
-5e-4 from the joint-IID recipe under the same AdamW schedule. That LoRA choice
-is a starting point, not a tuned optimum. Checkpoint selection is minimum
-validation NLL; maximum accuracy is a separately labeled diagnostic.
+Both frontier heads use the previous minimum-NLL winner: effective batch 64,
+peak AdamW learning rate 3e-5, and 50 warmup-cosine epochs. Newly adaptive node
+LoRAs use peak 5e-4 under that schedule. Rank-80 joint IID retains its original
+five-epoch SGD recipe. Frontier checkpoint selection is minimum validation NLL;
+all three architectures are also reported at fixed epoch five. Maximum
+accuracy is a separately labeled diagnostic.
 
 ## Interpretation boundaries
 
 This is one seed on a validation split, not a final test estimate. Repeated
 epoch evaluation makes the maximum-accuracy statistic exploratory. The
 full-fit frozen control isolates online augmentation and image forwarding from
-LoRA adaptation. The five H cells differ in both unique identities and total
-optimizer updates because each receives 50 full passes. No test identity was
-requested. Exact replay authenticated all six cells with zero new optimizer
-steps and left the source hierarchy unchanged. A separate fresh process also
-authenticated the rank-80 and rank-224 results and their model artifacts
-without an optimizer step. The linear-integrator condition likewise records
-zero test evaluations and authenticates without another optimizer step.
-"""
-    atomic_write(report_root / "REPORT.md", markdown.encode("utf-8"))
-    table = _table_html(
-        (*summaries, *((linear_summary,) if linear_summary is not None else ()))
+LoRA adaptation. H cells differ in both unique identities and optimizer steps,
+but within each H the fixed-epoch comparison uses the same identities and five
+complete passes. No test identity was requested. Exact replay authenticated the
+six original macro cells, eight new architecture-sweep cells, and all full-fit
+controls without a new optimizer step, while leaving the source hierarchy
+unchanged.
+    """
+    atomic_write(
+        report_root / "REPORT.md", (markdown.rstrip() + "\n").encode("utf-8")
     )
     html = f"""<!doctype html><html><head><meta charset="utf-8"><title>ImageNet-R frontier-LoRA adaptation</title><style>
 @page {{ size: Letter; margin: 0.55in; }}
@@ -1463,25 +1873,27 @@ table {{ width:100%; border-collapse:collapse; font-size:7.7pt; margin:8px 0 12p
 .page {{ break-before:page; }} .small {{ font-size:9pt; color:#44515e; }} .dense {{ font-size:9.5pt; line-height:1.28; }} .dense h2 {{ margin:12px 0 6px; }} .dense p {{ margin:7px 0; }} footer {{ margin-top:12px; border-top:1px solid #ccd5dd; padding-top:5px; color:#687580; font-size:8pt; }}
 </style></head><body>
 <h1>ImageNet-R stage-31 frontier-LoRA adaptation</h1><p class="lede">Can jointly adapting five fragmented node representations close the same-split joint-IID accuracy and NLL gap?</p>
-<div class="callout"><strong>Selected-checkpoint result.</strong> The minimum-NLL adaptive condition is {escape(str(best_nll['condition']))}: <strong>{float(best_nll['validation_accuracy_at_best_nll']):.3f}% accuracy / {float(best_nll['validation_nll_minimum']):.4f} NLL</strong>. That is {best_accuracy_gain:.3f} percentage points higher and {best_nll_reduction:.4f} NLL lower than the five-epoch rank-16 joint-IID reference. {escape(match_sentence)}</div>
-{linear_callout}
-<figure><img src="{_image_uri(report_root / 'accuracy_nll_vs_h.png')}" alt="Accuracy and NLL versus replay population"><figcaption>Blue macro-frontier points and the teal single-layer point use each condition's minimum-NLL checkpoint. Black rank-16, green rank-80, and ochre rank-224 joint-IID lines are fixed epoch-five endpoints.</figcaption></figure>
-<h2>Matched-exposure architecture and capacity comparison</h2>{rank_table_html}<p class="small">Every row uses exactly five complete passes over the 12,194-image fit population. "Other" means the trainable joint classifier, linear integrator, or macro integrator; frozen parameters are omitted. Rank 80 matches aggregate node-LoRA capacity. Rank 224 is the closest total-active-parameter match.</p>
-<div class="page"><h2>Complete condition summary</h2>{table}<p class="small">Maximum accuracy and its NLL are reported separately to expose calibration tradeoffs. Every cell also includes all 367 current-task identities; maximum historical H=11,827 is exactly the 12,194-image full fit.</p>{rank_history_html}</div>
-<div class="page"><h2>Architecture and experimental boundary</h2><p>The task-31 frontier has five nodes at levels 0-4, covering task intervals 31, 29-30, 25-28, 17-24, and 1-16. Each node supplies its own final 197 x 768 LoRA-adapted token sequence and immutable local affine scores to the macro transformer. The new condition instead concatenates only the five 768-value pre-classifier outputs and maps the resulting 3,840 values directly to 200 logits. Neither head receives task IDs or labels.</p>
+<div class="callout"><strong>Selected macro-token result.</strong> The minimum-NLL macro-token condition is {escape(str(best_nll['condition']))}: <strong>{float(best_nll['validation_accuracy_at_best_nll']):.3f}% accuracy / {float(best_nll['validation_nll_minimum']):.4f} NLL</strong>. That is {best_accuracy_gain:.3f} percentage points higher and {best_nll_reduction:.4f} NLL lower than the five-epoch rank-16 joint-IID reference. {escape(match_sentence)}</div>
+{architecture_crossover_html}
+<figure><img src="{_image_uri(report_root / 'accuracy_nll_vs_h.png')}" alt="Accuracy and NLL versus replay population"><figcaption>The upper row compares the 50-epoch minimum-NLL selections for the macro-token and single-affine frontiers. The lower row compares macro-token, single-affine, and rank-80 joint IID at fixed epoch five, after five passes over the identical fit identities at each H.</figcaption></figure>
+<div class="page"><h2>Replay scaling: selected frontier checkpoints</h2>{architecture_selected_table}<p class="small">Macro-token and single-affine cells share the 50-epoch AdamW schedule and minimum-validation-NLL rule. Rank 80 is excluded because its frozen protocol has only five epochs and a fixed primary endpoint.</p>
+<h2>Replay scaling: fixed epoch five</h2>{architecture_fixed_table}<p class="small">Within each H row, all three models see the same current-plus-history identity set for five complete passes. Their optimizer families and compute differ by design.</p></div>
+<div class="page"><h2>Full-fit architecture and capacity comparison</h2>{rank_table_html}<p class="small">Every row uses exactly five complete passes over the 12,194-image full-fit population. "Other" means the trainable joint classifier, affine integrator, or macro integrator; frozen parameters are omitted. Rank 80 matches aggregate node-LoRA capacity. Rank 224 is the closest total-active-parameter match.</p>{rank_history_html}</div>
+<div class="page"><h2>Architecture and experimental boundary</h2><p>The task-31 frontier has five nodes at levels 0-4, covering task intervals 31, 29-30, 25-28, 17-24, and 1-16. Each node supplies its own final 197 x 768 LoRA-adapted token sequence and immutable local affine scores to the macro transformer. The affine frontier instead concatenates only the five 768-value pre-classifier outputs and maps the resulting 3,840 values directly to 200 logits. Neither frontier head receives task IDs or labels.</p>
 <figure><img src="{_image_uri(report_root / 'stage31_frontier.png')}" alt="Five nodes feeding the macro-token integrator"><figcaption>This diagram shows the macro condition: the base ViT and node classifiers are frozen, while five rank-16 LoRAs and the shared 12.06M-parameter macro head can move. The single-layer condition replaces that head with one affine map.</figcaption></figure>
-<p>Every cell includes all 367 current-task images. H=1,024, 2,048, 4,096, 8,192, and 11,827 are nested prefixes of one deterministic uniform draw from the historical tasks without replacement. Maximum H therefore gives exactly all 12,194 fit identities. Every cell starts independently from identical sealed node tensors and macro initialization. The validation partition has 3,049 clean identities and never contributes gradients. No test image is opened.</p>
+<p>Every cell includes all 367 current-task images. H=1,024, 2,048, 4,096, 8,192, and 11,827 are nested prefixes of one deterministic uniform draw from the historical tasks without replacement. Maximum H therefore gives exactly all 12,194 fit identities. Frontier cells start independently from identical sealed node tensors; rank-80 cells start independently from the same seed and zero-effect LoRA initialization. The validation partition has 3,049 clean identities and never contributes gradients. No test image is opened.</p>
 <p><strong>Compute boundary.</strong> Both adaptive frontier heads evaluate the same five node-specific ViTs for every image. The linear condition then runs one 768,200-parameter affine map; the macro condition runs its 12,055,496-parameter transformer. Joint IID evaluates one ViT with one shared LoRA and classifier. Their split and full-fit data exposure match, but deployment compute remains different.</p>
 <h2>Why the frozen online control exists</h2><p>The previous frozen macro was trained from cached center-crop tokens. This run loads images online with deterministic random training augmentation. The purple full-fit control follows that new path while freezing the LoRAs, so its difference from the cached gray reference measures the pipeline/augmentation change rather than representation adaptation.</p></div>
-<div class="page"><h2>Optimization behavior</h2><figure><img src="{_image_uri(report_root / 'validation_learning_curves.png')}" alt="Validation learning curves"><figcaption>Every macro-frontier and single-layer epoch and all five epochs for both joint-IID capacity controls are retained in hash-chained histories. The horizontal black line is the rank-16 epoch-five endpoint, not a stopping gate.</figcaption></figure>
-<figure><img src="{_image_uri(report_root / 'adapter_displacements.png')}" alt="Relative LoRA update displacement"><figcaption>Macro-condition H sweep: scale-aware Frobenius movement of each dense LoRA update, measured from its sealed source node at the selected minimum-NLL checkpoint.</figcaption></figure></div>
+<div class="page"><h2>Optimization behavior</h2><figure><img src="{_image_uri(report_root / 'validation_learning_curves.png')}" alt="Validation learning curves"><figcaption>Rows separate the macro-token frontier, single-affine frontier, and rank-80 joint-IID model. Colors mean the same H in every panel; frontier histories contain 50 epochs and rank-80 histories contain the five frozen-protocol epochs.</figcaption></figure>
+<figure><img src="{_image_uri(report_root / 'adapter_displacements.png')}" alt="Relative LoRA update displacement"><figcaption>Scale-aware movement of each dense node-LoRA update from its sealed source value. Left is the macro-token frontier and right is the single-affine frontier under the same five H values.</figcaption></figure></div>
 <div class="page dense"><h2>Interpretation</h2><p>Allowing the frontier LoRAs to move changes the result by {adaptation_accuracy_gain:.3f} percentage points and {adaptation_nll_reduction:.4f} NLL relative to the online frozen-LoRA control at their minimum-NLL checkpoints. H=4,096 is the smallest tested historical population to cross both rank-16 joint-IID values. At exactly {matched_epoch} full-fit passes ({matched_presentations:,} image presentations), adaptive full history is {float(full_at_matched_epoch['validation_accuracy']):.3f}% / {float(full_at_matched_epoch['validation_nll']):.4f}, frozen full history is {float(frozen_at_matched_epoch['validation_accuracy']):.3f}% / {float(frozen_at_matched_epoch['validation_nll']):.4f}, and rank-16 joint IID is {float(joint['accuracy']):.3f}% / {float(joint['nll']):.4f}. This isolates feature adaptation from training exposure, but not the frontier's extra model and deployment compute.</p>
+<p>The replay-scaling tables make two different questions explicit. Minimum-NLL selection asks what each 50-epoch frontier fit can achieve after checkpoint selection. Fixed epoch five asks how the two frontiers and rank-80 joint IID compare after the same number of passes over exactly the same identities. The latter still does not equalize optimizer, initialization, parameter count beyond the LoRA-rank match, or inference compute.</p>
 <h2>What the single-layer condition establishes</h2>{linear_interpretation_html}
 <h2>What the capacity controls establish</h2>{rank_interpretation_html}
 <p>The head schedule is the previous minimum-NLL winner: effective batch 64, peak AdamW LR 3e-5, 50 epochs, 5% warmup, and cosine decay. The LoRA peak LR 5e-4 is imported from the same-split joint recipe but run here in AdamW under the shared schedule. It has not been tuned for this coupled model.</p>
 <p><strong>Limits.</strong> This is a one-seed validation screen. The H cells change both unique data and total optimizer updates. Maximum accuracy is exploratory because all 50 validation checkpoints are visible. A promising condition needs replication and a focused LoRA/head learning-rate audit before any locked-test use.</p>
-<h2>Integrity and reuse</h2><p>The training seals record zero fit-validation overlap, zero test overlap, zero test evaluations, and unchanged source hierarchy files. Fresh-process replay authenticated all six macro-frontier cells, the single-layer condition, and the rank-80 and rank-224 controls without taking an optimizer step. Large checkpoints and model weights remain local; compact histories, tables, plots, and protocol records are the report surface.</p>
-<footer>Protocol {escape(str(result['content_hash']))[:16]}... | stage 31 | seed 1993 | generated from authenticated result and history ledgers</footer></div>
+<h2>Integrity and reuse</h2><p>The training seals record zero fit-validation overlap, zero test overlap, zero test evaluations, and unchanged source hierarchy files. Fresh-process replay authenticated all six original macro-frontier cells, all eight architecture-sweep cells, and the full-fit controls without taking an optimizer step. Large checkpoints and model weights remain local; compact histories, tables, plots, and protocol records are the report surface.</p>
+<footer>Primary protocol {escape(str(result['content_hash']))[:16]}...{architecture_protocol_footer} | stage 31 | seed 1993 | generated from authenticated result and history ledgers</footer></div>
 </body></html>"""
     atomic_write(report_root / "REPORT.html", html.encode("utf-8"))
     return render_integrator_pdf(report_root / "REPORT.html")

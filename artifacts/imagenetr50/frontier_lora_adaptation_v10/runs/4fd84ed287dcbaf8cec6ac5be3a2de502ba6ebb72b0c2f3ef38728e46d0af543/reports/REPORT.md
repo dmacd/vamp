@@ -2,14 +2,14 @@
 
 ## Result
 
-The minimum-NLL adaptive condition is **Frontier LoRA adaptation (H=11,827; full fit)**, with
+The minimum-NLL macro-token condition is **Macro-token frontier, adaptive LoRAs (H=11,827; full fit)**, with
 **85.864% validation accuracy**
 and **0.5710 NLL** at epoch
-13. The largest observed adaptive accuracy is
+13. The largest observed macro-token accuracy is
 **85.864%** from
-**Frontier LoRA adaptation (H=11,827; full fit)** at epoch 13,
+**Macro-token frontier, adaptive LoRAs (H=11,827; full fit)** at epoch 13,
 where NLL is 0.5710.
-Frontier LoRA adaptation (H=4,096) is the smallest H to reach both rank-16 joint-IID metrics, first doing so at epoch 6.
+Macro-token frontier, adaptive LoRAs (H=4,096) is the smallest H to reach both rank-16 joint-IID metrics, first doing so at epoch 6.
 
 The rank-16 joint-IID reference is 77.862% / 0.9425
 NLL. The previous frozen cached macro result at the same seed is
@@ -31,6 +31,52 @@ image presentations), the adaptive frontier reaches
 matched at this checkpoint. Compute is not: the frontier evaluates five
 specialized ViTs plus the macro transformer, while joint IID evaluates one
 ViT with one shared LoRA and classifier.
+
+## Replay scaling across architectures
+
+### Minimum-NLL-selected frontier checkpoints
+
+| H | Macro-token frontier | Single-affine frontier |
+|---:|:---|:---|
+| 1,024 | e31: 57.330% / 1.9572 | e2: 71.925% / 1.2792 |
+| 2,048 | e25: 71.564% / 1.2565 | e3: 73.434% / 1.2058 |
+| 4,096 | e12: 80.125% / 0.8360 | e4: 75.992% / 1.0586 |
+| 8,192 | e8: 83.601% / 0.6430 | e5: 78.944% / 0.9737 |
+| 11,827; full fit | e13: 85.864% / 0.5710 | e3: 79.239% / 0.8907 |
+
+Each cell is `epoch: accuracy / NLL`. Rank 80 is omitted here because its
+predeclared primary endpoint is epoch five, not a 50-epoch selected checkpoint.
+
+### Fixed epoch-five checkpoints
+
+| H | Fit identities | Macro-token frontier | Single-affine frontier | Joint IID, rank 80 |
+|---:|---:|:---|:---|:---|
+| 1,024 | 1,391 | 50.738% / 2.2827 | 71.368% / 1.3873 | 48.049% / 2.7526 |
+| 2,048 | 2,415 | 67.727% / 1.3817 | 72.680% / 1.2629 | 60.512% / 1.8930 |
+| 4,096 | 4,463 | 77.796% / 0.9260 | 76.320% / 1.1238 | 70.548% / 1.3572 |
+| 8,192 | 8,559 | 83.732% / 0.6621 | 78.944% / 0.9737 | 76.812% / 1.0353 |
+| 11,827; full fit | 12,194 | 84.880% / 0.5897 | 78.649% / 0.9560 | 80.125% / 0.8339 |
+
+Each metric cell is `accuracy / NLL`. All three models have completed five
+passes over exactly the same identity set within each row.
+
+
+Under both checkpoint views, the
+single-affine frontier wins at H=1,024 and H=2,048, while the macro-token
+frontier wins from H=4,096 onward. At fixed epoch five, the affine accuracy
+lead falls from 20.630 to
+4.952 points between H=1,024 and H=2,048; the macro
+lead is then 1.476 points at H=4,096 and
+4.788 points at H=8,192. Rank-80 joint IID trails both
+frontier heads at every truncated H. At full history it passes the affine head
+(80.125% /
+0.8339 versus
+78.649% /
+0.9560), but still trails the macro
+head (84.880% /
+0.5897).
+
+![Accuracy and NLL versus H](accuracy_nll_vs_h.png)
 
 ## Joint-IID capacity controls
 
@@ -96,20 +142,18 @@ It has 768,200 parameters, 93.6% fewer than the
 LoRAs from the same initial tensors and use the same full-fit data, augmentation,
 optimizer schedule, and validation selection rule.
 
-![Accuracy and NLL versus H](accuracy_nll_vs_h.png)
-
 ## What changed
 
 The task-31 frontier contains five sealed rank-16 LoRAs over disjoint task
-intervals. Every adaptive condition starts from those exact tensors and the
-same seed-1993 macro head. The base ViT and all five node classifiers stay
-frozen; the five node LoRAs and macro head train jointly from task-free inputs.
-The architecture ablation instead reads only the five final pre-classifier
-vectors with one direct affine layer, while retaining the same trainable LoRAs.
-Every population includes all 367 current-task images. H is a nested uniform
-hash-order prefix of the 11,827-image historical partition, so maximum H is
-exactly the 12,194-image full fit. The 3,049 validation identities remain
-excluded from optimization.
+intervals. Every adaptive frontier cell starts from those exact tensors. The
+base ViT and all five node classifiers stay frozen; the five node LoRAs and
+either the macro-token or affine head train jointly from task-free inputs. The
+affine head reads only the five final pre-classifier vectors. Rank-80 joint IID
+instead starts one zero-effect adapter and a 124-way classifier. Every
+population includes all 367 current-task images. H is the same nested uniform
+hash-order prefix of the 11,827-image historical partition for all three
+architectures, so maximum H is exactly the 12,194-image full fit. The 3,049
+validation identities remain excluded from optimization.
 
 ![Stage-31 frontier](stage31_frontier.png)
 
@@ -119,21 +163,21 @@ excluded from optimization.
 
 ![Adapter displacement](adapter_displacements.png)
 
-The head uses the previous minimum-NLL winner: effective batch 64, peak AdamW
-learning rate 3e-5, and 50 warmup-cosine epochs. Newly adaptive LoRAs use peak
-5e-4 from the joint-IID recipe under the same AdamW schedule. That LoRA choice
-is a starting point, not a tuned optimum. Checkpoint selection is minimum
-validation NLL; maximum accuracy is a separately labeled diagnostic.
+Both frontier heads use the previous minimum-NLL winner: effective batch 64,
+peak AdamW learning rate 3e-5, and 50 warmup-cosine epochs. Newly adaptive node
+LoRAs use peak 5e-4 under that schedule. Rank-80 joint IID retains its original
+five-epoch SGD recipe. Frontier checkpoint selection is minimum validation NLL;
+all three architectures are also reported at fixed epoch five. Maximum
+accuracy is a separately labeled diagnostic.
 
 ## Interpretation boundaries
 
 This is one seed on a validation split, not a final test estimate. Repeated
 epoch evaluation makes the maximum-accuracy statistic exploratory. The
 full-fit frozen control isolates online augmentation and image forwarding from
-LoRA adaptation. The five H cells differ in both unique identities and total
-optimizer updates because each receives 50 full passes. No test identity was
-requested. Exact replay authenticated all six cells with zero new optimizer
-steps and left the source hierarchy unchanged. A separate fresh process also
-authenticated the rank-80 and rank-224 results and their model artifacts
-without an optimizer step. The linear-integrator condition likewise records
-zero test evaluations and authenticates without another optimizer step.
+LoRA adaptation. H cells differ in both unique identities and optimizer steps,
+but within each H the fixed-epoch comparison uses the same identities and five
+complete passes. No test identity was requested. Exact replay authenticated the
+six original macro cells, eight new architecture-sweep cells, and all full-fit
+controls without a new optimizer step, while leaving the source hierarchy
+unchanged.
