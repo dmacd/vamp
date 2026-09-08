@@ -41,6 +41,12 @@
   CPU-to-CUDA affine-bias optimizer-moment indexing error at the stage-1-to-2
   boundary; the device-safe transplant and its regression test are now in
   place, and no stage-2 optimization occurred in that failed namespace.
+- A subsequent live audit expanded the material-code manifest to include the
+  shared warmup scheduler and every source-loading helper used by the run,
+  pins all six joint-IID SGD hyperparameters in the resolved v15 config, and
+  requires ledger rows to equal their immutable stage artifacts. Early
+  healthy pilot stages were stopped before this identity correction so the
+  definitive namespace cannot silently reuse them.
 - Next: commit and push the implementation, execute/resume both 50-stage arms
   and the aggregate-rank joint curve, prove a second invocation performs zero
   optimizer steps, generate and visually inspect the PDF, run focused and

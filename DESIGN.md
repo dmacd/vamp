@@ -922,12 +922,13 @@ explicitly rather than treating one frontier example as one ViT forward.
 The rank-16 stage-matched joint-IID curve is imported byte-for-byte. The
 aggregate-rank comparison trains a fresh joint model at every prefix with rank
 and alpha `16 * popcount(t)`, using the original five-epoch joint-IID SGD
-recipe. One-node stages reuse the identical rank-16 artifacts. This control
-matches total live LoRA rank only: it does not match pretrained node state,
-the persistent affine map, multiple ViT paths, or deployment compute. Neither
-joint curve is a gate. All choices are frozen before post-stage test access,
-and a completed second invocation must authenticate every stage and perform
-zero new optimizer steps.
+recipe: batch 64, momentum 0.9, weight decay 5e-4, LoRA learning rate 5e-4,
+and head learning rate 1e-2. One-node stages reuse the identical rank-16
+artifacts. This control matches total live LoRA rank only: it does not match
+pretrained node state, the persistent affine map, multiple ViT paths, or
+deployment compute. Neither joint curve is a gate. All choices are frozen
+before post-stage test access, and a completed second invocation must
+authenticate every stage and perform zero new optimizer steps.
 
 ## TRACE Log-t VAMP
 

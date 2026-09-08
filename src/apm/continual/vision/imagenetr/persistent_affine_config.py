@@ -68,6 +68,12 @@ class PersistentAffineConfig:
     joint_rank_per_live_node: int
     joint_alpha_policy: str
     joint_epochs: int
+    joint_batch_size: int
+    joint_optimizer: str
+    joint_momentum: float
+    joint_weight_decay: float
+    joint_lora_learning_rate: float
+    joint_head_learning_rate: float
     evaluation_batch_size: int
     num_workers: int
     checkpoint_every_epochs: int
@@ -123,6 +129,12 @@ class PersistentAffineConfig:
             or self.joint_rank_per_live_node != 16
             or self.joint_alpha_policy != "equal_rank"
             or self.joint_epochs != 5
+            or self.joint_batch_size != 64
+            or self.joint_optimizer != "sgd"
+            or self.joint_momentum != 0.9
+            or self.joint_weight_decay != 0.0005
+            or self.joint_lora_learning_rate != 0.0005
+            or self.joint_head_learning_rate != 0.01
             or self.evaluation_batch_size != 64
             or self.num_workers < 0
             or self.checkpoint_every_epochs != 1
@@ -203,7 +215,11 @@ def load_persistent_affine_config(
     )
     joint = _mapping(
         root["joint_control"], "joint_control",
-        {"rank_policy", "rank_per_live_node", "alpha_policy", "epochs"},
+        {
+            "rank_policy", "rank_per_live_node", "alpha_policy", "epochs",
+            "batch_size", "optimizer", "momentum", "weight_decay",
+            "lora_learning_rate", "head_learning_rate",
+        },
     )
     runtime = _mapping(root["runtime"], "runtime", {"evaluation_batch_size", "num_workers", "checkpoint_every_epochs"})
     raw_epochs = matrix["epochs_per_stage"]
@@ -231,6 +247,8 @@ def load_persistent_affine_config(
         float(optimization["minimum_learning_rate_ratio"]), float(optimization["weight_decay"]),
         float(optimization["gradient_clip_norm"]), bool(optimization["activation_recomputation"]),
         str(joint["rank_policy"]), int(joint["rank_per_live_node"]), str(joint["alpha_policy"]), int(joint["epochs"]),
+        int(joint["batch_size"]), str(joint["optimizer"]), float(joint["momentum"]),
+        float(joint["weight_decay"]), float(joint["lora_learning_rate"]), float(joint["head_learning_rate"]),
         int(runtime["evaluation_batch_size"]), int(runtime["num_workers"]), int(runtime["checkpoint_every_epochs"]),
     )
 

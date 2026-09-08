@@ -11,6 +11,7 @@ import math
 import os
 from pathlib import Path
 import tempfile
+import textwrap
 from typing import Final
 
 from apm.continual.artifacts import (
@@ -26,6 +27,8 @@ LABEL_H4096: Final[str] = "Persistent single-affine + adaptive node LoRAs, H=4,0
 LABEL_H8192: Final[str] = "Persistent single-affine + adaptive node LoRAs, H=8,192"
 LABEL_STAGE_JOINT: Final[str] = "Stage-matched joint IID, rank 16"
 LABEL_RANK_JOINT: Final[str] = "Aggregate-rank-matched joint IID"
+LABEL_ORACLE_H4096: Final[str] = "True-node oracle for persistent H=4,096 (diagnostic)"
+LABEL_ORACLE_H8192: Final[str] = "True-node oracle for persistent H=8,192 (diagnostic)"
 
 
 def _validate_result(run: Path) -> dict[str, object]:
@@ -50,6 +53,14 @@ def _series(result: dict[str, object]) -> dict[str, list[float]]:
         LABEL_H8192: [float(row["evaluation"]["accuracy"]) for row in arms["8192"]],
         LABEL_STAGE_JOINT: [float(row["accuracy"]) for row in result["stage_matched_joint"]],
         LABEL_RANK_JOINT: [float(row["accuracy"]) for row in result["rank_matched_joint"]],
+        LABEL_ORACLE_H4096: [
+            float(row["evaluation"]["true_node_oracle_accuracy"])
+            for row in arms["4096"]
+        ],
+        LABEL_ORACLE_H8192: [
+            float(row["evaluation"]["true_node_oracle_accuracy"])
+            for row in arms["8192"]
+        ],
     }
 
 
@@ -136,21 +147,32 @@ def _plot_accuracy(reports: Path, result: dict[str, object]) -> Path:
         LABEL_H8192: "#d95f02",
         LABEL_STAGE_JOINT: "#222222",
         LABEL_RANK_JOINT: "#2ca02c",
+        LABEL_ORACLE_H4096: "#6baed6",
+        LABEL_ORACLE_H8192: "#fdae6b",
     }
     styles = {
         LABEL_H4096: "-",
         LABEL_H8192: "-",
         LABEL_STAGE_JOINT: "--",
         LABEL_RANK_JOINT: "-.",
+        LABEL_ORACLE_H4096: ":",
+        LABEL_ORACLE_H8192: ":",
     }
     figure, axis = plt.subplots(figsize=(11.2, 5.8), constrained_layout=True)
     for label, values in series.items():
-        axis.plot(stages, values, label=label, color=colors[label], linestyle=styles[label], linewidth=2.2)
+        axis.plot(
+            stages,
+            values,
+            label=label,
+            color=colors[label],
+            linestyle=styles[label],
+            linewidth=1.7 if "oracle" in label.lower() else 2.2,
+        )
     for stage in (2, 4, 8, 16, 32):
         axis.axvline(stage, color="#aaaaaa", linewidth=0.7, alpha=0.45)
     axis.set(xlabel="Tasks observed", ylabel="Test top-1 accuracy (%)", xlim=(1, 50))
     axis.grid(axis="y", alpha=0.25)
-    axis.legend(loc="lower right", fontsize=8.5, frameon=True)
+    axis.legend(loc="lower right", fontsize=7.5, frameon=True, ncol=2)
     axis.set_title("Full-stream accuracy with stage-matched data prefixes")
     path = reports / "stage_accuracy.png"
     figure.savefig(path, dpi=210)
@@ -215,15 +237,16 @@ def _png_data(path: Path) -> str:
 def _selected_table(stage_rows: tuple[dict[str, object], ...]) -> str:
     selected = {1, 2, 4, 8, 16, 31, 32, 50}
     lines = [
-        "| Stage | Nodes | H=4,096 | H=8,192 | Joint r16 | Rank-matched | Matched rank |",
-        "|---:|---:|---:|---:|---:|---:|---:|",
+        "| Stage | Nodes | H=4,096 | H=8,192 | H4 oracle | H8 oracle | Joint r16 | Rank-matched | Matched rank |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in stage_rows:
         if int(row["stage"]) not in selected:
             continue
         lines.append(
             "| {stage} | {live_nodes} | {persistent_affine_h4096_accuracy:.3f}% | "
-            "{persistent_affine_h8192_accuracy:.3f}% | {stage_matched_joint_rank16_accuracy:.3f}% | "
+            "{persistent_affine_h8192_accuracy:.3f}% | {h4096_true_node_oracle_accuracy:.3f}% | "
+            "{h8192_true_node_oracle_accuracy:.3f}% | {stage_matched_joint_rank16_accuracy:.3f}% | "
             "{rank_matched_joint_accuracy:.3f}% | {rank_matched_joint_rank} |".format(**row)
         )
     return "\n".join(lines)
@@ -257,12 +280,14 @@ def _write_markdown(
 
 ![Full-stream test accuracy](stage_accuracy.png)
 
-The two blue/orange curves are the only adaptive frontier conditions. Both use
+The solid blue/orange curves are the only adaptive frontier conditions. Both use
 one affine layer over the live nodes' 768-value pre-classifier vectors; neither
 uses macro tokens or metadata. The dashed black curve is a fresh rank-16 joint
 fit at every data prefix. The green curve is also fresh joint IID, with rank
 `16 x popcount(stage)` so its LoRA rank equals the sum across live frontier
-nodes. Vertical guides mark power-of-two consolidation stages.
+nodes. Dotted blue/orange curves are label-aware true-node diagnostics for the
+corresponding adapted frontiers. Vertical guides mark power-of-two consolidation
+stages.
 
 ## Selected stages
 
@@ -320,6 +345,8 @@ def _write_html(
         f"<td>{row['stage']}</td><td>{row['live_nodes']}</td>"
         f"<td>{row['persistent_affine_h4096_accuracy']:.3f}%</td>"
         f"<td>{row['persistent_affine_h8192_accuracy']:.3f}%</td>"
+        f"<td>{row['h4096_true_node_oracle_accuracy']:.3f}%</td>"
+        f"<td>{row['h8192_true_node_oracle_accuracy']:.3f}%</td>"
         f"<td>{row['stage_matched_joint_rank16_accuracy']:.3f}%</td>"
         f"<td>{row['rank_matched_joint_accuracy']:.3f}%</td>"
         f"<td>{row['rank_matched_joint_rank']}</td></tr>"
@@ -338,9 +365,9 @@ code{{background:#eef2f5;padding:2px 4px}} .note{{color:#4b5563}}
 <h1>ImageNet-R-50 persistent single-affine frontier</h1>
 <p>{escape(_interpretation(summaries))}</p>
 <img src="data:image/png;base64,{embedded[0]}" alt="Full-stream test accuracy">
-<p class="note">The blue and orange curves are the only adaptive-frontier conditions. They use a single affine layer over node-specific pre-classifier vectors, with no macro tokens or metadata.</p>
+<p class="note">The solid blue and orange curves are the only adaptive-frontier conditions. They use a single affine layer over node-specific pre-classifier vectors, with no macro tokens or metadata. The dotted curves are the corresponding label-aware true-node diagnostics.</p>
 <h2>Selected stages</h2>
-<table><thead><tr><th>Stage</th><th>Nodes</th><th>H=4,096</th><th>H=8,192</th><th>Joint r16</th><th>Rank-matched</th><th>Rank</th></tr></thead><tbody>{table_rows}</tbody></table>
+<table><thead><tr><th>Stage</th><th>Nodes</th><th>H=4,096</th><th>H=8,192</th><th>H4 oracle</th><th>H8 oracle</th><th>Joint r16</th><th>Rank-matched</th><th>Rank</th></tr></thead><tbody>{table_rows}</tbody></table>
 <img src="data:image/png;base64,{embedded[1]}" alt="Accuracy gaps to joint-IID controls">
 <p>Positive values mean the persistent affine frontier is ahead of the named joint-IID reference. Neither reference is an execution gate.</p>
 <img src="data:image/png;base64,{embedded[2]}" alt="Test negative log likelihood">
@@ -368,102 +395,212 @@ def _write_pdf(
     stage_rows: tuple[dict[str, object], ...],
     images: tuple[Path, ...],
 ) -> None:
-    from reportlab.lib import colors
-    from reportlab.lib.enums import TA_CENTER
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-    from reportlab.lib.units import inch
-    from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
+
+    def wrapped(text: str, width: int = 108) -> str:
+        return "\n".join(textwrap.wrap(text, width=width))
+
+    def footer(figure, page: int) -> None:
+        figure.text(
+            0.06,
+            0.025,
+            "ImageNet-R-50 persistent single-affine frontier",
+            fontsize=8,
+            color="#666666",
+        )
+        figure.text(
+            0.94,
+            0.025,
+            f"Page {page}",
+            fontsize=8,
+            color="#666666",
+            horizontalalignment="right",
+        )
+
+    def image_axis(figure, image: Path, bounds: tuple[float, float, float, float]) -> None:
+        axis = figure.add_axes(bounds)
+        axis.imshow(plt.imread(image))
+        axis.axis("off")
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(prefix=".persistent-affine-", suffix=".pdf", dir=output.parent)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".persistent-affine-", suffix=".pdf", dir=output.parent
+    )
     os.close(descriptor)
     temporary = Path(temporary_name)
-    styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="TitleCenter", parent=styles["Title"], alignment=TA_CENTER, textColor=colors.HexColor("#16324f"), spaceAfter=14))
-    styles.add(ParagraphStyle(name="Small", parent=styles["BodyText"], fontSize=8.5, leading=11))
-
-    def footer(canvas, document) -> None:
-        canvas.saveState()
-        canvas.setFont("Helvetica", 8)
-        canvas.setFillColor(colors.HexColor("#666666"))
-        canvas.drawString(0.65 * inch, 0.38 * inch, "ImageNet-R-50 persistent single-affine frontier")
-        canvas.drawRightString(7.85 * inch, 0.38 * inch, f"Page {document.page}")
-        canvas.restoreState()
-
-    document = SimpleDocTemplate(
-        str(temporary), pagesize=letter, rightMargin=0.55 * inch, leftMargin=0.55 * inch,
-        topMargin=0.55 * inch, bottomMargin=0.6 * inch,
-        title="ImageNet-R-50 persistent single-affine frontier",
-        author="APM continual-learning experiment",
+    selected = tuple(
+        row
+        for row in stage_rows
+        if int(row["stage"]) in {1, 2, 4, 8, 16, 31, 32, 50}
     )
-    story = [
-        Paragraph("ImageNet-R-50 persistent single-affine frontier", styles["TitleCenter"]),
-        Paragraph("Full 50-task extension of the H=4,096 and H=8,192 adaptive-LoRA conditions", styles["Heading2"]),
-        Paragraph(_interpretation(summaries), styles["BodyText"]),
-        Spacer(1, 8),
-        Image(str(images[0]), width=7.25 * inch, height=3.75 * inch),
-        Spacer(1, 6),
-        Paragraph(
-            "Condition names are identical across figures and tables. The adaptive curves use only one affine layer over node-specific pre-classifier vectors. The black control is fresh rank-16 joint IID at each prefix. The green control uses rank 16 times the number of live nodes.",
-            styles["Small"],
-        ),
-        PageBreak(),
-        Paragraph("Selected stages", styles["Heading1"]),
-    ]
-    selected = [row for row in stage_rows if int(row["stage"]) in {1, 2, 4, 8, 16, 31, 32, 50}]
-    table_data = [["Stage", "Nodes", "H=4,096", "H=8,192", "Joint r16", "Rank-matched", "Rank"]] + [
-        [
-            str(row["stage"]), str(row["live_nodes"]), f"{row['persistent_affine_h4096_accuracy']:.2f}%",
-            f"{row['persistent_affine_h8192_accuracy']:.2f}%", f"{row['stage_matched_joint_rank16_accuracy']:.2f}%",
-            f"{row['rank_matched_joint_accuracy']:.2f}%", str(row["rank_matched_joint_rank"]),
-        ]
-        for row in selected
-    ]
-    table = Table(table_data, colWidths=[0.55 * inch, 0.55 * inch, 0.9 * inch, 0.9 * inch, 0.9 * inch, 1.05 * inch, 0.55 * inch], repeatRows=1)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#16324f")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#b8c2cc")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f2f5f7")]),
-        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-    ]))
-    story.extend([
-        table,
-        Spacer(1, 10),
-        Image(str(images[1]), width=7.25 * inch, height=4.53 * inch),
-        Paragraph("Positive gap means the persistent frontier is ahead of the named joint-IID reference. Power-of-two stages have one node; fragmented stages have two or more.", styles["Small"]),
-        PageBreak(),
-        Paragraph("Likelihood and protocol", styles["Heading1"]),
-        Image(str(images[2]), width=7.25 * inch, height=3.43 * inch),
-        Paragraph(
-            "Rank-16 source artifacts retained hard predictions rather than logits, so rank-matched NLL is absent at stages 1, 2, 4, 8, 16, and 32. Accuracy remains available at all 50 stages.",
-            styles["Small"],
-        ),
-        Spacer(1, 12),
-        Paragraph("Exact online update rule", styles["Heading2"]),
-        Paragraph(
-            "Every arrival uses all current-task images plus a deterministic stage-keyed class-stratified historical draw. H=4,096 receives four passes and H=8,192 receives five. AdamW state and affine parameters carry forward. A node adapter and its optimizer moments carry only if the immutable hierarchy-node hash survives. New leaves and consolidation parents start from their authenticated source adapter. The base ViT and local classifiers never train.",
-            styles["BodyText"],
-        ),
-        Spacer(1, 8),
-        Paragraph("Comparison boundary", styles["Heading2"]),
-        Paragraph(
-            "Stage-matched joint IID trains one fresh rank-16 adapter for five epochs on every complete prefix. Aggregate-rank-matched joint IID instead uses rank and alpha equal to 16 times popcount(stage). It matches total live LoRA rank, but not the frontier's pretrained initialization, multiple ViT paths, affine-head parameter count, or deployment compute. Neither curve gates execution.",
-            styles["BodyText"],
-        ),
-        Spacer(1, 8),
-        Paragraph("Provenance", styles["Heading2"]),
-        Paragraph(
-            f"Protocol {result['protocol_hash']}<br/>Result {result['content_hash']}<br/>Source hierarchy unchanged: {result['hierarchy_source_unchanged']}",
-            styles["Small"],
-        ),
-    ])
-    document.build(story, onFirstPage=footer, onLaterPages=footer)
+    with PdfPages(
+        temporary,
+        metadata={
+            "Title": "ImageNet-R-50 persistent single-affine frontier",
+            "Author": "APM continual-learning experiment",
+            "Subject": "Full 50-task adaptive-LoRA single-affine experiment",
+        },
+    ) as document:
+        first = plt.figure(figsize=(8.5, 11), facecolor="white")
+        first.text(
+            0.5,
+            0.95,
+            "ImageNet-R-50 persistent single-affine frontier",
+            fontsize=17,
+            weight="bold",
+            color="#16324f",
+            horizontalalignment="center",
+        )
+        first.text(
+            0.5,
+            0.915,
+            "Full 50-task extension of the H=4,096 and H=8,192 adaptive-LoRA conditions",
+            fontsize=11.5,
+            horizontalalignment="center",
+        )
+        first.text(
+            0.06,
+            0.865,
+            wrapped(_interpretation(summaries), 90),
+            fontsize=10.2,
+            va="top",
+        )
+        image_axis(first, images[0], (0.055, 0.30, 0.89, 0.46))
+        first.text(
+            0.06,
+            0.265,
+            wrapped(
+            "The adaptive curves use only one affine layer over node-specific pre-classifier vectors. Their dotted true-node curves are label-aware diagnostics, not deployable conditions. The black control is fresh rank-16 joint IID at each prefix. The green control uses rank 16 times the number of live nodes."
+            ),
+            fontsize=9.2,
+            va="top",
+            color="#40464d",
+        )
+        footer(first, 1)
+        document.savefig(first)
+        plt.close(first)
+
+        second = plt.figure(figsize=(8.5, 11), facecolor="white")
+        second.text(0.06, 0.95, "Selected stages and control gaps", fontsize=17, weight="bold", color="#16324f")
+        table_axis = second.add_axes((0.055, 0.67, 0.89, 0.22))
+        table_axis.axis("off")
+        table = table_axis.table(
+            cellText=[
+                [
+                    row["stage"], row["live_nodes"],
+                    f"{row['persistent_affine_h4096_accuracy']:.2f}%",
+                    f"{row['persistent_affine_h8192_accuracy']:.2f}%",
+                    f"{row['h4096_true_node_oracle_accuracy']:.2f}%",
+                    f"{row['h8192_true_node_oracle_accuracy']:.2f}%",
+                    f"{row['stage_matched_joint_rank16_accuracy']:.2f}%",
+                    f"{row['rank_matched_joint_accuracy']:.2f}%",
+                    row["rank_matched_joint_rank"],
+                ]
+                for row in selected
+            ],
+            colLabels=(
+                "Stage", "Nodes", "H=4,096", "H=8,192", "H4 oracle",
+                "H8 oracle", "Joint r16", "Rank-matched", "Rank",
+            ),
+            cellLoc="center",
+            loc="center",
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(7.2)
+        table.scale(1.0, 1.45)
+        for (row, _column), cell in table.get_celld().items():
+            cell.set_edgecolor("#b8c2cc")
+            if row == 0:
+                cell.set_facecolor("#16324f")
+                cell.get_text().set_color("white")
+                cell.get_text().set_weight("bold")
+            elif row % 2 == 0:
+                cell.set_facecolor("#f2f5f7")
+        image_axis(second, images[1], (0.055, 0.12, 0.89, 0.51))
+        second.text(
+            0.06,
+            0.09,
+            wrapped(
+                "Positive gap means the persistent frontier is ahead of the named joint-IID reference. Power-of-two stages have one node; fragmented stages have two or more.",
+                105,
+            ),
+            fontsize=8.8,
+            color="#40464d",
+            va="top",
+        )
+        footer(second, 2)
+        document.savefig(second)
+        plt.close(second)
+
+        third = plt.figure(figsize=(8.5, 11), facecolor="white")
+        third.text(0.06, 0.95, "Likelihood and protocol", fontsize=17, weight="bold", color="#16324f")
+        image_axis(third, images[2], (0.055, 0.51, 0.89, 0.38))
+        third.text(
+            0.06,
+            0.49,
+            wrapped(
+                "Rank-16 source artifacts retained hard predictions rather than logits, so rank-matched NLL is absent at stages 1, 2, 4, 8, 16, and 32. Accuracy remains available at all 50 stages."
+            ),
+            fontsize=8.8,
+            va="top",
+            color="#40464d",
+        )
+        third.text(
+            0.06,
+            0.415,
+            "Exact online update rule",
+            fontsize=12,
+            weight="bold",
+            color="#16324f",
+        )
+        third.text(
+            0.06,
+            0.39,
+            wrapped(
+                "Every arrival uses all current-task images plus a deterministic stage-keyed class-stratified historical draw. H=4,096 receives four passes and H=8,192 receives five. AdamW state and affine parameters carry forward. A node adapter and its moments carry only if its hierarchy-node hash survives; new leaves and consolidation parents start from authenticated source adapters. The base ViT and local classifiers never train.",
+                105,
+            ),
+            fontsize=9.1,
+            va="top",
+        )
+        third.text(
+            0.06,
+            0.275,
+            "Comparison boundary",
+            fontsize=12,
+            weight="bold",
+            color="#16324f",
+        )
+        third.text(
+            0.06,
+            0.25,
+            wrapped(
+                "Stage-matched joint IID trains one fresh rank-16 adapter for five epochs on every prefix. Aggregate-rank-matched joint IID uses rank and alpha equal to 16 times popcount(stage). It matches total live LoRA rank, but not pretrained node state, multiple ViT paths, affine-head parameters, or deployment compute. Neither curve gates execution.",
+                105,
+            ),
+            fontsize=9.1,
+            va="top",
+        )
+        third.text(
+            0.06,
+            0.145,
+            "Provenance",
+            fontsize=12,
+            weight="bold",
+            color="#16324f",
+        )
+        third.text(
+            0.06,
+            0.12,
+            f"Protocol {result['protocol_hash']}\nResult {result['content_hash']}\nSource hierarchy unchanged: {result['hierarchy_source_unchanged']}",
+            fontsize=7.7,
+            va="top",
+            family="monospace",
+        )
+        footer(third, 3)
+        document.savefig(third)
+        plt.close(third)
     os.replace(temporary, output)
 
 
@@ -506,6 +643,8 @@ def write_persistent_affine_report(run: str | Path) -> Path:
 __all__ = [
     "LABEL_H4096",
     "LABEL_H8192",
+    "LABEL_ORACLE_H4096",
+    "LABEL_ORACLE_H8192",
     "LABEL_RANK_JOINT",
     "LABEL_STAGE_JOINT",
     "write_persistent_affine_report",

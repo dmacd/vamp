@@ -21,6 +21,8 @@ from apm.continual.vision.imagenetr.persistent_affine_model import (
 from apm.continual.vision.imagenetr.persistent_affine_reporting import (
     LABEL_H4096,
     LABEL_H8192,
+    LABEL_ORACLE_H4096,
+    LABEL_ORACLE_H8192,
     LABEL_RANK_JOINT,
     LABEL_STAGE_JOINT,
     _series,
@@ -68,6 +70,15 @@ def test_config_freezes_only_the_two_persistent_affine_arms() -> None:
     assert config.train_frontier_loras
     assert not config.train_node_classifiers
     assert config.joint_rank_policy == "source_rank_times_live_nodes"
+    assert (
+        config.joint_epochs,
+        config.joint_batch_size,
+        config.joint_optimizer,
+        config.joint_momentum,
+        config.joint_weight_decay,
+        config.joint_lora_learning_rate,
+        config.joint_head_learning_rate,
+    ) == (5, 64, "sgd", 0.9, 0.0005, 0.0005, 0.01)
     assert file_sha256(config.source_config) == config.source_config_sha256
     with pytest.raises(ValueError, match="persistent affine protocol"):
         replace(config, integrator_kind="macro_token")
@@ -153,6 +164,8 @@ def test_protocol_material_surface_excludes_reporting_and_macro_modules() -> Non
         "persistent_affine_workflow.py",
         "imagenetr50_logt_persistent_affine_protocol.md",
         "run_persistent_affine_local.sh",
+        "frontier_adaptation_training.py",
+        "primary.yaml",
     } <= names
     assert "persistent_affine_reporting.py" not in names
     assert not any("macro_token" in name for name in names)
@@ -185,7 +198,9 @@ def test_report_uses_one_set_of_exact_condition_names() -> None:
         LABEL_H8192,
         LABEL_STAGE_JOINT,
         LABEL_RANK_JOINT,
+        LABEL_ORACLE_H4096,
+        LABEL_ORACLE_H8192,
     )
-    assert len(_summary_rows(result)) == 4
+    assert len(_summary_rows(result)) == 6
     assert len(_stage_rows(result)) == 50
     assert "macro" not in " ".join(_series(result)).lower()

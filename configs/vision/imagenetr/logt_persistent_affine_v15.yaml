@@ -62,6 +62,12 @@ joint_control:
   rank_per_live_node: 16
   alpha_policy: equal_rank
   epochs: 5
+  batch_size: 64
+  optimizer: sgd
+  momentum: 0.9
+  weight_decay: 5.0e-4
+  lora_learning_rate: 5.0e-4
+  head_learning_rate: 1.0e-2
 
 runtime:
   evaluation_batch_size: 64

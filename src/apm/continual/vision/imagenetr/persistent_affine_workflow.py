@@ -178,23 +178,37 @@ def _material_paths(project_root: Path, config_path: Path) -> tuple[Path, ...]:
     package = project_root / "src/apm/continual/vision/imagenetr"
     return (
         config_path,
+        project_root / "configs/vision/imagenetr/primary.yaml",
         project_root / "docs/imagenetr50_logt_persistent_affine_protocol.md",
         project_root / "scripts/vision/imagenetr/run_persistent_affine_local.sh",
         project_root / "src/apm/continual/artifacts.py",
         *(package / name for name in (
             "artifacts.py",
+            "behavior_replay_workflow.py",
             "checkpoints.py",
+            "config.py",
             "data.py",
+            "frontier_adaptation_training.py",
             "heads.py",
+            "integrator_artifacts.py",
             "integrator_bank.py",
+            "integrator_config.py",
             "integrator_hierarchy.py",
             "integrator_observations.py",
+            "integrator_workflow.py",
             "lora.py",
+            "manifests.py",
             "model.py",
+            "parent_recipe_factorial.py",
             "persistent_affine_config.py",
             "persistent_affine_model.py",
             "persistent_affine_training.py",
             "persistent_affine_workflow.py",
+            "promoted_integrator_config.py",
+            "promoted_integrator_workflow.py",
+            "protocol.py",
+            "router_artifacts.py",
+            "stage_matched_joint.py",
             "training.py",
         )),
         package / "merging/common.py",
@@ -291,6 +305,37 @@ def bootstrap_persistent_affine(
             environment_manifest=load_canonical_json(source_store.run / "protocol/environment_manifest.json"),
         ),
     )
+    stored_resolved = load_canonical_json(source_store.run / "config_resolved.json")
+    current_runtime = source.integrator.config.as_record()
+    primary = source.integrator.primary_config
+    joint = primary.joint_training
+    expected_joint = (
+        config.joint_epochs,
+        config.joint_batch_size,
+        config.joint_momentum,
+        config.joint_weight_decay,
+        config.joint_lora_learning_rate,
+        config.joint_head_learning_rate,
+    )
+    observed_joint = (
+        joint.epochs,
+        joint.batch_size,
+        joint.momentum,
+        joint.weight_decay,
+        joint.lora_lr,
+        joint.head_lr,
+    )
+    if (
+        record_sha256(current_runtime)
+        != record_sha256(
+            {key: stored_resolved.get(key) for key in current_runtime}
+        )
+        or primary.lora_rank != config.source_rank
+        or primary.lora_alpha != config.source_alpha
+        or primary.lora_dropout != 0.0
+        or observed_joint != expected_joint
+    ):
+        raise ValueError("live source or joint-IID recipe differs from its frozen values")
     hierarchy_path = (
         source_store.run
         / "hierarchies"
@@ -597,7 +642,11 @@ def _run_affine_arm(
     completed = {int(row["stage"]): row for row in stage_ledger.rows}
     for stage, row in completed.items():
         stored = _load_affine_stage(bootstrap, capacity, stage)
-        if stored is None or stored["stage_artifact_sha256"] != row["stage_artifact_sha256"]:
+        if (
+            stored is None
+            or stored["stage_artifact_sha256"] != row["stage_artifact_sha256"]
+            or stored["content_hash"] != row.get("content_hash")
+        ):
             raise ValueError("affine stage ledger refers to changed model evidence")
     # Repair a crash after immutable publication but before the ledger append.
     for stage in range(1, bootstrap.config.tasks + 1):
@@ -850,6 +899,7 @@ def _run_rank_matched_joint(
                 stored is None
                 or stored["stage_artifact_sha256"]
                 != row.get("stage_artifact_sha256")
+                or stored["content_hash"] != row.get("content_hash")
             ):
                 raise ValueError("rank-matched ledger refers to changed model evidence")
     new_steps = new_stages = 0

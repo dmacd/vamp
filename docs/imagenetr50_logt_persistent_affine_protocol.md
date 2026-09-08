@@ -52,11 +52,13 @@ epochs on all training images seen so far. It is imported byte-for-byte from
 the authenticated promoted run.
 
 The new aggregate-rank-matched joint-IID curve uses the same data, five-epoch
-SGD recipe, initialization seeds, augmentation, and evaluation, but sets rank
-and alpha to `16 * popcount(stage)`. This matches the sum of live frontier LoRA
-ranks, not the affine head's parameters, the frontier's pretrained state, or
-its multiple ViT forward paths. At one-node stages it is exactly the existing
-rank-16 stage-matched condition and is reused rather than retrained.
+SGD recipe, initialization seeds, augmentation, and evaluation: batch 64,
+momentum 0.9, weight decay 5e-4, LoRA learning rate 5e-4, and head learning
+rate 1e-2. It sets rank and alpha to `16 * popcount(stage)`. This matches the
+sum of live frontier LoRA ranks, not the affine head's parameters, the
+frontier's pretrained state, or its multiple ViT forward paths. At one-node
+stages it is exactly the existing rank-16 stage-matched condition and is
+reused rather than retrained.
 
 Both controls are scientific references, never execution gates. The fixed
 test prefix is evaluated only after each stage's training state is sealed; no
