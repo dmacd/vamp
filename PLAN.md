@@ -13,6 +13,36 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## Active Experiment - ImageNet-R Full-Stream Persistent Single-Affine Frontier
+
+- The v15 implementation is complete and ready for the full local RTX 4090
+  run. It promotes only the simplified single-affine, adaptive-frontier-LoRA
+  architecture at H=4,096 and H=8,192; no macro-token model, token features,
+  local-score inputs, metadata fields, hidden layers, or label-aware routing
+  participate in its predictions.
+- At each of 50 arrivals, both arms use all current-task training images plus a
+  deterministic stage-keyed class-stratified redraw of at most H historical
+  images. The H=4,096 arm trains four epochs per arrival and H=8,192 trains
+  five, preserving the stage-31 minimum-NLL budgets and their original
+  50-epoch warmup-cosine trajectory.
+- Live rank-16 node LoRAs, affine input blocks, biases, and named AdamW moments
+  carry when their exact hierarchy-node hashes survive. New leaves and nodes
+  created by a binary-counter consolidation enter from the authenticated
+  source hierarchy. The base ViT and local classifiers never train.
+- Comparisons are the already-sealed fresh rank-16 joint-IID curve and a new
+  fresh aggregate-rank curve with rank and alpha `16 * popcount(stage)`. These
+  are descriptive references, not gates. Test prefixes are opened only after
+  each online stage is sealed.
+- Seven focused tests pass. The real BF16 preflight verifies 98 finite gradient
+  tensors, exact adapter carry, the expected `[1,1,2,1,2,2,3,1]` early
+  frontier sizes, zero split overlap, and exact-union logits within 1.53e-5.
+  A four-epoch stage-1 training smoke reaches 97.458% on its 118-image test
+  prefix with 4.19 GB peak allocated VRAM.
+- Next: commit and push the implementation, execute/resume both 50-stage arms
+  and the aggregate-rank joint curve, prove a second invocation performs zero
+  optimizer steps, generate and visually inspect the PDF, run focused and
+  repository regressions, then commit and push the compact scientific record.
+
 ## Completed Outcome - ImageNet-R Stage-31 Matched-H Architecture Replay Sweep
 
 - **The matched-H architecture sweep completed on 2026-09-06.** Aggregate

@@ -888,6 +888,47 @@ the two 50-epoch frontier fits achieve under the same checkpoint rule. Reports
 must keep these views separate and use the same architecture names, H colors,
 and endpoint language in figures and tables.
 
+### Persistent single-affine full-stream successor
+
+The full-stream successor promotes only the single-affine architecture. At
+stage `t`, every live binary-counter node runs the pinned ViT through its own
+rank-16 LoRA and returns its final 768-value pre-classifier vector. Vectors are
+concatenated in ascending hierarchy-level order and one dynamically sized
+affine map produces 200 logits, with unseen classes masked. This path imports
+no macro-token architecture and consumes no patch tokens, score features,
+metadata, task identifiers, labels, hidden layers, nonlinearities, or dropout.
+
+Online state follows semantic node identity rather than a tensor position. If
+a node hash survives an arrival, its adapted LoRA, affine input block, and
+named AdamW moments carry exactly even when its slot position changes. Old
+class biases also carry. A newly arrived leaf or a replacement parent created
+by LogT consolidation takes the adapter and classifier rows from its immutable
+source node; the new affine block starts as those exact local rows with zero
+cross-node weights. Retired-node parameters and moments disappear. The affine
+map itself therefore evolves continuously across ordinary arrivals while the
+part of the representation replaced by a carry is deliberately reset to the
+separately trained consolidation model.
+
+Each arrival retains all current-task rows and redraws at most H historical
+training identities with a deterministic namespace containing stage and seed.
+The draw is class-stratified, exact-resume stable, and different across stages;
+loss weights examples uniformly. H=4,096 takes four epochs and H=8,192 takes
+five. Both use the corresponding prefix of the frozen 50-epoch warmup-cosine
+schedule from the stage-31 sweep, resetting schedule position at each arrival
+while carrying optimizer moments. This keeps cumulative work O(T log T) for
+fixed H and fixed examples per task, with live-node model paths counted
+explicitly rather than treating one frontier example as one ViT forward.
+
+The rank-16 stage-matched joint-IID curve is imported byte-for-byte. The
+aggregate-rank comparison trains a fresh joint model at every prefix with rank
+and alpha `16 * popcount(t)`, using the original five-epoch joint-IID SGD
+recipe. One-node stages reuse the identical rank-16 artifacts. This control
+matches total live LoRA rank only: it does not match pretrained node state,
+the persistent affine map, multiple ViT paths, or deployment compute. Neither
+joint curve is a gate. All choices are frozen before post-stage test access,
+and a completed second invocation must authenticate every stage and perform
+zero new optimizer steps.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under
