@@ -224,6 +224,18 @@ def _transplant_affine_weight_state(
     return output
 
 
+def _transplant_affine_bias_state(
+    old: Tensor, old_class_ids: Sequence[int], parameter: nn.Parameter
+) -> Tensor:
+    """Move retained affine-bias moments from their CPU checkpoint safely."""
+    output = torch.zeros_like(parameter)
+    if old_class_ids:
+        source_indices = torch.tensor(old_class_ids, dtype=torch.int64)
+        target_indices = source_indices.to(parameter.device)
+        output.index_copy_(0, target_indices, old[source_indices].to(output))
+    return output
+
+
 def restore_named_optimizer_state(
     optimizer: torch.optim.AdamW,
     model: PersistentAffineFrontier,
@@ -258,11 +270,9 @@ def restore_named_optimizer_state(
                 and isinstance(value, Tensor)
                 and value.ndim == 1
             ):
-                copied = torch.zeros_like(parameter)
-                if old_seen:
-                    indices = torch.tensor(old_seen, dtype=torch.int64, device=parameter.device)
-                    copied[indices] = value[indices].to(copied)
-                state[key] = copied
+                state[key] = _transplant_affine_bias_state(
+                    value, old_seen, parameter
+                )
             else:
                 if isinstance(value, Tensor) and value.ndim > 0 and value.shape != parameter.shape:
                     raise ValueError("named optimizer tensor shape changed unexpectedly")

@@ -28,6 +28,7 @@ from apm.continual.vision.imagenetr.persistent_affine_reporting import (
     _summary_rows,
 )
 from apm.continual.vision.imagenetr.persistent_affine_training import (
+    _transplant_affine_bias_state,
     _transplant_affine_weight_state,
     rotating_replay_population,
 )
@@ -116,6 +117,13 @@ def test_affine_optimizer_moments_follow_node_hashes_not_positions() -> None:
     torch.testing.assert_close(transplanted[:, :768], torch.full((200, 768), 2.0))
     assert int(torch.count_nonzero(transplanted[:, 768:1536])) == 0
     torch.testing.assert_close(transplanted[:, 1536:], torch.full((200, 768), 1.0))
+    bias = _transplant_affine_bias_state(
+        torch.arange(200, dtype=torch.float32),
+        (0, 3, 17),
+        nn.Parameter(torch.empty(200)),
+    )
+    assert bias[[0, 3, 17]].tolist() == [0.0, 3.0, 17.0]
+    assert int(torch.count_nonzero(bias)) == 2
 
 
 def test_parameter_free_diagnostics_have_explicit_label_boundary() -> None:

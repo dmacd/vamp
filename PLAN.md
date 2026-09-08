@@ -37,7 +37,10 @@
   tensors, exact adapter carry, the expected `[1,1,2,1,2,2,3,1]` early
   frontier sizes, zero split overlap, and exact-union logits within 1.53e-5.
   A four-epoch stage-1 training smoke reaches 97.458% on its 118-image test
-  prefix with 4.19 GB peak allocated VRAM.
+  prefix with 4.19 GB peak allocated VRAM. The first full-run launch exposed a
+  CPU-to-CUDA affine-bias optimizer-moment indexing error at the stage-1-to-2
+  boundary; the device-safe transplant and its regression test are now in
+  place, and no stage-2 optimization occurred in that failed namespace.
 - Next: commit and push the implementation, execute/resume both 50-stage arms
   and the aggregate-rank joint curve, prove a second invocation performs zero
   optimizer steps, generate and visually inspect the PDF, run focused and
