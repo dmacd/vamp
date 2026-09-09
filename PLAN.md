@@ -13,32 +13,65 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
-## Active - ImageNet-R Persistent Two-Layer MLP, H=4,096
+## Completed Outcome - ImageNet-R Persistent Two-Layer MLP, H=4,096
 
-- Add one condition to the existing 50-task report: node-specific final ViT
-  latents of width `768 * live_nodes`, a fixed 1,024-unit ReLU hidden layer,
-  and 200 output logits. No macro tokens, metadata, additional latent layers,
-  normalization, dropout, or affine skip path are added.
-- Match the completed H=4,096 arm's replay membership, four-epoch schedule,
-  batch size, optimizer settings, and node-LoRA carry/reset rules. Initialize
-  the dense MLP as the exact signed-ReLU factorization of the source classifier
-  union, with additional random hidden projections initially zero at the
-  output. Surviving first-layer input blocks, shared MLP coordinates, and
-  named AdamW moments carry; replacement nodes load sealed source adapters.
-- Shared head persistence and authenticated source reuse are implemented; all
-  **130** ImageNet-R tests pass. The RTX 4090 preflight verifies union error
-  **1.1444e-5**, 100 finite gradient tensors, exact adapter carry, exact
-  checkpoint/AdamW restoration, zero split overlap, and the correct eight-stage
-  topology. Peak preflight allocation is 4.62 GB. Protocol/run
+- **All 50 stages completed on 2026-09-08 local time**, in 94.83 minutes on
+  the RTX 4090 at reduced CPU priority. Protocol/run
   `bb991cf93bd05d74a92d796735768c67e1f2e9b78e5b40e1c2ee314b29594fd6`
-  is running the single 50-stage arm at reduced CPU priority. The implementation
-  was committed and pushed as `edc21a3` before the full run.
-- Next, complete the run while preserving the existing H=8,192 and both
-  joint-IID curves unchanged, then integrate accuracy, NLL, true-node
-  diagnostics, and cumulative resource accounting into the same report and
-  figures. Report projections and authentication tests are implemented; an
-  eight-page layout fixture has been rendered without publishing synthetic
-  values. The new arm's full-stream scientific outcome is still pending.
+  seals result
+  `e86a99f4ead8eb40be436a88b6dd927ef6732a64c02c78077dce32ffea2aaf8f`.
+  The implementation was committed and pushed as `edc21a3` before training.
+  A fresh process completed in 10.62 seconds with zero new optimizer work,
+  unchanged stage results, and unchanged source hierarchy. No H=8,192 MLP
+  condition was run; both original affine arms and both joint curves are reused.
+- The new head is `Linear(768 * live_nodes, 1024) -> ReLU -> Linear(1024, 200)`.
+  Every input comes from its node's own base ViT plus trainable rank-16 LoRA.
+  There are no macro tokens, metadata, additional latent layers, normalization,
+  dropout, or skip connections. At five nodes the head has 4,138,184 parameters,
+  versus 768,200 for affine, in addition to the same 6,635,520 LoRA parameters.
+  Signed-ReLU initialization reproduces the source union. Surviving input blocks,
+  shared MLP state, and named AdamW moments carry; replacement node adapters
+  load sealed source state. The shared output layer is not reset at consolidation.
+- Every stage exactly matches affine H=4,096 in replay identities, four epochs,
+  batch size, augmentation/order seeds, optimizer settings, and node-LoRA
+  carry/reset boundaries. The 200 epoch records have finite loss and gradient
+  norms. The GPU preflight verifies union error **1.1444e-5**, 100 finite gradient
+  tensors, exact adapter/checkpoint/AdamW restoration, zero split overlap, and
+  the correct early topology; peak preflight allocation is 4.62 GB.
+- The larger head does **not materially close the remaining gap under this
+  recipe**. Final accuracy is **76.100% / 1.1945 NLL**, versus affine H=4,096's
+  **75.867% / 1.2151**: +0.233 accuracy point and -0.0206 NLL. Mean accuracy
+  across all 50 stages is **82.416%**, versus **82.434%** for affine; over the
+  44 fragmented stages the MLP change is **-0.061 point**. The unchanged final
+  joint references reach **78.867%** at rank 16 and **79.767% / 0.8795 NLL**
+  at rank 48. The rank-16 source did not retain NLL.
+- At the five-node stage 31, MLP reaches **77.909% / 1.0912 NLL**, versus
+  affine's **77.516% / 1.0907**; its true-node diagnostic is **85.823%**.
+  At stage 32, after consolidation, MLP reaches **79.229% / 0.9647**, versus
+  **78.694% / 0.9811**. Its final true-node diagnostic remains **81.650%**.
+  Averaged over the two five-node stages, the diagnostic gap falls only from
+  7.368 to 6.919 points. This label-aware diagnostic also changes the classifier,
+  so it is not a pure routing test or a strict upper bound on the MLP.
+- MLP recorded training cost is **107.19 minutes**, including the same
+  **21.33-minute** source hierarchy, versus **104.23** for affine H=4,096.
+  Both use exactly **3,050,765 ordinary forward/backward image pairs**, plus
+  **2,385,440 checkpoint recomputation invocations**. The fixed 1,024-unit hidden
+  width preserves the conditional O(T log T) training bound; repeated testing
+  and history-scanning costs retain the larger bounds documented below.
+- All **132 ImageNet-R tests pass** in one pytest process. All five report-table
+  families agree across CSV, JSON, and Parquet after alignment by column name.
+  The existing report now includes the MLP accuracy/NLL/oracle curves, 200
+  stage/condition resource rows, matched comparison tables, and shared node
+  lifetimes. All eight PDF pages were rendered and inspected; final PDF SHA-256
+  is `0546776a67023f313c16d7a14f4c53e4b866fac57828a1f894c3ad91575b83c3`.
+  Compact results, protocol records, epoch/stage logs, and figures are retained
+  for analysis; raw weights and optimizer checkpoints stay local.
+- Next, do not treat additional head capacity alone as the missing ingredient.
+  This is one seed and one fixed optimization budget, not a convergence study.
+  A held-out fragmented-frontier comparison should separate optimization,
+  class weighting/calibration, and classifier quality before choosing another
+  full-stream architecture. Retain the affine condition as the simpler reference;
+  neither joint curve is an execution gate.
 
 ## Completed Outcome - ImageNet-R Full-Stream Persistent Single-Affine Frontier
 
@@ -107,8 +140,8 @@
   and integration slices also returned cleanly. The top-level repository
   slice retained exactly 31 optional-environment failures:
   eight require `fabricpc` and 23 require `tokenizers`; no ImageNet-R test
-  fails. The seven-page PDF and every figure were rendered and inspected, and
-  the final report manifest records PDF SHA-256
+  fails. Its pre-MLP seven-page PDF and every figure were rendered and inspected;
+  that report version recorded PDF SHA-256
   `db01980c2ce55a9e1b0284aefedc491b484d1b6aa9cfd3ba577c9692c22a680c`.
 - Next, replicate the persistent arms across seeds before treating their small
   H difference as stable. For the architecture, target fragmented frontiers:

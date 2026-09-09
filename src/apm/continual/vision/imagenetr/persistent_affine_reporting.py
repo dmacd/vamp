@@ -604,7 +604,7 @@ def _resource_explanation(
             "counts are reconstructed from completed image-presentation counters and actual live-node counts. "
             "Recomputation is one additional forward invocation per image/node under activation checkpointing; it can stop "
             "early. These are path counts, not profiled FLOPs or equal-cost forward/backward operations. "
-            "The affine head, optimizer, and differing LoRA ranks also affect wall time.",
+            "The dense head (affine or MLP), optimizer, and differing LoRA ranks also affect wall time.",
         ),
         (
             "Wall-time and reuse",
@@ -612,7 +612,7 @@ def _resource_explanation(
             "those timers. They exclude setup, artifact validation, inter-job overhead, and evaluation. Source "
             "training is charged when its subtree becomes available. The imported final rank-16 joint model "
             "is charged its original training cost; each reused reference is counted once within each condition. "
-            "These are alternative algorithm totals, not a sum of actual work in the v15 invocation.",
+            "These are alternative algorithm totals, not a sum of actual work across the experiment invocations.",
         ),
         (
             "Why ViT training is O(T log T)",
@@ -631,7 +631,7 @@ def _resource_explanation(
             f"is {joint['cumulative_evaluation_wall_seconds'] / 60:.2f} minutes; rank-matched test wall-time was not retained. "
             "Testing every growing prefix is O(T squared log T) for the frontier. The replay sampler also scans "
             "all earlier identities at each arrival, giving at least quadratic CPU bookkeeping. The O(T log T) claim "
-            "therefore applies to ViT training, not the whole runner. The affine output width is fixed at 200 here; "
+            "therefore applies to ViT training, not the whole runner. Both head architectures have 200 outputs here; "
             "unbounded class growth would require separate head-cost accounting." + mlp_evaluation,
         ),
         (
@@ -827,9 +827,9 @@ ordinary forwards. H4 subtotals add to the affine H=4,096 total; do not sum the 
 
 {resource_text}
 
-This report authenticates result `{result['content_hash']}` under protocol
+The original affine/joint comparison is result `{result['content_hash']}` under protocol
 `{result['protocol_hash']}`. Source hierarchy unchanged:
-`{result['hierarchy_source_unchanged']}`. New work in the completing invocation:
+`{result['hierarchy_source_unchanged']}`. Work in that original completing invocation:
 `{json.dumps(result['invocation_work'], sort_keys=True)}`.
 """
     path = reports / "REPORT.md"
@@ -898,10 +898,10 @@ code{{background:#eef2f5;padding:2px 4px}} .note{{color:#4b5563}}
 <p>M means million image-paths. Recompute is activation checkpointing, additional to ordinary forwards. H4 subtotals add to the affine H=4,096 total.</p>
 {resource_text}
 <h2>Provenance</h2>
-<p>Protocol <code>{escape(str(result['protocol_hash']))}</code><br>
+<p>Original affine/joint protocol <code>{escape(str(result['protocol_hash']))}</code><br>
 Result <code>{escape(str(result['content_hash']))}</code><br>
 Source hierarchy unchanged: <code>{result['hierarchy_source_unchanged']}</code><br>
-Completing-invocation work: <code>{escape(json.dumps(result['invocation_work'], sort_keys=True))}</code></p>
+Original completing-invocation work: <code>{escape(json.dumps(result['invocation_work'], sort_keys=True))}</code></p>
 </body></html>"""
     path = reports / "REPORT.html"
     atomic_write(path, html.encode("utf-8"))
@@ -1088,7 +1088,7 @@ def _write_pdf(
         third.text(
             0.06,
             0.145,
-            "Provenance",
+            "Original affine/joint provenance",
             fontsize=12,
             weight="bold",
             color="#16324f",

@@ -5,3 +5,5 @@ condition,final_accuracy,incremental_accuracy,fragmented_stage_accuracy,one_node
 Aggregate-rank-matched joint IID,79.76666666666667,82.7592534660875,82.30112245132291,86.1188809076945
 "True-node oracle for persistent H=4,096 (diagnostic)",81.83333333333333,86.1945486166369,85.78322188626251,89.21094463938239
 "True-node oracle for persistent H=8,192 (diagnostic)",80.68333333333334,85.94609956184951,85.4696643337743,89.43995790106773
+"Persistent two-layer MLP + adaptive node LoRAs, H=4,096",76.1,82.41593381254006,81.47050331263642,89.3490908118333
+"True-node oracle for persistent MLP H=4,096 (diagnostic)",81.65,86.03989242824474,85.60737433637907,89.21169176859314

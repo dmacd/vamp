@@ -1,0 +1,11 @@
+[phase 1/5] Authenticate the MLP recipe and immutable affine/joint comparisons
+Temporary/resumable artifact directory: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/persistent_mlp_v16/runs/bb991cf93bd05d74a92d796735768c67e1f2e9b78e5b40e1c2ee314b29594fd6
+[phase 2/5] Reuse all source nodes and check real MLP parity/carry/gradients
+overall MLP GPU work: 100%|██████████| 5.24M/5.24M [00:00<?, ?node-image/s][phase 3/5] Train the persistent two-layer MLP, H=4,096, across all 50 tasks
+
+persistent MLP H=4,096: 100%|██████████| 50/50 [00:00<?, ?task/s]persistent MLP H=4,096: 100%|██████████| 50/50 [00:00<?, ?task/s]
+overall MLP GPU work: 100%|██████████| 5.24M/5.24M [00:00<?, ?node-image/s]
+[phase 4/5] Demonstrate zero-step reuse of all 50 MLP stages
+[phase 5/5] Integrate the MLP condition into the existing report and figures
+Result: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/persistent_mlp_v16/runs/bb991cf93bd05d74a92d796735768c67e1f2e9b78e5b40e1c2ee314b29594fd6/evaluations/result.json
+Report: /home/daniel/projects/snet/rpa/output/pdf/imagenetr50_persistent_affine_v15_report.pdf

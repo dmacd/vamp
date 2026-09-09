@@ -1,0 +1,1061 @@
+[phase 1/5] Authenticate the MLP recipe and immutable affine/joint comparisons
+Temporary/resumable artifact directory: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/persistent_mlp_v16/runs/bb991cf93bd05d74a92d796735768c67e1f2e9b78e5b40e1c2ee314b29594fd6
+[phase 2/5] Reuse all source nodes and check real MLP parity/carry/gradients
+overall MLP GPU work:   0%|          | 0.00/5.24M [00:00<?, ?node-image/s][phase 3/5] Train the persistent two-layer MLP, H=4,096, across all 50 tasks
+
+persistent MLP H=4,096:   0%|          | 0/50 [00:00<?, ?task/s]
+
+integrator H=4,096 stage 01:   0%|          | 0/4 [00:00<?, ?epoch/s]
+
+integrator H=4,096 stage 01:   0%|          | 0/4 [00:02<?, ?epoch/s, acc=94.7, nll=0.165]
+
+integrator H=4,096 stage 01:  25%|██▌       | 1/4 [00:02<00:06,  2.08s/epoch, acc=94.7, nll=0.165]
+
+integrator H=4,096 stage 01:  25%|██▌       | 1/4 [00:03<00:06,  2.08s/epoch, acc=97.9, nll=0.078]
+
+integrator H=4,096 stage 01:  50%|█████     | 2/4 [00:03<00:03,  1.72s/epoch, acc=97.9, nll=0.078]
+
+integrator H=4,096 stage 01:  50%|█████     | 2/4 [00:04<00:03,  1.72s/epoch, acc=98.3, nll=0.070]
+
+integrator H=4,096 stage 01:  75%|███████▌  | 3/4 [00:04<00:01,  1.59s/epoch, acc=98.3, nll=0.070]
+
+integrator H=4,096 stage 01:  75%|███████▌  | 3/4 [00:06<00:01,  1.59s/epoch, acc=96.6, nll=0.171]
+
+integrator H=4,096 stage 01: 100%|██████████| 4/4 [00:06<00:00,  1.53s/epoch, acc=96.6, nll=0.171]integrator H=4,096 stage 01: 100%|██████████| 4/4 [00:06<00:00,  1.61s/epoch, acc=96.6, nll=0.171]
+overall MLP GPU work:   0%|          | 3.92k/5.24M [00:08<3:09:23, 461node-image/s]
+persistent MLP H=4,096:   0%|          | 0/50 [00:08<?, ?task/s, accuracy=98.31, live=1, nll=0.073]
+persistent MLP H=4,096:   2%|▏         | 1/50 [00:08<06:59,  8.57s/task, accuracy=98.31, live=1, nll=0.073]
+
+integrator H=4,096 stage 02:   0%|          | 0/4 [00:00<?, ?epoch/s]
+
+integrator H=4,096 stage 02:   0%|          | 0/4 [00:02<?, ?epoch/s, acc=93.2, nll=0.233]
+
+integrator H=4,096 stage 02:  25%|██▌       | 1/4 [00:02<00:08,  2.86s/epoch, acc=93.2, nll=0.233]
+
+integrator H=4,096 stage 02:  25%|██▌       | 1/4 [00:05<00:08,  2.86s/epoch, acc=94.1, nll=0.203]
+
+integrator H=4,096 stage 02:  50%|█████     | 2/4 [00:05<00:05,  2.76s/epoch, acc=94.1, nll=0.203]
+
+integrator H=4,096 stage 02:  50%|█████     | 2/4 [00:08<00:05,  2.76s/epoch, acc=95.0, nll=0.169]
+
+integrator H=4,096 stage 02:  75%|███████▌  | 3/4 [00:08<00:02,  2.68s/epoch, acc=95.0, nll=0.169]
+
+integrator H=4,096 stage 02:  75%|███████▌  | 3/4 [00:10<00:02,  2.68s/epoch, acc=96.8, nll=0.127]
+
+integrator H=4,096 stage 02: 100%|██████████| 4/4 [00:10<00:00,  2.68s/epoch, acc=96.8, nll=0.127]integrator H=4,096 stage 02: 100%|██████████| 4/4 [00:10<00:00,  2.71s/epoch, acc=96.8, nll=0.127]
+overall MLP GPU work:   0%|          | 12.1k/5.24M [00:21<2:30:25, 580node-image/s]
+persistent MLP H=4,096:   2%|▏         | 1/50 [00:21<06:59,  8.57s/task, accuracy=93.95, live=1, nll=0.257]
+persistent MLP H=4,096:   4%|▍         | 2/50 [00:21<08:52, 11.10s/task, accuracy=93.95, live=1, nll=0.257]
+
+integrator H=4,096 stage 03:   0%|          | 0/4 [00:00<?, ?epoch/s]
+
+integrator H=4,096 stage 03:   0%|          | 0/4 [00:07<?, ?epoch/s, acc=85.2, nll=0.586]
+
+integrator H=4,096 stage 03:  25%|██▌       | 1/4 [00:07<00:21,  7.33s/epoch, acc=85.2, nll=0.586]
+
+integrator H=4,096 stage 03:  25%|██▌       | 1/4 [00:14<00:21,  7.33s/epoch, acc=88.4, nll=0.381]
+
+integrator H=4,096 stage 03:  50%|█████     | 2/4 [00:14<00:14,  7.22s/epoch, acc=88.4, nll=0.381]overall MLP GPU work:   0%|          | 12.1k/5.24M [00:38<2:30:25, 580node-image/s]
+
+integrator H=4,096 stage 03:  50%|█████     | 2/4 [00:21<00:14,  7.22s/epoch, acc=91.0, nll=0.306]
+
+integrator H=4,096 stage 03:  75%|███████▌  | 3/4 [00:21<00:07,  7.20s/epoch, acc=91.0, nll=0.306]
+
+integrator H=4,096 stage 03:  75%|███████▌  | 3/4 [00:28<00:07,  7.20s/epoch, acc=92.0, nll=0.251]
+
+integrator H=4,096 stage 03: 100%|██████████| 4/4 [00:28<00:00,  7.25s/epoch, acc=92.0, nll=0.251]integrator H=4,096 stage 03: 100%|██████████| 4/4 [00:28<00:00,  7.24s/epoch, acc=92.0, nll=0.251]
+overall MLP GPU work:   1%|          | 38.1k/5.24M [00:53<1:57:42, 737node-image/s]
+persistent MLP H=4,096:   4%|▍         | 2/50 [00:53<08:52, 11.10s/task, accuracy=89.85, live=2, nll=0.385]
+persistent MLP H=4,096:   6%|▌         | 3/50 [00:53<16:20, 20.86s/task, accuracy=89.85, live=2, nll=0.385]
+
+integrator H=4,096 stage 04:   0%|          | 0/4 [00:00<?, ?epoch/s]
+
+integrator H=4,096 stage 04:   0%|          | 0/4 [00:05<?, ?epoch/s, acc=90.5, nll=0.331]
+
+integrator H=4,096 stage 04:  25%|██▌       | 1/4 [00:05<00:16,  5.58s/epoch, acc=90.5, nll=0.331]
+
+integrator H=4,096 stage 04:  25%|██▌       | 1/4 [00:11<00:16,  5.58s/epoch, acc=92.4, nll=0.261]
+
+integrator H=4,096 stage 04:  50%|█████     | 2/4 [00:11<00:11,  5.60s/epoch, acc=92.4, nll=0.261]overall MLP GPU work:   1%|          | 38.1k/5.24M [01:08<1:57:42, 737node-image/s]
+
+integrator H=4,096 stage 04:  50%|█████     | 2/4 [00:16<00:11,  5.60s/epoch, acc=91.7, nll=0.274]
+
+integrator H=4,096 stage 04:  75%|███████▌  | 3/4 [00:16<00:05,  5.61s/epoch, acc=91.7, nll=0.274]
+
+integrator H=4,096 stage 04:  75%|███████▌  | 3/4 [00:22<00:05,  5.61s/epoch, acc=93.5, nll=0.250]
+
+integrator H=4,096 stage 04: 100%|██████████| 4/4 [00:22<00:00,  5.62s/epoch, acc=93.5, nll=0.250]integrator H=4,096 stage 04: 100%|██████████| 4/4 [00:22<00:00,  5.61s/epoch, acc=93.5, nll=0.250]
+overall MLP GPU work:   1%|          | 56.9k/5.24M [01:18<1:55:52, 746node-image/s]
+persistent MLP H=4,096:   6%|▌         | 3/50 [01:18<16:20, 20.86s/task, accuracy=91.40, live=1, nll=0.297]
+persistent MLP H=4,096:   8%|▊         | 4/50 [01:18<17:11, 22.42s/task, accuracy=91.40, live=1, nll=0.297]
+
+integrator H=4,096 stage 05:   0%|          | 0/4 [00:00<?, ?epoch/s]
+
+integrator H=4,096 stage 05:   0%|          | 0/4 [00:12<?, ?epoch/s, acc=84.0, nll=0.648]
+
+integrator H=4,096 stage 05:  25%|██▌       | 1/4 [00:12<00:36, 12.19s/epoch, acc=84.0, nll=0.648]overall MLP GPU work:   1%|          | 56.9k/5.24M [01:38<1:55:52, 746node-image/s]
+
+integrator H=4,096 stage 05:  25%|██▌       | 1/4 [00:24<00:36, 12.19s/epoch, acc=91.8, nll=0.276]
+
+integrator H=4,096 stage 05:  50%|█████     | 2/4 [00:24<00:24, 12.21s/epoch, acc=91.8, nll=0.276]
+
+integrator H=4,096 stage 05:  50%|█████     | 2/4 [00:36<00:24, 12.21s/epoch, acc=92.9, nll=0.246]
+
+integrator H=4,096 stage 05:  75%|███████▌  | 3/4 [00:36<00:12, 12.36s/epoch, acc=92.9, nll=0.246]
+
+integrator H=4,096 stage 05:  75%|███████▌  | 3/4 [00:49<00:12, 12.36s/epoch, acc=93.1, nll=0.246]
+
+integrator H=4,096 stage 05: 100%|██████████| 4/4 [00:49<00:00, 12.39s/epoch, acc=93.1, nll=0.246]integrator H=4,096 stage 05: 100%|██████████| 4/4 [00:49<00:00, 12.34s/epoch, acc=93.1, nll=0.246]
+overall MLP GPU work:   2%|▏         | 103k/5.24M [02:12<1:45:20, 813node-image/s]
+persistent MLP H=4,096:   8%|▊         | 4/50 [02:12<17:11, 22.42s/task, accuracy=91.26, live=2, nll=0.315]
+persistent MLP H=4,096:  10%|█         | 5/50 [02:12<25:12, 33.60s/task, accuracy=91.26, live=2, nll=0.315]
+
+integrator H=4,096 stage 06:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:   2%|▏         | 103k/5.24M [02:28<1:45:20, 813node-image/s]
+
+integrator H=4,096 stage 06:   0%|          | 0/4 [00:14<?, ?epoch/s, acc=89.4, nll=0.379]
+
+integrator H=4,096 stage 06:  25%|██▌       | 1/4 [00:14<00:44, 14.76s/epoch, acc=89.4, nll=0.379]
+
+integrator H=4,096 stage 06:  25%|██▌       | 1/4 [00:29<00:44, 14.76s/epoch, acc=90.8, nll=0.315]
+
+integrator H=4,096 stage 06:  50%|█████     | 2/4 [00:29<00:29, 14.60s/epoch, acc=90.8, nll=0.315]
+
+integrator H=4,096 stage 06:  50%|█████     | 2/4 [00:43<00:29, 14.60s/epoch, acc=92.4, nll=0.276]
+
+integrator H=4,096 stage 06:  75%|███████▌  | 3/4 [00:43<00:14, 14.46s/epoch, acc=92.4, nll=0.276]
+
+integrator H=4,096 stage 06:  75%|███████▌  | 3/4 [00:57<00:14, 14.46s/epoch, acc=92.6, nll=0.256]
+
+integrator H=4,096 stage 06: 100%|██████████| 4/4 [00:57<00:00, 14.36s/epoch, acc=92.6, nll=0.256]integrator H=4,096 stage 06: 100%|██████████| 4/4 [00:57<00:00, 14.44s/epoch, acc=92.6, nll=0.256]
+overall MLP GPU work:   3%|▎         | 157k/5.24M [03:13<1:40:33, 843node-image/s]
+persistent MLP H=4,096:  10%|█         | 5/50 [03:13<25:12, 33.60s/task, accuracy=89.85, live=2, nll=0.454]
+persistent MLP H=4,096:  12%|█▏        | 6/50 [03:14<31:41, 43.21s/task, accuracy=89.85, live=2, nll=0.454]
+
+integrator H=4,096 stage 07:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:   3%|▎         | 157k/5.24M [03:28<1:40:33, 843node-image/s]
+
+integrator H=4,096 stage 07:   0%|          | 0/4 [00:23<?, ?epoch/s, acc=89.0, nll=0.385]
+
+integrator H=4,096 stage 07:  25%|██▌       | 1/4 [00:23<01:11, 23.75s/epoch, acc=89.0, nll=0.385]
+
+integrator H=4,096 stage 07:  25%|██▌       | 1/4 [00:47<01:11, 23.75s/epoch, acc=91.1, nll=0.315]
+
+integrator H=4,096 stage 07:  50%|█████     | 2/4 [00:47<00:47, 23.97s/epoch, acc=91.1, nll=0.315]
+
+integrator H=4,096 stage 07:  50%|█████     | 2/4 [01:11<00:47, 23.97s/epoch, acc=91.3, nll=0.313]
+
+integrator H=4,096 stage 07:  75%|███████▌  | 3/4 [01:11<00:23, 24.00s/epoch, acc=91.3, nll=0.313]
+
+integrator H=4,096 stage 07:  75%|███████▌  | 3/4 [01:36<00:23, 24.00s/epoch, acc=92.3, nll=0.281]
+
+integrator H=4,096 stage 07: 100%|██████████| 4/4 [01:36<00:00, 24.12s/epoch, acc=92.3, nll=0.281]integrator H=4,096 stage 07: 100%|██████████| 4/4 [01:36<00:00, 24.05s/epoch, acc=92.3, nll=0.281]
+overall MLP GPU work:   5%|▍         | 250k/5.24M [04:56<1:35:02, 876node-image/s]
+persistent MLP H=4,096:  12%|█▏        | 6/50 [04:56<31:41, 43.21s/task, accuracy=88.85, live=3, nll=0.453]
+persistent MLP H=4,096:  14%|█▍        | 7/50 [04:56<44:49, 62.54s/task, accuracy=88.85, live=3, nll=0.453]
+
+integrator H=4,096 stage 08:   0%|          | 0/4 [00:00<?, ?epoch/s]
+
+integrator H=4,096 stage 08:   0%|          | 0/4 [00:10<?, ?epoch/s, acc=89.5, nll=0.390]
+
+integrator H=4,096 stage 08:  25%|██▌       | 1/4 [00:10<00:30, 10.28s/epoch, acc=89.5, nll=0.390]overall MLP GPU work:   5%|▍         | 250k/5.24M [05:08<1:35:02, 876node-image/s]
+
+integrator H=4,096 stage 08:  25%|██▌       | 1/4 [00:20<00:30, 10.28s/epoch, acc=90.3, nll=0.340]
+
+integrator H=4,096 stage 08:  50%|█████     | 2/4 [00:20<00:20, 10.38s/epoch, acc=90.3, nll=0.340]
+
+integrator H=4,096 stage 08:  50%|█████     | 2/4 [00:31<00:20, 10.38s/epoch, acc=90.5, nll=0.351]
+
+integrator H=4,096 stage 08:  75%|███████▌  | 3/4 [00:31<00:10, 10.36s/epoch, acc=90.5, nll=0.351]
+
+integrator H=4,096 stage 08:  75%|███████▌  | 3/4 [00:41<00:10, 10.36s/epoch, acc=91.1, nll=0.308]
+
+integrator H=4,096 stage 08: 100%|██████████| 4/4 [00:41<00:00, 10.33s/epoch, acc=91.1, nll=0.308]integrator H=4,096 stage 08: 100%|██████████| 4/4 [00:41<00:00, 10.34s/epoch, acc=91.1, nll=0.308]
+overall MLP GPU work:   5%|▌         | 285k/5.24M [05:40<1:36:31, 856node-image/s]
+persistent MLP H=4,096:  14%|█▍        | 7/50 [05:40<44:49, 62.54s/task, accuracy=89.31, live=1, nll=0.482]
+persistent MLP H=4,096:  16%|█▌        | 8/50 [05:40<39:42, 56.72s/task, accuracy=89.31, live=1, nll=0.482]
+
+integrator H=4,096 stage 09:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:   5%|▌         | 285k/5.24M [05:58<1:36:31, 856node-image/s]
+
+integrator H=4,096 stage 09:   0%|          | 0/4 [00:20<?, ?epoch/s, acc=88.5, nll=0.439]
+
+integrator H=4,096 stage 09:  25%|██▌       | 1/4 [00:20<01:00, 20.10s/epoch, acc=88.5, nll=0.439]
+
+integrator H=4,096 stage 09:  25%|██▌       | 1/4 [00:40<01:00, 20.10s/epoch, acc=89.5, nll=0.385]
+
+integrator H=4,096 stage 09:  50%|█████     | 2/4 [00:40<00:40, 20.09s/epoch, acc=89.5, nll=0.385]
+
+integrator H=4,096 stage 09:  50%|█████     | 2/4 [01:00<00:40, 20.09s/epoch, acc=90.8, nll=0.342]
+
+integrator H=4,096 stage 09:  75%|███████▌  | 3/4 [01:00<00:20, 20.13s/epoch, acc=90.8, nll=0.342]
+
+integrator H=4,096 stage 09:  75%|███████▌  | 3/4 [01:20<00:20, 20.13s/epoch, acc=91.8, nll=0.306]
+
+integrator H=4,096 stage 09: 100%|██████████| 4/4 [01:20<00:00, 20.21s/epoch, acc=91.8, nll=0.306]integrator H=4,096 stage 09: 100%|██████████| 4/4 [01:20<00:00, 20.17s/epoch, acc=91.8, nll=0.306]
+overall MLP GPU work:   7%|▋         | 361k/5.24M [07:06<1:33:24, 871node-image/s]
+persistent MLP H=4,096:  16%|█▌        | 8/50 [07:06<39:42, 56.72s/task, accuracy=89.00, live=2, nll=0.505]
+persistent MLP H=4,096:  18%|█▊        | 9/50 [07:06<44:54, 65.73s/task, accuracy=89.00, live=2, nll=0.505]
+
+integrator H=4,096 stage 10:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:   7%|▋         | 361k/5.24M [07:18<1:33:24, 871node-image/s]
+
+integrator H=4,096 stage 10:   0%|          | 0/4 [00:20<?, ?epoch/s, acc=88.3, nll=0.432]
+
+integrator H=4,096 stage 10:  25%|██▌       | 1/4 [00:20<01:01, 20.58s/epoch, acc=88.3, nll=0.432]
+
+integrator H=4,096 stage 10:  25%|██▌       | 1/4 [00:40<01:01, 20.58s/epoch, acc=89.9, nll=0.368]
+
+integrator H=4,096 stage 10:  50%|█████     | 2/4 [00:40<00:40, 20.40s/epoch, acc=89.9, nll=0.368]
+
+integrator H=4,096 stage 10:  50%|█████     | 2/4 [01:00<00:40, 20.40s/epoch, acc=90.3, nll=0.345]
+
+integrator H=4,096 stage 10:  75%|███████▌  | 3/4 [01:00<00:20, 20.23s/epoch, acc=90.3, nll=0.345]
+
+integrator H=4,096 stage 10:  75%|███████▌  | 3/4 [01:20<00:20, 20.23s/epoch, acc=91.5, nll=0.314]
+
+integrator H=4,096 stage 10: 100%|██████████| 4/4 [01:20<00:00, 20.01s/epoch, acc=91.5, nll=0.314]integrator H=4,096 stage 10: 100%|██████████| 4/4 [01:20<00:00, 20.14s/epoch, acc=91.5, nll=0.314]
+overall MLP GPU work:   8%|▊         | 438k/5.24M [08:31<1:30:46, 882node-image/s]
+persistent MLP H=4,096:  18%|█▊        | 9/50 [08:31<44:54, 65.73s/task, accuracy=86.47, live=2, nll=0.569]
+persistent MLP H=4,096:  20%|██        | 10/50 [08:31<47:52, 71.80s/task, accuracy=86.47, live=2, nll=0.569]
+
+integrator H=4,096 stage 11:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:   8%|▊         | 438k/5.24M [08:48<1:30:46, 882node-image/s]
+
+integrator H=4,096 stage 11:   0%|          | 0/4 [00:27<?, ?epoch/s, acc=89.4, nll=0.409]
+
+integrator H=4,096 stage 11:  25%|██▌       | 1/4 [00:27<01:23, 27.81s/epoch, acc=89.4, nll=0.409]
+
+integrator H=4,096 stage 11:  25%|██▌       | 1/4 [00:55<01:23, 27.81s/epoch, acc=91.0, nll=0.336]
+
+integrator H=4,096 stage 11:  50%|█████     | 2/4 [00:55<00:55, 27.97s/epoch, acc=91.0, nll=0.336]
+
+integrator H=4,096 stage 11:  50%|█████     | 2/4 [01:23<00:55, 27.97s/epoch, acc=91.4, nll=0.321]
+
+integrator H=4,096 stage 11:  75%|███████▌  | 3/4 [01:23<00:28, 28.01s/epoch, acc=91.4, nll=0.321]
+
+integrator H=4,096 stage 11:  75%|███████▌  | 3/4 [01:52<00:28, 28.01s/epoch, acc=91.8, nll=0.311]
+
+integrator H=4,096 stage 11: 100%|██████████| 4/4 [01:52<00:00, 28.31s/epoch, acc=91.8, nll=0.311]integrator H=4,096 stage 11: 100%|██████████| 4/4 [01:52<00:00, 28.18s/epoch, acc=91.8, nll=0.311]
+overall MLP GPU work:  10%|█         | 550k/5.24M [10:31<1:26:27, 905node-image/s]
+persistent MLP H=4,096:  20%|██        | 10/50 [10:31<47:52, 71.80s/task, accuracy=85.61, live=3, nll=0.668]
+persistent MLP H=4,096:  22%|██▏       | 11/50 [10:31<56:14, 86.52s/task, accuracy=85.61, live=3, nll=0.668]
+
+integrator H=4,096 stage 12:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  10%|█         | 550k/5.24M [10:48<1:26:27, 905node-image/s]
+
+integrator H=4,096 stage 12:   0%|          | 0/4 [00:20<?, ?epoch/s, acc=87.8, nll=0.444]
+
+integrator H=4,096 stage 12:  25%|██▌       | 1/4 [00:20<01:01, 20.58s/epoch, acc=87.8, nll=0.444]
+
+integrator H=4,096 stage 12:  25%|██▌       | 1/4 [00:41<01:01, 20.58s/epoch, acc=90.0, nll=0.371]
+
+integrator H=4,096 stage 12:  50%|█████     | 2/4 [00:41<00:41, 20.64s/epoch, acc=90.0, nll=0.371]
+
+integrator H=4,096 stage 12:  50%|█████     | 2/4 [01:01<00:41, 20.64s/epoch, acc=90.0, nll=0.374]
+
+integrator H=4,096 stage 12:  75%|███████▌  | 3/4 [01:01<00:20, 20.61s/epoch, acc=90.0, nll=0.374]
+
+integrator H=4,096 stage 12:  75%|███████▌  | 3/4 [01:22<00:20, 20.61s/epoch, acc=91.0, nll=0.329]
+
+integrator H=4,096 stage 12: 100%|██████████| 4/4 [01:22<00:00, 20.57s/epoch, acc=91.0, nll=0.329]integrator H=4,096 stage 12: 100%|██████████| 4/4 [01:22<00:00, 20.59s/epoch, acc=91.0, nll=0.329]
+overall MLP GPU work:  12%|█▏        | 626k/5.24M [11:58<1:26:08, 893node-image/s]
+persistent MLP H=4,096:  22%|██▏       | 11/50 [11:58<56:14, 86.52s/task, accuracy=83.98, live=2, nll=0.719]
+persistent MLP H=4,096:  24%|██▍       | 12/50 [11:59<55:00, 86.86s/task, accuracy=83.98, live=2, nll=0.719]
+
+integrator H=4,096 stage 13:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  12%|█▏        | 626k/5.24M [12:18<1:26:08, 893node-image/s]
+
+integrator H=4,096 stage 13:   0%|          | 0/4 [00:29<?, ?epoch/s, acc=88.5, nll=0.448]
+
+integrator H=4,096 stage 13:  25%|██▌       | 1/4 [00:29<01:29, 29.85s/epoch, acc=88.5, nll=0.448]
+
+integrator H=4,096 stage 13:  25%|██▌       | 1/4 [00:59<01:29, 29.85s/epoch, acc=90.0, nll=0.377]
+
+integrator H=4,096 stage 13:  50%|█████     | 2/4 [00:59<01:00, 30.01s/epoch, acc=90.0, nll=0.377]
+
+integrator H=4,096 stage 13:  50%|█████     | 2/4 [01:30<01:00, 30.01s/epoch, acc=91.0, nll=0.359]
+
+integrator H=4,096 stage 13:  75%|███████▌  | 3/4 [01:30<00:30, 30.06s/epoch, acc=91.0, nll=0.359]
+
+integrator H=4,096 stage 13:  75%|███████▌  | 3/4 [01:59<00:30, 30.06s/epoch, acc=91.5, nll=0.319]
+
+integrator H=4,096 stage 13: 100%|██████████| 4/4 [01:59<00:00, 29.95s/epoch, acc=91.5, nll=0.319]integrator H=4,096 stage 13: 100%|██████████| 4/4 [01:59<00:00, 29.97s/epoch, acc=91.5, nll=0.319]
+overall MLP GPU work:  14%|█▍        | 742k/5.24M [14:06<1:23:29, 898node-image/s]
+persistent MLP H=4,096:  24%|██▍       | 12/50 [14:06<55:00, 86.86s/task, accuracy=85.66, live=3, nll=0.658]
+persistent MLP H=4,096:  26%|██▌       | 13/50 [14:06<1:01:09, 99.18s/task, accuracy=85.66, live=3, nll=0.658]
+
+integrator H=4,096 stage 14:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  14%|█▍        | 742k/5.24M [14:18<1:23:29, 898node-image/s]
+
+integrator H=4,096 stage 14:   0%|          | 0/4 [00:29<?, ?epoch/s, acc=88.1, nll=0.438]
+
+integrator H=4,096 stage 14:  25%|██▌       | 1/4 [00:29<01:29, 29.80s/epoch, acc=88.1, nll=0.438]
+
+integrator H=4,096 stage 14:  25%|██▌       | 1/4 [00:59<01:29, 29.80s/epoch, acc=90.4, nll=0.363]
+
+integrator H=4,096 stage 14:  50%|█████     | 2/4 [00:59<00:59, 29.91s/epoch, acc=90.4, nll=0.363]
+
+integrator H=4,096 stage 14:  50%|█████     | 2/4 [01:29<00:59, 29.91s/epoch, acc=90.8, nll=0.359]
+
+integrator H=4,096 stage 14:  75%|███████▌  | 3/4 [01:29<00:29, 29.93s/epoch, acc=90.8, nll=0.359]
+
+integrator H=4,096 stage 14:  75%|███████▌  | 3/4 [01:59<00:29, 29.93s/epoch, acc=91.2, nll=0.331]
+
+integrator H=4,096 stage 14: 100%|██████████| 4/4 [01:59<00:00, 29.93s/epoch, acc=91.2, nll=0.331]integrator H=4,096 stage 14: 100%|██████████| 4/4 [01:59<00:00, 29.92s/epoch, acc=91.2, nll=0.331]
+overall MLP GPU work:  16%|█▋        | 858k/5.24M [16:14<1:20:54, 903node-image/s]
+persistent MLP H=4,096:  26%|██▌       | 13/50 [16:14<1:01:09, 99.18s/task, accuracy=84.28, live=3, nll=0.752]
+persistent MLP H=4,096:  28%|██▊       | 14/50 [16:14<1:04:40, 107.78s/task, accuracy=84.28, live=3, nll=0.752]
+
+integrator H=4,096 stage 15:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  16%|█▋        | 858k/5.24M [16:28<1:20:54, 903node-image/s]
+
+integrator H=4,096 stage 15:   0%|          | 0/4 [00:39<?, ?epoch/s, acc=88.0, nll=0.456]
+
+integrator H=4,096 stage 15:  25%|██▌       | 1/4 [00:39<01:59, 39.94s/epoch, acc=88.0, nll=0.456]
+
+integrator H=4,096 stage 15:  25%|██▌       | 1/4 [01:18<01:59, 39.94s/epoch, acc=90.3, nll=0.365]
+
+integrator H=4,096 stage 15:  50%|█████     | 2/4 [01:18<01:18, 39.27s/epoch, acc=90.3, nll=0.365]
+
+integrator H=4,096 stage 15:  50%|█████     | 2/4 [01:57<01:18, 39.27s/epoch, acc=90.4, nll=0.360]
+
+integrator H=4,096 stage 15:  75%|███████▌  | 3/4 [01:57<00:39, 39.21s/epoch, acc=90.4, nll=0.360]
+
+integrator H=4,096 stage 15:  75%|███████▌  | 3/4 [02:36<00:39, 39.21s/epoch, acc=91.8, nll=0.309]
+
+integrator H=4,096 stage 15: 100%|██████████| 4/4 [02:36<00:00, 39.12s/epoch, acc=91.8, nll=0.309]integrator H=4,096 stage 15: 100%|██████████| 4/4 [02:36<00:00, 39.22s/epoch, acc=91.8, nll=0.309]
+overall MLP GPU work:  19%|█▉        | 1.01M/5.24M [19:01<1:17:36, 909node-image/s]
+persistent MLP H=4,096:  28%|██▊       | 14/50 [19:01<1:04:40, 107.78s/task, accuracy=82.94, live=4, nll=0.771]
+persistent MLP H=4,096:  30%|███       | 15/50 [19:01<1:13:24, 125.84s/task, accuracy=82.94, live=4, nll=0.771]
+
+integrator H=4,096 stage 16:   0%|          | 0/4 [00:00<?, ?epoch/s]
+
+integrator H=4,096 stage 16:   0%|          | 0/4 [00:11<?, ?epoch/s, acc=85.8, nll=0.561]
+
+integrator H=4,096 stage 16:  25%|██▌       | 1/4 [00:11<00:33, 11.11s/epoch, acc=85.8, nll=0.561]overall MLP GPU work:  19%|█▉        | 1.01M/5.24M [19:18<1:17:36, 909node-image/s]
+
+integrator H=4,096 stage 16:  25%|██▌       | 1/4 [00:22<00:33, 11.11s/epoch, acc=86.9, nll=0.508]
+
+integrator H=4,096 stage 16:  50%|█████     | 2/4 [00:22<00:22, 11.14s/epoch, acc=86.9, nll=0.508]
+
+integrator H=4,096 stage 16:  50%|█████     | 2/4 [00:33<00:22, 11.14s/epoch, acc=87.4, nll=0.480]
+
+integrator H=4,096 stage 16:  75%|███████▌  | 3/4 [00:33<00:11, 11.23s/epoch, acc=87.4, nll=0.480]
+
+integrator H=4,096 stage 16:  75%|███████▌  | 3/4 [00:44<00:11, 11.23s/epoch, acc=88.3, nll=0.454]
+
+integrator H=4,096 stage 16: 100%|██████████| 4/4 [00:44<00:00, 11.19s/epoch, acc=88.3, nll=0.454]integrator H=4,096 stage 16: 100%|██████████| 4/4 [00:44<00:00, 11.19s/epoch, acc=88.3, nll=0.454]
+overall MLP GPU work:  20%|██        | 1.05M/5.24M [19:50<1:18:14, 893node-image/s]
+persistent MLP H=4,096:  30%|███       | 15/50 [19:50<1:13:24, 125.84s/task, accuracy=83.90, live=1, nll=0.695]
+persistent MLP H=4,096:  32%|███▏      | 16/50 [19:50<58:10, 102.65s/task, accuracy=83.90, live=1, nll=0.695]
+
+integrator H=4,096 stage 17:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  20%|██        | 1.05M/5.24M [20:08<1:18:14, 893node-image/s]
+
+integrator H=4,096 stage 17:   0%|          | 0/4 [00:20<?, ?epoch/s, acc=83.8, nll=0.651]
+
+integrator H=4,096 stage 17:  25%|██▌       | 1/4 [00:20<01:01, 20.48s/epoch, acc=83.8, nll=0.651]
+
+integrator H=4,096 stage 17:  25%|██▌       | 1/4 [00:40<01:01, 20.48s/epoch, acc=86.6, nll=0.529]
+
+integrator H=4,096 stage 17:  50%|█████     | 2/4 [00:40<00:40, 20.37s/epoch, acc=86.6, nll=0.529]
+
+integrator H=4,096 stage 17:  50%|█████     | 2/4 [01:01<00:40, 20.37s/epoch, acc=87.4, nll=0.479]
+
+integrator H=4,096 stage 17:  75%|███████▌  | 3/4 [01:01<00:20, 20.32s/epoch, acc=87.4, nll=0.479]
+
+integrator H=4,096 stage 17:  75%|███████▌  | 3/4 [01:21<00:20, 20.32s/epoch, acc=88.4, nll=0.457]
+
+integrator H=4,096 stage 17: 100%|██████████| 4/4 [01:21<00:00, 20.29s/epoch, acc=88.4, nll=0.457]integrator H=4,096 stage 17: 100%|██████████| 4/4 [01:21<00:00, 20.32s/epoch, acc=88.4, nll=0.457]
+overall MLP GPU work:  22%|██▏       | 1.13M/5.24M [21:18<1:16:53, 892node-image/s]
+persistent MLP H=4,096:  32%|███▏      | 16/50 [21:18<58:10, 102.65s/task, accuracy=82.91, live=2, nll=0.735]
+persistent MLP H=4,096:  34%|███▍      | 17/50 [21:18<53:59, 98.16s/task, accuracy=82.91, live=2, nll=0.735]
+
+integrator H=4,096 stage 18:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  22%|██▏       | 1.13M/5.24M [21:28<1:16:53, 892node-image/s]
+
+integrator H=4,096 stage 18:   0%|          | 0/4 [00:19<?, ?epoch/s, acc=85.5, nll=0.595]
+
+integrator H=4,096 stage 18:  25%|██▌       | 1/4 [00:19<00:59, 19.98s/epoch, acc=85.5, nll=0.595]
+
+integrator H=4,096 stage 18:  25%|██▌       | 1/4 [00:40<00:59, 19.98s/epoch, acc=88.5, nll=0.457]
+
+integrator H=4,096 stage 18:  50%|█████     | 2/4 [00:40<00:40, 20.03s/epoch, acc=88.5, nll=0.457]
+
+integrator H=4,096 stage 18:  50%|█████     | 2/4 [00:59<00:40, 20.03s/epoch, acc=88.8, nll=0.432]
+
+integrator H=4,096 stage 18:  75%|███████▌  | 3/4 [00:59<00:19, 19.97s/epoch, acc=88.8, nll=0.432]
+
+integrator H=4,096 stage 18:  75%|███████▌  | 3/4 [01:19<00:19, 19.97s/epoch, acc=89.6, nll=0.420]
+
+integrator H=4,096 stage 18: 100%|██████████| 4/4 [01:19<00:00, 19.95s/epoch, acc=89.6, nll=0.420]integrator H=4,096 stage 18: 100%|██████████| 4/4 [01:19<00:00, 19.97s/epoch, acc=89.6, nll=0.420]
+overall MLP GPU work:  23%|██▎       | 1.21M/5.24M [22:44<1:15:29, 891node-image/s]
+persistent MLP H=4,096:  34%|███▍      | 17/50 [22:44<53:59, 98.16s/task, accuracy=84.00, live=2, nll=0.757]
+persistent MLP H=4,096:  36%|███▌      | 18/50 [22:44<50:27, 94.62s/task, accuracy=84.00, live=2, nll=0.757]
+
+integrator H=4,096 stage 19:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  23%|██▎       | 1.21M/5.24M [22:58<1:15:29, 891node-image/s]
+
+integrator H=4,096 stage 19:   0%|          | 0/4 [00:28<?, ?epoch/s, acc=86.1, nll=0.555]
+
+integrator H=4,096 stage 19:  25%|██▌       | 1/4 [00:28<01:26, 28.90s/epoch, acc=86.1, nll=0.555]
+
+integrator H=4,096 stage 19:  25%|██▌       | 1/4 [00:58<01:26, 28.90s/epoch, acc=87.8, nll=0.464]
+
+integrator H=4,096 stage 19:  50%|█████     | 2/4 [00:58<00:58, 29.09s/epoch, acc=87.8, nll=0.464]
+
+integrator H=4,096 stage 19:  50%|█████     | 2/4 [01:27<00:58, 29.09s/epoch, acc=88.7, nll=0.456]
+
+integrator H=4,096 stage 19:  75%|███████▌  | 3/4 [01:27<00:29, 29.23s/epoch, acc=88.7, nll=0.456]
+
+integrator H=4,096 stage 19:  75%|███████▌  | 3/4 [01:56<00:29, 29.23s/epoch, acc=90.2, nll=0.398]
+
+integrator H=4,096 stage 19: 100%|██████████| 4/4 [01:56<00:00, 29.23s/epoch, acc=90.2, nll=0.398]integrator H=4,096 stage 19: 100%|██████████| 4/4 [01:56<00:00, 29.19s/epoch, acc=90.2, nll=0.398]
+overall MLP GPU work:  25%|██▌       | 1.32M/5.24M [24:50<1:12:30, 901node-image/s]
+persistent MLP H=4,096:  36%|███▌      | 18/50 [24:50<50:27, 94.62s/task, accuracy=84.19, live=3, nll=0.736]
+persistent MLP H=4,096:  38%|███▊      | 19/50 [24:51<53:47, 104.10s/task, accuracy=84.19, live=3, nll=0.736]
+
+integrator H=4,096 stage 20:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  25%|██▌       | 1.32M/5.24M [25:08<1:12:30, 901node-image/s]
+
+integrator H=4,096 stage 20:   0%|          | 0/4 [00:19<?, ?epoch/s, acc=86.0, nll=0.525]
+
+integrator H=4,096 stage 20:  25%|██▌       | 1/4 [00:19<00:59, 19.81s/epoch, acc=86.0, nll=0.525]
+
+integrator H=4,096 stage 20:  25%|██▌       | 1/4 [00:39<00:59, 19.81s/epoch, acc=88.1, nll=0.458]
+
+integrator H=4,096 stage 20:  50%|█████     | 2/4 [00:39<00:39, 19.91s/epoch, acc=88.1, nll=0.458]
+
+integrator H=4,096 stage 20:  50%|█████     | 2/4 [00:59<00:39, 19.91s/epoch, acc=89.1, nll=0.415]
+
+integrator H=4,096 stage 20:  75%|███████▌  | 3/4 [00:59<00:19, 19.88s/epoch, acc=89.1, nll=0.415]
+
+integrator H=4,096 stage 20:  75%|███████▌  | 3/4 [01:19<00:19, 19.88s/epoch, acc=90.2, nll=0.404]
+
+integrator H=4,096 stage 20: 100%|██████████| 4/4 [01:19<00:00, 20.03s/epoch, acc=90.2, nll=0.404]integrator H=4,096 stage 20: 100%|██████████| 4/4 [01:19<00:00, 19.98s/epoch, acc=90.2, nll=0.404]
+overall MLP GPU work:  27%|██▋       | 1.40M/5.24M [26:17<1:11:22, 898node-image/s]
+persistent MLP H=4,096:  38%|███▊      | 19/50 [26:17<53:47, 104.10s/task, accuracy=82.67, live=2, nll=0.781]
+persistent MLP H=4,096:  40%|████      | 20/50 [26:17<49:27, 98.90s/task, accuracy=82.67, live=2, nll=0.781]
+
+integrator H=4,096 stage 21:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  27%|██▋       | 1.40M/5.24M [26:28<1:11:22, 898node-image/s]
+
+integrator H=4,096 stage 21:   0%|          | 0/4 [00:30<?, ?epoch/s, acc=84.6, nll=0.666]
+
+integrator H=4,096 stage 21:  25%|██▌       | 1/4 [00:30<01:30, 30.24s/epoch, acc=84.6, nll=0.666]
+
+integrator H=4,096 stage 21:  25%|██▌       | 1/4 [01:01<01:30, 30.24s/epoch, acc=88.6, nll=0.443]
+
+integrator H=4,096 stage 21:  50%|█████     | 2/4 [01:01<01:01, 30.66s/epoch, acc=88.6, nll=0.443]
+
+integrator H=4,096 stage 21:  50%|█████     | 2/4 [01:31<01:01, 30.66s/epoch, acc=88.7, nll=0.450]
+
+integrator H=4,096 stage 21:  75%|███████▌  | 3/4 [01:31<00:30, 30.69s/epoch, acc=88.7, nll=0.450]
+
+integrator H=4,096 stage 21:  75%|███████▌  | 3/4 [02:02<00:30, 30.69s/epoch, acc=90.2, nll=0.402]
+
+integrator H=4,096 stage 21: 100%|██████████| 4/4 [02:02<00:00, 30.72s/epoch, acc=90.2, nll=0.402]integrator H=4,096 stage 21: 100%|██████████| 4/4 [02:02<00:00, 30.67s/epoch, acc=90.2, nll=0.402]
+overall MLP GPU work:  29%|██▉       | 1.52M/5.24M [28:30<1:08:55, 900node-image/s]
+persistent MLP H=4,096:  40%|████      | 20/50 [28:30<49:27, 98.90s/task, accuracy=83.23, live=3, nll=0.792]
+persistent MLP H=4,096:  42%|████▏     | 21/50 [28:30<52:42, 109.04s/task, accuracy=83.23, live=3, nll=0.792]
+
+integrator H=4,096 stage 22:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  29%|██▉       | 1.52M/5.24M [28:48<1:08:55, 900node-image/s]
+
+integrator H=4,096 stage 22:   0%|          | 0/4 [00:29<?, ?epoch/s, acc=85.9, nll=0.562]
+
+integrator H=4,096 stage 22:  25%|██▌       | 1/4 [00:29<01:29, 29.86s/epoch, acc=85.9, nll=0.562]
+
+integrator H=4,096 stage 22:  25%|██▌       | 1/4 [00:59<01:29, 29.86s/epoch, acc=87.9, nll=0.469]
+
+integrator H=4,096 stage 22:  50%|█████     | 2/4 [00:59<00:59, 29.81s/epoch, acc=87.9, nll=0.469]
+
+integrator H=4,096 stage 22:  50%|█████     | 2/4 [01:29<00:59, 29.81s/epoch, acc=88.9, nll=0.453]
+
+integrator H=4,096 stage 22:  75%|███████▌  | 3/4 [01:29<00:29, 29.79s/epoch, acc=88.9, nll=0.453]
+
+integrator H=4,096 stage 22:  75%|███████▌  | 3/4 [01:59<00:29, 29.79s/epoch, acc=89.9, nll=0.403]
+
+integrator H=4,096 stage 22: 100%|██████████| 4/4 [01:59<00:00, 29.82s/epoch, acc=89.9, nll=0.403]integrator H=4,096 stage 22: 100%|██████████| 4/4 [01:59<00:00, 29.82s/epoch, acc=89.9, nll=0.403]
+overall MLP GPU work:  31%|███       | 1.64M/5.24M [30:39<1:06:27, 904node-image/s]
+persistent MLP H=4,096:  42%|████▏     | 21/50 [30:40<52:42, 109.04s/task, accuracy=81.72, live=3, nll=0.902]
+persistent MLP H=4,096:  44%|████▍     | 22/50 [30:40<53:45, 115.21s/task, accuracy=81.72, live=3, nll=0.902]
+
+integrator H=4,096 stage 23:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  31%|███       | 1.64M/5.24M [30:58<1:06:27, 904node-image/s]
+
+integrator H=4,096 stage 23:   0%|          | 0/4 [00:38<?, ?epoch/s, acc=84.4, nll=0.646]
+
+integrator H=4,096 stage 23:  25%|██▌       | 1/4 [00:38<01:54, 38.19s/epoch, acc=84.4, nll=0.646]
+
+integrator H=4,096 stage 23:  25%|██▌       | 1/4 [01:15<01:54, 38.19s/epoch, acc=86.2, nll=0.546]
+
+integrator H=4,096 stage 23:  50%|█████     | 2/4 [01:15<01:15, 37.77s/epoch, acc=86.2, nll=0.546]
+
+integrator H=4,096 stage 23:  50%|█████     | 2/4 [01:54<01:15, 37.77s/epoch, acc=87.6, nll=0.492]
+
+integrator H=4,096 stage 23:  75%|███████▌  | 3/4 [01:54<00:38, 38.21s/epoch, acc=87.6, nll=0.492]
+
+integrator H=4,096 stage 23:  75%|███████▌  | 3/4 [02:32<00:38, 38.21s/epoch, acc=89.0, nll=0.420]
+
+integrator H=4,096 stage 23: 100%|██████████| 4/4 [02:32<00:00, 38.36s/epoch, acc=89.0, nll=0.420]integrator H=4,096 stage 23: 100%|██████████| 4/4 [02:32<00:00, 38.25s/epoch, acc=89.0, nll=0.420]
+overall MLP GPU work:  34%|███▍      | 1.79M/5.24M [33:26<1:02:25, 921node-image/s]
+persistent MLP H=4,096:  44%|████▍     | 22/50 [33:26<53:45, 115.21s/task, accuracy=80.35, live=4, nll=0.958]
+persistent MLP H=4,096:  46%|████▌     | 23/50 [33:26<58:45, 130.58s/task, accuracy=80.35, live=4, nll=0.958]
+
+integrator H=4,096 stage 24:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  34%|███▍      | 1.79M/5.24M [33:38<1:02:25, 921node-image/s]
+
+integrator H=4,096 stage 24:   0%|          | 0/4 [00:19<?, ?epoch/s, acc=84.5, nll=0.588]
+
+integrator H=4,096 stage 24:  25%|██▌       | 1/4 [00:19<00:58, 19.53s/epoch, acc=84.5, nll=0.588]
+
+integrator H=4,096 stage 24:  25%|██▌       | 1/4 [00:39<00:58, 19.53s/epoch, acc=87.2, nll=0.490]
+
+integrator H=4,096 stage 24:  50%|█████     | 2/4 [00:39<00:39, 19.60s/epoch, acc=87.2, nll=0.490]
+
+integrator H=4,096 stage 24:  50%|█████     | 2/4 [00:58<00:39, 19.60s/epoch, acc=88.7, nll=0.466]
+
+integrator H=4,096 stage 24:  75%|███████▌  | 3/4 [00:58<00:19, 19.41s/epoch, acc=88.7, nll=0.466]
+
+integrator H=4,096 stage 24:  75%|███████▌  | 3/4 [01:17<00:19, 19.41s/epoch, acc=89.1, nll=0.435]
+
+integrator H=4,096 stage 24: 100%|██████████| 4/4 [01:17<00:00, 19.19s/epoch, acc=89.1, nll=0.435]integrator H=4,096 stage 24: 100%|██████████| 4/4 [01:17<00:00, 19.30s/epoch, acc=89.1, nll=0.435]
+overall MLP GPU work:  36%|███▌      | 1.87M/5.24M [34:50<1:01:10, 918node-image/s]
+persistent MLP H=4,096:  46%|████▌     | 23/50 [34:51<58:45, 130.58s/task, accuracy=80.21, live=2, nll=0.932]
+persistent MLP H=4,096:  48%|████▊     | 24/50 [34:51<50:36, 116.77s/task, accuracy=80.21, live=2, nll=0.932]
+
+integrator H=4,096 stage 25:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  36%|███▌      | 1.87M/5.24M [35:08<1:01:10, 918node-image/s]
+
+integrator H=4,096 stage 25:   0%|          | 0/4 [00:26<?, ?epoch/s, acc=84.3, nll=0.653]
+
+integrator H=4,096 stage 25:  25%|██▌       | 1/4 [00:26<01:20, 26.88s/epoch, acc=84.3, nll=0.653]
+
+integrator H=4,096 stage 25:  25%|██▌       | 1/4 [00:54<01:20, 26.88s/epoch, acc=87.2, nll=0.484]
+
+integrator H=4,096 stage 25:  50%|█████     | 2/4 [00:54<00:54, 27.03s/epoch, acc=87.2, nll=0.484]
+
+integrator H=4,096 stage 25:  50%|█████     | 2/4 [01:21<00:54, 27.03s/epoch, acc=88.4, nll=0.457]
+
+integrator H=4,096 stage 25:  75%|███████▌  | 3/4 [01:21<00:27, 27.05s/epoch, acc=88.4, nll=0.457]
+
+integrator H=4,096 stage 25:  75%|███████▌  | 3/4 [01:48<00:27, 27.05s/epoch, acc=89.3, nll=0.444]
+
+integrator H=4,096 stage 25: 100%|██████████| 4/4 [01:48<00:00, 27.08s/epoch, acc=89.3, nll=0.444]integrator H=4,096 stage 25: 100%|██████████| 4/4 [01:48<00:00, 27.05s/epoch, acc=89.3, nll=0.444]
+overall MLP GPU work:  38%|███▊      | 1.99M/5.24M [36:49<58:21, 930node-image/s]
+persistent MLP H=4,096:  48%|████▊     | 24/50 [36:49<50:36, 116.77s/task, accuracy=81.13, live=3, nll=0.884]
+persistent MLP H=4,096:  50%|█████     | 25/50 [36:49<48:53, 117.33s/task, accuracy=81.13, live=3, nll=0.884]
+
+integrator H=4,096 stage 26:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  38%|███▊      | 1.99M/5.24M [37:08<58:21, 930node-image/s]
+
+integrator H=4,096 stage 26:   0%|          | 0/4 [00:28<?, ?epoch/s, acc=85.4, nll=0.590]
+
+integrator H=4,096 stage 26:  25%|██▌       | 1/4 [00:28<01:26, 28.74s/epoch, acc=85.4, nll=0.590]
+
+integrator H=4,096 stage 26:  25%|██▌       | 1/4 [00:57<01:26, 28.74s/epoch, acc=87.6, nll=0.465]
+
+integrator H=4,096 stage 26:  50%|█████     | 2/4 [00:57<00:57, 28.80s/epoch, acc=87.6, nll=0.465]
+
+integrator H=4,096 stage 26:  50%|█████     | 2/4 [01:26<00:57, 28.80s/epoch, acc=89.3, nll=0.438]
+
+integrator H=4,096 stage 26:  75%|███████▌  | 3/4 [01:26<00:28, 28.76s/epoch, acc=89.3, nll=0.438]
+
+integrator H=4,096 stage 26:  75%|███████▌  | 3/4 [01:54<00:28, 28.76s/epoch, acc=90.3, nll=0.395]
+
+integrator H=4,096 stage 26: 100%|██████████| 4/4 [01:54<00:00, 28.63s/epoch, acc=90.3, nll=0.395]integrator H=4,096 stage 26: 100%|██████████| 4/4 [01:54<00:00, 28.68s/epoch, acc=90.3, nll=0.395]
+overall MLP GPU work:  40%|████      | 2.10M/5.24M [38:55<55:46, 937node-image/s]
+persistent MLP H=4,096:  50%|█████     | 25/50 [38:55<48:53, 117.33s/task, accuracy=79.90, live=3, nll=0.962]
+persistent MLP H=4,096:  52%|█████▏    | 26/50 [38:55<47:54, 119.78s/task, accuracy=79.90, live=3, nll=0.962]
+
+integrator H=4,096 stage 27:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  40%|████      | 2.10M/5.24M [39:08<55:46, 937node-image/s]
+
+integrator H=4,096 stage 27:   0%|          | 0/4 [00:37<?, ?epoch/s, acc=83.7, nll=0.724]
+
+integrator H=4,096 stage 27:  25%|██▌       | 1/4 [00:37<01:51, 37.29s/epoch, acc=83.7, nll=0.724]
+
+integrator H=4,096 stage 27:  25%|██▌       | 1/4 [01:14<01:51, 37.29s/epoch, acc=87.9, nll=0.485]
+
+integrator H=4,096 stage 27:  50%|█████     | 2/4 [01:14<01:14, 37.46s/epoch, acc=87.9, nll=0.485]
+
+integrator H=4,096 stage 27:  50%|█████     | 2/4 [01:53<01:14, 37.46s/epoch, acc=88.7, nll=0.467]
+
+integrator H=4,096 stage 27:  75%|███████▌  | 3/4 [01:53<00:37, 37.96s/epoch, acc=88.7, nll=0.467]
+
+integrator H=4,096 stage 27:  75%|███████▌  | 3/4 [02:32<00:37, 37.96s/epoch, acc=90.0, nll=0.391]
+
+integrator H=4,096 stage 27: 100%|██████████| 4/4 [02:32<00:00, 38.22s/epoch, acc=90.0, nll=0.391]integrator H=4,096 stage 27: 100%|██████████| 4/4 [02:32<00:00, 38.01s/epoch, acc=90.0, nll=0.391]
+overall MLP GPU work:  43%|████▎     | 2.26M/5.24M [41:41<52:38, 943node-image/s]
+persistent MLP H=4,096:  52%|█████▏    | 26/50 [41:41<47:54, 119.78s/task, accuracy=80.20, live=4, nll=0.976]
+persistent MLP H=4,096:  54%|█████▍    | 27/50 [41:41<51:16, 133.76s/task, accuracy=80.20, live=4, nll=0.976]
+
+integrator H=4,096 stage 28:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  43%|████▎     | 2.26M/5.24M [41:58<52:38, 943node-image/s]
+
+integrator H=4,096 stage 28:   0%|          | 0/4 [00:29<?, ?epoch/s, acc=85.4, nll=0.576]
+
+integrator H=4,096 stage 28:  25%|██▌       | 1/4 [00:29<01:27, 29.10s/epoch, acc=85.4, nll=0.576]
+
+integrator H=4,096 stage 28:  25%|██▌       | 1/4 [00:57<01:27, 29.10s/epoch, acc=88.1, nll=0.477]
+
+integrator H=4,096 stage 28:  50%|█████     | 2/4 [00:57<00:57, 28.94s/epoch, acc=88.1, nll=0.477]
+
+integrator H=4,096 stage 28:  50%|█████     | 2/4 [01:27<00:57, 28.94s/epoch, acc=88.1, nll=0.480]
+
+integrator H=4,096 stage 28:  75%|███████▌  | 3/4 [01:27<00:29, 29.04s/epoch, acc=88.1, nll=0.480]
+
+integrator H=4,096 stage 28:  75%|███████▌  | 3/4 [01:55<00:29, 29.04s/epoch, acc=90.4, nll=0.391]
+
+integrator H=4,096 stage 28: 100%|██████████| 4/4 [01:55<00:00, 28.98s/epoch, acc=90.4, nll=0.391]integrator H=4,096 stage 28: 100%|██████████| 4/4 [01:55<00:00, 29.00s/epoch, acc=90.4, nll=0.391]
+overall MLP GPU work:  45%|████▌     | 2.38M/5.24M [43:48<50:47, 939node-image/s]
+persistent MLP H=4,096:  54%|█████▍    | 27/50 [43:48<51:16, 133.76s/task, accuracy=79.76, live=3, nll=1.021]
+persistent MLP H=4,096:  56%|█████▌    | 28/50 [43:48<48:20, 131.84s/task, accuracy=79.76, live=3, nll=1.021]
+
+integrator H=4,096 stage 29:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  45%|████▌     | 2.38M/5.24M [44:08<50:47, 939node-image/s]
+
+integrator H=4,096 stage 29:   0%|          | 0/4 [00:38<?, ?epoch/s, acc=83.9, nll=0.656]
+
+integrator H=4,096 stage 29:  25%|██▌       | 1/4 [00:38<01:55, 38.60s/epoch, acc=83.9, nll=0.656]
+
+integrator H=4,096 stage 29:  25%|██▌       | 1/4 [01:16<01:55, 38.60s/epoch, acc=87.3, nll=0.514]
+
+integrator H=4,096 stage 29:  50%|█████     | 2/4 [01:16<01:16, 38.45s/epoch, acc=87.3, nll=0.514]
+
+integrator H=4,096 stage 29:  50%|█████     | 2/4 [01:55<01:16, 38.45s/epoch, acc=88.7, nll=0.454]
+
+integrator H=4,096 stage 29:  75%|███████▌  | 3/4 [01:55<00:38, 38.46s/epoch, acc=88.7, nll=0.454]
+
+integrator H=4,096 stage 29:  75%|███████▌  | 3/4 [02:33<00:38, 38.46s/epoch, acc=89.7, nll=0.421]
+
+integrator H=4,096 stage 29: 100%|██████████| 4/4 [02:33<00:00, 38.44s/epoch, acc=89.7, nll=0.421]integrator H=4,096 stage 29: 100%|██████████| 4/4 [02:33<00:00, 38.45s/epoch, acc=89.7, nll=0.421]
+overall MLP GPU work:  48%|████▊     | 2.54M/5.24M [46:37<47:50, 941node-image/s]
+persistent MLP H=4,096:  56%|█████▌    | 28/50 [46:37<48:20, 131.84s/task, accuracy=78.87, live=4, nll=1.053]
+persistent MLP H=4,096:  58%|█████▊    | 29/50 [46:37<50:01, 142.95s/task, accuracy=78.87, live=4, nll=1.053]
+
+integrator H=4,096 stage 30:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  48%|████▊     | 2.54M/5.24M [46:48<47:50, 941node-image/s]
+
+integrator H=4,096 stage 30:   0%|          | 0/4 [00:41<?, ?epoch/s, acc=84.6, nll=0.620]
+
+integrator H=4,096 stage 30:  25%|██▌       | 1/4 [00:41<02:05, 41.90s/epoch, acc=84.6, nll=0.620]
+
+integrator H=4,096 stage 30:  25%|██▌       | 1/4 [01:23<02:05, 41.90s/epoch, acc=87.3, nll=0.489]
+
+integrator H=4,096 stage 30:  50%|█████     | 2/4 [01:23<01:23, 41.76s/epoch, acc=87.3, nll=0.489]
+
+integrator H=4,096 stage 30:  50%|█████     | 2/4 [02:05<01:23, 41.76s/epoch, acc=88.8, nll=0.452]
+
+integrator H=4,096 stage 30:  75%|███████▌  | 3/4 [02:05<00:41, 41.78s/epoch, acc=88.8, nll=0.452]
+
+integrator H=4,096 stage 30:  75%|███████▌  | 3/4 [02:46<00:41, 41.78s/epoch, acc=89.5, nll=0.403]
+
+integrator H=4,096 stage 30: 100%|██████████| 4/4 [02:46<00:00, 41.70s/epoch, acc=89.5, nll=0.403]integrator H=4,096 stage 30: 100%|██████████| 4/4 [02:46<00:00, 41.73s/epoch, acc=89.5, nll=0.403]
+overall MLP GPU work:  52%|█████▏    | 2.71M/5.24M [49:40<44:39, 944node-image/s]
+persistent MLP H=4,096:  58%|█████▊    | 29/50 [49:40<50:01, 142.95s/task, accuracy=77.34, live=4, nll=1.154]
+persistent MLP H=4,096:  60%|██████    | 30/50 [49:40<51:37, 154.87s/task, accuracy=77.34, live=4, nll=1.154]
+
+integrator H=4,096 stage 31:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  52%|█████▏    | 2.71M/5.24M [49:58<44:39, 944node-image/s]
+
+integrator H=4,096 stage 31:   0%|          | 0/4 [00:47<?, ?epoch/s, acc=84.6, nll=0.678]
+
+integrator H=4,096 stage 31:  25%|██▌       | 1/4 [00:47<02:22, 47.56s/epoch, acc=84.6, nll=0.678]
+
+integrator H=4,096 stage 31:  25%|██▌       | 1/4 [01:35<02:22, 47.56s/epoch, acc=88.6, nll=0.471]
+
+integrator H=4,096 stage 31:  50%|█████     | 2/4 [01:35<01:35, 47.57s/epoch, acc=88.6, nll=0.471]
+
+integrator H=4,096 stage 31:  50%|█████     | 2/4 [02:23<01:35, 47.57s/epoch, acc=89.4, nll=0.421]
+
+integrator H=4,096 stage 31:  75%|███████▌  | 3/4 [02:23<00:47, 47.71s/epoch, acc=89.4, nll=0.421]
+
+integrator H=4,096 stage 31:  75%|███████▌  | 3/4 [03:10<00:47, 47.71s/epoch, acc=89.7, nll=0.423]
+
+integrator H=4,096 stage 31: 100%|██████████| 4/4 [03:10<00:00, 47.67s/epoch, acc=89.7, nll=0.423]integrator H=4,096 stage 31: 100%|██████████| 4/4 [03:10<00:00, 47.65s/epoch, acc=89.7, nll=0.423]
+overall MLP GPU work:  56%|█████▌    | 2.92M/5.24M [53:10<40:52, 949node-image/s]
+persistent MLP H=4,096:  60%|██████    | 30/50 [53:10<51:37, 154.87s/task, accuracy=77.91, live=5, nll=1.091]
+persistent MLP H=4,096:  62%|██████▏   | 31/50 [53:10<54:18, 171.48s/task, accuracy=77.91, live=5, nll=1.091]
+
+integrator H=4,096 stage 32:   0%|          | 0/4 [00:00<?, ?epoch/s]
+
+integrator H=4,096 stage 32:   0%|          | 0/4 [00:10<?, ?epoch/s, acc=83.1, nll=0.697]
+
+integrator H=4,096 stage 32:  25%|██▌       | 1/4 [00:10<00:32, 10.96s/epoch, acc=83.1, nll=0.697]overall MLP GPU work:  56%|█████▌    | 2.92M/5.24M [53:28<40:52, 949node-image/s]
+
+integrator H=4,096 stage 32:  25%|██▌       | 1/4 [00:21<00:32, 10.96s/epoch, acc=84.5, nll=0.631]
+
+integrator H=4,096 stage 32:  50%|█████     | 2/4 [00:21<00:21, 10.84s/epoch, acc=84.5, nll=0.631]
+
+integrator H=4,096 stage 32:  50%|█████     | 2/4 [00:32<00:21, 10.84s/epoch, acc=85.1, nll=0.618]
+
+integrator H=4,096 stage 32:  75%|███████▌  | 3/4 [00:32<00:10, 10.89s/epoch, acc=85.1, nll=0.618]
+
+integrator H=4,096 stage 32:  75%|███████▌  | 3/4 [00:43<00:10, 10.89s/epoch, acc=86.1, nll=0.577]
+
+integrator H=4,096 stage 32: 100%|██████████| 4/4 [00:43<00:00, 10.88s/epoch, acc=86.1, nll=0.577]integrator H=4,096 stage 32: 100%|██████████| 4/4 [00:43<00:00, 10.88s/epoch, acc=86.1, nll=0.577]
+overall MLP GPU work:  56%|█████▋    | 2.96M/5.24M [53:59<40:48, 934node-image/s]
+persistent MLP H=4,096:  62%|██████▏   | 31/50 [53:59<54:18, 171.48s/task, accuracy=79.23, live=1, nll=0.965]
+persistent MLP H=4,096:  64%|██████▍   | 32/50 [53:59<40:25, 134.75s/task, accuracy=79.23, live=1, nll=0.965]
+
+integrator H=4,096 stage 33:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  56%|█████▋    | 2.96M/5.24M [54:18<40:48, 934node-image/s]
+
+integrator H=4,096 stage 33:   0%|          | 0/4 [00:20<?, ?epoch/s, acc=81.9, nll=0.754]
+
+integrator H=4,096 stage 33:  25%|██▌       | 1/4 [00:20<01:00, 20.10s/epoch, acc=81.9, nll=0.754]
+
+integrator H=4,096 stage 33:  25%|██▌       | 1/4 [00:40<01:00, 20.10s/epoch, acc=84.0, nll=0.661]
+
+integrator H=4,096 stage 33:  50%|█████     | 2/4 [00:40<00:40, 20.11s/epoch, acc=84.0, nll=0.661]
+
+integrator H=4,096 stage 33:  50%|█████     | 2/4 [01:00<00:40, 20.11s/epoch, acc=86.7, nll=0.544]
+
+integrator H=4,096 stage 33:  75%|███████▌  | 3/4 [01:00<00:20, 20.08s/epoch, acc=86.7, nll=0.544]
+
+integrator H=4,096 stage 33:  75%|███████▌  | 3/4 [01:20<00:20, 20.08s/epoch, acc=87.5, nll=0.500]
+
+integrator H=4,096 stage 33: 100%|██████████| 4/4 [01:20<00:00, 20.13s/epoch, acc=87.5, nll=0.500]integrator H=4,096 stage 33: 100%|██████████| 4/4 [01:20<00:00, 20.12s/epoch, acc=87.5, nll=0.500]
+overall MLP GPU work:  58%|█████▊    | 3.04M/5.24M [55:29<39:42, 926node-image/s]
+persistent MLP H=4,096:  64%|██████▍   | 32/50 [55:29<40:25, 134.75s/task, accuracy=79.90, live=2, nll=1.011]
+persistent MLP H=4,096:  66%|██████▌   | 33/50 [55:29<34:21, 121.26s/task, accuracy=79.90, live=2, nll=1.011]
+
+integrator H=4,096 stage 34:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  58%|█████▊    | 3.04M/5.24M [55:48<39:42, 926node-image/s]
+
+integrator H=4,096 stage 34:   0%|          | 0/4 [00:20<?, ?epoch/s, acc=81.7, nll=0.803]
+
+integrator H=4,096 stage 34:  25%|██▌       | 1/4 [00:20<01:02, 20.82s/epoch, acc=81.7, nll=0.803]
+
+integrator H=4,096 stage 34:  25%|██▌       | 1/4 [00:41<01:02, 20.82s/epoch, acc=85.5, nll=0.586]
+
+integrator H=4,096 stage 34:  50%|█████     | 2/4 [00:41<00:41, 20.57s/epoch, acc=85.5, nll=0.586]
+
+integrator H=4,096 stage 34:  50%|█████     | 2/4 [01:01<00:41, 20.57s/epoch, acc=86.1, nll=0.575]
+
+integrator H=4,096 stage 34:  75%|███████▌  | 3/4 [01:01<00:20, 20.25s/epoch, acc=86.1, nll=0.575]
+
+integrator H=4,096 stage 34:  75%|███████▌  | 3/4 [01:21<00:20, 20.25s/epoch, acc=87.3, nll=0.499]
+
+integrator H=4,096 stage 34: 100%|██████████| 4/4 [01:21<00:00, 20.14s/epoch, acc=87.3, nll=0.499]integrator H=4,096 stage 34: 100%|██████████| 4/4 [01:21<00:00, 20.26s/epoch, acc=87.3, nll=0.499]
+overall MLP GPU work:  59%|█████▉    | 3.11M/5.24M [57:00<38:55, 911node-image/s]
+persistent MLP H=4,096:  66%|██████▌   | 33/50 [57:00<34:21, 121.26s/task, accuracy=80.71, live=2, nll=0.940]
+persistent MLP H=4,096:  68%|██████▊   | 34/50 [57:00<29:52, 112.06s/task, accuracy=80.71, live=2, nll=0.940]
+
+integrator H=4,096 stage 35:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  59%|█████▉    | 3.11M/5.24M [57:18<38:55, 911node-image/s]
+
+integrator H=4,096 stage 35:   0%|          | 0/4 [00:30<?, ?epoch/s, acc=80.3, nll=0.824]
+
+integrator H=4,096 stage 35:  25%|██▌       | 1/4 [00:30<01:31, 30.41s/epoch, acc=80.3, nll=0.824]
+
+integrator H=4,096 stage 35:  25%|██▌       | 1/4 [01:00<01:31, 30.41s/epoch, acc=84.4, nll=0.630]
+
+integrator H=4,096 stage 35:  50%|█████     | 2/4 [01:00<01:00, 30.44s/epoch, acc=84.4, nll=0.630]
+
+integrator H=4,096 stage 35:  50%|█████     | 2/4 [01:30<01:00, 30.44s/epoch, acc=86.4, nll=0.547]
+
+integrator H=4,096 stage 35:  75%|███████▌  | 3/4 [01:30<00:30, 30.24s/epoch, acc=86.4, nll=0.547]
+
+integrator H=4,096 stage 35:  75%|███████▌  | 3/4 [02:01<00:30, 30.24s/epoch, acc=87.1, nll=0.513]
+
+integrator H=4,096 stage 35: 100%|██████████| 4/4 [02:01<00:00, 30.23s/epoch, acc=87.1, nll=0.513]integrator H=4,096 stage 35: 100%|██████████| 4/4 [02:01<00:00, 30.27s/epoch, acc=87.1, nll=0.513]
+overall MLP GPU work:  62%|██████▏   | 3.24M/5.24M [59:14<36:28, 916node-image/s]
+persistent MLP H=4,096:  68%|██████▊   | 34/50 [59:14<29:52, 112.06s/task, accuracy=80.43, live=3, nll=0.942]
+persistent MLP H=4,096:  70%|███████   | 35/50 [59:14<29:42, 118.86s/task, accuracy=80.43, live=3, nll=0.942]
+
+integrator H=4,096 stage 36:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  62%|██████▏   | 3.24M/5.24M [59:28<36:28, 916node-image/s]
+
+integrator H=4,096 stage 36:   0%|          | 0/4 [00:20<?, ?epoch/s, acc=82.0, nll=0.716]
+
+integrator H=4,096 stage 36:  25%|██▌       | 1/4 [00:20<01:02, 20.91s/epoch, acc=82.0, nll=0.716]
+
+integrator H=4,096 stage 36:  25%|██▌       | 1/4 [00:41<01:02, 20.91s/epoch, acc=84.8, nll=0.627]
+
+integrator H=4,096 stage 36:  50%|█████     | 2/4 [00:41<00:41, 20.92s/epoch, acc=84.8, nll=0.627]
+
+integrator H=4,096 stage 36:  50%|█████     | 2/4 [01:02<00:41, 20.92s/epoch, acc=86.3, nll=0.565]
+
+integrator H=4,096 stage 36:  75%|███████▌  | 3/4 [01:02<00:20, 20.99s/epoch, acc=86.3, nll=0.565]
+
+integrator H=4,096 stage 36:  75%|███████▌  | 3/4 [01:23<00:20, 20.99s/epoch, acc=87.7, nll=0.506]
+
+integrator H=4,096 stage 36: 100%|██████████| 4/4 [01:23<00:00, 20.98s/epoch, acc=87.7, nll=0.506]integrator H=4,096 stage 36: 100%|██████████| 4/4 [01:23<00:00, 20.97s/epoch, acc=87.7, nll=0.506]
+overall MLP GPU work:  63%|██████▎   | 3.32M/5.24M [1:00:48<35:04, 912node-image/s]
+persistent MLP H=4,096:  70%|███████   | 35/50 [1:00:48<29:42, 118.86s/task, accuracy=79.52, live=2, nll=0.997]
+persistent MLP H=4,096:  72%|███████▏  | 36/50 [1:00:48<25:57, 111.25s/task, accuracy=79.52, live=2, nll=0.997]
+
+integrator H=4,096 stage 37:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  63%|██████▎   | 3.32M/5.24M [1:00:58<35:04, 912node-image/s]
+
+integrator H=4,096 stage 37:   0%|          | 0/4 [00:30<?, ?epoch/s, acc=80.1, nll=0.854]
+
+integrator H=4,096 stage 37:  25%|██▌       | 1/4 [00:30<01:30, 30.29s/epoch, acc=80.1, nll=0.854]
+
+integrator H=4,096 stage 37:  25%|██▌       | 1/4 [01:01<01:30, 30.29s/epoch, acc=84.3, nll=0.646]
+
+integrator H=4,096 stage 37:  50%|█████     | 2/4 [01:01<01:01, 30.55s/epoch, acc=84.3, nll=0.646]
+
+integrator H=4,096 stage 37:  50%|█████     | 2/4 [01:32<01:01, 30.55s/epoch, acc=85.5, nll=0.583]
+
+integrator H=4,096 stage 37:  75%|███████▌  | 3/4 [01:32<00:30, 30.80s/epoch, acc=85.5, nll=0.583]
+
+integrator H=4,096 stage 37:  75%|███████▌  | 3/4 [02:02<00:30, 30.80s/epoch, acc=87.6, nll=0.515]
+
+integrator H=4,096 stage 37: 100%|██████████| 4/4 [02:02<00:00, 30.50s/epoch, acc=87.6, nll=0.515]integrator H=4,096 stage 37: 100%|██████████| 4/4 [02:02<00:00, 30.54s/epoch, acc=87.6, nll=0.515]
+overall MLP GPU work:  66%|██████▌   | 3.45M/5.24M [1:03:04<32:30, 919node-image/s]
+persistent MLP H=4,096:  72%|███████▏  | 36/50 [1:03:04<25:57, 111.25s/task, accuracy=79.59, live=3, nll=0.977]
+persistent MLP H=4,096:  74%|███████▍  | 37/50 [1:03:04<25:44, 118.78s/task, accuracy=79.59, live=3, nll=0.977]
+
+integrator H=4,096 stage 38:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  66%|██████▌   | 3.45M/5.24M [1:03:18<32:30, 919node-image/s]
+
+integrator H=4,096 stage 38:   0%|          | 0/4 [00:30<?, ?epoch/s, acc=82.6, nll=0.698]
+
+integrator H=4,096 stage 38:  25%|██▌       | 1/4 [00:30<01:31, 30.51s/epoch, acc=82.6, nll=0.698]
+
+integrator H=4,096 stage 38:  25%|██▌       | 1/4 [01:01<01:31, 30.51s/epoch, acc=85.0, nll=0.606]
+
+integrator H=4,096 stage 38:  50%|█████     | 2/4 [01:01<01:01, 30.57s/epoch, acc=85.0, nll=0.606]
+
+integrator H=4,096 stage 38:  50%|█████     | 2/4 [01:31<01:01, 30.57s/epoch, acc=86.4, nll=0.564]
+
+integrator H=4,096 stage 38:  75%|███████▌  | 3/4 [01:31<00:30, 30.54s/epoch, acc=86.4, nll=0.564]
+
+integrator H=4,096 stage 38:  75%|███████▌  | 3/4 [02:02<00:30, 30.54s/epoch, acc=87.2, nll=0.534]
+
+integrator H=4,096 stage 38: 100%|██████████| 4/4 [02:02<00:00, 30.49s/epoch, acc=87.2, nll=0.534]integrator H=4,096 stage 38: 100%|██████████| 4/4 [02:02<00:00, 30.51s/epoch, acc=87.2, nll=0.534]
+overall MLP GPU work:  68%|██████▊   | 3.58M/5.24M [1:05:20<30:08, 921node-image/s]
+persistent MLP H=4,096:  74%|███████▍  | 37/50 [1:05:20<25:44, 118.78s/task, accuracy=79.62, live=3, nll=0.963]
+persistent MLP H=4,096:  76%|███████▌  | 38/50 [1:05:21<24:48, 124.04s/task, accuracy=79.62, live=3, nll=0.963]
+
+integrator H=4,096 stage 39:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  68%|██████▊   | 3.58M/5.24M [1:05:38<30:08, 921node-image/s]
+
+integrator H=4,096 stage 39:   0%|          | 0/4 [00:38<?, ?epoch/s, acc=82.6, nll=0.729]
+
+integrator H=4,096 stage 39:  25%|██▌       | 1/4 [00:38<01:56, 38.96s/epoch, acc=82.6, nll=0.729]
+
+integrator H=4,096 stage 39:  25%|██▌       | 1/4 [01:17<01:56, 38.96s/epoch, acc=84.8, nll=0.626]
+
+integrator H=4,096 stage 39:  50%|█████     | 2/4 [01:17<01:17, 38.57s/epoch, acc=84.8, nll=0.626]
+
+integrator H=4,096 stage 39:  50%|█████     | 2/4 [01:56<01:17, 38.57s/epoch, acc=86.9, nll=0.567]
+
+integrator H=4,096 stage 39:  75%|███████▌  | 3/4 [01:56<00:38, 38.68s/epoch, acc=86.9, nll=0.567]
+
+integrator H=4,096 stage 39:  75%|███████▌  | 3/4 [02:34<00:38, 38.68s/epoch, acc=88.2, nll=0.480]
+
+integrator H=4,096 stage 39: 100%|██████████| 4/4 [02:34<00:00, 38.76s/epoch, acc=88.2, nll=0.480]integrator H=4,096 stage 39: 100%|██████████| 4/4 [02:34<00:00, 38.74s/epoch, acc=88.2, nll=0.480]
+overall MLP GPU work:  71%|███████▏  | 3.74M/5.24M [1:08:14<26:51, 931node-image/s]
+persistent MLP H=4,096:  76%|███████▌  | 38/50 [1:08:14<24:48, 124.04s/task, accuracy=79.04, live=4, nll=1.024]
+persistent MLP H=4,096:  78%|███████▊  | 39/50 [1:08:15<25:29, 139.04s/task, accuracy=79.04, live=4, nll=1.024]
+
+integrator H=4,096 stage 40:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  71%|███████▏  | 3.74M/5.24M [1:08:28<26:51, 931node-image/s]
+
+integrator H=4,096 stage 40:   0%|          | 0/4 [00:20<?, ?epoch/s, acc=83.5, nll=0.668]
+
+integrator H=4,096 stage 40:  25%|██▌       | 1/4 [00:20<01:01, 20.35s/epoch, acc=83.5, nll=0.668]
+
+integrator H=4,096 stage 40:  25%|██▌       | 1/4 [00:40<01:01, 20.35s/epoch, acc=85.6, nll=0.580]
+
+integrator H=4,096 stage 40:  50%|█████     | 2/4 [00:40<00:40, 20.08s/epoch, acc=85.6, nll=0.580]
+
+integrator H=4,096 stage 40:  50%|█████     | 2/4 [01:00<00:40, 20.08s/epoch, acc=86.8, nll=0.551]
+
+integrator H=4,096 stage 40:  75%|███████▌  | 3/4 [01:00<00:19, 19.98s/epoch, acc=86.8, nll=0.551]
+
+integrator H=4,096 stage 40:  75%|███████▌  | 3/4 [01:20<00:19, 19.98s/epoch, acc=87.8, nll=0.497]
+
+integrator H=4,096 stage 40: 100%|██████████| 4/4 [01:20<00:00, 20.09s/epoch, acc=87.8, nll=0.497]integrator H=4,096 stage 40: 100%|██████████| 4/4 [01:20<00:00, 20.09s/epoch, acc=87.8, nll=0.497]
+overall MLP GPU work:  73%|███████▎  | 3.83M/5.24M [1:09:45<25:21, 931node-image/s]
+persistent MLP H=4,096:  78%|███████▊  | 39/50 [1:09:45<25:29, 139.04s/task, accuracy=78.69, live=2, nll=1.048]
+persistent MLP H=4,096:  80%|████████  | 40/50 [1:09:45<20:45, 124.54s/task, accuracy=78.69, live=2, nll=1.048]
+
+integrator H=4,096 stage 41:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  73%|███████▎  | 3.83M/5.24M [1:09:58<25:21, 931node-image/s]
+
+integrator H=4,096 stage 41:   0%|          | 0/4 [00:27<?, ?epoch/s, acc=81.6, nll=0.780]
+
+integrator H=4,096 stage 41:  25%|██▌       | 1/4 [00:27<01:22, 27.56s/epoch, acc=81.6, nll=0.780]
+
+integrator H=4,096 stage 41:  25%|██▌       | 1/4 [00:54<01:22, 27.56s/epoch, acc=84.5, nll=0.648]
+
+integrator H=4,096 stage 41:  50%|█████     | 2/4 [00:54<00:54, 27.48s/epoch, acc=84.5, nll=0.648]
+
+integrator H=4,096 stage 41:  50%|█████     | 2/4 [01:23<00:54, 27.48s/epoch, acc=86.6, nll=0.550]
+
+integrator H=4,096 stage 41:  75%|███████▌  | 3/4 [01:23<00:27, 27.94s/epoch, acc=86.6, nll=0.550]
+
+integrator H=4,096 stage 41:  75%|███████▌  | 3/4 [01:52<00:27, 27.94s/epoch, acc=87.7, nll=0.496]
+
+integrator H=4,096 stage 41: 100%|██████████| 4/4 [01:52<00:00, 28.20s/epoch, acc=87.7, nll=0.496]integrator H=4,096 stage 41: 100%|██████████| 4/4 [01:52<00:00, 28.02s/epoch, acc=87.7, nll=0.496]
+overall MLP GPU work:  75%|███████▌  | 3.95M/5.24M [1:11:52<23:04, 936node-image/s]
+persistent MLP H=4,096:  80%|████████  | 40/50 [1:11:52<20:45, 124.54s/task, accuracy=78.27, live=3, nll=1.110]
+persistent MLP H=4,096:  82%|████████▏ | 41/50 [1:11:52<18:47, 125.29s/task, accuracy=78.27, live=3, nll=1.110]
+
+integrator H=4,096 stage 42:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  75%|███████▌  | 3.95M/5.24M [1:12:08<23:04, 936node-image/s]
+
+integrator H=4,096 stage 42:   0%|          | 0/4 [00:28<?, ?epoch/s, acc=82.1, nll=0.778]
+
+integrator H=4,096 stage 42:  25%|██▌       | 1/4 [00:28<01:26, 28.83s/epoch, acc=82.1, nll=0.778]
+
+integrator H=4,096 stage 42:  25%|██▌       | 1/4 [00:57<01:26, 28.83s/epoch, acc=85.1, nll=0.604]
+
+integrator H=4,096 stage 42:  50%|█████     | 2/4 [00:57<00:57, 28.89s/epoch, acc=85.1, nll=0.604]
+
+integrator H=4,096 stage 42:  50%|█████     | 2/4 [01:27<00:57, 28.89s/epoch, acc=86.1, nll=0.575]
+
+integrator H=4,096 stage 42:  75%|███████▌  | 3/4 [01:27<00:29, 29.37s/epoch, acc=86.1, nll=0.575]
+
+integrator H=4,096 stage 42:  75%|███████▌  | 3/4 [01:57<00:29, 29.37s/epoch, acc=87.6, nll=0.521]
+
+integrator H=4,096 stage 42: 100%|██████████| 4/4 [01:57<00:00, 29.40s/epoch, acc=87.6, nll=0.521]integrator H=4,096 stage 42: 100%|██████████| 4/4 [01:57<00:00, 29.29s/epoch, acc=87.6, nll=0.521]
+overall MLP GPU work:  78%|███████▊  | 4.07M/5.24M [1:14:04<20:38, 944node-image/s]
+persistent MLP H=4,096:  82%|████████▏ | 41/50 [1:14:04<18:47, 125.29s/task, accuracy=78.86, live=3, nll=1.062]
+persistent MLP H=4,096:  84%|████████▍ | 42/50 [1:14:04<16:58, 127.33s/task, accuracy=78.86, live=3, nll=1.062]
+
+integrator H=4,096 stage 43:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  78%|███████▊  | 4.07M/5.24M [1:14:18<20:38, 944node-image/s]
+
+integrator H=4,096 stage 43:   0%|          | 0/4 [00:37<?, ?epoch/s, acc=83.4, nll=0.694]
+
+integrator H=4,096 stage 43:  25%|██▌       | 1/4 [00:37<01:52, 37.57s/epoch, acc=83.4, nll=0.694]
+
+integrator H=4,096 stage 43:  25%|██▌       | 1/4 [01:15<01:52, 37.57s/epoch, acc=85.2, nll=0.595]
+
+integrator H=4,096 stage 43:  50%|█████     | 2/4 [01:15<01:15, 37.95s/epoch, acc=85.2, nll=0.595]
+
+integrator H=4,096 stage 43:  50%|█████     | 2/4 [01:53<01:15, 37.95s/epoch, acc=86.3, nll=0.561]
+
+integrator H=4,096 stage 43:  75%|███████▌  | 3/4 [01:53<00:38, 38.02s/epoch, acc=86.3, nll=0.561]
+
+integrator H=4,096 stage 43:  75%|███████▌  | 3/4 [02:31<00:38, 38.02s/epoch, acc=89.2, nll=0.466]
+
+integrator H=4,096 stage 43: 100%|██████████| 4/4 [02:31<00:00, 38.04s/epoch, acc=89.2, nll=0.466]integrator H=4,096 stage 43: 100%|██████████| 4/4 [02:31<00:00, 37.99s/epoch, acc=89.2, nll=0.466]
+overall MLP GPU work:  81%|████████  | 4.24M/5.24M [1:16:56<17:39, 948node-image/s]
+persistent MLP H=4,096:  84%|████████▍ | 42/50 [1:16:56<16:58, 127.33s/task, accuracy=78.01, live=4, nll=1.109]
+persistent MLP H=4,096:  86%|████████▌ | 43/50 [1:16:56<16:24, 140.69s/task, accuracy=78.01, live=4, nll=1.109]
+
+integrator H=4,096 stage 44:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  81%|████████  | 4.24M/5.24M [1:17:08<17:39, 948node-image/s]
+
+integrator H=4,096 stage 44:   0%|          | 0/4 [00:28<?, ?epoch/s, acc=82.9, nll=0.722]
+
+integrator H=4,096 stage 44:  25%|██▌       | 1/4 [00:28<01:24, 28.02s/epoch, acc=82.9, nll=0.722]
+
+integrator H=4,096 stage 44:  25%|██▌       | 1/4 [00:56<01:24, 28.02s/epoch, acc=85.3, nll=0.618]
+
+integrator H=4,096 stage 44:  50%|█████     | 2/4 [00:56<00:56, 28.09s/epoch, acc=85.3, nll=0.618]
+
+integrator H=4,096 stage 44:  50%|█████     | 2/4 [01:24<00:56, 28.09s/epoch, acc=87.1, nll=0.541]
+
+integrator H=4,096 stage 44:  75%|███████▌  | 3/4 [01:24<00:28, 28.19s/epoch, acc=87.1, nll=0.541]
+
+integrator H=4,096 stage 44:  75%|███████▌  | 3/4 [01:53<00:28, 28.19s/epoch, acc=88.8, nll=0.471]
+
+integrator H=4,096 stage 44: 100%|██████████| 4/4 [01:53<00:00, 28.42s/epoch, acc=88.8, nll=0.471]integrator H=4,096 stage 44: 100%|██████████| 4/4 [01:53<00:00, 28.31s/epoch, acc=88.8, nll=0.471]
+overall MLP GPU work:  83%|████████▎ | 4.36M/5.24M [1:19:05<15:34, 946node-image/s]
+persistent MLP H=4,096:  86%|████████▌ | 43/50 [1:19:05<16:24, 140.69s/task, accuracy=77.41, live=3, nll=1.147]
+persistent MLP H=4,096:  88%|████████▊ | 44/50 [1:19:05<13:43, 137.20s/task, accuracy=77.41, live=3, nll=1.147]
+
+integrator H=4,096 stage 45:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  83%|████████▎ | 4.36M/5.24M [1:19:18<15:34, 946node-image/s]
+
+integrator H=4,096 stage 45:   0%|          | 0/4 [00:36<?, ?epoch/s, acc=83.3, nll=0.707]
+
+integrator H=4,096 stage 45:  25%|██▌       | 1/4 [00:36<01:49, 36.48s/epoch, acc=83.3, nll=0.707]
+
+integrator H=4,096 stage 45:  25%|██▌       | 1/4 [01:13<01:49, 36.48s/epoch, acc=85.6, nll=0.616]
+
+integrator H=4,096 stage 45:  50%|█████     | 2/4 [01:13<01:13, 36.86s/epoch, acc=85.6, nll=0.616]
+
+integrator H=4,096 stage 45:  50%|█████     | 2/4 [01:50<01:13, 36.86s/epoch, acc=86.8, nll=0.545]
+
+integrator H=4,096 stage 45:  75%|███████▌  | 3/4 [01:50<00:37, 37.03s/epoch, acc=86.8, nll=0.545]
+
+integrator H=4,096 stage 45:  75%|███████▌  | 3/4 [02:28<00:37, 37.03s/epoch, acc=88.7, nll=0.466]
+
+integrator H=4,096 stage 45: 100%|██████████| 4/4 [02:28<00:00, 37.12s/epoch, acc=88.7, nll=0.466]integrator H=4,096 stage 45: 100%|██████████| 4/4 [02:28<00:00, 37.03s/epoch, acc=88.7, nll=0.466]
+overall MLP GPU work:  86%|████████▋ | 4.53M/5.24M [1:21:54<12:27, 960node-image/s]
+persistent MLP H=4,096:  88%|████████▊ | 44/50 [1:21:54<13:43, 137.20s/task, accuracy=77.81, live=4, nll=1.128]
+persistent MLP H=4,096:  90%|█████████ | 45/50 [1:21:54<12:13, 146.64s/task, accuracy=77.81, live=4, nll=1.128]
+
+integrator H=4,096 stage 46:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  86%|████████▋ | 4.53M/5.24M [1:22:08<12:27, 960node-image/s]
+
+integrator H=4,096 stage 46:   0%|          | 0/4 [00:38<?, ?epoch/s, acc=81.9, nll=0.768]
+
+integrator H=4,096 stage 46:  25%|██▌       | 1/4 [00:38<01:54, 38.26s/epoch, acc=81.9, nll=0.768]
+
+integrator H=4,096 stage 46:  25%|██▌       | 1/4 [01:17<01:54, 38.26s/epoch, acc=84.1, nll=0.651]
+
+integrator H=4,096 stage 46:  50%|█████     | 2/4 [01:17<01:17, 38.78s/epoch, acc=84.1, nll=0.651]
+
+integrator H=4,096 stage 46:  50%|█████     | 2/4 [01:56<01:17, 38.78s/epoch, acc=86.6, nll=0.565]
+
+integrator H=4,096 stage 46:  75%|███████▌  | 3/4 [01:56<00:38, 38.79s/epoch, acc=86.6, nll=0.565]
+
+integrator H=4,096 stage 46:  75%|███████▌  | 3/4 [02:36<00:38, 38.79s/epoch, acc=88.2, nll=0.500]
+
+integrator H=4,096 stage 46: 100%|██████████| 4/4 [02:36<00:00, 39.50s/epoch, acc=88.2, nll=0.500]integrator H=4,096 stage 46: 100%|██████████| 4/4 [02:36<00:00, 39.20s/epoch, acc=88.2, nll=0.500]
+overall MLP GPU work:  90%|████████▉ | 4.69M/5.24M [1:24:52<09:32, 957node-image/s]
+persistent MLP H=4,096:  90%|█████████ | 45/50 [1:24:52<12:13, 146.64s/task, accuracy=78.09, live=4, nll=1.128]
+persistent MLP H=4,096:  92%|█████████▏| 46/50 [1:24:52<10:24, 156.09s/task, accuracy=78.09, live=4, nll=1.128]
+
+integrator H=4,096 stage 47:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  90%|████████▉ | 4.69M/5.24M [1:25:08<09:32, 957node-image/s]
+
+integrator H=4,096 stage 47:   0%|          | 0/4 [00:46<?, ?epoch/s, acc=82.8, nll=0.780]
+
+integrator H=4,096 stage 47:  25%|██▌       | 1/4 [00:46<02:18, 46.22s/epoch, acc=82.8, nll=0.780]
+
+integrator H=4,096 stage 47:  25%|██▌       | 1/4 [01:32<02:18, 46.22s/epoch, acc=84.6, nll=0.619]
+
+integrator H=4,096 stage 47:  50%|█████     | 2/4 [01:32<01:32, 46.49s/epoch, acc=84.6, nll=0.619]
+
+integrator H=4,096 stage 47:  50%|█████     | 2/4 [02:20<01:32, 46.49s/epoch, acc=87.6, nll=0.530]
+
+integrator H=4,096 stage 47:  75%|███████▌  | 3/4 [02:20<00:46, 46.88s/epoch, acc=87.6, nll=0.530]
+
+integrator H=4,096 stage 47:  75%|███████▌  | 3/4 [03:07<00:46, 46.88s/epoch, acc=88.7, nll=0.478]
+
+integrator H=4,096 stage 47: 100%|██████████| 4/4 [03:07<00:00, 47.11s/epoch, acc=88.7, nll=0.478]integrator H=4,096 stage 47: 100%|██████████| 4/4 [03:07<00:00, 46.92s/epoch, acc=88.7, nll=0.478]
+overall MLP GPU work:  94%|█████████▎| 4.91M/5.24M [1:28:26<05:48, 967node-image/s]
+persistent MLP H=4,096:  92%|█████████▏| 46/50 [1:28:26<10:24, 156.09s/task, accuracy=77.48, live=5, nll=1.158]
+persistent MLP H=4,096:  94%|█████████▍| 47/50 [1:28:26<08:40, 173.34s/task, accuracy=77.48, live=5, nll=1.158]
+
+integrator H=4,096 stage 48:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  94%|█████████▎| 4.91M/5.24M [1:28:38<05:48, 967node-image/s]
+
+integrator H=4,096 stage 48:   0%|          | 0/4 [00:19<?, ?epoch/s, acc=81.8, nll=0.753]
+
+integrator H=4,096 stage 48:  25%|██▌       | 1/4 [00:19<00:59, 19.73s/epoch, acc=81.8, nll=0.753]
+
+integrator H=4,096 stage 48:  25%|██▌       | 1/4 [00:39<00:59, 19.73s/epoch, acc=84.5, nll=0.638]
+
+integrator H=4,096 stage 48:  50%|█████     | 2/4 [00:39<00:39, 19.95s/epoch, acc=84.5, nll=0.638]
+
+integrator H=4,096 stage 48:  50%|█████     | 2/4 [01:00<00:39, 19.95s/epoch, acc=86.3, nll=0.558]
+
+integrator H=4,096 stage 48:  75%|███████▌  | 3/4 [01:00<00:20, 20.11s/epoch, acc=86.3, nll=0.558]
+
+integrator H=4,096 stage 48:  75%|███████▌  | 3/4 [01:20<00:20, 20.11s/epoch, acc=88.4, nll=0.477]
+
+integrator H=4,096 stage 48: 100%|██████████| 4/4 [01:20<00:00, 20.15s/epoch, acc=88.4, nll=0.477]integrator H=4,096 stage 48: 100%|██████████| 4/4 [01:20<00:00, 20.09s/epoch, acc=88.4, nll=0.477]
+overall MLP GPU work:  95%|█████████▌| 4.99M/5.24M [1:29:58<04:24, 957node-image/s]
+persistent MLP H=4,096:  94%|█████████▍| 47/50 [1:29:58<08:40, 173.34s/task, accuracy=76.98, live=2, nll=1.142]
+persistent MLP H=4,096:  96%|█████████▌| 48/50 [1:29:58<04:58, 149.04s/task, accuracy=76.98, live=2, nll=1.142]
+
+integrator H=4,096 stage 49:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  95%|█████████▌| 4.99M/5.24M [1:30:08<04:24, 957node-image/s]
+
+integrator H=4,096 stage 49:   0%|          | 0/4 [00:29<?, ?epoch/s, acc=81.4, nll=0.781]
+
+integrator H=4,096 stage 49:  25%|██▌       | 1/4 [00:29<01:29, 29.97s/epoch, acc=81.4, nll=0.781]
+
+integrator H=4,096 stage 49:  25%|██▌       | 1/4 [00:59<01:29, 29.97s/epoch, acc=84.2, nll=0.652]
+
+integrator H=4,096 stage 49:  50%|█████     | 2/4 [00:59<00:59, 29.78s/epoch, acc=84.2, nll=0.652]
+
+integrator H=4,096 stage 49:  50%|█████     | 2/4 [01:29<00:59, 29.78s/epoch, acc=85.6, nll=0.594]
+
+integrator H=4,096 stage 49:  75%|███████▌  | 3/4 [01:29<00:29, 29.85s/epoch, acc=85.6, nll=0.594]
+
+integrator H=4,096 stage 49:  75%|███████▌  | 3/4 [02:01<00:29, 29.85s/epoch, acc=87.2, nll=0.546]
+
+integrator H=4,096 stage 49: 100%|██████████| 4/4 [02:01<00:00, 30.58s/epoch, acc=87.2, nll=0.546]integrator H=4,096 stage 49: 100%|██████████| 4/4 [02:01<00:00, 30.31s/epoch, acc=87.2, nll=0.546]
+overall MLP GPU work:  98%|█████████▊| 5.12M/5.24M [1:32:17<02:14, 943node-image/s]
+persistent MLP H=4,096:  96%|█████████▌| 48/50 [1:32:17<04:58, 149.04s/task, accuracy=76.06, live=3, nll=1.182]
+persistent MLP H=4,096:  98%|█████████▊| 49/50 [1:32:17<02:25, 145.96s/task, accuracy=76.06, live=3, nll=1.182]
+
+integrator H=4,096 stage 50:   0%|          | 0/4 [00:00<?, ?epoch/s]overall MLP GPU work:  98%|█████████▊| 5.12M/5.24M [1:32:28<02:14, 943node-image/s]
+
+integrator H=4,096 stage 50:   0%|          | 0/4 [00:32<?, ?epoch/s, acc=81.8, nll=0.773]
+
+integrator H=4,096 stage 50:  25%|██▌       | 1/4 [00:32<01:38, 32.74s/epoch, acc=81.8, nll=0.773]
+
+integrator H=4,096 stage 50:  25%|██▌       | 1/4 [01:05<01:38, 32.74s/epoch, acc=85.6, nll=0.600]
+
+integrator H=4,096 stage 50:  50%|█████     | 2/4 [01:05<01:05, 32.72s/epoch, acc=85.6, nll=0.600]
+
+integrator H=4,096 stage 50:  50%|█████     | 2/4 [01:37<01:05, 32.72s/epoch, acc=87.1, nll=0.552]
+
+integrator H=4,096 stage 50:  75%|███████▌  | 3/4 [01:37<00:32, 32.63s/epoch, acc=87.1, nll=0.552]
+
+integrator H=4,096 stage 50:  75%|███████▌  | 3/4 [02:10<00:32, 32.63s/epoch, acc=88.8, nll=0.471]
+
+integrator H=4,096 stage 50: 100%|██████████| 4/4 [02:10<00:00, 32.54s/epoch, acc=88.8, nll=0.471]integrator H=4,096 stage 50: 100%|██████████| 4/4 [02:10<00:00, 32.59s/epoch, acc=88.8, nll=0.471]
+overall MLP GPU work: 100%|██████████| 5.24M/5.24M [1:34:46<00:00, 916node-image/s]
+persistent MLP H=4,096:  98%|█████████▊| 49/50 [1:34:46<02:25, 145.96s/task, accuracy=76.10, live=3, nll=1.194]
+persistent MLP H=4,096: 100%|██████████| 50/50 [1:34:46<00:00, 146.80s/task, accuracy=76.10, live=3, nll=1.194]persistent MLP H=4,096: 100%|██████████| 50/50 [1:34:46<00:00, 113.72s/task, accuracy=76.10, live=3, nll=1.194]
+overall MLP GPU work: 100%|██████████| 5.24M/5.24M [1:34:46<00:00, 922node-image/s]
+[phase 4/5] Demonstrate zero-step reuse of all 50 MLP stages
+[phase 5/5] Integrate the MLP condition into the existing report and figures
+Result: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/persistent_mlp_v16/runs/bb991cf93bd05d74a92d796735768c67e1f2e9b78e5b40e1c2ee314b29594fd6/evaluations/result.json
+Report: /home/daniel/projects/snet/rpa/output/pdf/imagenetr50_persistent_affine_v15_report.pdf
