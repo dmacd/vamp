@@ -269,6 +269,7 @@ def test_report_aggregates_fragmentation_by_live_node_count() -> None:
     assert len(rows) == 10
     assert rows[0] == {
         "historical_capacity": 4096,
+        "integrator_kind": "affine",
         "live_nodes": 1,
         "stages": 1,
         "mean_accuracy": 71.0,

@@ -31,11 +31,14 @@
   checkpoint/AdamW restoration, zero split overlap, and the correct eight-stage
   topology. Peak preflight allocation is 4.62 GB. Protocol/run
   `bb991cf93bd05d74a92d796735768c67e1f2e9b78e5b40e1c2ee314b29594fd6`
-  is ready for the single 50-stage arm at reduced CPU priority.
+  is running the single 50-stage arm at reduced CPU priority. The implementation
+  was committed and pushed as `edc21a3` before the full run.
 - Next, complete the run while preserving the existing H=8,192 and both
   joint-IID curves unchanged, then integrate accuracy, NLL, true-node
   diagnostics, and cumulative resource accounting into the same report and
-  figures. No scientific result for the new arm is available yet.
+  figures. Report projections and authentication tests are implemented; an
+  eight-page layout fixture has been rendered without publishing synthetic
+  values. The new arm's full-stream scientific outcome is still pending.
 
 ## Completed Outcome - ImageNet-R Full-Stream Persistent Single-Affine Frontier
 
