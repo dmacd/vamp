@@ -118,12 +118,92 @@ def _stage_rows(result: dict[str, object]) -> tuple[dict[str, object], ...]:
     return tuple(rows)
 
 
-def _write_tables(reports: Path, stage_rows: tuple[dict[str, object], ...], summaries: tuple[dict[str, object], ...]) -> None:
-    for name, rows in (("stage_metrics", stage_rows), ("condition_summary", summaries)):
+def _lifecycle_rows(result: dict[str, object]) -> tuple[dict[str, object], ...]:
+    """Project exact node carry/reset evidence into a compact plotting ledger."""
+    h4096 = result["arms"]["4096"]
+    h8192 = result["arms"]["8192"]
+    rows: list[dict[str, object]] = []
+    for stage, (h4, h8) in enumerate(zip(h4096, h8192, strict=True), 1):
+        topology_fields = ("node_hashes", "slots", "carry")
+        if any(h4[field] != h8[field] for field in topology_fields):
+            raise ValueError("persistent arms disagree about the source hierarchy")
+        node_hashes = tuple(str(value) for value in h4["node_hashes"])
+        slots = tuple(int(value) for value in h4["slots"])
+        continued = frozenset(str(value) for value in h4["carry"]["continued_node_hashes"])
+        reset = frozenset(str(value) for value in h4["carry"]["reset_node_hashes"])
+        if (
+            len(node_hashes) != len(slots)
+            or set(node_hashes) != continued | reset
+            or continued & reset
+        ):
+            raise ValueError("persistent node transition evidence is malformed")
+        rows.extend(
+            {
+                "stage": stage,
+                "slot": slot,
+                "represented_task_capacity": 2**slot,
+                "node_hash": node_hash,
+                "entry": "continued" if node_hash in continued else "source_reset",
+            }
+            for node_hash, slot in zip(node_hashes, slots, strict=True)
+        )
+    return tuple(rows)
+
+
+def _fragmentation_rows(result: dict[str, object]) -> tuple[dict[str, object], ...]:
+    """Aggregate task-free and oracle accuracy by the number of live nodes."""
+    arms = result["arms"]
+    rows: list[dict[str, object]] = []
+    for capacity in ("4096", "8192"):
+        for live_nodes in range(1, 6):
+            selected = tuple(
+                row
+                for row in arms[capacity]
+                if int(row["live_nodes"]) == live_nodes
+            )
+            if not selected:
+                raise ValueError("one expected LogT frontier width is absent")
+            accuracies = tuple(float(row["evaluation"]["accuracy"]) for row in selected)
+            oracles = tuple(
+                float(row["evaluation"]["true_node_oracle_accuracy"])
+                for row in selected
+            )
+            rows.append(
+                {
+                    "historical_capacity": int(capacity),
+                    "live_nodes": live_nodes,
+                    "stages": len(selected),
+                    "mean_accuracy": math.fsum(accuracies) / len(selected),
+                    "mean_true_node_oracle_accuracy": math.fsum(oracles) / len(selected),
+                    "mean_true_node_oracle_gap": math.fsum(
+                        oracle - accuracy
+                        for oracle, accuracy in zip(oracles, accuracies, strict=True)
+                    )
+                    / len(selected),
+                }
+            )
+    return tuple(rows)
+
+
+def _write_tables(
+    reports: Path,
+    stage_rows: tuple[dict[str, object], ...],
+    summaries: tuple[dict[str, object], ...],
+    lifecycle_rows: tuple[dict[str, object], ...],
+    fragmentation_rows: tuple[dict[str, object], ...],
+) -> None:
+    for name, rows in (
+        ("stage_metrics", stage_rows),
+        ("condition_summary", summaries),
+        ("adapter_lifecycle", lifecycle_rows),
+        ("fragmentation_summary", fragmentation_rows),
+    ):
         json_path = reports / f"{name}.json"
         atomic_write(json_path, canonical_json_bytes(list(rows)))
         buffer = StringIO()
-        writer = csv.DictWriter(buffer, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(
+            buffer, fieldnames=list(rows[0]), lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(rows)
         atomic_write(reports / f"{name}.csv", buffer.getvalue().encode("utf-8"))
@@ -158,7 +238,7 @@ def _plot_accuracy(reports: Path, result: dict[str, object]) -> Path:
         LABEL_ORACLE_H4096: ":",
         LABEL_ORACLE_H8192: ":",
     }
-    figure, axis = plt.subplots(figsize=(11.2, 5.8), constrained_layout=True)
+    figure, axis = plt.subplots(figsize=(11.2, 6.4), constrained_layout=True)
     for label, values in series.items():
         axis.plot(
             stages,
@@ -172,7 +252,13 @@ def _plot_accuracy(reports: Path, result: dict[str, object]) -> Path:
         axis.axvline(stage, color="#aaaaaa", linewidth=0.7, alpha=0.45)
     axis.set(xlabel="Tasks observed", ylabel="Test top-1 accuracy (%)", xlim=(1, 50))
     axis.grid(axis="y", alpha=0.25)
-    axis.legend(loc="lower right", fontsize=7.5, frameon=True, ncol=2)
+    axis.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.14),
+        fontsize=8.7,
+        frameon=False,
+        ncol=2,
+    )
     axis.set_title("Full-stream accuracy with stage-matched data prefixes")
     path = reports / "stage_accuracy.png"
     figure.savefig(path, dpi=210)
@@ -230,6 +316,117 @@ def _plot_nll(reports: Path, result: dict[str, object]) -> Path:
     return path
 
 
+def _plot_lifecycle(
+    reports: Path, lifecycle_rows: tuple[dict[str, object], ...]
+) -> Path:
+    """Render exact source-entry and adapted-state carry over all 50 stages."""
+    import matplotlib.pyplot as plt
+
+    by_node: dict[str, list[dict[str, object]]] = {}
+    for row in lifecycle_rows:
+        by_node.setdefault(str(row["node_hash"]), []).append(row)
+    figure, axis = plt.subplots(figsize=(11.2, 4.9), constrained_layout=True)
+    for node_rows in by_node.values():
+        stages = [int(row["stage"]) for row in node_rows]
+        slots = {int(row["slot"]) for row in node_rows}
+        if len(slots) != 1 or stages != list(range(stages[0], stages[-1] + 1)):
+            raise ValueError("one source node has a discontinuous online lifetime")
+        axis.plot(
+            stages,
+            [next(iter(slots))] * len(stages),
+            color="#1f77b4",
+            linewidth=3.2,
+            alpha=0.55,
+            solid_capstyle="round",
+        )
+    reset = tuple(row for row in lifecycle_rows if row["entry"] == "source_reset")
+    continued = tuple(row for row in lifecycle_rows if row["entry"] == "continued")
+    axis.scatter(
+        [int(row["stage"]) for row in continued],
+        [int(row["slot"]) for row in continued],
+        color="#1f77b4",
+        edgecolor="white",
+        linewidth=0.45,
+        s=28,
+        label="Adapted LoRA and Adam state carried, then updated",
+        zorder=3,
+    )
+    axis.scatter(
+        [int(row["stage"]) for row in reset],
+        [int(row["slot"]) for row in reset],
+        color="#d95f02",
+        edgecolor="white",
+        linewidth=0.55,
+        marker="D",
+        s=44,
+        label="Sealed source leaf/parent loaded, then updated",
+        zorder=4,
+    )
+    for stage in (2, 4, 8, 16, 32):
+        axis.axvline(stage, color="#888888", linewidth=0.7, alpha=0.35)
+    axis.set(
+        xlabel="Tasks observed / online stage",
+        ylabel="LogT hierarchy level",
+        xlim=(0.5, 50.5),
+        ylim=(-0.45, 5.45),
+        yticks=range(6),
+        yticklabels=tuple(f"L{level} ({2**level} task{'s' if level else ''})" for level in range(6)),
+    )
+    axis.set_title("Frontier-node LoRA lifetimes and exact persistence boundaries")
+    axis.grid(axis="x", alpha=0.12)
+    axis.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.17),
+        fontsize=8.3,
+        frameon=False,
+        ncol=2,
+    )
+    path = reports / "adapter_lifecycle.png"
+    figure.savefig(path, dpi=210)
+    plt.close(figure)
+    return path
+
+
+def _plot_fragmentation(
+    reports: Path, fragmentation_rows: tuple[dict[str, object], ...]
+) -> Path:
+    """Plot the task-free loss associated with wider LogT frontiers."""
+    import matplotlib.pyplot as plt
+
+    figure, axis = plt.subplots(figsize=(11.2, 5.0), constrained_layout=True)
+    for capacity, color, marker in (
+        (4_096, "#1f77b4", "o"),
+        (8_192, "#d95f02", "s"),
+    ):
+        selected = tuple(
+            row
+            for row in fragmentation_rows
+            if int(row["historical_capacity"]) == capacity
+        )
+        axis.plot(
+            [int(row["live_nodes"]) for row in selected],
+            [float(row["mean_true_node_oracle_gap"]) for row in selected],
+            color=color,
+            marker=marker,
+            linewidth=2.2,
+            markersize=6,
+            label=f"H={capacity:,}",
+        )
+    axis.axhline(0, color="#222222", linewidth=0.9)
+    axis.set(
+        xlabel="Live frontier nodes",
+        ylabel="True-node oracle minus task-free accuracy (points)",
+        xticks=range(1, 6),
+    )
+    axis.set_title("True-node diagnostic gap grows with frontier fragmentation")
+    axis.grid(axis="y", alpha=0.25)
+    axis.legend(fontsize=9, frameon=True)
+    path = reports / "fragmentation_oracle_gap.png"
+    figure.savefig(path, dpi=210)
+    plt.close(figure)
+    return path
+
+
 def _png_data(path: Path) -> str:
     return base64.b64encode(path.read_bytes()).decode("ascii")
 
@@ -248,6 +445,27 @@ def _selected_table(stage_rows: tuple[dict[str, object], ...]) -> str:
             "{persistent_affine_h8192_accuracy:.3f}% | {h4096_true_node_oracle_accuracy:.3f}% | "
             "{h8192_true_node_oracle_accuracy:.3f}% | {stage_matched_joint_rank16_accuracy:.3f}% | "
             "{rank_matched_joint_accuracy:.3f}% | {rank_matched_joint_rank} |".format(**row)
+        )
+    return "\n".join(lines)
+
+
+def _fragmentation_table(fragmentation_rows: tuple[dict[str, object], ...]) -> str:
+    by_key = {
+        (int(row["historical_capacity"]), int(row["live_nodes"])): row
+        for row in fragmentation_rows
+    }
+    lines = [
+        "| Live nodes | Stages | H4 accuracy | H4 oracle gap | H8 accuracy | H8 oracle gap |",
+        "|---:|---:|---:|---:|---:|---:|",
+    ]
+    for live_nodes in range(1, 6):
+        h4, h8 = by_key[(4_096, live_nodes)], by_key[(8_192, live_nodes)]
+        if h4["stages"] != h8["stages"]:
+            raise ValueError("persistent arms disagree about frontier-width counts")
+        lines.append(
+            f"| {live_nodes} | {h4['stages']} | {h4['mean_accuracy']:.3f}% | "
+            f"{h4['mean_true_node_oracle_gap']:.3f} | {h8['mean_accuracy']:.3f}% | "
+            f"{h8['mean_true_node_oracle_gap']:.3f} |"
         )
     return "\n".join(lines)
 
@@ -271,6 +489,7 @@ def _write_markdown(
     result: dict[str, object],
     stage_rows: tuple[dict[str, object], ...],
     summaries: tuple[dict[str, object], ...],
+    fragmentation_rows: tuple[dict[str, object], ...],
 ) -> Path:
     text = f"""# ImageNet-R-50 persistent single-affine frontier
 
@@ -305,6 +524,25 @@ NLL is shown for both persistent arms and newly trained aggregate-rank models.
 The imported one-node rank-16 artifacts retained predictions but not logits,
 so those six green NLL points are intentionally absent; accuracy is complete.
 
+## Fragmentation diagnosis
+
+![Oracle gap by live-node count](fragmentation_oracle_gap.png)
+
+{_fragmentation_table(fragmentation_rows)}
+
+The true-node oracle is label-aware and not deployable. Its widening advantage
+is consistent with cross-node competition, but the diagnostic also substitutes
+the frozen node-local classifier, so it does not isolate routing alone.
+
+## Frontier-node LoRA lifetimes
+
+![Frontier-node LoRA lifetimes](adapter_lifecycle.png)
+
+Every marker is followed by adaptation at that stage. Blue circles continue the
+exact final LoRA factors and named AdamW state from the preceding stage. Orange
+diamonds load an authenticated source leaf or full-union parent. Consolidation
+parents do not inherit the online-adapted LoRAs of their retired children.
+
 ## Protocol
 
 - H=4,096 uses four epochs per arrival; H=8,192 uses five.
@@ -333,6 +571,7 @@ def _write_html(
     result: dict[str, object],
     stage_rows: tuple[dict[str, object], ...],
     summaries: tuple[dict[str, object], ...],
+    fragmentation_rows: tuple[dict[str, object], ...],
     images: tuple[Path, ...],
 ) -> Path:
     selected = tuple(
@@ -353,6 +592,19 @@ def _write_html(
         for row in selected
     )
     embedded = tuple(_png_data(image) for image in images)
+    fragmentation_by_key = {
+        (int(row["historical_capacity"]), int(row["live_nodes"])): row
+        for row in fragmentation_rows
+    }
+    fragmentation_table_rows = "".join(
+        "<tr>"
+        f"<td>{live_nodes}</td><td>{fragmentation_by_key[(4_096, live_nodes)]['stages']}</td>"
+        f"<td>{fragmentation_by_key[(4_096, live_nodes)]['mean_accuracy']:.3f}%</td>"
+        f"<td>{fragmentation_by_key[(4_096, live_nodes)]['mean_true_node_oracle_gap']:.3f}</td>"
+        f"<td>{fragmentation_by_key[(8_192, live_nodes)]['mean_accuracy']:.3f}%</td>"
+        f"<td>{fragmentation_by_key[(8_192, live_nodes)]['mean_true_node_oracle_gap']:.3f}</td></tr>"
+        for live_nodes in range(1, 6)
+    )
     html = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>ImageNet-R-50 persistent single-affine frontier</title>
@@ -371,6 +623,13 @@ code{{background:#eef2f5;padding:2px 4px}} .note{{color:#4b5563}}
 <img src="data:image/png;base64,{embedded[1]}" alt="Accuracy gaps to joint-IID controls">
 <p>Positive values mean the persistent affine frontier is ahead of the named joint-IID reference. Neither reference is an execution gate.</p>
 <img src="data:image/png;base64,{embedded[2]}" alt="Test negative log likelihood">
+<h2>Fragmentation diagnosis</h2>
+<img src="data:image/png;base64,{embedded[3]}" alt="True-node oracle gap by live-node count">
+<table><thead><tr><th>Nodes</th><th>Stages</th><th>H4 accuracy</th><th>H4 oracle gap</th><th>H8 accuracy</th><th>H8 oracle gap</th></tr></thead><tbody>{fragmentation_table_rows}</tbody></table>
+<p>The true-node oracle is label-aware and diagnostic only. Its widening advantage is consistent with cross-node competition, but it also substitutes the frozen node-local classifier, so it does not isolate routing alone.</p>
+<h2>Frontier-node LoRA lifetimes</h2>
+<img src="data:image/png;base64,{embedded[4]}" alt="Frontier-node LoRA carry and reset history">
+<p>Every marker is followed by adaptation at that stage. Blue circles carry the exact final LoRA factors and named AdamW state from the preceding stage. Orange diamonds load a sealed source leaf or full-union parent. A consolidation parent does not inherit the online-adapted LoRAs of its retired children.</p>
 <h2>Protocol</h2>
 <ul><li>H=4,096 uses four epochs per arrival; H=8,192 uses five.</li>
 <li>Replay is class-stratified and deterministically redrawn at every stage.</li>
@@ -393,6 +652,7 @@ def _write_pdf(
     result: dict[str, object],
     summaries: tuple[dict[str, object], ...],
     stage_rows: tuple[dict[str, object], ...],
+    fragmentation_rows: tuple[dict[str, object], ...],
     images: tuple[Path, ...],
 ) -> None:
     import matplotlib.pyplot as plt
@@ -601,6 +861,113 @@ def _write_pdf(
         footer(third, 3)
         document.savefig(third)
         plt.close(third)
+
+        fourth = plt.figure(figsize=(8.5, 11), facecolor="white")
+        fourth.text(
+            0.06,
+            0.95,
+            "Fragmentation diagnosis",
+            fontsize=17,
+            weight="bold",
+            color="#16324f",
+        )
+        image_axis(fourth, images[3], (0.055, 0.43, 0.89, 0.43))
+        by_key = {
+            (int(row["historical_capacity"]), int(row["live_nodes"])): row
+            for row in fragmentation_rows
+        }
+        table_axis = fourth.add_axes((0.09, 0.19, 0.82, 0.17))
+        table_axis.axis("off")
+        table = table_axis.table(
+            cellText=[
+                [
+                    live_nodes,
+                    by_key[(4_096, live_nodes)]["stages"],
+                    f"{by_key[(4_096, live_nodes)]['mean_accuracy']:.2f}%",
+                    f"{by_key[(4_096, live_nodes)]['mean_true_node_oracle_gap']:.2f}",
+                    f"{by_key[(8_192, live_nodes)]['mean_accuracy']:.2f}%",
+                    f"{by_key[(8_192, live_nodes)]['mean_true_node_oracle_gap']:.2f}",
+                ]
+                for live_nodes in range(1, 6)
+            ],
+            colLabels=("Nodes", "Stages", "H4 acc.", "H4 gap", "H8 acc.", "H8 gap"),
+            cellLoc="center",
+            loc="center",
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(8)
+        table.scale(1.0, 1.4)
+        for (row, _column), cell in table.get_celld().items():
+            cell.set_edgecolor("#b8c2cc")
+            if row == 0:
+                cell.set_facecolor("#16324f")
+                cell.get_text().set_color("white")
+                cell.get_text().set_weight("bold")
+            elif row % 2 == 0:
+                cell.set_facecolor("#f2f5f7")
+        fourth.text(
+            0.06,
+            0.125,
+            wrapped(
+                "The label-aware true-node oracle is diagnostic only. Its growing advantage as the number of independently adapted frontier nodes rises is consistent with cross-node competition. Because it also substitutes the frozen node-local classifier, it does not isolate routing alone.",
+                105,
+            ),
+            fontsize=9.1,
+            va="top",
+        )
+        footer(fourth, 4)
+        document.savefig(fourth)
+        plt.close(fourth)
+
+        fifth = plt.figure(figsize=(8.5, 11), facecolor="white")
+        fifth.text(
+            0.06,
+            0.95,
+            "Frontier-node adaptation lifetimes",
+            fontsize=17,
+            weight="bold",
+            color="#16324f",
+        )
+        image_axis(fifth, images[4], (0.055, 0.45, 0.89, 0.42))
+        fifth.text(
+            0.06,
+            0.405,
+            "What persists",
+            fontsize=12,
+            weight="bold",
+            color="#16324f",
+        )
+        fifth.text(
+            0.06,
+            0.38,
+            wrapped(
+                "A blue lifetime continues only while the exact source hierarchy-node hash remains live. The next stage begins from that node's final adapted rank-16 LoRA, its 768-column affine block, and its named AdamW moments. All live LoRAs then update jointly on every current-plus-replay example.",
+                105,
+            ),
+            fontsize=9.1,
+            va="top",
+        )
+        fifth.text(
+            0.06,
+            0.265,
+            "What resets",
+            fontsize=12,
+            weight="bold",
+            color="#16324f",
+        )
+        fifth.text(
+            0.06,
+            0.24,
+            wrapped(
+                "An orange diamond is a new leaf or consolidation parent loaded from the sealed source hierarchy. A parent was independently retrained on the full union of its represented tasks; it does not inherit the online-adapted LoRAs or optimizer moments of retired children. Unaffected nodes continue normally, and old global affine-bias rows remain persistent.",
+                105,
+            ),
+            fontsize=9.1,
+            va="top",
+        )
+        footer(fifth, 5)
+        document.savefig(fifth)
+        plt.close(fifth)
     os.replace(temporary, output)
 
 
@@ -612,19 +979,35 @@ def write_persistent_affine_report(run: str | Path) -> Path:
     reports.mkdir(parents=True, exist_ok=True)
     summaries = _summary_rows(result)
     stage_rows = _stage_rows(result)
-    _write_tables(reports, stage_rows, summaries)
+    lifecycle_rows = _lifecycle_rows(result)
+    fragmentation_rows = _fragmentation_rows(result)
+    _write_tables(
+        reports, stage_rows, summaries, lifecycle_rows, fragmentation_rows
+    )
     images = (
         _plot_accuracy(reports, result),
         _plot_gaps(reports, stage_rows),
         _plot_nll(reports, result),
+        _plot_fragmentation(reports, fragmentation_rows),
+        _plot_lifecycle(reports, lifecycle_rows),
     )
-    markdown = _write_markdown(reports, result, stage_rows, summaries)
-    html = _write_html(reports, result, stage_rows, summaries, images)
+    markdown = _write_markdown(
+        reports, result, stage_rows, summaries, fragmentation_rows
+    )
+    html = _write_html(
+        reports, result, stage_rows, summaries, fragmentation_rows, images
+    )
     project_root = run_path.parents[4]
     pdf = project_root / "output/pdf/imagenetr50_persistent_affine_v15_report.pdf"
-    _write_pdf(pdf, result, summaries, stage_rows, images)
+    _write_pdf(pdf, result, summaries, stage_rows, fragmentation_rows, images)
     manifest_core = {
         "condition_summary_sha256": file_sha256(reports / "condition_summary.json"),
+        "adapter_lifecycle_sha256": file_sha256(reports / "adapter_lifecycle.json"),
+        "fragmentation_summary_sha256": file_sha256(reports / "fragmentation_summary.json"),
+        "figure_sha256": {
+            image.name: file_sha256(image)
+            for image in images
+        },
         "html_sha256": file_sha256(html),
         "markdown_sha256": file_sha256(markdown),
         "pdf": str(pdf),

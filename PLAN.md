@@ -13,44 +13,61 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
-## Active Experiment - ImageNet-R Full-Stream Persistent Single-Affine Frontier
+## Completed Outcome - ImageNet-R Full-Stream Persistent Single-Affine Frontier
 
-- The v15 implementation is complete and ready for the full local RTX 4090
-  run. It promotes only the simplified single-affine, adaptive-frontier-LoRA
-  architecture at H=4,096 and H=8,192; no macro-token model, token features,
-  local-score inputs, metadata fields, hidden layers, or label-aware routing
-  participate in its predictions.
-- At each of 50 arrivals, both arms use all current-task training images plus a
-  deterministic stage-keyed class-stratified redraw of at most H historical
-  images. The H=4,096 arm trains four epochs per arrival and H=8,192 trains
-  five, preserving the stage-31 minimum-NLL budgets and their original
-  50-epoch warmup-cosine trajectory.
-- Live rank-16 node LoRAs, affine input blocks, biases, and named AdamW moments
-  carry when their exact hierarchy-node hashes survive. New leaves and nodes
-  created by a binary-counter consolidation enter from the authenticated
-  source hierarchy. The base ViT and local classifiers never train.
-- Comparisons are the already-sealed fresh rank-16 joint-IID curve and a new
-  fresh aggregate-rank curve with rank and alpha `16 * popcount(stage)`. These
-  are descriptive references, not gates. Test prefixes are opened only after
-  each online stage is sealed.
-- Seven focused tests pass. The real BF16 preflight verifies 98 finite gradient
+- **The definitive 50-task v15 run completed on 2026-09-08.** Protocol and run
+  hash `5f60e2f5c25e3318ba9c9b66d41ce8c159ba57a0f1a4fc524567c098b222d686`
+  sealed 50 stages for each adaptive arm and both joint-IID references in 6 h
+  9 min on the local RTX 4090. Result hash
+  `4fa601c9b8e3cc87f07897f06ba51f88b75b7ecde1bf47ef01881526df4b4b58`
+  authenticates the complete matrix. A second invocation performed zero leaf,
+  affine, or joint-control optimizer steps and reproduced every stage row.
+- The deployed conditions are exactly the simplified single-affine frontier:
+  one 768-value pre-classifier vector from each live node is concatenated and
+  mapped directly to 200 logits. The model contains no macro tokens, hidden
+  layers, score inputs, metadata, or label-aware routing. Both arms train every
+  live rank-16 node LoRA and the affine map; the base ViT and node-local
+  classifiers remain frozen.
+- At every arrival, the H=4,096 arm makes four passes and H=8,192 makes five
+  over all current-task images plus a fresh deterministic, class-stratified
+  historical draw. A surviving hierarchy node carries its final adapted LoRA,
+  corresponding affine input block, and named AdamW moments into the next
+  stage. A consolidation retires its children and loads the authenticated,
+  independently full-union-retrained parent; that parent does not inherit the
+  children's online adaptations. The report renders all carry and reset
+  lifetimes over the complete 50-stage binary-counter hierarchy.
+- At task 50, H=4,096 reaches **75.867% accuracy / 1.2151 NLL** and H=8,192
+  reaches **76.217% / 1.3099**. Fresh stage-matched joint IID reaches
+  **78.867%**, while the aggregate-rank control reaches **79.767%** at rank 48.
+  Across all 50 prefixes, incremental accuracy is **82.434%**, **82.452%**,
+  **81.630%**, and **82.759%**, respectively. The larger replay budget gains
+  only 0.350 point at the final stage and essentially nothing cumulatively,
+  despite more than doubling the adaptive arm's optimizer work.
+- Frontier fragmentation, rather than total adapter rank alone, is the main
+  remaining failure pattern. Averaged by live-node count, the H=4,096
+  true-node diagnostic gap rises from **0.16 point with one node** to **7.37
+  points with five**; H=8,192 rises from **0.09** to **6.48 points**. At stage
+  31, five nodes score 77.52%/78.04%, their true-node diagnostics score
+  85.64%/85.17%, rank-16 joint IID scores 80.29%, and rank-80 joint IID scores
+  82.10%. At stage 32 the frontier consolidates to one node and H=8,192 jumps
+  to 81.19%, above both 80.28% joint controls. Because the diagnostic also uses
+  frozen node-local classifiers, it is consistent with cross-node competition
+  but does not isolate routing alone.
+- The real BF16 preflight verifies zero split overlap, 98 finite gradient
   tensors, exact adapter carry, the expected `[1,1,2,1,2,2,3,1]` early
-  frontier sizes, zero split overlap, and exact-union logits within 1.53e-5.
-  A four-epoch stage-1 training smoke reaches 97.458% on its 118-image test
-  prefix with 4.19 GB peak allocated VRAM. The first full-run launch exposed a
-  CPU-to-CUDA affine-bias optimizer-moment indexing error at the stage-1-to-2
-  boundary; the device-safe transplant and its regression test are now in
-  place, and no stage-2 optimization occurred in that failed namespace.
-- A subsequent live audit expanded the material-code manifest to include the
-  shared warmup scheduler and every source-loading helper used by the run,
-  pins all six joint-IID SGD hyperparameters in the resolved v15 config, and
-  requires ledger rows to equal their immutable stage artifacts. Early
-  healthy pilot stages were stopped before this identity correction so the
-  definitive namespace cannot silently reuse them.
-- Next: commit and push the implementation, execute/resume both 50-stage arms
-  and the aggregate-rank joint curve, prove a second invocation performs zero
-  optimizer steps, generate and visually inspect the PDF, run focused and
-  repository regressions, then commit and push the compact scientific record.
+  frontier sizes, and exact-union logits within 1.53e-5. All **124** ImageNet-R
+  tests pass in the required single pytest process; the separate remaining
+  continual, benchmark, and integration slices also return cleanly. The
+  top-level repository slice retains exactly 31 optional-environment failures:
+  eight require `fabricpc` and 23 require `tokenizers`; no ImageNet-R test
+  fails. The five-page PDF and every figure were rendered and inspected, and
+  the final report manifest records PDF SHA-256
+  `de0b57cbf0c462d951859271fb9acc3051c826c95fcae847e13eb012ca4baa62`.
+- Next, replicate the persistent arms across seeds before treating their small
+  H difference as stable. For the architecture, target fragmented frontiers:
+  first separate global-head competition from node-local classifier quality
+  with matched fixed heads, then test a normalized or calibrated affine map at
+  the same replay budgets. More replay by itself is not the next priority.
 
 ## Completed Outcome - ImageNet-R Stage-31 Matched-H Architecture Replay Sweep
 

@@ -25,6 +25,8 @@ from apm.continual.vision.imagenetr.persistent_affine_reporting import (
     LABEL_ORACLE_H8192,
     LABEL_RANK_JOINT,
     LABEL_STAGE_JOINT,
+    _fragmentation_rows,
+    _lifecycle_rows,
     _series,
     _stage_rows,
     _summary_rows,
@@ -204,3 +206,74 @@ def test_report_uses_one_set_of_exact_condition_names() -> None:
     assert len(_summary_rows(result)) == 6
     assert len(_stage_rows(result)) == 50
     assert "macro" not in " ".join(_series(result)).lower()
+
+
+def test_report_lifecycle_distinguishes_exact_carry_from_source_reset() -> None:
+    stages = (
+        {
+            "carry": {
+                "continued_node_hashes": [],
+                "reset_node_hashes": ["node-a"],
+                "retired_node_hashes": [],
+            },
+            "node_hashes": ["node-a"],
+            "slots": [1],
+        },
+        {
+            "carry": {
+                "continued_node_hashes": ["node-a"],
+                "reset_node_hashes": ["node-b"],
+                "retired_node_hashes": [],
+            },
+            "node_hashes": ["node-b", "node-a"],
+            "slots": [0, 1],
+        },
+    )
+    rows = _lifecycle_rows({"arms": {"4096": stages, "8192": stages}})
+    assert rows == (
+        {
+            "stage": 1,
+            "slot": 1,
+            "represented_task_capacity": 2,
+            "node_hash": "node-a",
+            "entry": "source_reset",
+        },
+        {
+            "stage": 2,
+            "slot": 0,
+            "represented_task_capacity": 1,
+            "node_hash": "node-b",
+            "entry": "source_reset",
+        },
+        {
+            "stage": 2,
+            "slot": 1,
+            "represented_task_capacity": 2,
+            "node_hash": "node-a",
+            "entry": "continued",
+        },
+    )
+
+
+def test_report_aggregates_fragmentation_by_live_node_count() -> None:
+    stages = tuple(
+        {
+            "evaluation": {
+                "accuracy": 70.0 + live_nodes,
+                "true_node_oracle_accuracy": 72.0 + 2 * live_nodes,
+            },
+            "live_nodes": live_nodes,
+        }
+        for live_nodes in range(1, 6)
+    )
+    rows = _fragmentation_rows({"arms": {"4096": stages, "8192": stages}})
+    assert len(rows) == 10
+    assert rows[0] == {
+        "historical_capacity": 4096,
+        "live_nodes": 1,
+        "stages": 1,
+        "mean_accuracy": 71.0,
+        "mean_true_node_oracle_accuracy": 74.0,
+        "mean_true_node_oracle_gap": 3.0,
+    }
+    assert rows[-1]["mean_true_node_oracle_gap"] == 7.0
