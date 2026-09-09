@@ -78,6 +78,43 @@ parents do not inherit the online-adapted LoRAs of their retired children.
 
 ## Resource and provenance
 
+![Cumulative training wall-time and model passes](cumulative_resources.png)
+
+| Condition / component | Train min | Forward M | Recompute M | Backward M |
+|---|---:|---:|---:|---:|
+| H=4,096 total | 104.23 | 3.051 | 2.385 | 3.051 |
+|   H4 hierarchy subtotal | 21.33 | 0.665 | 0.000 | 0.665 |
+|   H4 adaptation subtotal | 82.90 | 2.385 | 2.385 | 2.385 |
+| Joint IID, rank 16 | 80.72 | 3.140 | 0.000 | 3.140 |
+| Joint IID, rank matched | 85.88 | 3.140 | 0.000 | 3.140 |
+
+M means million image-paths. Recompute is activation checkpointing, additional to
+ordinary forwards. H4 subtotals add to the H=4,096 total; do not sum the total again.
+
+### Training cost at 50 tasks
+
+H=4,096 costs 1.29 times the rank-16 joint curve's recorded training time and 1.73 times its forward image-path count including checkpoint recomputation. The hierarchy subtotal includes all 50 leaves and 47 parents, including intermediate parents created and retired in the same arrival. The smaller asymptotic bound has not produced a wall-time saving at this horizon.
+
+### What is measured
+
+One image-path is one image processed by one ViT with one installed adapter. Forward and backward counts are reconstructed from completed image-presentation counters and actual live-node counts. Recomputation is one additional forward invocation per image/node under activation checkpointing; it can stop early. These are path counts, not profiled FLOPs or equal-cost forward/backward operations. The affine head, optimizer, and differing LoRA ranks also affect wall time.
+
+### Wall-time and reuse
+
+Curves sum recorded training-job wall times, including data loading and checkpoint writes inside those timers. They exclude setup, artifact validation, inter-job overhead, and evaluation. Source training is charged when its subtree becomes available. The imported final rank-16 joint model is charged its original training cost; each reused reference is counted once within each condition. These are alternative algorithm totals, not a sum of actual work in the v15 invocation.
+
+### Why ViT training is O(T log T)
+
+Let P_t = 4(m_t + min(4096, M_(t-1))), where m_t is the new task size and M_t is the seen training prefix. With k_t = popcount(t), adaptive forwards are A_T = sum(k_t P_t). Each hierarchy example belongs to at most one five-epoch job per level, giving S_T = 5 sum_v(n_v). Total forward work including checkpoint recomputation is S_T + 2A_T; backward work is S_T + A_T. For fixed replay capacity, epochs, model size, and bounded task size, both are O(T log T). The joint curves each use 5 sum_t(M_t) forward/backward pairs, which is O(T squared) in model paths.
+
+### The entire benchmarking workflow has a larger bound
+
+Repeated full-prefix tests add 471,565 forward image-paths and 6.06 measured minutes for H=4,096. Each joint curve adds 157,149 test paths. Rank-16 test time is 2.55 minutes; rank-matched test wall-time was not retained. Testing every growing prefix is O(T squared log T) for the frontier. The replay sampler also scans all earlier identities at each arrival, giving at least quadratic CPU bookkeeping. The O(T log T) claim therefore applies to ViT training, not the whole runner. The affine output width is fixed at 200 here; unbounded class growth would require separate head-cost accounting.
+
+### Joint curves versus one final offline fit
+
+Both joint curves refit at every prefix, so their base-model path counts coincide. The larger rank changes arithmetic per path, not the number of paths. A single final rank-16 offline fit cost 3.11 minutes and 120,000 forward/backward pairs; it provides only the final model and has linear training work in the total image count.
+
 This report authenticates result `4fa601c9b8e3cc87f07897f06ba51f88b75b7ecde1bf47ef01881526df4b4b58` under protocol
 `5f60e2f5c25e3318ba9c9b66d41ce8c159ba57a0f1a4fc524567c098b222d686`. Source hierarchy unchanged:
 `True`. New work in the completing invocation:

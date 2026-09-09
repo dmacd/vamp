@@ -21,6 +21,10 @@ from apm.continual.artifacts import (
     load_canonical_json,
     record_sha256,
 )
+from apm.continual.vision.imagenetr.persistent_affine_resources import (
+    load_source_training_costs,
+    resource_stage_rows,
+)
 
 
 LABEL_H4096: Final[str] = "Persistent single-affine + adaptive node LoRAs, H=4,096"
@@ -29,6 +33,11 @@ LABEL_STAGE_JOINT: Final[str] = "Stage-matched joint IID, rank 16"
 LABEL_RANK_JOINT: Final[str] = "Aggregate-rank-matched joint IID"
 LABEL_ORACLE_H4096: Final[str] = "True-node oracle for persistent H=4,096 (diagnostic)"
 LABEL_ORACLE_H8192: Final[str] = "True-node oracle for persistent H=8,192 (diagnostic)"
+RESOURCE_LABELS = {
+    "persistent_h4096": LABEL_H4096,
+    "joint_rank16": LABEL_STAGE_JOINT,
+    "joint_rank_matched": LABEL_RANK_JOINT,
+}
 
 
 def _validate_result(run: Path) -> dict[str, object]:
@@ -191,12 +200,14 @@ def _write_tables(
     summaries: tuple[dict[str, object], ...],
     lifecycle_rows: tuple[dict[str, object], ...],
     fragmentation_rows: tuple[dict[str, object], ...],
+    resource_rows: tuple[dict[str, object], ...],
 ) -> None:
     for name, rows in (
         ("stage_metrics", stage_rows),
         ("condition_summary", summaries),
         ("adapter_lifecycle", lifecycle_rows),
         ("fragmentation_summary", fragmentation_rows),
+        ("resource_metrics", resource_rows),
     ):
         json_path = reports / f"{name}.json"
         atomic_write(json_path, canonical_json_bytes(list(rows)))
@@ -431,6 +442,154 @@ def _png_data(path: Path) -> str:
     return base64.b64encode(path.read_bytes()).decode("ascii")
 
 
+def _plot_resources(reports: Path, rows: tuple[dict[str, object], ...]) -> Path:
+    """Compare full algorithm training costs, with recomputation counted explicitly."""
+    import matplotlib.pyplot as plt
+
+    figure, axes = plt.subplots(2, 1, figsize=(11.2, 8.0), sharex=True, constrained_layout=True)
+    fields = (
+        ("cumulative_training_wall_seconds", 60, "Cumulative recorded training wall-time (minutes)"),
+        ("cumulative_training_forward_images_including_recompute", 1_000_000, "Cumulative training forward image-paths (millions)"),
+    )
+    for condition, color, style in (
+        ("persistent_h4096", "#1f77b4", "-"),
+        ("joint_rank16", "#222222", "--"),
+        ("joint_rank_matched", "#2ca02c", ":"),
+    ):
+        selected = tuple(row for row in rows if row["condition_id"] == condition)
+        for axis, (field, scale, title) in zip(axes, fields, strict=True):
+            axis.plot(
+                [row["stage"] for row in selected],
+                [row[field] / scale for row in selected],
+                label=RESOURCE_LABELS[condition], color=color, linestyle=style,
+                linewidth=2.3,
+            )
+            axis.set_title(title, fontsize=12)
+            axis.grid(axis="y", alpha=0.25)
+            axis.set_ylim(bottom=0)
+    persistent = tuple(row for row in rows if row["condition_id"] == "persistent_h4096")
+    for axis, (field, scale, _title), hierarchy_field in zip(
+        axes, fields,
+        ("cumulative_hierarchy_wall_seconds", "cumulative_hierarchy_forward_images"),
+        strict=True,
+    ):
+        axis.plot(
+            [row["stage"] for row in persistent],
+            [(row[field] - row[hierarchy_field]) / scale for row in persistent],
+            color="#6baed6", linestyle="-.", linewidth=1.7,
+            label="H=4,096 adaptation only (subtotal)",
+        )
+        axis.set_xlim(1, 50)
+    axes[0].set_ylabel("Minutes")
+    axes[1].set_ylabel("Million forward image-paths")
+    axes[1].set_xlabel("Tasks observed")
+    axes[1].text(
+        0.03, 0.94, "Both joint curves have identical path counts.\nBlue includes one recomputation call per training image/node.",
+        transform=axes[1].transAxes, fontsize=9, va="top",
+    )
+    axes[1].legend(loc="upper center", bbox_to_anchor=(0.5, -0.19), fontsize=8.7, frameon=False, ncol=2)
+    path = reports / "cumulative_resources.png"
+    figure.savefig(path, dpi=210)
+    plt.close(figure)
+    return path
+
+
+def _resource_totals(rows: tuple[dict[str, object], ...]) -> tuple[tuple[object, ...], ...]:
+    """Return presentation-ready totals, retaining recomputation and backward counts."""
+    final = {row["condition_id"]: row for row in rows if row["stage"] == 50}
+    persistent = final["persistent_h4096"]
+    totals = tuple(
+        (
+            label,
+            final[condition]["cumulative_training_wall_seconds"],
+            final[condition]["cumulative_training_forward_images"],
+            final[condition]["cumulative_recompute_forward_images"],
+            final[condition]["cumulative_training_backward_images"],
+        )
+        for condition, label in (
+            ("persistent_h4096", "H=4,096 total"),
+            ("joint_rank16", "Joint IID, rank 16"),
+            ("joint_rank_matched", "Joint IID, rank matched"),
+        )
+    )
+    hierarchy_images = persistent["cumulative_hierarchy_forward_images"]
+    adaptation_images = persistent["cumulative_adaptation_forward_images"]
+    subtotals = (
+        ("  H4 hierarchy subtotal", persistent["cumulative_hierarchy_wall_seconds"], hierarchy_images, 0, hierarchy_images),
+        ("  H4 adaptation subtotal", persistent["cumulative_adaptation_wall_seconds"], adaptation_images, persistent["cumulative_recompute_forward_images"], adaptation_images),
+    )
+    return tuple(
+        (label, f"{seconds / 60:.2f}", f"{forward / 1e6:.3f}", f"{recompute / 1e6:.3f}", f"{backward / 1e6:.3f}")
+        for label, seconds, forward, recompute, backward in (totals[0], *subtotals, *totals[1:])
+    )
+
+
+RESOURCE_COLUMNS = ("Condition / component", "Train min", "Forward M", "Recompute M", "Backward M")
+
+
+def _resource_explanation(
+    rows: tuple[dict[str, object], ...], sources: dict[str, object]
+) -> tuple[tuple[str, str], ...]:
+    """Explain exactly which recorded costs support the training complexity claim."""
+    final = {row["condition_id"]: row for row in rows if row["stage"] == 50}
+    persistent, joint = final["persistent_h4096"], final["joint_rank16"]
+    time_ratio = persistent["cumulative_training_wall_seconds"] / joint["cumulative_training_wall_seconds"]
+    forward_ratio = persistent["cumulative_training_forward_images_including_recompute"] / joint["cumulative_training_forward_images"]
+    offline = sources["joint_final"]["metrics"]
+    return (
+        (
+            "Training cost at 50 tasks",
+            f"H=4,096 costs {time_ratio:.2f} times the rank-16 joint curve's recorded training time and "
+            f"{forward_ratio:.2f} times its forward image-path count including checkpoint recomputation. "
+            "The hierarchy subtotal includes all 50 leaves and 47 parents, including intermediate parents "
+            "created and retired in the same arrival. The smaller asymptotic bound has not produced a wall-time saving at this horizon.",
+        ),
+        (
+            "What is measured",
+            "One image-path is one image processed by one ViT with one installed adapter. Forward and backward "
+            "counts are reconstructed from completed image-presentation counters and actual live-node counts. "
+            "Recomputation is one additional forward invocation per image/node under activation checkpointing; it can stop "
+            "early. These are path counts, not profiled FLOPs or equal-cost forward/backward operations. "
+            "The affine head, optimizer, and differing LoRA ranks also affect wall time.",
+        ),
+        (
+            "Wall-time and reuse",
+            "Curves sum recorded training-job wall times, including data loading and checkpoint writes inside "
+            "those timers. They exclude setup, artifact validation, inter-job overhead, and evaluation. Source "
+            "training is charged when its subtree becomes available. The imported final rank-16 joint model "
+            "is charged its original training cost; each reused reference is counted once within each condition. "
+            "These are alternative algorithm totals, not a sum of actual work in the v15 invocation.",
+        ),
+        (
+            "Why ViT training is O(T log T)",
+            "Let P_t = 4(m_t + min(4096, M_(t-1))), where m_t is the new task size and M_t is the seen "
+            "training prefix. With k_t = popcount(t), adaptive forwards are A_T = sum(k_t P_t). "
+            "Each hierarchy example belongs to at most one five-epoch job per level, giving S_T = 5 sum_v(n_v). "
+            "Total forward work including checkpoint recomputation is S_T + 2A_T; backward work is S_T + A_T. "
+            "For fixed replay capacity, epochs, model size, and bounded task size, both are O(T log T). "
+            "The joint curves each use 5 sum_t(M_t) forward/backward pairs, which is O(T squared) in model paths.",
+        ),
+        (
+            "The entire benchmarking workflow has a larger bound",
+            f"Repeated full-prefix tests add {persistent['cumulative_evaluation_forward_images']:,} forward image-paths "
+            f"and {persistent['cumulative_evaluation_wall_seconds'] / 60:.2f} measured minutes for H=4,096. "
+            f"Each joint curve adds {joint['cumulative_evaluation_forward_images']:,} test paths. Rank-16 test time "
+            f"is {joint['cumulative_evaluation_wall_seconds'] / 60:.2f} minutes; rank-matched test wall-time was not retained. "
+            "Testing every growing prefix is O(T squared log T) for the frontier. The replay sampler also scans "
+            "all earlier identities at each arrival, giving at least quadratic CPU bookkeeping. The O(T log T) claim "
+            "therefore applies to ViT training, not the whole runner. The affine output width is fixed at 200 here; "
+            "unbounded class growth would require separate head-cost accounting.",
+        ),
+        (
+            "Joint curves versus one final offline fit",
+            "Both joint curves refit at every prefix, so their base-model path counts coincide. The larger "
+            "rank changes arithmetic per path, not the number of paths. A single final rank-16 offline fit "
+            f"cost {offline['wall_seconds'] / 60:.2f} minutes and {offline['image_presentations']:,} forward/backward "
+            "pairs; it provides only the final model and has linear training work in the total image count.",
+        ),
+    )
+
+
 def _selected_table(stage_rows: tuple[dict[str, object], ...]) -> str:
     selected = {1, 2, 4, 8, 16, 31, 32, 50}
     lines = [
@@ -490,7 +649,18 @@ def _write_markdown(
     stage_rows: tuple[dict[str, object], ...],
     summaries: tuple[dict[str, object], ...],
     fragmentation_rows: tuple[dict[str, object], ...],
+    resource_rows: tuple[dict[str, object], ...],
+    source_costs: dict[str, object],
 ) -> Path:
+    resource_table = "\n".join((
+        "| " + " | ".join(RESOURCE_COLUMNS) + " |",
+        "|---|---:|---:|---:|---:|",
+        *("| " + " | ".join(row) + " |" for row in _resource_totals(resource_rows)),
+    ))
+    resource_text = "\n\n".join(
+        f"### {title}\n\n{text}"
+        for title, text in _resource_explanation(resource_rows, source_costs)
+    )
     text = f"""# ImageNet-R-50 persistent single-affine frontier
 
 ## Result
@@ -556,6 +726,15 @@ parents do not inherit the online-adapted LoRAs of their retired children.
 
 ## Resource and provenance
 
+![Cumulative training wall-time and model passes](cumulative_resources.png)
+
+{resource_table}
+
+M means million image-paths. Recompute is activation checkpointing, additional to
+ordinary forwards. H4 subtotals add to the H=4,096 total; do not sum the total again.
+
+{resource_text}
+
 This report authenticates result `{result['content_hash']}` under protocol
 `{result['protocol_hash']}`. Source hierarchy unchanged:
 `{result['hierarchy_source_unchanged']}`. New work in the completing invocation:
@@ -573,6 +752,8 @@ def _write_html(
     summaries: tuple[dict[str, object], ...],
     fragmentation_rows: tuple[dict[str, object], ...],
     images: tuple[Path, ...],
+    resource_rows: tuple[dict[str, object], ...],
+    source_costs: dict[str, object],
 ) -> Path:
     selected = tuple(
         row
@@ -605,6 +786,16 @@ def _write_html(
         f"<td>{fragmentation_by_key[(8_192, live_nodes)]['mean_true_node_oracle_gap']:.3f}</td></tr>"
         for live_nodes in range(1, 6)
     )
+    resource_table = (
+        "<table><thead><tr>" + "".join(f"<th>{escape(column)}</th>" for column in RESOURCE_COLUMNS)
+        + "</tr></thead><tbody>"
+        + "".join("<tr>" + "".join(f"<td>{escape(value)}</td>" for value in row) + "</tr>" for row in _resource_totals(resource_rows))
+        + "</tbody></table>"
+    )
+    resource_text = "".join(
+        f"<h3>{escape(title)}</h3><p>{escape(text)}</p>"
+        for title, text in _resource_explanation(resource_rows, source_costs)
+    )
     html = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>ImageNet-R-50 persistent single-affine frontier</title>
@@ -636,6 +827,11 @@ code{{background:#eef2f5;padding:2px 4px}} .note{{color:#4b5563}}
 <li>Affine parameters and AdamW state persist. Node LoRAs persist exactly while their hierarchy-node hashes remain live.</li>
 <li>New leaves and consolidation parents enter from authenticated source models. The base ViT and local classifiers stay frozen.</li>
 <li>The test split is used only after each stage is sealed.</li></ul>
+<h2>Cumulative wall-time and model passes</h2>
+<img src="data:image/png;base64,{embedded[5]}" alt="Cumulative training wall-time and forward model-image paths">
+{resource_table}
+<p>M means million image-paths. Recompute is activation checkpointing, additional to ordinary forwards. H4 subtotals add to the H=4,096 total.</p>
+{resource_text}
 <h2>Provenance</h2>
 <p>Protocol <code>{escape(str(result['protocol_hash']))}</code><br>
 Result <code>{escape(str(result['content_hash']))}</code><br>
@@ -654,6 +850,8 @@ def _write_pdf(
     stage_rows: tuple[dict[str, object], ...],
     fragmentation_rows: tuple[dict[str, object], ...],
     images: tuple[Path, ...],
+    resource_rows: tuple[dict[str, object], ...],
+    source_costs: dict[str, object],
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
@@ -968,6 +1166,52 @@ def _write_pdf(
         footer(fifth, 5)
         document.savefig(fifth)
         plt.close(fifth)
+
+        explanations = _resource_explanation(resource_rows, source_costs)
+        for page_number, heading, sections in (
+            (6, "Cumulative training cost", explanations[:2]),
+            (7, "Resource accounting and scaling", explanations[2:]),
+        ):
+            page = plt.figure(figsize=(8.5, 11), facecolor="white")
+            page.text(0.06, 0.95, heading, fontsize=17, weight="bold", color="#16324f")
+            if page_number == 6:
+                image_axis(page, images[5], (0.055, 0.325, 0.89, 0.59))
+                cursor = 0.29
+            else:
+                table_axis = page.add_axes((0.055, 0.735, 0.89, 0.17))
+                table_axis.axis("off")
+                table = table_axis.table(
+                    cellText=_resource_totals(resource_rows), colLabels=RESOURCE_COLUMNS,
+                    colWidths=(0.36, 0.16, 0.16, 0.16, 0.16), cellLoc="center", loc="center",
+                )
+                table.auto_set_font_size(False)
+                table.set_fontsize(8.0)
+                table.scale(1.0, 1.6)
+                for (row, _column), cell in table.get_celld().items():
+                    cell.set_edgecolor("#b8c2cc")
+                    if row == 0:
+                        cell.set_facecolor("#16324f")
+                        cell.get_text().set_color("white")
+                        cell.get_text().set_weight("bold")
+                    elif row % 2 == 0:
+                        cell.set_facecolor("#f2f5f7")
+                page.text(
+                    0.06, 0.72,
+                    "M = million image-paths. Recompute = activation checkpointing. H4 rows include two subtotals.",
+                    fontsize=8.3, va="top", color="#40464d",
+                )
+                cursor = 0.675
+            for title, paragraph in sections:
+                page.text(0.06, cursor, title, fontsize=10.5, weight="bold", color="#16324f")
+                lines = textwrap.wrap(paragraph, width=110)
+                cursor -= 0.022
+                page.text(0.06, cursor, "\n".join(lines), fontsize=9.1, va="top")
+                cursor -= len(lines) * 0.014 + 0.03
+            if cursor < 0.025:
+                raise ValueError("resource report text overflows the page")
+            footer(page, page_number)
+            document.savefig(page)
+            plt.close(page)
     os.replace(temporary, output)
 
 
@@ -981,8 +1225,11 @@ def write_persistent_affine_report(run: str | Path) -> Path:
     stage_rows = _stage_rows(result)
     lifecycle_rows = _lifecycle_rows(result)
     fragmentation_rows = _fragmentation_rows(result)
+    source_costs = load_source_training_costs(run_path, result)
+    config = load_canonical_json(run_path / "config_resolved.json")
+    resource_rows = resource_stage_rows(result, source_costs, config["activation_recomputation"])
     _write_tables(
-        reports, stage_rows, summaries, lifecycle_rows, fragmentation_rows
+        reports, stage_rows, summaries, lifecycle_rows, fragmentation_rows, resource_rows
     )
     images = (
         _plot_accuracy(reports, result),
@@ -990,20 +1237,23 @@ def write_persistent_affine_report(run: str | Path) -> Path:
         _plot_nll(reports, result),
         _plot_fragmentation(reports, fragmentation_rows),
         _plot_lifecycle(reports, lifecycle_rows),
+        _plot_resources(reports, resource_rows),
     )
     markdown = _write_markdown(
-        reports, result, stage_rows, summaries, fragmentation_rows
+        reports, result, stage_rows, summaries, fragmentation_rows, resource_rows, source_costs
     )
     html = _write_html(
-        reports, result, stage_rows, summaries, fragmentation_rows, images
+        reports, result, stage_rows, summaries, fragmentation_rows, images, resource_rows, source_costs
     )
     project_root = run_path.parents[4]
     pdf = project_root / "output/pdf/imagenetr50_persistent_affine_v15_report.pdf"
-    _write_pdf(pdf, result, summaries, stage_rows, fragmentation_rows, images)
+    _write_pdf(pdf, result, summaries, stage_rows, fragmentation_rows, images, resource_rows, source_costs)
     manifest_core = {
         "condition_summary_sha256": file_sha256(reports / "condition_summary.json"),
         "adapter_lifecycle_sha256": file_sha256(reports / "adapter_lifecycle.json"),
         "fragmentation_summary_sha256": file_sha256(reports / "fragmentation_summary.json"),
+        "resource_metrics_sha256": file_sha256(reports / "resource_metrics.json"),
+        "source_training_costs_sha256": file_sha256(reports / "source_training_costs.json"),
         "figure_sha256": {
             image.name: file_sha256(image)
             for image in images

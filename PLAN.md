@@ -53,21 +53,44 @@
   to 81.19%, above both 80.28% joint controls. Because the diagnostic also uses
   frozen node-local classifiers, it is consistent with cross-node competition
   but does not isolate routing alone.
+- The report now includes cumulative training wall-time and model-image work
+  for H=4,096 and both joint-IID curves, with 150 stage/condition resource rows
+  and compact authenticated source-training records. H=4,096 costs **104.23
+  recorded training minutes**, including **21.33** for all 50 leaves and 47
+  full-union parents; rank-16 and rank-matched joint IID cost **80.72** and
+  **85.88 minutes**. Reused models retain their original training costs,
+  including the final rank-16 model whose imported stage row records zero new
+  work. No model was retrained for this report update.
+- H=4,096 uses **3,050,765 ordinary forward/backward image pairs**, plus
+  **2,385,440 activation-checkpoint recomputation invocations**. Each joint
+  curve uses **3,140,210 pairs** without recomputation. These counts come from
+  completed presentation counters and live-node multiplicity, not profiled
+  FLOPs; non-reentrant checkpoint recomputation may stop early. With fixed H,
+  epochs, and model size, hierarchy training plus online adaptation remains
+  **O(T log T)**, but costs 1.29 times the recorded rank-16 training time at
+  this horizon. Full-prefix benchmark evaluation is **O(T squared log T)**,
+  and replay selection scans history with at least quadratic cumulative CPU
+  bookkeeping. The training bound is not a whole-run wall-time claim; timers
+  exclude evaluation, source loading, validation, and inter-job overhead.
 - The real BF16 preflight verifies zero split overlap, 98 finite gradient
   tensors, exact adapter carry, the expected `[1,1,2,1,2,2,3,1]` early
-  frontier sizes, and exact-union logits within 1.53e-5. All **124** ImageNet-R
-  tests pass in the required single pytest process; the separate remaining
-  continual, benchmark, and integration slices also return cleanly. The
-  top-level repository slice retains exactly 31 optional-environment failures:
+  frontier sizes, and exact-union logits within 1.53e-5. All **126** ImageNet-R
+  tests pass in the required single pytest process after the resource update.
+  During full-run verification, the separate remaining continual, benchmark,
+  and integration slices also returned cleanly. The top-level repository
+  slice retained exactly 31 optional-environment failures:
   eight require `fabricpc` and 23 require `tokenizers`; no ImageNet-R test
-  fails. The five-page PDF and every figure were rendered and inspected, and
+  fails. The seven-page PDF and every figure were rendered and inspected, and
   the final report manifest records PDF SHA-256
-  `de0b57cbf0c462d951859271fb9acc3051c826c95fcae847e13eb012ca4baa62`.
+  `db01980c2ce55a9e1b0284aefedc491b484d1b6aa9cfd3ba577c9692c22a680c`.
 - Next, replicate the persistent arms across seeds before treating their small
   H difference as stable. For the architecture, target fragmented frontiers:
   first separate global-head competition from node-local classifier quality
   with matched fixed heads, then test a normalized or calibrated affine map at
   the same replay budgets. More replay by itself is not the next priority.
+  Before a longer-stream scaling claim, replace full-history replay-selection
+  scans with indexed sampling and account separately for benchmark evaluation
+  and any growing classifier width.
 
 ## Completed Outcome - ImageNet-R Stage-31 Matched-H Architecture Replay Sweep
 
