@@ -13,6 +13,50 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## Active - ImageNet-R Single-Adapter Spaced Repetition Training
+
+- Implement the approved Atreya et al. SRT adaptation as an isolated rank-16
+  continual learner, with H=1,024- and H=4,096-equivalent presentation budgets
+  and a realized-exposure-matched uniform control for each. These budgets mean
+  294,368 and 844,640 training presentations, not memory limits. The existing
+  split, class order, base model, and joint-reference SGD recipe stay fixed.
+- The persistent SM-2 scheduler, bounded image loader, chunked replay ledger,
+  atomic training resume, growing classifier/momentum carry, and finite
+  calibration workflow are implemented. All 149 ImageNet-R tests pass in one
+  pytest process. The real-model preflight passed zero-LoRA parity, batch 64,
+  eight tasks, exact interrupted/uninterrupted recovery, and paired exposure
+  accounting, with 4.23 GB peak GPU allocation.
+- A perfect-recall stress test exposed virtual times exceeding 64-bit integers.
+  SM-2 interval arithmetic now uses exact integer hundredths, and Parquet stores
+  unbounded clock fields as decimal strings. The preliminary calibration run
+  was stopped and preserved, but is excluded from selection. The corrected
+  implementation is running under identity
+  `b3de2a819efe0707b85cf105cf8d4c53370c807b48108bf996dc4f4883a213ea`.
+  Its repeated real preflight passed exact recovery and paired 1,152-image,
+  253-update smoke streams. Calibration is in progress; final test results
+  are not available yet.
+- Calibrate eighteen settings per budget through task 16 using the existing
+  training-derived validation split, continue two finalists per budget through
+  task 50, then freeze winners before fresh full-data SRT/control runs. Mean
+  stage validation accuracy selects settings; NLL and canonical policy order
+  break ties. No accuracy execution gate applies.
+- The separate PDF/HTML/Markdown report and per-sample timing analysis are
+  implemented. A synthetic integration fixture exercises all thirteen pages,
+  all seven new figures, cross-format clock storage, and deterministic PDF
+  regeneration. It is not scientific evidence. Carry forward authenticated old accuracy curves and
+  the original full-stream figure; do not rewrite the prior report or results.
+  Report calibration work separately, actual versus requested replay gaps,
+  outstanding/censored reviews, and one-model forward/backward work.
+- After calibration and all four final streams, the default workflow audits
+  every committed replay event, rechecks paired per-update exposure, verifies
+  zero-step reuse, generates the report, opens the PDF, and sends a desktop
+  notification. Final integration still requires inspecting the actual report,
+  recording the measured outcome, and committing its compact analysis artifacts.
+- The isolated vision extra now includes pinned reportlab/pypdf dependencies.
+  Host RAM is constrained, so image loading is bounded to four workers; the
+  single GPU runner uses nice level 10. Raw checkpoints and full replay traces
+  remain local; preserve compact analysis-ready tables, logs, and figures.
+
 ## Completed Outcome - ImageNet-R Persistent Two-Layer MLP, H=4,096
 
 - **All 50 stages completed on 2026-09-08 local time**, in 94.83 minutes on

@@ -1,0 +1,26 @@
+seed: 1993
+tasks: 50
+budgets: [1024, 4096]
+batch_size: 64
+lora_learning_rate: 0.0005
+head_learning_rate: 0.01
+momentum: 0.9
+weight_decay: 0.0005
+num_workers: 4
+checkpoint_steps: 50
+screen_tasks: 16
+finalists: 2
+profiles:
+  relaxed: [0.05, 0.15, 0.30, 0.60, 0.85]
+  standard: [0.10, 0.25, 0.50, 0.75, 0.90]
+  strict: [0.20, 0.40, 0.70, 0.85, 0.95]
+historical_fractions: [0.2, 0.5, 0.8]
+interval_units: [1, 8]
+artifact_root: artifacts/imagenetr50/srt_r16_v1
+reference_run: artifacts/imagenetr50/persistent_affine_v15/runs/5f60e2f5c25e3318ba9c9b66d41ce8c159ba57a0f1a4fc524567c098b222d686
+reference_result_sha256: 97db15dcdf8b55009f8d37ffbaba7ad36f6583099eb165de770be185bc6938d3
+reference_pdf_sha256: 0546776a67023f313c16d7a14f4c53e4b866fac57828a1f894c3ad91575b83c3
+reference_figure_sha256: 57ce636f7014bbf3b0d23df77e2bc99c1a483b15a3a4d12c9f75406b30cf7867
+mlp_result_sha256: d27ac22881bb82111b841cf6e501feabbe933e061004c9da49d5808c2e61f619
+dataset_hash: 76ca289711f37323e256a7b62d19e29c414ee4d513b31e3e6c23adc5eb768448
+split_hash: b18c7f375fd1f51d6f05d3b37315b56827131c7731c6be20aafead0dfb843d96

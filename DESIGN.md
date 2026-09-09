@@ -1,5 +1,31 @@
 # VAMP Technical Design
 
+## ImageNet-R Single-Adapter SRT
+
+The SRT experiment is a separate continual learner, not a hierarchy or
+integrator variant. One rank/alpha-16 QKV/fc1 LoRA persists across 50 tasks.
+An all-seen-class affine head grows four rows at a time while carrying old
+rows and SGD momentum. Training uses no oracle routing or future-class logits.
+H fixes four-pass-equivalent presentation work, not the accessible history.
+
+The mandatory first exposure of each arriving image consumes the stage budget.
+Subsequent old and current reviews follow per-image SM-2 due times, scored
+using the correct-label probability in the augmented pre-update training
+forward. A persistent leftist heap and indexed due sets avoid per-batch full
+history scans. Virtual scheduling time may advance without optimization when
+both pools are empty; actual optimizer/presentation gaps remain separate.
+Uniform controls copy realized SRT old/current batch counts but not selection.
+SM-2 arithmetic uses integer hundredths for ease updates and interval ceilings.
+Scheduling clocks have arbitrary integer width; exact decimal-string columns
+preserve them in Parquet and the compact report tables without overflow.
+
+Review state, pool ordering, weights, momentum, RNG state, counters, and trace
+references share one atomic checkpoint boundary. Trace chunks are immutable;
+uncommitted orphan chunks cannot enter reports or affect replay after resume.
+Calibration sees only the training-derived fitting/validation partition and
+selects mean stage accuracy before fresh full-data runs. Comparison artifacts
+are imported read-only into a separate report, never appended to old results.
+
 ## Public Result Boundary
 
 Generated result trees remain ignored by default. A public result snapshot may
