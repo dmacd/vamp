@@ -20,8 +20,7 @@ from apm.continual.vision.imagenetr.frontier_adaptation_training import warmup_c
 from apm.continual.vision.imagenetr.integrator_bank import class_stratified_reservoir
 from apm.continual.vision.imagenetr.persistent_affine_config import PersistentAffineConfig
 from apm.continual.vision.imagenetr.persistent_affine_model import (
-    FEATURE_DIMENSION,
-    PersistentAffineFrontier,
+    PersistentFrontierIntegrator,
     export_model_state,
     load_exact_model_state,
     raw_union_logits,
@@ -143,30 +142,28 @@ def rotating_replay_population(
     )
 
 
-def _stable_parameters(model: PersistentAffineFrontier) -> dict[str, nn.Parameter]:
-    parameters: dict[str, nn.Parameter] = {
-        "affine.weight": model.affine.weight,
-        "affine.bias": model.affine.bias,
-    }
+def _stable_parameters(model: PersistentFrontierIntegrator) -> dict[str, nn.Parameter]:
+    parameters = {f"integrator.{name}": parameter for name, parameter in model.integrator.named_parameters()}
+    head_count = len(parameters)
     for node_hash, node_model in zip(model.node_hashes, model.node_models, strict=True):
         for name, parameter in node_model.named_parameters():
             if name.endswith("lora_a") or name.endswith("lora_b"):
                 parameters[f"node:{node_hash}:{name}"] = parameter
-    if len(parameters) != 2 + 48 * len(model.node_hashes):
+    if len(parameters) != head_count + 48 * len(model.node_hashes):
         raise ValueError("stable optimizer parameter map is incomplete")
     return parameters
 
 
 def create_optimizer(
-    model: PersistentAffineFrontier, config: PersistentAffineConfig
+    model: PersistentFrontierIntegrator, config: PersistentAffineConfig
 ) -> torch.optim.AdamW:
     """Create the two-group AdamW optimizer used at every arrival."""
     return torch.optim.AdamW(
         (
             {
-                "params": tuple(model.affine.parameters()),
+                "params": tuple(model.integrator.parameters()),
                 "lr": config.integrator_peak_learning_rate,
-                "name": "affine",
+                "name": "integrator",
             },
             {
                 "params": model.lora_parameters,
@@ -179,7 +176,7 @@ def create_optimizer(
 
 
 def export_named_optimizer_state(
-    optimizer: torch.optim.AdamW, model: PersistentAffineFrontier
+    optimizer: torch.optim.AdamW, model: PersistentFrontierIntegrator
 ) -> dict[str, object]:
     """Serialize AdamW state by semantic node identity instead of parameter index."""
     states: dict[str, dict[str, object]] = {}
@@ -205,40 +202,9 @@ def _to_parameter_state(value: object, parameter: nn.Parameter) -> object:
     return value.to(device=parameter.device, dtype=parameter.dtype).clone()
 
 
-def _transplant_affine_weight_state(
-    old: Tensor,
-    old_hashes: Sequence[str],
-    new_hashes: Sequence[str],
-    parameter: nn.Parameter,
-) -> Tensor:
-    output = torch.zeros_like(parameter)
-    old_index = {node_hash: index for index, node_hash in enumerate(old_hashes)}
-    for new_index, node_hash in enumerate(new_hashes):
-        if node_hash not in old_index:
-            continue
-        old_first = old_index[node_hash] * FEATURE_DIMENSION
-        new_first = new_index * FEATURE_DIMENSION
-        output[:, new_first : new_first + FEATURE_DIMENSION].copy_(
-            old[:, old_first : old_first + FEATURE_DIMENSION].to(output)
-        )
-    return output
-
-
-def _transplant_affine_bias_state(
-    old: Tensor, old_class_ids: Sequence[int], parameter: nn.Parameter
-) -> Tensor:
-    """Move retained affine-bias moments from their CPU checkpoint safely."""
-    output = torch.zeros_like(parameter)
-    if old_class_ids:
-        source_indices = torch.tensor(old_class_ids, dtype=torch.int64)
-        target_indices = source_indices.to(parameter.device)
-        output.index_copy_(0, target_indices, old[source_indices].to(output))
-    return output
-
-
 def restore_named_optimizer_state(
     optimizer: torch.optim.AdamW,
-    model: PersistentAffineFrontier,
+    model: PersistentFrontierIntegrator,
     snapshot: Mapping[str, object] | None,
 ) -> int:
     """Carry affine and surviving-node moments across a changing frontier."""
@@ -258,20 +224,13 @@ def restore_named_optimizer_state(
         state: dict[str, object] = {}
         for key, value in raw_state.items():
             if (
-                name == "affine.weight"
+                name.startswith("integrator.")
                 and isinstance(value, Tensor)
-                and value.ndim == 2
+                and value.ndim > 0
             ):
-                state[key] = _transplant_affine_weight_state(
-                    value, old_hashes, model.node_hashes, parameter
-                )
-            elif (
-                name == "affine.bias"
-                and isinstance(value, Tensor)
-                and value.ndim == 1
-            ):
-                state[key] = _transplant_affine_bias_state(
-                    value, old_seen, parameter
+                state[key] = model.integrator.project_parameter(
+                    name.removeprefix("integrator."), value, old_hashes,
+                    model.node_hashes, old_seen, torch.zeros_like(parameter),
                 )
             else:
                 if isinstance(value, Tensor) and value.ndim > 0 and value.shape != parameter.shape:
@@ -294,7 +253,7 @@ def _checkpoint_record(
     optimizer_steps_total: int,
     image_presentations: int,
     history_rows: int,
-    model: PersistentAffineFrontier,
+    model: PersistentFrontierIntegrator,
     optimizer: torch.optim.AdamW,
 ) -> dict[str, object]:
     return {
@@ -309,16 +268,17 @@ def _checkpoint_record(
         "optimizer_steps_total": optimizer_steps_total,
         "population_hash": population_hash,
         "protocol_hash": protocol_hash,
-        "schema_version": "imagenetr50-persistent-affine-checkpoint-v1",
+        "schema_version": "imagenetr50-persistent-frontier-checkpoint-v1",
         "stage": stage,
     }
 
 
 def fit_online_stage(
     *,
-    model: PersistentAffineFrontier,
+    model: PersistentFrontierIntegrator,
     optimizer: torch.optim.AdamW,
     config: PersistentAffineConfig,
+    protocol_hash: str,
     capacity: int,
     stage: int,
     frontier_hash: str,
@@ -340,8 +300,8 @@ def fit_online_stage(
     if checkpoint_path.is_file():
         saved = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         if (
-            saved.get("schema_version") != "imagenetr50-persistent-affine-checkpoint-v1"
-            or saved.get("protocol_hash") != config.config_hash
+            saved.get("schema_version") != "imagenetr50-persistent-frontier-checkpoint-v1"
+            or saved.get("protocol_hash") != protocol_hash
             or saved.get("capacity") != capacity
             or saved.get("stage") != stage
             or saved.get("frontier_hash") != frontier_hash
@@ -360,6 +320,10 @@ def fit_online_stage(
         optimizer_steps_before_stage = int(saved["optimizer_steps_before_stage"])
         presentations = int(saved["image_presentations"])
         history.truncate(int(saved["history_rows"]))
+        retained = tuple(row for row in history.rows if row["stage"] == stage and row["capacity"] == capacity)
+        if retained:
+            elapsed_before = float(retained[-1]["wall_seconds_stage"])
+            peak_before = int(retained[-1]["peak_vram_bytes_stage"])
     steps_per_epoch = math.ceil(len(population.rows) / config.microbatch_size)
     horizon_steps = steps_per_epoch * config.schedule_horizon_epochs
     started = time.monotonic()
@@ -371,7 +335,7 @@ def fit_online_stage(
         range(start_epoch + 1, epochs + 1),
         initial=start_epoch,
         total=epochs,
-        desc=f"affine H={capacity:,} stage {stage:02d}",
+        desc=f"integrator H={capacity:,} stage {stage:02d}",
         unit="epoch",
     )
     final_nll = final_accuracy = math.nan
@@ -411,7 +375,7 @@ def fit_online_stage(
             for group in optimizer.param_groups:
                 group["lr"] = multiplier * (
                     config.integrator_peak_learning_rate
-                    if group["name"] == "affine"
+                    if group["name"] == "integrator"
                     else config.lora_peak_learning_rate
                 )
             images = images.to(device, non_blocking=True)
@@ -455,6 +419,7 @@ def fit_online_stage(
                 "historical_examples": population.historical_examples,
                 "image_presentations_stage": presentations,
                 "optimizer_steps_total": optimizer_steps_total,
+                "peak_vram_bytes_stage": int(peak),
                 "stage": stage,
                 "train_accuracy": final_accuracy,
                 "train_nll": final_nll,
@@ -465,7 +430,7 @@ def fit_online_stage(
         atomic_torch_save(
             checkpoint_path,
             _checkpoint_record(
-                protocol_hash=config.config_hash,
+                protocol_hash=protocol_hash,
                 capacity=capacity,
                 stage=stage,
                 frontier_hash=frontier_hash,
@@ -508,7 +473,7 @@ def fit_online_stage(
 
 def evaluate_prefix(
     *,
-    model: PersistentAffineFrontier,
+    model: PersistentFrontierIntegrator,
     prepared_root: Path,
     rows: Sequence[ImageRecord],
     transform: object,

@@ -13,6 +13,30 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## Active - ImageNet-R Persistent Two-Layer MLP, H=4,096
+
+- Add one condition to the existing 50-task report: node-specific final ViT
+  latents of width `768 * live_nodes`, a fixed 1,024-unit ReLU hidden layer,
+  and 200 output logits. No macro tokens, metadata, additional latent layers,
+  normalization, dropout, or affine skip path are added.
+- Match the completed H=4,096 arm's replay membership, four-epoch schedule,
+  batch size, optimizer settings, and node-LoRA carry/reset rules. Initialize
+  the dense MLP as the exact signed-ReLU factorization of the source classifier
+  union, with additional random hidden projections initially zero at the
+  output. Surviving first-layer input blocks, shared MLP coordinates, and
+  named AdamW moments carry; replacement nodes load sealed source adapters.
+- Shared head persistence and authenticated source reuse are implemented; all
+  **130** ImageNet-R tests pass. The RTX 4090 preflight verifies union error
+  **1.1444e-5**, 100 finite gradient tensors, exact adapter carry, exact
+  checkpoint/AdamW restoration, zero split overlap, and the correct eight-stage
+  topology. Peak preflight allocation is 4.62 GB. Protocol/run
+  `bb991cf93bd05d74a92d796735768c67e1f2e9b78e5b40e1c2ee314b29594fd6`
+  is ready for the single 50-stage arm at reduced CPU priority.
+- Next, complete the run while preserving the existing H=8,192 and both
+  joint-IID curves unchanged, then integrate accuracy, NLL, true-node
+  diagnostics, and cumulative resource accounting into the same report and
+  figures. No scientific result for the new arm is available yet.
+
 ## Completed Outcome - ImageNet-R Full-Stream Persistent Single-Affine Frontier
 
 - **The definitive 50-task v15 run completed on 2026-09-08.** Protocol and run

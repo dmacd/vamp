@@ -1,4 +1,4 @@
-"""Persistent single-affine integration over a changing LogT frontier."""
+"""Persistent dense integration over a changing adapter-dependent LogT frontier."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ from apm.continual.vision.imagenetr.lora import (
 )
 from apm.continual.vision.imagenetr.merging.common import LoRAFactors
 from apm.continual.vision.imagenetr.model import AdapterVisionModel
+from apm.continual.vision.imagenetr.persistent_integrator_head import PersistentIntegratorHead
 
 
 CLASS_COUNT = 200
@@ -41,8 +42,8 @@ class CarrySummary:
         }
 
 
-class PersistentAffineFrontier(nn.Module):
-    """Variable-width node features feeding exactly one affine classifier."""
+class PersistentFrontierIntegrator(nn.Module):
+    """Variable-width node features feeding a persistent affine or two-layer head."""
 
     def __init__(
         self,
@@ -52,6 +53,8 @@ class PersistentAffineFrontier(nn.Module):
         rank: int,
         alpha: int,
         device: torch.device,
+        hidden_dimension: int = 0,
+        initialization_seed: int = 1993,
     ) -> None:
         super().__init__()
         ordered = tuple(
@@ -98,24 +101,17 @@ class PersistentAffineFrontier(nn.Module):
             ),
             persistent=True,
         )
-        self.affine = nn.Linear(len(ordered) * FEATURE_DIMENSION, CLASS_COUNT)
-        self._initialize_exact_union()
+        weight = torch.zeros(CLASS_COUNT, len(ordered) * FEATURE_DIMENSION)
+        bias = torch.zeros(CLASS_COUNT)
+        for index, node_model in enumerate(self.node_models):
+            rows = node_model.classifier.rows()
+            owned = torch.tensor(rows.class_ids, dtype=torch.int64)
+            first = index * FEATURE_DIMENSION
+            weight[:, first:first + FEATURE_DIMENSION].index_copy_(0, owned, rows.weight)
+            bias.index_copy_(0, owned, rows.bias)
+        self.integrator = PersistentIntegratorHead(weight, bias, hidden_dimension, initialization_seed)
         self.to(device)
         require_persistent_trainable_boundary(self)
-
-    def _initialize_exact_union(self) -> None:
-        """Initialize owned rows as the exact union of local classifiers."""
-        with torch.no_grad():
-            self.affine.weight.zero_()
-            self.affine.bias.zero_()
-            for index, node_model in enumerate(self.node_models):
-                rows = node_model.classifier.rows()
-                owned = torch.tensor(rows.class_ids, dtype=torch.int64)
-                first = index * FEATURE_DIMENSION
-                self.affine.weight[:, first : first + FEATURE_DIMENSION].index_copy_(
-                    0, owned, rows.weight
-                )
-                self.affine.bias.index_copy_(0, owned, rows.bias)
 
     @property
     def lora_parameters(self) -> tuple[nn.Parameter, ...]:
@@ -129,17 +125,17 @@ class PersistentAffineFrontier(nn.Module):
     @property
     def trainable_parameters(self) -> tuple[nn.Parameter, ...]:
         """Return affine parameters followed by all live LoRA factors."""
-        return tuple(self.affine.parameters()) + self.lora_parameters
+        return tuple(self.integrator.parameters()) + self.lora_parameters
 
     def set_training_mode(self) -> None:
         """Train the affine map while retaining deterministic ViT inference state."""
-        self.affine.train()
+        self.integrator.train()
         for node_model in self.node_models:
             node_model.eval()
 
     def set_evaluation_mode(self) -> None:
         """Put every active component into deterministic evaluation mode."""
-        self.affine.eval()
+        self.integrator.eval()
         for node_model in self.node_models:
             node_model.eval()
 
@@ -177,7 +173,7 @@ class PersistentAffineFrontier(nn.Module):
     ) -> tuple[Tensor, tuple[Tensor, ...], tuple[Tensor, ...]]:
         """Return integrated logits plus reused node features and local scores."""
         features = self.node_features(images, adapt_lora, activation_recomputation)
-        logits = self.affine(torch.cat(features, dim=1)).masked_fill(
+        logits = self.integrator(torch.cat(features, dim=1)).masked_fill(
             ~self.seen_class_mask, -torch.inf
         )
         local_scores = tuple(
@@ -198,9 +194,10 @@ class PersistentAffineFrontier(nn.Module):
         )[0]
 
 
-def require_persistent_trainable_boundary(model: PersistentAffineFrontier) -> None:
-    """Fail unless only the affine map and every live LoRA can update."""
-    expected = {"affine.weight", "affine.bias"} | {
+def require_persistent_trainable_boundary(model: PersistentFrontierIntegrator) -> None:
+    """Fail unless only the dense integrator and every live LoRA can update."""
+    head_names = {f"integrator.{name}" for name, _parameter in model.integrator.named_parameters()}
+    expected = head_names | {
         name
         for name, _parameter in model.named_parameters()
         if name.startswith("node_models.")
@@ -209,15 +206,18 @@ def require_persistent_trainable_boundary(model: PersistentAffineFrontier) -> No
     actual = {
         name for name, parameter in model.named_parameters() if parameter.requires_grad
     }
-    if actual != expected or len(expected) != 2 + 48 * len(model.node_models):
+    if actual != expected or len(expected) != len(head_names) + 48 * len(model.node_models):
         raise ValueError("persistent affine trainable parameters crossed the boundary")
 
 
-def export_model_state(model: PersistentAffineFrontier) -> dict[str, object]:
+def export_model_state(model: PersistentFrontierIntegrator) -> dict[str, object]:
     """Capture the complete continuing state without duplicating frozen bases."""
     return {
-        "affine_bias": model.affine.bias.detach().cpu().clone(),
-        "affine_weight": model.affine.weight.detach().cpu().clone(),
+        "hidden_dimension": model.integrator.hidden_dimension,
+        "integrator_state": {
+            name: value.detach().cpu().clone()
+            for name, value in model.integrator.state_dict().items()
+        },
         "node_adapters": {
             node_hash: {
                 module: LoRAFactors(
@@ -238,7 +238,7 @@ def export_model_state(model: PersistentAffineFrontier) -> dict[str, object]:
 
 
 def carry_model_state(
-    model: PersistentAffineFrontier,
+    model: PersistentFrontierIntegrator,
     previous: Mapping[str, object] | None,
 ) -> CarrySummary:
     """Carry surviving node/head state and retain source initialization for replacements."""
@@ -246,39 +246,27 @@ def carry_model_state(
         return CarrySummary((), model.node_hashes, ())
     old_hashes = tuple(str(value) for value in previous["node_hashes"])
     old_seen = tuple(int(value) for value in previous["seen_class_ids"])
-    old_weight = previous["affine_weight"]
-    old_bias = previous["affine_bias"]
+    head_state = previous["integrator_state"]
     old_adapters = previous["node_adapters"]
     if (
-        not isinstance(old_weight, Tensor)
-        or not isinstance(old_bias, Tensor)
+        not isinstance(head_state, Mapping)
+        or previous.get("hidden_dimension") != model.integrator.hidden_dimension
+        or not all(isinstance(value, Tensor) for value in head_state.values())
         or not isinstance(old_adapters, Mapping)
-        or old_weight.shape != (CLASS_COUNT, len(old_hashes) * FEATURE_DIMENSION)
-        or old_bias.shape != (CLASS_COUNT,)
         or len(set(old_hashes)) != len(old_hashes)
     ):
         raise ValueError("previous persistent affine state is malformed")
-    old_index = {node_hash: index for index, node_hash in enumerate(old_hashes)}
+    model.integrator.carry(head_state, old_hashes, model.node_hashes, old_seen)
     with torch.no_grad():
         for new_index, node_hash in enumerate(model.node_hashes):
-            if node_hash not in old_index:
+            if node_hash not in old_hashes:
                 continue
-            old_first = old_index[node_hash] * FEATURE_DIMENSION
-            new_first = new_index * FEATURE_DIMENSION
-            model.affine.weight[:, new_first : new_first + FEATURE_DIMENSION].copy_(
-                old_weight[:, old_first : old_first + FEATURE_DIMENSION]
-            )
             raw = old_adapters.get(node_hash)
             if not isinstance(raw, Mapping) or not all(
                 isinstance(value, LoRAFactors) for value in raw.values()
             ):
                 raise ValueError("continued node lacks authenticated adapter factors")
             load_adapter_factors(model.node_models[new_index], raw)
-        if old_seen:
-            indices = torch.tensor(old_seen, dtype=torch.int64, device=model.affine.bias.device)
-            model.affine.bias.index_copy_(
-                0, indices, old_bias[indices.cpu()].to(model.affine.bias)
-            )
     return node_transition(old_hashes, model.node_hashes)
 
 
@@ -300,25 +288,20 @@ def node_transition(
 
 
 def load_exact_model_state(
-    model: PersistentAffineFrontier, state: Mapping[str, object]
+    model: PersistentFrontierIntegrator, state: Mapping[str, object]
 ) -> None:
     """Restore one same-frontier checkpoint without applying transition rules."""
     if (
         tuple(state.get("node_hashes", ())) != model.node_hashes
         or tuple(state.get("slot_indices", ())) != model.slot_indices
         or tuple(state.get("seen_class_ids", ())) != model.seen_class_ids
+        or state.get("hidden_dimension") != model.integrator.hidden_dimension
     ):
         raise ValueError("checkpoint frontier differs from the requested model")
-    weight, bias, adapters = (
-        state.get("affine_weight"),
-        state.get("affine_bias"),
-        state.get("node_adapters"),
-    )
-    if not isinstance(weight, Tensor) or not isinstance(bias, Tensor) or not isinstance(adapters, Mapping):
+    head_state, adapters = state.get("integrator_state"), state.get("node_adapters")
+    if not isinstance(head_state, Mapping) or not isinstance(adapters, Mapping):
         raise ValueError("checkpoint model state is malformed")
-    with torch.no_grad():
-        model.affine.weight.copy_(weight.to(model.affine.weight))
-        model.affine.bias.copy_(bias.to(model.affine.bias))
+    model.integrator.load_state_dict(head_state, strict=True)
     for node_hash, node_model in zip(model.node_hashes, model.node_models, strict=True):
         raw = adapters.get(node_hash)
         if not isinstance(raw, Mapping) or not all(
@@ -329,7 +312,7 @@ def load_exact_model_state(
 
 
 def raw_union_logits(
-    model: PersistentAffineFrontier,
+    model: PersistentFrontierIntegrator,
     local_scores: Sequence[Tensor],
 ) -> Tensor:
     """Return the parameter-free union of frozen local classifier rows."""
@@ -347,7 +330,7 @@ def raw_union_logits(
 
 
 def true_node_logits(
-    model: PersistentAffineFrontier,
+    model: PersistentFrontierIntegrator,
     local_scores: Sequence[Tensor],
     labels: Tensor,
 ) -> Tensor:
@@ -369,7 +352,7 @@ def true_node_logits(
 
 __all__ = [
     "CarrySummary",
-    "PersistentAffineFrontier",
+    "PersistentFrontierIntegrator",
     "carry_model_state",
     "export_model_state",
     "load_exact_model_state",

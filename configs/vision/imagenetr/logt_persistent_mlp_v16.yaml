@@ -1,0 +1,14 @@
+experiment:
+  name: imagenetr50_logt_persistent_mlp_v16
+  historical_capacity: 4096
+  hidden_dimension: 1024
+  activation: relu
+  initialization: signed_union_with_zero_output_random_units
+paths:
+  artifact_root: artifacts/imagenetr50/persistent_mlp_v16
+  affine_config: configs/vision/imagenetr/logt_persistent_affine_v15.yaml
+  reference_run: artifacts/imagenetr50/persistent_affine_v15/runs/5f60e2f5c25e3318ba9c9b66d41ce8c159ba57a0f1a4fc524567c098b222d686
+sources:
+  affine_config_sha256: 0a501a33aee0a7096771b23a73b6c9e439055291a23b4670c77fea73bd914c77
+  reference_result_sha256: 97db15dcdf8b55009f8d37ffbaba7ad36f6583099eb165de770be185bc6938d3
+  reference_result_hash: 4fa601c9b8e3cc87f07897f06ba51f88b75b7ecde1bf47ef01881526df4b4b58

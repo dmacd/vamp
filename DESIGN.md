@@ -930,6 +930,33 @@ deployment compute. Neither joint curve is a gate. All choices are frozen
 before post-stage test access, and a completed second invocation must
 authenticate every stage and perform zero new optimizer steps.
 
+### Persistent two-layer MLP extension
+
+The MLP condition retains the same node-specific final latents, H=4,096 replay
+identities, four-epoch schedule, trainable node LoRAs, and frozen local heads
+as the affine arm. Its only architectural change is
+`Linear(768 * live_nodes, 1024) -> ReLU -> Linear(1024, 200)`, with no skip
+connection, normalization, dropout, score input, or metadata. The fixed hidden
+width gives a larger but still linear-in-frontier-width head cost. Existing
+affine and joint-IID results are immutable references, not retrained controls.
+
+The dense head initially reproduces the source-classifier union using 200
+positive and 200 negative hidden coordinates, followed by signed identity
+output weights. Another 624 units are random latent projections with initially
+zero output weights. All weights are trainable, so this is initialization of
+a full latent-input MLP, not a restriction to classifier scores.
+
+First-layer columns and node LoRAs carry by surviving source-node identity.
+Replacement columns use the new source classifier and seeded random latent
+projections, and replacement adapters load their sealed source state. Shared
+hidden biases and old-class output rows persist, with named AdamW moments;
+new-class rows and replacement columns start with zero moments. Hidden
+coordinates never change identity or width. Thus full consolidation replaces
+the node representation but does not reset the learned MLP output layer.
+Same-frontier checkpoints restore every tensor exactly rather than applying
+arrival-time initialization. Reports distinguish this global head persistence
+from the separate carry/reset lifetimes of node adapters.
+
 ## TRACE Log-t VAMP
 
 TRACE is an isolated PyTorch/PEFT experiment package under

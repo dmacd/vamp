@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from typing import Protocol
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 import json
@@ -36,6 +37,7 @@ from apm.continual.vision.imagenetr.behavior_replay_workflow import (
     _stored_integrator_protocol,
 )
 from apm.continual.vision.imagenetr.data import ImageRecord, ManifestDataset
+from apm.continual.vision.imagenetr.checkpoints import atomic_torch_save
 from apm.continual.vision.imagenetr.heads import save_classifier
 from apm.continual.vision.imagenetr.integrator_artifacts import IntegratorStore
 from apm.continual.vision.imagenetr.integrator_hierarchy import HierarchyBuildResult
@@ -50,9 +52,10 @@ from apm.continual.vision.imagenetr.persistent_affine_config import (
     load_persistent_affine_config,
 )
 from apm.continual.vision.imagenetr.persistent_affine_model import (
-    PersistentAffineFrontier,
+    PersistentFrontierIntegrator,
     carry_model_state,
     export_model_state,
+    load_exact_model_state,
     raw_union_logits,
 )
 from apm.continual.vision.imagenetr.persistent_affine_training import (
@@ -148,8 +151,19 @@ class PersistentAffineBootstrap:
     source: PromotedBootstrap
     stage_matched_joint: dict[str, object]
     selection_result: dict[str, object]
-    protocol: PersistentAffineProtocol
+    protocol: RunProtocol
     run: Path
+    hidden_dimension: int = 0
+    reference_rows: tuple[Mapping[str, object], ...] = ()
+
+
+class RunProtocol(Protocol):
+    """Minimal immutable identity shared by affine and MLP experiment runners."""
+
+    @property
+    def content_hash(self) -> str: ...
+
+    def as_record(self) -> dict[str, object]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,6 +216,7 @@ def _material_paths(project_root: Path, config_path: Path) -> tuple[Path, ...]:
             "parent_recipe_factorial.py",
             "persistent_affine_config.py",
             "persistent_affine_model.py",
+            "persistent_integrator_head.py",
             "persistent_affine_training.py",
             "persistent_affine_workflow.py",
             "promoted_integrator_config.py",
@@ -256,7 +271,7 @@ def _selection_cells(
     return selected[0], selected[1]
 
 
-def _prepare_run(run: Path, protocol: PersistentAffineProtocol) -> None:
+def _prepare_run(run: Path, protocol: RunProtocol) -> None:
     for relative in (
         "protocol",
         "arms",
@@ -271,10 +286,10 @@ def _prepare_run(run: Path, protocol: PersistentAffineProtocol) -> None:
     publish_immutable_json(run / "protocol/protocol.json", protocol.as_record())
 
 
-def bootstrap_persistent_affine(
+def load_persistent_inputs(
     config_path: str | Path = DEFAULT_PERSISTENT_AFFINE_CONFIG,
-) -> PersistentAffineBootstrap:
-    """Authenticate all promoted inputs and create the isolated v15 namespace."""
+) -> tuple[PersistentAffineConfig, PromotedBootstrap, dict[str, object], dict[str, object]]:
+    """Authenticate frozen source models and recipes without creating an affine run."""
     resolved = Path(config_path).resolve()
     project_root = resolved.parents[3]
     config = load_persistent_affine_config(resolved)
@@ -361,6 +376,17 @@ def bootstrap_persistent_affine(
     selection = _validated_content_record(
         selection_path, "imagenetr50-frontier-architecture-replay-result-v1"
     )
+    _selection_cells(config, selection)
+    return config, source, stage_matched, selection
+
+
+def bootstrap_persistent_affine(
+    config_path: str | Path = DEFAULT_PERSISTENT_AFFINE_CONFIG,
+) -> PersistentAffineBootstrap:
+    """Authenticate all promoted inputs and create the isolated affine namespace."""
+    resolved = Path(config_path).resolve()
+    project_root = resolved.parents[3]
+    config, source, stage_matched, selection = load_persistent_inputs(resolved)
     h4096, h8192 = _selection_cells(config, selection)
     code = material_tree_manifest(_material_paths(project_root, resolved))
     environment = installed_environment_manifest(PROMOTED_PACKAGES)
@@ -436,14 +462,16 @@ def _new_frontier_model(
     nodes: Sequence[BehaviorNode],
     slots: Sequence[int],
     device: torch.device,
-) -> PersistentAffineFrontier:
-    return PersistentAffineFrontier(
+) -> PersistentFrontierIntegrator:
+    return PersistentFrontierIntegrator(
         nodes,
         slots,
         lambda: create_pinned_backbone(bootstrap.source.integrator.checkpoint),
         bootstrap.config.source_rank,
         bootstrap.config.source_alpha,
         device,
+        hidden_dimension=bootstrap.hidden_dimension,
+        initialization_seed=bootstrap.config.seed + 10_000 * len({task for node in nodes for task in node.represented_task_ids}),
     )
 
 
@@ -507,6 +535,31 @@ def _preflight(
         loss = F.cross_entropy(logits, labels)
     loss.backward()
     trainables = model3.trainable_parameters
+    optimizer = create_optimizer(model3, bootstrap.config)
+    optimizer.step()
+    model_snapshot = export_model_state(model3)
+    optimizer_snapshot = export_named_optimizer_state(optimizer, model3)
+    with torch.inference_mode():
+        expected_resume = model3(images, False, False)[:, model3.seen_class_mask].clone()
+    with tempfile.TemporaryDirectory(prefix="head-resume-preflight-", dir=bootstrap.run / "work") as temporary:
+        checkpoint = Path(temporary) / "state.pt"
+        atomic_torch_save(checkpoint, {"model": model_snapshot, "optimizer": optimizer_snapshot})
+        restored = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    with torch.no_grad():
+        for parameter in trainables:
+            parameter.add_(0.25)
+    load_exact_model_state(model3, restored["model"])
+    optimizer.state.clear()
+    restore_named_optimizer_state(optimizer, model3, restored["optimizer"])
+    observed_optimizer = export_named_optimizer_state(optimizer, model3)
+    optimizer_resume_exact = all(
+        torch.equal(value, observed_optimizer["states"][name][key])
+        for name, state in optimizer_snapshot["states"].items()
+        for key, value in state.items()
+    )
+    with torch.inference_mode():
+        observed_resume = model3(images, False, False)[:, model3.seen_class_mask]
+        resume_error = float((expected_resume - observed_resume).abs().max())
     train_ids = {row.image_id for row in integrator.manifest.images if row.split == "train"}
     test_ids = {row.image_id for row in integrator.manifest.images if row.split == "test"}
     topology = [len(hierarchy.frontier(stage)) for stage in range(1, 9)]
@@ -522,6 +575,10 @@ def _preflight(
         ),
         "frontier_hash": frontier3,
         "loss": float(loss.detach()),
+        "hidden_dimension": bootstrap.hidden_dimension,
+        "optimizer_resume_exact": optimizer_resume_exact,
+        "resume_max_logit_error": resume_error,
+        "peak_vram_bytes": torch.cuda.max_memory_allocated(device),
         "output_shape": list(logits.shape),
         "schema_version": "imagenetr50-persistent-affine-preflight-v1",
         "stage_1_to_8_live_nodes": topology,
@@ -536,6 +593,8 @@ def _preflight(
         or not core["bf16_supported"]
         or union_error > 1e-4
         or adapter_carry_error != 0.0
+        or resume_error != 0.0
+        or not optimizer_resume_exact
         or carry.continued_node_hashes != expected_continued
         or len(carry.reset_node_hashes) != 1
         or carry.retired_node_hashes
@@ -547,7 +606,7 @@ def _preflight(
     ):
         raise RuntimeError(f"persistent affine preflight failed: {core}")
     model3.zero_grad(set_to_none=True)
-    del model3
+    del optimizer, model3
     torch.cuda.empty_cache()
     record = {**core, "content_hash": record_sha256(core)}
     publish_immutable_json(target, record)
@@ -558,7 +617,7 @@ def _publish_affine_stage(
     bootstrap: PersistentAffineBootstrap,
     capacity: int,
     stage: int,
-    model: PersistentAffineFrontier,
+    model: PersistentFrontierIntegrator,
     result: Mapping[str, object],
 ) -> tuple[Path, str]:
     target = bootstrap.run / "arms" / f"h{capacity:05d}" / "stages" / f"stage_{stage:03d}"
@@ -569,12 +628,9 @@ def _publish_affine_stage(
         from safetensors.torch import save_file
 
         save_file(
-            {
-                "affine.bias": model.affine.bias.detach().cpu().contiguous(),
-                "affine.weight": model.affine.weight.detach().cpu().contiguous(),
-            },
+            {name: value.detach().cpu().contiguous() for name, value in model.integrator.state_dict().items()},
             work / "integrator.safetensors",
-            metadata={"schema_version": "imagenetr50-persistent-affine-head-v1"},
+            metadata={"schema_version": "imagenetr50-persistent-dense-head-v1", "hidden_dimension": str(bootstrap.hidden_dimension)},
         )
         adapters = []
         for index, (node_hash, node_model) in enumerate(
@@ -617,7 +673,7 @@ def _checkpoint_state(path: Path) -> tuple[dict[str, object], dict[str, object],
     saved = torch.load(path, map_location="cpu", weights_only=False)
     model, optimizer = saved.get("model_state"), saved.get("optimizer_state")
     if (
-        saved.get("schema_version") != "imagenetr50-persistent-affine-checkpoint-v1"
+        saved.get("schema_version") != "imagenetr50-persistent-frontier-checkpoint-v1"
         or not isinstance(model, dict)
         or not isinstance(optimizer, dict)
     ):
@@ -681,12 +737,12 @@ def _run_affine_arm(
         range(first_missing, bootstrap.config.tasks + 1),
         total=bootstrap.config.tasks,
         initial=first_missing - 1,
-        desc=f"persistent affine H={capacity:,}",
+        desc=f"persistent {'MLP' if bootstrap.hidden_dimension else 'affine'} H={capacity:,}",
         unit="task",
         disable=not show_progress,
     )
     for stage in stages:
-        _write_state(bootstrap, "adaptive_affine", capacity=capacity, stage=stage)
+        _write_state(bootstrap, "adaptive_mlp" if bootstrap.hidden_dimension else "adaptive_affine", capacity=capacity, stage=stage)
         nodes, slots, frontier_hash = _hierarchy_frontier(hierarchy, stage)
         model = _new_frontier_model(bootstrap, nodes, slots, device)
         carry = carry_model_state(model, previous_model)
@@ -697,11 +753,24 @@ def _run_affine_arm(
         population = rotating_replay_population(
             all_train, stage, capacity, bootstrap.config.seed
         )
+        if bootstrap.reference_rows:
+            reference = bootstrap.reference_rows[stage - 1]
+            if (
+                population.as_record() != reference["population"]
+                or list(model.node_hashes) != reference["node_hashes"]
+                or bootstrap.config.epoch_map[capacity] != reference["epochs_per_stage"]
+            ):
+                raise ValueError("new integrator condition differs from the affine replay/frontier budget")
         checkpoint = root / "checkpoints" / f"stage_{stage:03d}.pt"
+        steps_before_invocation = (
+            int(torch.load(checkpoint, map_location="cpu", weights_only=False)["optimizer_steps_total"])
+            if checkpoint.is_file() else optimizer_steps_total
+        )
         fit, model_state, optimizer_state = fit_online_stage(
             model=model,
             optimizer=optimizer,
             config=bootstrap.config,
+            protocol_hash=bootstrap.protocol.content_hash,
             capacity=capacity,
             stage=stage,
             frontier_hash=frontier_hash,
@@ -727,6 +796,9 @@ def _run_affine_arm(
         )
         core: dict[str, object] = {
             "capacity": capacity,
+            "hidden_dimension": bootstrap.hidden_dimension,
+            "integrator_parameters": sum(parameter.numel() for parameter in model.integrator.parameters()),
+            "lora_parameters": sum(parameter.numel() for parameter in model.lora_parameters),
             "carry": carry.as_record(),
             "epochs_per_stage": bootstrap.config.epoch_map[capacity],
             "evaluation": evaluation.as_record(),
@@ -750,7 +822,7 @@ def _run_affine_arm(
         stage_ledger.append(result)
         if on_stage_complete is not None:
             on_stage_complete(stage)
-        new_steps += fit.optimizer_steps
+        new_steps += fit.optimizer_steps_total - steps_before_invocation
         new_stages += 1
         previous_model, previous_optimizer = model_state, optimizer_state
         optimizer_steps_total = fit.optimizer_steps_total

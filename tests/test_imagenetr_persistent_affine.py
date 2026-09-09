@@ -32,10 +32,9 @@ from apm.continual.vision.imagenetr.persistent_affine_reporting import (
     _summary_rows,
 )
 from apm.continual.vision.imagenetr.persistent_affine_training import (
-    _transplant_affine_bias_state,
-    _transplant_affine_weight_state,
     rotating_replay_population,
 )
+from apm.continual.vision.imagenetr.persistent_integrator_head import PersistentIntegratorHead
 from apm.continual.vision.imagenetr.persistent_affine_workflow import (
     PersistentAffineProtocol,
     _material_paths,
@@ -124,16 +123,16 @@ def test_affine_optimizer_moments_follow_node_hashes_not_positions() -> None:
         dim=1,
     )
     parameter = nn.Parameter(torch.empty(200, 3 * 768))
-    transplanted = _transplant_affine_weight_state(
-        old, ("node-a", "node-b"), ("node-b", "node-c", "node-a"), parameter
+    head = PersistentIntegratorHead(torch.zeros_like(parameter), torch.zeros(200), 0, 1993)
+    transplanted = head.project_parameter(
+        "input.weight", old, ("node-a", "node-b"), ("node-b", "node-c", "node-a"), (), torch.zeros_like(parameter)
     )
     torch.testing.assert_close(transplanted[:, :768], torch.full((200, 768), 2.0))
     assert int(torch.count_nonzero(transplanted[:, 768:1536])) == 0
     torch.testing.assert_close(transplanted[:, 1536:], torch.full((200, 768), 1.0))
-    bias = _transplant_affine_bias_state(
-        torch.arange(200, dtype=torch.float32),
-        (0, 3, 17),
-        nn.Parameter(torch.empty(200)),
+    bias = head.project_parameter(
+        "input.bias", torch.arange(200, dtype=torch.float32), (), (),
+        (0, 3, 17), torch.zeros(200),
     )
     assert bias[[0, 3, 17]].tolist() == [0.0, 3.0, 17.0]
     assert int(torch.count_nonzero(bias)) == 2
