@@ -1,0 +1,10 @@
+condition,label
+srt_h1024,"SRT rank 16, 1,024-equivalent budget"
+uniform_h1024,"Uniform replay rank 16, 1,024-equivalent budget"
+srt_h4096,"SRT rank 16, 4,096-equivalent budget"
+uniform_h4096,"Uniform replay rank 16, 4,096-equivalent budget"
+persistent_h4096,"Persistent single-affine + adaptive node LoRAs, H=4,096"
+persistent_h8192,"Persistent single-affine + adaptive node LoRAs, H=8,192"
+persistent_mlp_h4096,"Persistent two-layer MLP + adaptive node LoRAs, H=4,096"
+joint_rank16,"Stage-matched joint IID, rank 16"
+joint_rank_matched,Aggregate-rank-matched joint IID

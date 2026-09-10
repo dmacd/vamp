@@ -1,0 +1,165 @@
+SRT working artifacts: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/srt_r16_v1/runs/a47f1f4dc86dbc24f8e8e0e610197e4aff125595f094e68020e7fd81cff2c3a2
+
+Phase: authenticate dataset and run real-model smoke. Measuring initial throughput.
+srt H1024 task 01:   0%|          | 0/32 [00:00<?, ?image/s]srt H1024 task 01: 100%|██████████| 32/32 [00:00<00:00, 105.08image/s]
+Completed continuous task 1/50: 25.000% NLL 4.9148; 32 cumulative presentations
+srt H1024 task 02:   0%|          | 0/64 [00:00<?, ?image/s]srt H1024 task 02: 100%|██████████| 64/64 [00:01<00:00, 34.98image/s]
+Completed continuous task 2/50: 12.500% NLL 23.0126; 96 cumulative presentations
+srt H1024 task 03:   0%|          | 0/96 [00:00<?, ?image/s]srt H1024 task 03: 100%|██████████| 96/96 [00:01<00:00, 58.04image/s]
+Completed continuous task 3/50: 8.333% NLL 49.7710; 192 cumulative presentations
+srt H1024 task 04:   0%|          | 0/128 [00:00<?, ?image/s]srt H1024 task 04: 100%|██████████| 128/128 [00:01<00:00, 65.24image/s]
+Completed continuous task 4/50: 6.250% NLL 13.3080; 320 cumulative presentations
+srt H1024 task 05:   0%|          | 0/160 [00:00<?, ?image/s]srt H1024 task 05: 100%|██████████| 160/160 [00:01<00:00, 86.13image/s]
+Completed continuous task 5/50: 5.000% NLL 6.8043; 480 cumulative presentations
+srt H1024 task 06:   0%|          | 0/192 [00:00<?, ?image/s]srt H1024 task 06: 100%|██████████| 192/192 [00:01<00:00, 97.13image/s]
+Completed continuous task 6/50: 8.333% NLL 5.5491; 672 cumulative presentations
+srt H1024 task 07:   0%|          | 0/224 [00:00<?, ?image/s]srt H1024 task 07: 100%|██████████| 224/224 [00:01<00:00, 117.72image/s]
+Completed continuous task 7/50: 7.143% NLL 3.8961; 896 cumulative presentations
+srt H1024 task 08:   0%|          | 0/256 [00:00<?, ?image/s]srt H1024 task 08: 100%|██████████| 256/256 [00:01<00:00, 130.81image/s]
+Completed continuous task 8/50: 3.125% NLL 4.1392; 1,152 cumulative presentations
+srt H1024 task 01:   0%|          | 0/32 [00:00<?, ?image/s]srt H1024 task 01:  84%|████████▍ | 27/32 [00:00<00:00, 99.37image/s]
+srt H1024 task 01:  84%|████████▍ | 27/32 [00:00<?, ?image/s]srt H1024 task 01: 100%|██████████| 32/32 [00:00<00:00, 42.78image/s]
+Completed interrupted task 1/50: 25.000% NLL 4.9148; 32 cumulative presentations
+srt H1024 task 02:   0%|          | 0/64 [00:00<?, ?image/s]srt H1024 task 02: 100%|██████████| 64/64 [00:01<00:00, 38.86image/s]
+Completed interrupted task 2/50: 12.500% NLL 23.0126; 96 cumulative presentations
+srt H1024 task 03:   0%|          | 0/96 [00:00<?, ?image/s]srt H1024 task 03: 100%|██████████| 96/96 [00:01<00:00, 54.52image/s]
+Completed interrupted task 3/50: 8.333% NLL 49.7710; 192 cumulative presentations
+srt H1024 task 04:   0%|          | 0/128 [00:00<?, ?image/s]srt H1024 task 04: 100%|██████████| 128/128 [00:01<00:00, 69.40image/s]
+Completed interrupted task 4/50: 6.250% NLL 13.3080; 320 cumulative presentations
+srt H1024 task 05:   0%|          | 0/160 [00:00<?, ?image/s]srt H1024 task 05: 100%|██████████| 160/160 [00:01<00:00, 91.14image/s]
+Completed interrupted task 5/50: 5.000% NLL 6.8043; 480 cumulative presentations
+srt H1024 task 06:   0%|          | 0/192 [00:00<?, ?image/s]srt H1024 task 06: 100%|██████████| 192/192 [00:01<00:00, 101.35image/s]
+Completed interrupted task 6/50: 8.333% NLL 5.5491; 672 cumulative presentations
+srt H1024 task 07:   0%|          | 0/224 [00:00<?, ?image/s]srt H1024 task 07: 100%|██████████| 224/224 [00:01<00:00, 120.17image/s]
+Completed interrupted task 7/50: 7.143% NLL 3.8961; 896 cumulative presentations
+srt H1024 task 08:   0%|          | 0/256 [00:00<?, ?image/s]srt H1024 task 08: 100%|██████████| 256/256 [00:01<00:00, 138.98image/s]
+Completed interrupted task 8/50: 3.125% NLL 4.1392; 1,152 cumulative presentations
+uniform H1024 task 01:   0%|          | 0/32 [00:00<?, ?image/s]uniform H1024 task 01: 100%|██████████| 32/32 [00:00<00:00, 124.38image/s]
+Completed uniform task 1/50: 25.000% NLL 4.7578; 32 cumulative presentations
+uniform H1024 task 02:   0%|          | 0/64 [00:00<?, ?image/s]uniform H1024 task 02: 100%|██████████| 64/64 [00:01<00:00, 42.35image/s]
+Completed uniform task 2/50: 37.500% NLL 14.2505; 96 cumulative presentations
+uniform H1024 task 03:   0%|          | 0/96 [00:00<?, ?image/s]uniform H1024 task 03: 100%|██████████| 96/96 [00:01<00:00, 73.10image/s]
+Completed uniform task 3/50: 33.333% NLL 23.1586; 192 cumulative presentations
+uniform H1024 task 04:   0%|          | 0/128 [00:00<?, ?image/s]uniform H1024 task 04: 100%|██████████| 128/128 [00:01<00:00, 79.83image/s]
+Completed uniform task 4/50: 31.250% NLL 11.9701; 320 cumulative presentations
+uniform H1024 task 05:   0%|          | 0/160 [00:00<?, ?image/s]uniform H1024 task 05: 100%|██████████| 160/160 [00:01<00:00, 102.89image/s]
+Completed uniform task 5/50: 15.000% NLL 9.9208; 480 cumulative presentations
+uniform H1024 task 06:   0%|          | 0/192 [00:00<?, ?image/s]uniform H1024 task 06: 100%|██████████| 192/192 [00:01<00:00, 144.94image/s]
+Completed uniform task 6/50: 12.500% NLL 9.9085; 672 cumulative presentations
+uniform H1024 task 07:   0%|          | 0/224 [00:00<?, ?image/s]uniform H1024 task 07: 100%|██████████| 224/224 [00:01<00:00, 113.80image/s]
+Completed uniform task 7/50: 17.857% NLL 7.2748; 896 cumulative presentations
+uniform H1024 task 08:   0%|          | 0/256 [00:00<?, ?image/s]uniform H1024 task 08: 100%|██████████| 256/256 [00:01<00:00, 141.26image/s]
+Completed uniform task 8/50: 28.125% NLL 6.1656; 1,152 cumulative presentations
+
+Phase: calibration H1024, screen 1/18 through task 16. Measuring initial throughput.
+srt H1024 task 01:   0%|          | 0/1524 [00:00<?, ?image/s]srt H1024 task 01: 100%|██████████| 1524/1524 [00:04<00:00, 353.34image/s]
+Completed h1024_relaxed_rho20_unit1 task 1/50: 87.234% NLL 0.7672; 1,524 cumulative presentations
+srt H1024 task 02:   0%|          | 0/3172 [00:00<?, ?image/s]srt H1024 task 02:  57%|█████▋    | 1820/3172 [00:05<00:03, 355.66image/s]srt H1024 task 02: 100%|██████████| 3172/3172 [00:08<00:00, 355.59image/s]
+Completed h1024_relaxed_rho20_unit1 task 2/50: 89.286% NLL 0.5639; 4,696 cumulative presentations
+srt H1024 task 03:   0%|          | 0/5048 [00:00<?, ?image/s]srt H1024 task 03:  32%|███▏      | 1621/5048 [00:05<00:10, 320.24image/s]srt H1024 task 03:  66%|██████▋   | 3349/5048 [00:10<00:05, 330.49image/s]srt H1024 task 03: 100%|██████████| 5048/5048 [00:15<00:00, 330.48image/s]
+Completed h1024_relaxed_rho20_unit1 task 3/50: 88.179% NLL 0.5654; 9,744 cumulative presentations
+srt H1024 task 04:   0%|          | 0/6356 [00:00<?, ?image/s]srt H1024 task 04:  26%|██▌       | 1653/6356 [00:05<00:14, 327.11image/s]srt H1024 task 04:  54%|█████▍    | 3445/6356 [00:10<00:08, 339.14image/s]srt H1024 task 04:  82%|████████▏ | 5237/6356 [00:15<00:03, 344.32image/s]srt H1024 task 04: 100%|██████████| 6356/6356 [00:18<00:00, 341.26image/s]
+Completed h1024_relaxed_rho20_unit1 task 4/50: 87.389% NLL 0.4730; 16,100 cumulative presentations
+srt H1024 task 05:   0%|          | 0/5748 [00:00<?, ?image/s]srt H1024 task 05:  31%|███       | 1757/5748 [00:05<00:11, 348.92image/s]srt H1024 task 05:  62%|██████▏   | 3549/5748 [00:10<00:06, 341.10image/s]srt H1024 task 05:  92%|█████████▏| 5277/5748 [00:15<00:01, 340.38image/s]srt H1024 task 05: 100%|██████████| 5748/5748 [00:17<00:00, 338.08image/s]
+Completed h1024_relaxed_rho20_unit1 task 5/50: 82.523% NLL 0.6136; 21,848 cumulative presentations
+srt H1024 task 06:   0%|          | 0/5644 [00:00<?, ?image/s]srt H1024 task 06:  31%|███       | 1731/5644 [00:05<00:11, 342.59image/s]srt H1024 task 06:  62%|██████▏   | 3523/5644 [00:10<00:06, 349.75image/s]srt H1024 task 06:  94%|█████████▍| 5315/5644 [00:15<00:00, 343.52image/s]srt H1024 task 06: 100%|██████████| 5644/5644 [00:16<00:00, 341.84image/s]
+Completed h1024_relaxed_rho20_unit1 task 6/50: 86.000% NLL 0.5271; 27,492 cumulative presentations
+srt H1024 task 07:   0%|          | 0/5572 [00:00<?, ?image/s]srt H1024 task 07:  31%|███       | 1713/5572 [00:05<00:11, 333.65image/s]srt H1024 task 07:  64%|██████▍   | 3569/5572 [00:10<00:05, 339.71image/s]srt H1024 task 07:  96%|█████████▌| 5361/5572 [00:15<00:00, 346.70image/s]srt H1024 task 07: 100%|██████████| 5572/5572 [00:16<00:00, 339.96image/s]
+Completed h1024_relaxed_rho20_unit1 task 7/50: 84.771% NLL 0.5201; 33,064 cumulative presentations
+srt H1024 task 08:   0%|          | 0/5808 [00:00<?, ?image/s]srt H1024 task 08:  31%|███       | 1772/5808 [00:05<00:11, 346.12image/s]srt H1024 task 08:  61%|██████▏   | 3564/5808 [00:10<00:06, 350.79image/s]srt H1024 task 08:  92%|█████████▏| 5356/5808 [00:15<00:01, 350.27image/s]srt H1024 task 08: 100%|██████████| 5808/5808 [00:16<00:00, 348.12image/s]
+Completed h1024_relaxed_rho20_unit1 task 8/50: 86.219% NLL 0.4855; 38,872 cumulative presentations
+srt H1024 task 09:   0%|          | 0/5792 [00:00<?, ?image/s]srt H1024 task 09:  29%|██▉       | 1704/5792 [00:05<00:12, 338.56image/s]srt H1024 task 09:  61%|██████▏   | 3560/5792 [00:10<00:06, 353.95image/s]srt H1024 task 09:  92%|█████████▏| 5352/5792 [00:15<00:01, 344.90image/s]srt H1024 task 09: 100%|██████████| 5792/5792 [00:16<00:00, 342.65image/s]
+Completed h1024_relaxed_rho20_unit1 task 9/50: 85.325% NLL 0.5243; 44,664 cumulative presentations
+srt H1024 task 10:   0%|          | 0/5848 [00:00<?, ?image/s]srt H1024 task 10:  30%|███       | 1782/5848 [00:05<00:11, 347.59image/s]srt H1024 task 10:  61%|██████    | 3574/5848 [00:10<00:06, 345.19image/s]srt H1024 task 10:  92%|█████████▏| 5366/5848 [00:15<00:01, 349.57image/s]srt H1024 task 10: 100%|██████████| 5848/5848 [00:16<00:00, 344.18image/s]
+Completed h1024_relaxed_rho20_unit1 task 10/50: 84.384% NLL 0.5815; 50,512 cumulative presentations
+srt H1024 task 11:   0%|          | 0/5360 [00:00<?, ?image/s]srt H1024 task 11:  33%|███▎      | 1788/5360 [00:05<00:10, 354.57image/s]srt H1024 task 11:  67%|██████▋   | 3580/5360 [00:10<00:05, 340.33image/s]srt H1024 task 11:  99%|█████████▉| 5308/5360 [00:15<00:00, 339.84image/s]srt H1024 task 11: 100%|██████████| 5360/5360 [00:15<00:00, 338.80image/s]
+Completed h1024_relaxed_rho20_unit1 task 11/50: 85.377% NLL 0.5756; 55,872 cumulative presentations
+srt H1024 task 12:   0%|          | 0/5568 [00:00<?, ?image/s]srt H1024 task 12:  32%|███▏      | 1776/5568 [00:05<00:10, 354.71image/s]srt H1024 task 12:  65%|██████▌   | 3632/5568 [00:10<00:05, 359.04image/s]srt H1024 task 12:  99%|█████████▊| 5488/5568 [00:15<00:00, 352.13image/s]srt H1024 task 12: 100%|██████████| 5568/5568 [00:15<00:00, 349.21image/s]
+Completed h1024_relaxed_rho20_unit1 task 12/50: 84.777% NLL 0.5596; 61,440 cumulative presentations
+srt H1024 task 13:   0%|          | 0/5732 [00:00<?, ?image/s]srt H1024 task 13:  29%|██▉       | 1689/5732 [00:05<00:12, 333.63image/s]srt H1024 task 13:  60%|█████▉    | 3417/5732 [00:10<00:06, 337.44image/s]srt H1024 task 13:  90%|████████▉ | 5145/5732 [00:15<00:01, 336.33image/s]srt H1024 task 13: 100%|██████████| 5732/5732 [00:17<00:00, 335.74image/s]
+Completed h1024_relaxed_rho20_unit1 task 13/50: 85.639% NLL 0.5710; 67,172 cumulative presentations
+srt H1024 task 14:   0%|          | 0/5776 [00:00<?, ?image/s]srt H1024 task 14:  27%|██▋       | 1572/5776 [00:05<00:13, 304.83image/s]srt H1024 task 14:  57%|█████▋    | 3300/5776 [00:10<00:07, 322.95image/s]srt H1024 task 14:  88%|████████▊ | 5092/5776 [00:15<00:02, 330.58image/s]srt H1024 task 14: 100%|██████████| 5776/5776 [00:17<00:00, 327.83image/s]
+Completed h1024_relaxed_rho20_unit1 task 14/50: 84.823% NLL 0.5877; 72,948 cumulative presentations
+srt H1024 task 15:   0%|          | 0/5584 [00:00<?, ?image/s]srt H1024 task 15:  33%|███▎      | 1844/5584 [00:05<00:10, 357.31image/s]srt H1024 task 15:  65%|██████▌   | 3636/5584 [00:10<00:05, 355.66image/s]srt H1024 task 15:  98%|█████████▊| 5492/5584 [00:15<00:00, 358.52image/s]srt H1024 task 15: 100%|██████████| 5584/5584 [00:15<00:00, 354.33image/s]
+Completed h1024_relaxed_rho20_unit1 task 15/50: 84.961% NLL 0.5786; 78,532 cumulative presentations
+srt H1024 task 16:   0%|          | 0/5788 [00:00<?, ?image/s]srt H1024 task 16:  31%|███       | 1767/5788 [00:05<00:11, 352.92image/s]srt H1024 task 16:  61%|██████▏   | 3559/5788 [00:10<00:06, 343.47image/s]srt H1024 task 16:  92%|█████████▏| 5351/5788 [00:15<00:01, 345.64image/s]srt H1024 task 16: 100%|██████████| 5788/5788 [00:16<00:00, 344.39image/s]
+Completed h1024_relaxed_rho20_unit1 task 16/50: 84.044% NLL 0.6374; 84,320 cumulative presentations
+
+Phase: calibration H1024, screen 2/18 through task 16. Planned experiment work 84,320/9,031,008 images; overall ETA 7.24 h
+srt H1024 task 01:   0%|          | 0/1524 [00:00<?, ?image/s]srt H1024 task 01:  93%|█████████▎| 1414/1524 [00:05<00:00, 281.54image/s]srt H1024 task 01: 100%|██████████| 1524/1524 [00:06<00:00, 248.00image/s]
+Completed h1024_relaxed_rho20_unit8 task 1/50: 75.532% NLL 5.3402; 1,524 cumulative presentations
+srt H1024 task 02:   0%|          | 0/3172 [00:00<?, ?image/s]srt H1024 task 02:  54%|█████▍    | 1728/3172 [00:05<00:04, 344.60image/s]srt H1024 task 02: 100%|██████████| 3172/3172 [00:11<00:00, 269.72image/s]
+Completed h1024_relaxed_rho20_unit8 task 2/50: 84.184% NLL 0.7265; 4,696 cumulative presentations
+srt H1024 task 03:   0%|          | 0/5048 [00:00<?, ?image/s]srt H1024 task 03:  32%|███▏      | 1621/5048 [00:05<00:10, 313.18image/s]srt H1024 task 03:  63%|██████▎   | 3196/5048 [00:10<00:06, 300.72image/s]srt H1024 task 03:  93%|█████████▎| 4701/5048 [00:16<00:01, 268.15image/s]srt H1024 task 03: 100%|██████████| 5048/5048 [00:19<00:00, 262.58image/s]
+Completed h1024_relaxed_rho20_unit8 task 3/50: 88.818% NLL 0.4198; 9,744 cumulative presentations
+srt H1024 task 04:   0%|          | 0/6356 [00:00<?, ?image/s]srt H1024 task 04:  26%|██▌       | 1653/6356 [00:05<00:14, 326.65image/s]srt H1024 task 04:  52%|█████▏    | 3293/6356 [00:10<00:09, 310.53image/s]srt H1024 task 04:  77%|███████▋  | 4868/6356 [00:17<00:05, 260.68image/s]srt H1024 task 04:  98%|█████████▊| 6223/6356 [00:25<00:00, 227.94image/s]srt H1024 task 04: 100%|██████████| 6356/6356 [00:25<00:00, 244.69image/s]
+Completed h1024_relaxed_rho20_unit8 task 4/50: 89.602% NLL 0.3676; 16,100 cumulative presentations
+srt H1024 task 05:   0%|          | 0/5748 [00:00<?, ?image/s]srt H1024 task 05:  31%|███▏      | 1809/5748 [00:05<00:10, 358.43image/s]srt H1024 task 05:  63%|██████▎   | 3609/5748 [00:11<00:07, 292.79image/s]srt H1024 task 05:  89%|████████▉ | 5118/5748 [00:18<00:02, 256.33image/s]srt H1024 task 05: 100%|██████████| 5748/5748 [00:22<00:00, 260.95image/s]
+Completed h1024_relaxed_rho20_unit8 task 5/50: 89.730% NLL 0.3656; 21,848 cumulative presentations
+srt H1024 task 06:   0%|          | 0/5644 [00:00<?, ?image/s]srt H1024 task 06:  30%|██▉       | 1677/5644 [00:05<00:11, 333.85image/s]srt H1024 task 06:  59%|█████▉    | 3358/5644 [00:11<00:08, 276.62image/s]srt H1024 task 06:  85%|████████▍ | 4775/5644 [00:17<00:03, 255.13image/s]srt H1024 task 06: 100%|██████████| 5644/5644 [00:23<00:00, 244.56image/s]
+Completed h1024_relaxed_rho20_unit8 task 6/50: 88.769% NLL 0.3947; 27,492 cumulative presentations
+srt H1024 task 07:   0%|          | 0/5572 [00:00<?, ?image/s]srt H1024 task 07:  28%|██▊       | 1574/5572 [00:05<00:12, 309.48image/s]srt H1024 task 07:  56%|█████▌    | 3132/5572 [00:11<00:09, 265.04image/s]srt H1024 task 07:  81%|████████  | 4492/5572 [00:17<00:04, 251.76image/s]srt H1024 task 07: 100%|██████████| 5572/5572 [00:23<00:00, 236.95image/s]
+Completed h1024_relaxed_rho20_unit8 task 7/50: 86.792% NLL 0.4729; 33,064 cumulative presentations
+srt H1024 task 08:   0%|          | 0/5808 [00:00<?, ?image/s]srt H1024 task 08:  30%|██▉       | 1714/5808 [00:05<00:12, 340.61image/s]srt H1024 task 08:  59%|█████▉    | 3421/5808 [00:10<00:07, 314.33image/s]srt H1024 task 08:  87%|████████▋ | 5036/5808 [00:17<00:02, 269.28image/s]srt H1024 task 08: 100%|██████████| 5808/5808 [00:21<00:00, 264.05image/s]
+Completed h1024_relaxed_rho20_unit8 task 8/50: 87.986% NLL 0.4845; 38,872 cumulative presentations
+srt H1024 task 09:   0%|          | 0/5792 [00:00<?, ?image/s]srt H1024 task 09:  32%|███▏      | 1843/5792 [00:05<00:10, 362.04image/s]srt H1024 task 09:  63%|██████▎   | 3659/5792 [00:11<00:06, 322.77image/s]srt H1024 task 09:  91%|█████████▏| 5297/5792 [00:17<00:01, 296.98image/s]srt H1024 task 09: 100%|██████████| 5792/5792 [00:19<00:00, 289.84image/s]
+Completed h1024_relaxed_rho20_unit8 task 9/50: 87.317% NLL 0.4925; 44,664 cumulative presentations
+srt H1024 task 10:   0%|          | 0/5848 [00:00<?, ?image/s]srt H1024 task 10:  30%|██▉       | 1754/5848 [00:05<00:11, 345.46image/s]srt H1024 task 10:  60%|█████▉    | 3489/5848 [00:10<00:07, 319.46image/s]srt H1024 task 10:  88%|████████▊ | 5120/5848 [00:16<00:02, 312.05image/s]srt H1024 task 10: 100%|██████████| 5848/5848 [00:18<00:00, 312.15image/s]
+Completed h1024_relaxed_rho20_unit8 task 10/50: 85.983% NLL 0.5492; 50,512 cumulative presentations
+srt H1024 task 11:   0%|          | 0/5360 [00:00<?, ?image/s]srt H1024 task 11:  35%|███▌      | 1894/5360 [00:05<00:09, 375.68image/s]srt H1024 task 11:  71%|███████   | 3783/5360 [00:11<00:05, 314.37image/s]srt H1024 task 11: 100%|██████████| 5360/5360 [00:17<00:00, 307.98image/s]
+Completed h1024_relaxed_rho20_unit8 task 11/50: 86.427% NLL 0.5785; 55,872 cumulative presentations
+srt H1024 task 12:   0%|          | 0/5568 [00:00<?, ?image/s]srt H1024 task 12:  31%|███       | 1729/5568 [00:05<00:11, 343.83image/s]srt H1024 task 12:  62%|██████▏   | 3465/5568 [00:10<00:06, 333.64image/s]srt H1024 task 12:  92%|█████████▏| 5142/5568 [00:15<00:01, 321.51image/s]srt H1024 task 12: 100%|██████████| 5568/5568 [00:17<00:00, 319.61image/s]
+Completed h1024_relaxed_rho20_unit8 task 12/50: 85.830% NLL 0.5904; 61,440 cumulative presentations
+srt H1024 task 13:   0%|          | 0/5732 [00:00<?, ?image/s]srt H1024 task 13:  32%|███▏      | 1817/5732 [00:05<00:10, 357.83image/s]srt H1024 task 13:  63%|██████▎   | 3619/5732 [00:10<00:05, 354.36image/s]srt H1024 task 13:  94%|█████████▍| 5405/5732 [00:16<00:01, 326.70image/s]srt H1024 task 13: 100%|██████████| 5732/5732 [00:17<00:00, 325.52image/s]
+Completed h1024_relaxed_rho20_unit8 task 13/50: 86.687% NLL 0.5681; 67,172 cumulative presentations
+srt H1024 task 14:   0%|          | 0/5776 [00:00<?, ?image/s]srt H1024 task 14:  27%|██▋       | 1572/5776 [00:05<00:13, 309.50image/s]srt H1024 task 14:  57%|█████▋    | 3290/5776 [00:10<00:07, 328.65image/s]srt H1024 task 14:  86%|████████▌ | 4967/5776 [00:15<00:02, 324.39image/s]srt H1024 task 14: 100%|██████████| 5776/5776 [00:17<00:00, 322.10image/s]
+Completed h1024_relaxed_rho20_unit8 task 14/50: 85.031% NLL 0.6013; 72,948 cumulative presentations
+srt H1024 task 15:   0%|          | 0/5584 [00:00<?, ?image/s]srt H1024 task 15:  32%|███▏      | 1780/5584 [00:05<00:10, 350.49image/s]srt H1024 task 15:  64%|██████▎   | 3551/5584 [00:10<00:05, 344.50image/s]srt H1024 task 15:  95%|█████████▌| 5310/5584 [00:15<00:00, 343.30image/s]srt H1024 task 15: 100%|██████████| 5584/5584 [00:16<00:00, 341.02image/s]
+Completed h1024_relaxed_rho20_unit8 task 15/50: 85.026% NLL 0.6476; 78,532 cumulative presentations
+srt H1024 task 16:   0%|          | 0/5788 [00:00<?, ?image/s]srt H1024 task 16:  29%|██▉       | 1703/5788 [00:05<00:12, 327.97image/s]srt H1024 task 16:  62%|██████▏   | 3583/5788 [00:10<00:06, 351.49image/s]srt H1024 task 16:  93%|█████████▎| 5387/5788 [00:15<00:01, 352.45image/s]srt H1024 task 16: 100%|██████████| 5788/5788 [00:16<00:00, 347.75image/s]
+Completed h1024_relaxed_rho20_unit8 task 16/50: 82.400% NLL 0.7179; 84,320 cumulative presentations
+
+Phase: calibration H1024, screen 3/18 through task 16. Planned experiment work 168,640/9,031,008 images; overall ETA 7.88 h
+srt H1024 task 01:   0%|          | 0/1524 [00:00<?, ?image/s]srt H1024 task 01: 100%|██████████| 1524/1524 [00:04<00:00, 360.25image/s]
+Completed h1024_relaxed_rho50_unit1 task 1/50: 87.234% NLL 0.7672; 1,524 cumulative presentations
+srt H1024 task 02:   0%|          | 0/3172 [00:00<?, ?image/s]srt H1024 task 02:  59%|█████▉    | 1884/3172 [00:05<00:03, 368.32image/s]srt H1024 task 02: 100%|██████████| 3172/3172 [00:08<00:00, 362.35image/s]
+Completed h1024_relaxed_rho50_unit1 task 2/50: 86.735% NLL 0.6738; 4,696 cumulative presentations
+srt H1024 task 03:   0%|          | 0/5048 [00:00<?, ?image/s]srt H1024 task 03:  33%|███▎      | 1685/5048 [00:05<00:10, 331.91image/s]srt H1024 task 03:  69%|██████▉   | 3477/5048 [00:10<00:04, 341.06image/s]srt H1024 task 03: 100%|██████████| 5048/5048 [00:15<00:00, 333.19image/s]
+Completed h1024_relaxed_rho50_unit1 task 3/50: 86.262% NLL 0.5701; 9,744 cumulative presentations
+srt H1024 task 04:   0%|          | 0/6356 [00:00<?, ?image/s]srt H1024 task 04:  28%|██▊       | 1781/6356 [00:05<00:12, 352.04image/s]srt H1024 task 04:  56%|█████▌    | 3573/6356 [00:10<00:07, 349.18image/s]srt H1024 task 04:  84%|████████▍ | 5365/6356 [00:15<00:02, 347.96image/s]srt H1024 task 04: 100%|██████████| 6356/6356 [00:18<00:00, 346.25image/s]
+Completed h1024_relaxed_rho50_unit1 task 4/50: 88.274% NLL 0.4500; 16,100 cumulative presentations
+srt H1024 task 05:   0%|          | 0/5748 [00:00<?, ?image/s]srt H1024 task 05:  32%|███▏      | 1821/5748 [00:05<00:10, 363.67image/s]srt H1024 task 05:  64%|██████▍   | 3677/5748 [00:10<00:05, 357.76image/s]srt H1024 task 05:  95%|█████████▌| 5469/5748 [00:15<00:00, 355.26image/s]srt H1024 task 05: 100%|██████████| 5748/5748 [00:16<00:00, 352.27image/s]
+Completed h1024_relaxed_rho50_unit1 task 5/50: 85.586% NLL 0.4963; 21,848 cumulative presentations
+srt H1024 task 06:   0%|          | 0/5644 [00:00<?, ?image/s]srt H1024 task 06:  31%|███       | 1731/5644 [00:05<00:11, 338.84image/s]srt H1024 task 06:  64%|██████▎   | 3587/5644 [00:10<00:05, 350.95image/s]srt H1024 task 06:  96%|█████████▋| 5443/5644 [00:15<00:00, 358.61image/s]srt H1024 task 06: 100%|██████████| 5644/5644 [00:15<00:00, 353.39image/s]
+Completed h1024_relaxed_rho50_unit1 task 6/50: 86.308% NLL 0.5249; 27,492 cumulative presentations
+srt H1024 task 07:   0%|          | 0/5572 [00:00<?, ?image/s]srt H1024 task 07:  31%|███       | 1713/5572 [00:05<00:11, 336.65image/s]srt H1024 task 07:  63%|██████▎   | 3505/5572 [00:10<00:05, 345.56image/s]srt H1024 task 07:  94%|█████████▍| 5233/5572 [00:15<00:00, 341.28image/s]srt H1024 task 07: 100%|██████████| 5572/5572 [00:16<00:00, 340.02image/s]
+Completed h1024_relaxed_rho50_unit1 task 7/50: 84.771% NLL 0.5294; 33,064 cumulative presentations
+srt H1024 task 08:   0%|          | 0/5808 [00:00<?, ?image/s]srt H1024 task 08:  12%|█▏        | 684/5808 [00:02<00:15, 333.67image/s]
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/daniel/projects/snet/rpa/src/apm/continual/vision/imagenetr/srt_workflow.py", line 304, in <module>
+    main()
+  File "/home/daniel/projects/snet/rpa/src/apm/continual/vision/imagenetr/srt_workflow.py", line 290, in main
+    print(run_srt(args.config))
+  File "/home/daniel/projects/snet/rpa/src/apm/continual/vision/imagenetr/srt_workflow.py", line 210, in run_srt
+    run_training_job(root, policy=policy, capacity=capacity, method="srt", training_rows=inputs.fitting,
+  File "/home/daniel/projects/snet/rpa/src/apm/continual/vision/imagenetr/srt_training.py", line 346, in run_training_job
+    scheduler, position, chunks, stopped = _train_stage(
+  File "/home/daniel/projects/snet/rpa/src/apm/continual/vision/imagenetr/srt_training.py", line 235, in _train_stage
+    images, labels = loader.load(chosen, True)
+  File "/home/daniel/projects/snet/rpa/src/apm/continual/vision/imagenetr/srt_data.py", line 57, in load
+    results = tuple(self.executor.map(function, chunks))
+  File "/usr/lib/python3.10/concurrent/futures/process.py", line 575, in _chain_from_iterable_of_lists
+    for element in iterable:
+  File "/usr/lib/python3.10/concurrent/futures/_base.py", line 621, in result_iterator
+    yield _result_or_cancel(fs.pop())
+  File "/usr/lib/python3.10/concurrent/futures/_base.py", line 319, in _result_or_cancel
+    return fut.result(timeout)
+  File "/usr/lib/python3.10/concurrent/futures/_base.py", line 453, in result
+    self._condition.wait(timeout)
+  File "/usr/lib/python3.10/threading.py", line 320, in wait
+    waiter.acquire()
+KeyboardInterrupt

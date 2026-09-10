@@ -26,6 +26,14 @@ Calibration sees only the training-derived fitting/validation partition and
 selects mean stage accuracy before fresh full-data runs. Comparison artifacts
 are imported read-only into a separate report, never appended to old results.
 
+The analysis handoff retains compact stage/task/resource ledgers, per-image
+replay summaries, calibration results, final paired predictions, provenance,
+and all generated figures in the experiment's existing artifact tree. Raw
+training-event streams and checkpoints remain local. A large redundant JSON
+copy need not be tracked when its audited CSV and Parquet forms are retained.
+This is the ImageNet-R handoff exception to the narrower public snapshot
+boundary below, not a separate publication bundle.
+
 ## Public Result Boundary
 
 Generated result trees remain ignored by default. A public result snapshot may

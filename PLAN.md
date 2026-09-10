@@ -13,49 +13,65 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
-## Active - ImageNet-R Single-Adapter Spaced Repetition Training
+## Completed Outcome - ImageNet-R Single-Adapter Spaced Repetition Training
 
-- Implement the approved Atreya et al. SRT adaptation as an isolated rank-16
-  continual learner, with H=1,024- and H=4,096-equivalent presentation budgets
-  and a realized-exposure-matched uniform control for each. These budgets mean
-  294,368 and 844,640 training presentations, not memory limits. The existing
-  split, class order, base model, and joint-reference SGD recipe stay fixed.
-- The persistent SM-2 scheduler, bounded image loader, chunked replay ledger,
-  atomic training resume, growing classifier/momentum carry, and finite
-  calibration workflow are implemented. All 149 ImageNet-R tests pass in one
-  pytest process. The real-model preflight passed zero-LoRA parity, batch 64,
-  eight tasks, exact interrupted/uninterrupted recovery, and paired exposure
-  accounting, with 4.23 GB peak GPU allocation.
-- A perfect-recall stress test exposed virtual times exceeding 64-bit integers.
-  SM-2 interval arithmetic now uses exact integer hundredths, and Parquet stores
-  unbounded clock fields as decimal strings. The preliminary calibration run
-  was stopped and preserved, but is excluded from selection. The corrected
-  implementation is running under identity
-  `b3de2a819efe0707b85cf105cf8d4c53370c807b48108bf996dc4f4883a213ea`.
-  Its repeated real preflight passed exact recovery and paired 1,152-image,
-  253-update smoke streams. Calibration is in progress; final test results
-  are not available yet.
-- Calibrate eighteen settings per budget through task 16 using the existing
-  training-derived validation split, continue two finalists per budget through
-  task 50, then freeze winners before fresh full-data SRT/control runs. Mean
-  stage validation accuracy selects settings; NLL and canonical policy order
-  break ties. No accuracy execution gate applies.
-- The separate PDF/HTML/Markdown report and per-sample timing analysis are
-  implemented. A synthetic integration fixture exercises all thirteen pages,
-  all seven new figures, cross-format clock storage, and deterministic PDF
-  regeneration. It is not scientific evidence. Carry forward authenticated old accuracy curves and
-  the original full-stream figure; do not rewrite the prior report or results.
-  Report calibration work separately, actual versus requested replay gaps,
-  outstanding/censored reviews, and one-model forward/backward work.
-- After calibration and all four final streams, the default workflow audits
-  every committed replay event, rechecks paired per-update exposure, verifies
-  zero-step reuse, generates the report, opens the PDF, and sends a desktop
-  notification. Final integration still requires inspecting the actual report,
-  recording the measured outcome, and committing its compact analysis artifacts.
-- The isolated vision extra now includes pinned reportlab/pypdf dependencies.
-  Host RAM is constrained, so image loading is bounded to four workers; the
-  single GPU runner uses nice level 10. Raw checkpoints and full replay traces
-  remain local; preserve compact analysis-ready tables, logs, and figures.
+- All 36 screening runs, four full-stream calibration finalists, and four
+  fresh 50-task final runs completed on 2026-09-10. Protocol/run
+  `b3de2a819efe0707b85cf105cf8d4c53370c807b48108bf996dc4f4883a213ea`
+  seals result
+  `a7834602b2f9b7a00401f7a34fb3396ae3cf31c43a6d7b6ce528eb48bcc2f098`.
+  Active agent-loop checks continued about every five minutes through
+  completion; no crash or stalled run required recovery. The independent
+  systemd timer remained disabled. The single GPU runner stayed at nice 10.
+- One rank/alpha-16 QKV/fc1 adapter, all-seen affine classifier rows, and SGD
+  momentum persist across tasks. H bounds training presentations, not stored
+  history. Both methods have access to every arrived training image. Their
+  per-update old/current counts and partial batch sizes match exactly.
+- Validation selected standard thresholds, old fraction 0.8, and time unit 8
+  for H=1,024; strict thresholds, old fraction 0.5, and time unit 1 for H=4,096.
+  Both choices were frozen before final test evaluation. Threshold values
+  were hand-chosen search candidates, not values specified by the paper;
+  selection does not establish confidence-to-retention calibration.
+- At H=1,024, SRT reaches **79.267% final accuracy / 0.9585 NLL**, versus
+  uniform replay's **80.533% / 0.8592**. Mean stage accuracy is **83.916%**
+  versus **85.059%**. At H=4,096, SRT reaches **77.333% / 1.1100**, versus
+  uniform's **80.400% / 0.9123**; mean accuracy is **81.908%** versus
+  **84.197%**. SRT therefore loses to its paired control by 1.267 and 3.067
+  final accuracy points, with worse NLL at both budgets.
+- The unchanged joint rank-16 reference finishes at **78.867%**; aggregate-
+  rank-matched joint IID finishes at **79.767% / 0.8795 NLL**. Both uniform
+  runs exceed these final accuracies in this single seed. This is evidence
+  for a useful single-adapter replay baseline, not a SOTA or reproducibility
+  claim. The offline full-stream validation selection is explicitly disclosed.
+- Each H=1,024 condition used **294,368** forward/backward image pairs; each
+  H=4,096 condition used **844,640**, with no extra confidence or recomputation
+  forwards. Measured training times are **14.52 / 14.05 minutes** for SRT /
+  uniform at H=1,024, and **40.11 / 40.46 minutes** at H=4,096. Calibration
+  separately used **6,752,992 presentations and 7.49 training hours**.
+  The corrected calibration-plus-final matrix totals **9,031,008** pairs.
+  Preflight and the superseded development run are outside those totals.
+- Terminal overdue counts are **14,498 / 24,000** images at H=1,024 and
+  **12,560 / 24,000** at H=4,096. Requested spacing is often not delivered.
+  The 96,000 per-image records retain replay counts, gap summaries, and
+  censored terminal waits. Crop-dependent confidence, selection, and delays
+  remain competing explanations; this experiment does not isolate them.
+- All 149 focused ImageNet-R tests pass in one pytest process. The real
+  eight-task preflight verified exact interrupted/uninterrupted weights,
+  predictions, and events, zero-LoRA parity, and paired exposure, with 4.23 GB
+  peak allocation. A fresh default invocation reused every training artifact
+  with zero optimizer steps. Final audit authenticated 200 stage models and
+  predictions, all nine JSON/CSV/Parquet tables, and unchanged prior sources.
+- The separate 13-page PDF, self-contained HTML, Markdown, seven new plots,
+  and original carried-forward accuracy figure are complete and visually
+  checked. Compact ledgers, final paired predictions, manifests, and logs are
+  retained for analysis handoff. Large checkpoints, raw replay events, and the
+  redundant 58 MB per-image JSON remain local. The PDF was opened and a
+  desktop notification sent; the previous report was not modified.
+- Recommended next work, not launched: replicate the paired comparison
+  across seeds, measure confidence versus later retention on training-derived
+  validation data, and calibrate spacing to the available review budget.
+  H also changes the selected recipe here, so its comparison is not a pure
+  training-work ablation. Do not retune this frozen matrix on its test results.
 
 ## Completed Outcome - ImageNet-R Persistent Two-Layer MLP, H=4,096
 

@@ -318,6 +318,11 @@ def _sections(
 ) -> tuple[ReportSection, ...]:
     joint_final = references["stage_matched_joint"][-1]["accuracy"]
     summaries = tuple(analysis.totals for analysis in analyses.values())
+    uniform_wins = sum(
+        analyses[f"uniform_h{capacity}"].totals["final_accuracy"] > analyses[f"srt_h{capacity}"].totals["final_accuracy"]
+        and analyses[f"uniform_h{capacity}"].totals["final_nll"] < analyses[f"srt_h{capacity}"].totals["final_nll"]
+        for capacity in (1024, 4096)
+    )
     differences = tuple(
         f"At the {capacity:,}-equivalent budget, SRT finishes at {analyses[f'srt_h{capacity}'].totals['final_accuracy']:.3f}% accuracy "
         f"and {analyses[f'srt_h{capacity}'].totals['final_nll']:.4f} NLL. Relative to its exposure-matched uniform control, "
@@ -343,6 +348,8 @@ def _sections(
         ReportSection("Results and experimental question", (
             "Does confidence-based spaced repetition improve a single continuing rank-16 adapter compared with uniform replay under identical realized exposure? "
             "The ImageNet-R split is unchanged: 24,000 training images, 6,000 test images, and fifty four-class tasks in the existing seed-1993 order.",
+            f"Uniform replay has higher final accuracy and lower final NLL at {uniform_wins} of the two tested budgets. "
+            "This comparison tests the selected SRT recipes, not every possible confidence threshold or spacing rule.",
             *differences,
             "Mean accuracy is the arithmetic mean of the fifty stage test accuracies. NLL is uncalibrated, all-seen-class cross-entropy; lower is better. "
             "These are single-seed results, not estimates of training-run variability. Final-run times below exclude calibration.",
@@ -404,6 +411,8 @@ def _sections(
             f"{sum(row['evaluation_wall_seconds'] for row in calibration) / 60:.2f} evaluation minutes. The four final models restarted from cold adapters after selection.",
             "Relaxed thresholds are [.05,.15,.30,.60,.85], standard [.10,.25,.50,.75,.90], and strict [.20,.40,.70,.85,.95]. "
             "Quality counts thresholds met by the pre-update probability of the correct class. The interval unit scales the first/failure interval and the first two successful intervals.",
+            "These numerical thresholds were hand-chosen search candidates, not values reported by the paper. Validation selected among them; "
+            "it did not establish that a quality score predicts retention after a given delay. Calibration costs above exclude the preserved, superseded development run and preflight.",
         ), table=selected_table),
         ReportSection("Complete calibration matrix", (
             "Screen accuracy averages tasks 1-16; full accuracy averages tasks 1-50 and is present only for continued finalists. An asterisk marks the selected setting. "
@@ -420,8 +429,12 @@ def _sections(
             "The uniform control is conditioned on SRT's realized allocation; it is not an independently tuned uniform-replay optimum. Quality is measured on random training crops, "
             "so a low score can reflect an uninformative crop as well as forgetting. Hyperparameters were selected offline using a training-derived full-stream validation sweep. "
             "One seed cannot establish reproducibility or a publishable state-of-the-art result.",
-            "Next tests should follow the observed failure mode: replicate a favorable SRT-versus-uniform difference across training seeds; inspect scheduling lateness if reviews are mostly overdue; "
-            "and distinguish optimization or rank limits from replay selection if both methods remain below joint IID. Existing test results must not be used to choose additional settings within this experiment.",
+            f"At the final boundary, {analyses['srt_h1024'].totals['terminal_overdue_images']:,} of 24,000 training images are overdue at H=1,024, "
+            f"and {analyses['srt_h4096'].totals['terminal_overdue_images']:,} at H=4,096. Requested spacing is therefore not reliably delivered. "
+            "This does not isolate the cause of the accuracy difference: crop-dependent confidence, sample selection, and review delays can all contribute.",
+            "The next tests should replicate the paired SRT/uniform comparison across seeds and, on training-derived validation data, measure how pre-review confidence predicts later retention "
+            "at observed delays. Then test spacing calibrated to the available review budget. H changes both work and the selected recipe here, so it is not a pure work ablation. "
+            "Existing test results must not choose additional settings within this frozen experiment.",
             "Source: Atreya et al. (2026), When to Review: Spaced Repetition for Continual Pre-Training of Language Models, arXiv:2608.17530v1. "
             "https://arxiv.org/html/2608.17530v1",
         )),

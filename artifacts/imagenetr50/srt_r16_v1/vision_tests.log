@@ -1,0 +1,37 @@
+........................................................................ [ 48%]
+........................................................................ [ 96%]
+.....                                                                    [100%]
+=============================== warnings summary ===============================
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+  /home/daniel/projects/snet/rpa/.venv-vision/lib/python3.10/site-packages/matplotlib/_fontconfig_pattern.py:64: PyparsingDeprecationWarning: 'oneOf' deprecated - use 'one_of'
+    prop = Group((name + Suppress("=") + comma_separated(value)) | oneOf(_CONSTANTS))
+
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+  /home/daniel/projects/snet/rpa/.venv-vision/lib/python3.10/site-packages/matplotlib/_fontconfig_pattern.py:85: PyparsingDeprecationWarning: 'parseString' deprecated - use 'parse_string'
+    parse = parser.parseString(pattern)
+
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+  /home/daniel/projects/snet/rpa/.venv-vision/lib/python3.10/site-packages/matplotlib/_fontconfig_pattern.py:89: PyparsingDeprecationWarning: 'resetCache' deprecated - use 'reset_cache'
+    parser.resetCache()
+
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+  /home/daniel/projects/snet/rpa/.venv-vision/lib/python3.10/site-packages/matplotlib/_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+    ParserElement.enablePackrat()
+
+tests/test_imagenetr_macro_token.py::test_macro_token_parameter_counts_and_nested_initialization
+tests/test_imagenetr_macro_token.py::test_positionwise_slot_projection_equals_dense_zero_padded_linear
+tests/test_imagenetr_macro_token.py::test_attached_components_match_cache_forward_and_preserve_gradients
+  /home/daniel/projects/snet/rpa/.venv-vision/lib/python3.10/site-packages/torch/cuda/__init__.py:716: UserWarning: Can't initialize NVML
+    warnings.warn("Can't initialize NVML")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
