@@ -26,6 +26,21 @@ Calibration sees only the training-derived fitting/validation partition and
 selects mean stage accuracy before fresh full-data runs. Comparison artifacts
 are imported read-only into a separate report, never appended to old results.
 
+Fixed-policy follow-ups live under the sealed SRT run's `followups/<hash>`
+directory with their own protocol, jobs, checkpoints, and result. They require
+unchanged source training code, configuration, environment, model, and dataset.
+Each profile has a distinct uniform partner whose per-update old/current
+counts and batch sizes are copied exactly. A completed, authenticated pointer
+lets the existing SRT report combine their evidence without modifying the
+original result or validation selection. Follow-ups requested after inspecting
+test results are labeled exploratory, not independently selected outcomes.
+
+The due-only scheduler treats batch size 64 as a maximum, not a guaranteed
+batch size. Image-presentation budgets therefore do not fix optimizer-step
+counts. Reports retain both counters and the realized batch-size curve.
+Correct-class probability is a loss-based quality heuristic, not a calibrated
+estimate of future forgetting or the accuracy benefit of another review.
+
 The analysis handoff retains compact stage/task/resource ledgers, per-image
 replay summaries, calibration results, final paired predictions, provenance,
 and all generated figures in the experiment's existing artifact tree. Raw

@@ -1,0 +1,81 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/daniel/projects/snet/rpa
+configfile: pyproject.toml
+plugins: xdist-3.8.0
+collected 161 items / 8 deselected / 153 selected
+
+tests/continual/vision/imagenetr/test_artifacts_scheduler.py ......      [  3%]
+tests/continual/vision/imagenetr/test_behavior_replay.py ...             [  5%]
+tests/continual/vision/imagenetr/test_integrator_core.py .......         [ 10%]
+tests/continual/vision/imagenetr/test_integrator_pdf.py .                [ 11%]
+tests/continual/vision/imagenetr/test_integrator_persistence.py ........ [ 16%]
+                                                                         [ 16%]
+tests/continual/vision/imagenetr/test_lora_heads_routing.py .....        [ 19%]
+tests/continual/vision/imagenetr/test_low_rank_merging.py ......         [ 23%]
+tests/continual/vision/imagenetr/test_parent_recipe_factorial.py ....... [ 28%]
+                                                                         [ 28%]
+tests/continual/vision/imagenetr/test_protocol_and_bank.py .......       [ 32%]
+tests/continual/vision/imagenetr/test_replay_adaptation.py .....         [ 35%]
+tests/continual/vision/imagenetr/test_router_descriptor.py ..            [ 37%]
+tests/continual/vision/imagenetr/test_router_persistence_evaluation.py . [ 37%]
+.                                                                        [ 38%]
+tests/continual/vision/imagenetr/test_router_protocol.py ....            [ 41%]
+tests/continual/vision/imagenetr/test_router_scores_merge.py ...         [ 43%]
+tests/continual/vision/imagenetr/test_router_synthetic_hierarchy.py .    [ 43%]
+tests/continual/vision/imagenetr/test_router_training.py ..              [ 45%]
+tests/continual/vision/imagenetr/test_router_workflow.py ..              [ 46%]
+tests/continual/vision/imagenetr/test_stage_matched_joint.py .....       [ 49%]
+tests/continual/vision/imagenetr/test_two_layer_replay.py ...            [ 51%]
+tests/test_imagenetr_frontier_adaptation.py .......                      [ 56%]
+tests/test_imagenetr_frontier_architecture_replay.py ......              [ 60%]
+tests/test_imagenetr_frontier_linear_preclassifier.py ....               [ 62%]
+tests/test_imagenetr_frontier_rank_matched.py ....                       [ 65%]
+tests/test_imagenetr_frontier_total_param_matched.py ...                 [ 67%]
+tests/test_imagenetr_macro_convergence.py .....                          [ 70%]
+tests/test_imagenetr_macro_token.py .......                              [ 75%]
+tests/test_imagenetr_persistent_affine.py .........                      [ 81%]
+tests/test_imagenetr_persistent_affine_resources.py ..                   [ 82%]
+tests/test_imagenetr_persistent_mlp.py ....                              [ 84%]
+tests/test_imagenetr_persistent_mlp_reporting.py ..                      [ 86%]
+tests/test_imagenetr_srt_followup.py ..                                  [ 87%]
+tests/test_imagenetr_srt_reporting.py ......                             [ 91%]
+tests/test_imagenetr_srt_scheduler.py ........                           [ 96%]
+tests/test_imagenetr_srt_training.py .....                               [100%]
+
+=============================== warnings summary ===============================
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+  /home/daniel/projects/snet/rpa/.venv-vision/lib/python3.10/site-packages/matplotlib/_fontconfig_pattern.py:64: PyparsingDeprecationWarning: 'oneOf' deprecated - use 'one_of'
+    prop = Group((name + Suppress("=") + comma_separated(value)) | oneOf(_CONSTANTS))
+
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+  /home/daniel/projects/snet/rpa/.venv-vision/lib/python3.10/site-packages/matplotlib/_fontconfig_pattern.py:85: PyparsingDeprecationWarning: 'parseString' deprecated - use 'parse_string'
+    parse = parser.parseString(pattern)
+
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+  /home/daniel/projects/snet/rpa/.venv-vision/lib/python3.10/site-packages/matplotlib/_fontconfig_pattern.py:89: PyparsingDeprecationWarning: 'resetCache' deprecated - use 'reset_cache'
+    parser.resetCache()
+
+tests/continual/vision/imagenetr/test_integrator_persistence.py::test_partial_report_is_markdown_and_self_contained_html
+  /home/daniel/projects/snet/rpa/.venv-vision/lib/python3.10/site-packages/matplotlib/_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+    ParserElement.enablePackrat()
+
+tests/test_imagenetr_macro_token.py::test_macro_token_parameter_counts_and_nested_initialization
+tests/test_imagenetr_macro_token.py::test_positionwise_slot_projection_equals_dense_zero_padded_linear
+tests/test_imagenetr_macro_token.py::test_attached_components_match_cache_forward_and_preserve_gradients
+  /home/daniel/projects/snet/rpa/.venv-vision/lib/python3.10/site-packages/torch/cuda/__init__.py:716: UserWarning: Can't initialize NVML
+    warnings.warn("Can't initialize NVML")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+- generated xml file: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/srt_r16_v1/fixed_policy_tests.xml -
+=============== 153 passed, 8 deselected, 17 warnings in 19.74s ================

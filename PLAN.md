@@ -13,6 +13,66 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## Completed Outcome - ImageNet-R SRT Fixed-Policy H=4,096 Follow-Up
+
+- User-requested full-stream reruns fix historical target 0.8 and interval
+  unit 8, using standard and strict thresholds. Each SRT recipe has its own
+  exact-exposure uniform control. All four fresh 50-task streams completed on
+  2026-09-10, each with 844,640 presentations. No calibration search or older
+  model was retrained. Follow-up result
+  `d12b36cb00d295c819ec5aef5275b24c052f62ba840953c95a075d2ae58ddae6`
+  is sealed separately from the unchanged original result.
+- Config: `configs/vision/imagenetr/srt_h4096_rho80_unit8.yaml`; default
+  execution: `bash scripts/vision/imagenetr/run_srt_followup_local.sh`.
+  The original SRT result stays immutable. Follow-up state lives underneath
+  its `followups/5faf058a3209c70c16e589016bbc205b918879a08ae800cb87d5f89d67434447`
+  directory, with atomic optimizer/stage checkpoints and separate provenance.
+- Standard SRT finishes at **73.967% accuracy / 1.2682 NLL**, versus its
+  uniform control's **80.917% / 0.8951**. Strict SRT finishes at
+  **75.717% / 1.2217**, versus **80.750% / 0.8974**. SRT loses by 6.950
+  and 5.033 final accuracy points, respectively, with worse NLL in both cases.
+  Mean stage accuracies are 79.490% / 84.820% for standard SRT / uniform and
+  81.014% / 84.816% for strict. These are exploratory single-seed follow-ups,
+  requested after inspecting test results, not new validation-selected winners.
+- Holding standard/old=0.8/unit=8 fixed, raising H from 1,024 to 4,096 changes
+  SRT final accuracy by **-5.300 points** and uniform by **+0.383 points**;
+  NLL changes by +0.3097 and +0.0359. The higher budget does not lower both
+  methods' final accuracy. Standard ends with only 10 overdue training images;
+  strict ends with 6,078. Meeting a requested schedule does not validate its
+  usefulness for accuracy.
+- Batch 64 is a maximum, not a fixed effective batch. The standard pair uses
+  **56,243 updates** per stream; strict uses **21,926**, despite equal image
+  work. Training minutes are 60.41 / 62.77 for standard SRT / uniform and
+  43.32 / 43.46 for strict. Both uniform partners match every update's old/new
+  counts and batch size exactly. The follow-up adds 3,378,560 presentations;
+  original calibration plus all final streams totals 12,409,568 presentations.
+- All 30,000 image bytes and memberships, 400 stage models, and 400 prediction
+  files pass authentication and split-isolation checks. The 200 new stage
+  results, original source result, environment, model, and previous frontier
+  report are unchanged on reuse. A fresh default workflow exits successfully
+  in **95.97 seconds**, rebuilding the report with zero optimizer steps in
+  all four streams. Agent-loop monitoring continued through completion; no
+  recovery was needed. The single GPU worker ran at nice 10 and is finished.
+- **153 focused vision tests pass**, with eight integration/benchmark tests
+  deselected; a separate eight-test report slice includes both synthetic PDF
+  integrations and passes. The existing SRT report is now 19 pages, with
+  HTML/Markdown, eleven generated plots, and the unchanged carried-forward
+  accuracy figure. All pages are visually checked. Nine JSON/CSV/Parquet table
+  families agree, including 400 stage rows and 192,000 per-image summaries.
+  Compact stage results, final paired predictions, manifests, audits, and logs
+  support handoff; checkpoints, raw replay events, and the redundant 114 MiB
+  per-image JSON stay local. No TRACE files changed.
+- Confidence interpretation: correct-label probability follows cross-entropy
+  but does not distinguish different runner-up margins or calibrate future
+  forgetting and replay benefit. At p=0.50, standard assigns success (quality
+  3), strict failure (quality 2). The report explains that arbitrary numerical
+  thresholds, crop noise, and changing class count can affect scheduling.
+- Recommended next experiment, not launched: control effective batch size and
+  optimizer work, then compare confidence, correctness, and correct-versus-
+  runner-up margin against later forgetting at controlled review delays on
+  training-derived probes. Replicate across seeds. Do not treat margin as an
+  established replacement or tune the frozen original matrix on test results.
+
 ## Completed Outcome - ImageNet-R Single-Adapter Spaced Repetition Training
 
 - All 36 screening runs, four full-stream calibration finalists, and four

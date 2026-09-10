@@ -1,10 +1,14 @@
-condition,label
-srt_h1024,"SRT rank 16, 1,024-equivalent budget"
-uniform_h1024,"Uniform replay rank 16, 1,024-equivalent budget"
-srt_h4096,"SRT rank 16, 4,096-equivalent budget"
-uniform_h4096,"Uniform replay rank 16, 4,096-equivalent budget"
-persistent_h4096,"Persistent single-affine + adaptive node LoRAs, H=4,096"
-persistent_h8192,"Persistent single-affine + adaptive node LoRAs, H=8,192"
-persistent_mlp_h4096,"Persistent two-layer MLP + adaptive node LoRAs, H=4,096"
-joint_rank16,"Stage-matched joint IID, rank 16"
-joint_rank_matched,Aggregate-rank-matched joint IID
+condition,label,profile,historical_fraction,interval_unit
+srt_h1024,"SRT rank 16, 1,024-equivalent budget",standard,0.8,8.0
+uniform_h1024,"Uniform replay rank 16, 1,024-equivalent budget",standard,0.8,8.0
+srt_h4096,"SRT rank 16, 4,096-equivalent budget",strict,0.5,1.0
+uniform_h4096,"Uniform replay rank 16, 4,096-equivalent budget",strict,0.5,1.0
+persistent_h4096,"Persistent single-affine + adaptive node LoRAs, H=4,096",,,
+persistent_h8192,"Persistent single-affine + adaptive node LoRAs, H=8,192",,,
+persistent_mlp_h4096,"Persistent two-layer MLP + adaptive node LoRAs, H=4,096",,,
+joint_rank16,"Stage-matched joint IID, rank 16",,,
+joint_rank_matched,Aggregate-rank-matched joint IID,,,
+srt_h4096_standard_rho80_unit8,"SRT rank 16, H=4,096; standard, old=0.8, unit=8",standard,0.8,8.0
+uniform_h4096_standard_rho80_unit8,"Uniform replay rank 16, H=4,096; standard, old=0.8, unit=8",standard,0.8,8.0
+srt_h4096_strict_rho80_unit8,"SRT rank 16, H=4,096; strict, old=0.8, unit=8",strict,0.8,8.0
+uniform_h4096_strict_rho80_unit8,"Uniform replay rank 16, H=4,096; strict, old=0.8, unit=8",strict,0.8,8.0
