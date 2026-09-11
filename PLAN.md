@@ -13,6 +13,31 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## In Progress - ImageNet-R Task-50 Rank-16 Joint-IID Convergence
+
+- Establish a validation-converged joint-IID reference without reclassifying
+  the existing five-epoch 78.867% endpoint as convergence. Keep rank/alpha 16,
+  all QKV/fc1 targets, the 200-way affine head, split, augmentation, and initial
+  SGD recipe unchanged. No SRT or frontier model is retrained.
+- Protocol: `docs/imagenetr50_joint_convergence_protocol.md`; config:
+  `configs/vision/imagenetr/joint_convergence_r16.yaml`; default workflow:
+  `bash scripts/vision/imagenetr/run_joint_convergence_local.sh`.
+- One development seed uses the existing 19,200/4,800 training-derived split.
+  Accuracy/NLL improvements of 0.1 point/0.002 reset patience. Eight plateau
+  epochs trigger a fivefold rate reduction; after three reductions require
+  twelve plateau epochs and at least thirty total epochs. The 160-epoch safety
+  cap is not convergence. Accuracy selects the primary checkpoint, with NLL
+  and epoch tie-breaks; minimum NLL is separately retained.
+- Freeze the entire learning-rate schedule before three full-data refits
+  (seeds 1993-1995). Train all through the development stopping horizon, then
+  evaluate epoch five, accuracy-selected, NLL-selected, and terminal models.
+  No test-dependent stopping, seed selection, or checkpoint selection.
+- Current implementation has immutable epoch evidence, step checkpoints,
+  deterministic augmentations, explicit population isolation, and zero-step
+  reuse. Next: focused tests and real GPU resume preflight, run all phases,
+  monitor in the agent loop, add the task-50 endpoint and convergence/work
+  evidence to the current SRT report, verify, and publish compact artifacts.
+
 ## Completed Outcome - ImageNet-R SRT Fixed-Policy H=4,096 Follow-Up
 
 - User-requested full-stream reruns fix historical target 0.8 and interval

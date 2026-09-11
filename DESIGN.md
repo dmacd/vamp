@@ -49,6 +49,24 @@ copy need not be tracked when its audited CSV and Parquet forms are retained.
 This is the ImageNet-R handoff exception to the narrower public snapshot
 boundary below, not a separate publication bundle.
 
+## ImageNet-R Joint-IID Convergence Reference
+
+The task-50 convergence study retains the rank-16 joint model architecture and
+original SGD recipe, while allowing validation-driven learning-rate reductions.
+Development alone sees the training-derived fit/validation partition. Separate
+accuracy and NLL improvement anchors determine a plateau; an epoch safety cap
+does not establish convergence. Primary checkpoint selection maximizes
+validation accuracy, with NLL and epoch tie-breaks.
+
+The complete epoch-rate schedule and selected endpoints are immutable before
+three cold fits use the full training population. Those fits replay the same
+schedule by epochs and cannot select using validation or test observations.
+Test evaluation happens after every refit completes, at the predefined
+five-epoch, accuracy-selected, NLL-selected, and terminal endpoints. A mean
+and sample standard deviation describe seed variation, not a global optimum
+or an independently converged schedule for each seed. The original five-epoch
+curve stays intact; the convergence result is a task-50 endpoint only.
+
 ## Public Result Boundary
 
 Generated result trees remain ignored by default. A public result snapshot may

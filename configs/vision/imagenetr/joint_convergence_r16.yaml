@@ -1,0 +1,14 @@
+artifact_root: artifacts/imagenetr50/joint_convergence_r16
+source_run: artifacts/imagenetr50/srt_r16_v1/runs/b3de2a819efe0707b85cf105cf8d4c53370c807b48108bf996dc4f4883a213ea
+source_result_hash: a7834602b2f9b7a00401f7a34fb3396ae3cf31c43a6d7b6ce528eb48bcc2f098
+development_seed: 1993
+refit_seeds: [1993, 1994, 1995]
+minimum_epochs: 30
+maximum_epochs: 160
+plateau_patience: 8
+terminal_patience: 12
+learning_rate_factor: 0.2
+learning_rate_reductions: 3
+accuracy_improvement_points: 0.1
+nll_improvement: 0.002
+fit_probe_images: 2048
