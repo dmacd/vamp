@@ -1,0 +1,5 @@
+condition,role,label,stage,epoch,seeds,accuracy_mean,accuracy_sample_sd,nll_mean,nll_sample_sd,training_presentations_per_seed_to_endpoint,optimizer_steps_per_seed_to_endpoint
+joint_convergence_accuracy_selected,accuracy_selected,"Joint IID rank 16, validation accuracy-selected",50,19,3,79.17222222222222,0.1669442133479614,1.048973647871841,0.0201918051783801,456000,7125
+joint_convergence_five_epoch,five_epoch,"Joint IID rank 16, five-epoch rerun",50,5,3,78.97777777777777,0.2795499027868699,0.915071112170818,0.0168190356856412,120000,1875
+joint_convergence_nll_selected,nll_selected,"Joint IID rank 16, validation NLL-selected",50,3,3,78.73888888888888,0.16358257627039288,0.9088922400957887,0.011429413856264755,72000,1125
+joint_convergence_terminal,terminal,"Joint IID rank 16, terminal schedule checkpoint",50,47,3,78.90555555555555,0.10844011831079595,1.0715177726066463,0.005305556736623277,1128000,17625

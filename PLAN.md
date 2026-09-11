@@ -13,12 +13,14 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
-## In Progress - ImageNet-R Task-50 Rank-16 Joint-IID Convergence
+## Completed Outcome - ImageNet-R Task-50 Rank-16 Joint-IID Convergence
 
-- Establish a validation-converged joint-IID reference without reclassifying
-  the existing five-epoch 78.867% endpoint as convergence. Keep rank/alpha 16,
-  all QKV/fc1 targets, the 200-way affine head, split, augmentation, and initial
-  SGD recipe unchanged. No SRT or frontier model is retrained.
+- The validation-converged reference reaches **79.172% mean test accuracy
+  (sample SD 0.167 points) and 1.0490 mean NLL (SD 0.0202)** across three
+  full-data seeds. This is convergence under the fixed SGD recipe, not a
+  global rank-16 upper bound. Rank/alpha 16, all QKV/fc1 targets, the 200-way
+  affine head, split, augmentation, and initial SGD settings are unchanged.
+  No SRT or frontier model was retrained.
 - Protocol: `docs/imagenetr50_joint_convergence_protocol.md`; config:
   `configs/vision/imagenetr/joint_convergence_r16.yaml`; default workflow:
   `bash scripts/vision/imagenetr/run_joint_convergence_local.sh`.
@@ -28,37 +30,65 @@
   twelve plateau epochs and at least thirty total epochs. The 160-epoch safety
   cap is not convergence. Accuracy selects the primary checkpoint, with NLL
   and epoch tie-breaks; minimum NLL is separately retained.
-- Freeze the entire learning-rate schedule before three full-data refits
-  (seeds 1993-1995). Train all through the development stopping horizon, then
-  evaluate epoch five, accuracy-selected, NLL-selected, and terminal models.
-  No test-dependent stopping, seed selection, or checkpoint selection.
+- The entire learning-rate schedule was frozen before three cold full-data
+  refits (seeds 1993-1995). All ran through the development stopping horizon
+  before testing any of the four predeclared endpoints. No new test-dependent
+  stopping, seed selection, or checkpoint selection occurred.
 - Implementation and protocol were committed/pushed as `43fb39c` before
-  training. Twelve focused convergence/SGD tests passed. Run
+  training. Run
   `4fed5e0b39a01ebd7a7f2914adaaa51126157f0e40cf85c3a69432188ef959b2`
-  is active on one nice-10 GPU worker. The real preflight authenticated all
+  completed on 2026-09-10 local time with sealed result
+  `50ade21078b36396deaf6031b4ecc465e4c7d8555fb7cd4fecc9ae1396d22947`.
+  One nice-10 GPU worker ran sequentially; active-agent timer checks continued
+  through completion without a training failure. Preflight authenticated all
   30,000 image bytes, verified exact interrupted/uninterrupted model states
-  and zero-step reuse, and peaked at 4.20 GB allocated VRAM.
+  and zero-step reuse, and peaked at 4.20 GB allocated VRAM. A post-training
+  byte audit also authenticated all 30,000 images.
 - Development reached the predeclared validation plateau at epoch 47. The
   frozen primary accuracy endpoint is epoch 19 (77.417% validation accuracy);
   minimum validation NLL is epoch 3 (1.008731). Selection record
   `e7e24a8b3593c9e5bad98f1bab4a9b63c5233c9cb54b675163ffa51ca244b13a`
   fixes both endpoints, epoch five, and the terminal epoch before testing.
-  Full-data refits run sequentially. Seed 1993 completed all 47 epochs,
-  1,128,000 presentations, and 17,625 updates; its checkpoints and exact
-  schedule passed a separate verification pass. The remaining seeds are
-  underway; no new held-out test result exists.
-- Report integration now includes
-  task-50-only mean/SD markers, development curves, full-data fit histories,
-  predeclared checkpoint comparisons, and work ledgers. The three-page
-  synthetic appendix passed rendering and visual checks; a sealed-file test
-  verifies the complete report authentication path and prediction tampering
-  rejection. The focused vision suite passes all 163 short tests. Thirteen
-  reporting tests pass, including the combined old-curve/new-endpoint layout;
-  figure-page prose distinguishes the new endpoint from the unchanged
-  five-epoch accuracy-gap reference. The report-only command normalizes
-  relative paths before checking the convergence artifact namespace. Remaining:
-  monitor all phases, verify the actual report, demonstrate fresh-process
-  reuse, and publish compact evidence. No held-out ceiling value is claimed yet.
+  At epoch 19, seeds 1993/1994/1995 score 79.000% / 79.333% / 79.183%.
+  All three full fits completed 47 epochs, 1,128,000 presentations, and
+  17,625 updates apiece, following the exact sealed schedule.
+- Fresh five-epoch refits average **78.978% / 0.9151 NLL**. The selected
+  endpoint adds only **0.194 accuracy points** and worsens NLL by 0.1339.
+  The validation-NLL-selected epoch 3 averages **78.739% / 0.9089**; terminal
+  epoch 47 averages **78.906% / 1.0715**. Longer training does not close the
+  gap to standard/old=0.8/unit=8 uniform replay's **80.917% / 0.8951**:
+  selected joint is 1.744 accuracy points lower and 0.1539 NLL higher.
+  This compares three joint seeds with one replay seed, without a significance
+  claim. The original 78.867% five-epoch result and its curve remain unchanged;
+  the fresh seed-1993 five-epoch score is 78.833%, not a bit-exact reproduction.
+- Development plus three full terminal refits consumed **4,286,400 training
+  forward/backward image pairs and 66,975 optimizer updates**. Including
+  validation, clean fit probes, and twelve final tests gives 4,969,024 forward
+  image paths. Measured training-batch work totals 205.35 minutes; evaluation
+  and epoch artifact work totals 27.89 minutes. Setup and step-checkpoint
+  overhead are separate. One primary epoch-19 refit costs 456,000 training
+  presentations and 7,125 updates. Preflight is outside these study totals.
+- The existing SRT report now has 22 visually checked pages, thirteen generated
+  plots, the unchanged carried-forward figure, and fourteen matching
+  JSON/CSV/Parquet table families. New mean/SD diamonds appear only at task 50;
+  they are not a fabricated converged stage-matched curve. The report includes
+  development and full-fit histories, all predefined endpoints, and work
+  ledgers. All 163 focused vision tests and the separate thirteen-test reporting
+  slice pass with one pytest process. No TRACE files changed.
+- Fresh-process default-workflow reuse exits successfully with zero optimizer
+  steps. All 481 sealed scientific/checkpoint/prediction files retain their
+  hashes, sizes, and modification times; PDF and report hashes also repeat.
+  Compact predictions, epoch results, selection, manifests, audits, and logs
+  support analysis handoff. Weights, optimizer states, and raw replay events
+  remain local.
+- Interpretation and next work, not launched: the clean training-probe fit
+  approaches 100% while validation NLL worsens, consistent with overfitting.
+  Test validation-tuned batch/update-matched joint optimization and
+  regularization before attributing replay's advantage to its curriculum.
+  A schedule transferred by epochs gives full-data fits 25% more updates per
+  epoch; these are three repetitions of one selected recipe, not three
+  independent convergence searches. The test set was examined in earlier
+  experiments, and no global optimum or SOTA claim follows.
 
 ## Completed Outcome - ImageNet-R SRT Fixed-Policy H=4,096 Follow-Up
 

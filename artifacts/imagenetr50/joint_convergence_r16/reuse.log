@@ -1,0 +1,31 @@
+Joint-convergence working artifacts: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/joint_convergence_r16/runs/4fed5e0b39a01ebd7a7f2914adaaa51126157f0e40cf85c3a69432188ef959b2
+Phase preflight: measuring throughput
+Phase development: measuring throughput
+Frozen schedule: 47 epochs; endpoints {'accuracy_selected': 19, 'nll_selected': 3, 'terminal': 47, 'five_epoch': 5}; validation_plateau
+Phase full-data seed 1993: measuring throughput
+Phase full-data seed 1994: measuring throughput
+Phase full-data seed 1995: measuring throughput
+Phase evaluate frozen task-50 endpoints: measuring throughput
+Test seed 1993, epoch 3: 78.833% / NLL 0.92156; roles ['nll_selected']
+Test seed 1993, epoch 5: 78.833% / NLL 0.91853; roles ['five_epoch']
+Test seed 1993, epoch 19: 79.000% / NLL 1.06772; roles ['accuracy_selected']
+Test seed 1993, epoch 47: 78.800% / NLL 1.07630; roles ['terminal']
+Test seed 1994, epoch 3: 78.550% / NLL 0.89934; roles ['nll_selected']
+Test seed 1994, epoch 5: 78.800% / NLL 0.92989; roles ['five_epoch']
+Test seed 1994, epoch 19: 79.333% / NLL 1.05160; roles ['accuracy_selected']
+Test seed 1994, epoch 47: 78.900% / NLL 1.07244; roles ['terminal']
+Test seed 1995, epoch 3: 78.833% / NLL 0.90578; roles ['nll_selected']
+Test seed 1995, epoch 5: 79.300% / NLL 0.89679; roles ['five_epoch']
+Test seed 1995, epoch 19: 79.183% / NLL 1.02760; roles ['accuracy_selected']
+Test seed 1995, epoch 47: 79.017% / NLL 1.06581; roles ['terminal']
+Phase report: measuring throughput
+Report audit: SRT rank 16, 1,024-equivalent budget
+Report audit: Uniform replay rank 16, 1,024-equivalent budget
+Report audit: SRT rank 16, 4,096-equivalent budget
+Report audit: Uniform replay rank 16, 4,096-equivalent budget
+Report audit: SRT rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: SRT rank 16, H=4,096; strict, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; strict, old=0.8, unit=8
+Phase complete: measuring throughput
+/home/daniel/projects/snet/rpa/output/pdf/imagenetr50_srt_r16_report.pdf

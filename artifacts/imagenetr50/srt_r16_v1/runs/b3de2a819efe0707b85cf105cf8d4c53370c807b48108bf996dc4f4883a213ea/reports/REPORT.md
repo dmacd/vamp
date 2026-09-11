@@ -6,9 +6,9 @@ Does confidence-based spaced repetition improve a single continuing rank-16 adap
 
 Uniform replay has higher final accuracy and lower final NLL at 2 of the two tested budgets. This comparison tests the selected SRT recipes, not every possible confidence threshold or spacing rule.
 
-At the 1,024-equivalent budget, SRT finishes at 79.267% accuracy and 0.9585 NLL. Relative to its exposure-matched uniform control, the differences are -1.267 accuracy points and +0.0993 NLL. Its accuracy difference from joint rank 16 is +0.400 points.
+At the 1,024-equivalent budget, SRT finishes at 79.267% accuracy and 0.9585 NLL. Relative to its exposure-matched uniform control, the differences are -1.267 accuracy points and +0.0993 NLL. Its accuracy difference from the original five-epoch joint rank 16 is +0.400 points.
 
-At the 4,096-equivalent budget, SRT finishes at 77.333% accuracy and 1.1100 NLL. Relative to its exposure-matched uniform control, the differences are -3.067 accuracy points and +0.1977 NLL. Its accuracy difference from joint rank 16 is -1.533 points.
+At the 4,096-equivalent budget, SRT finishes at 77.333% accuracy and 1.1100 NLL. Relative to its exposure-matched uniform control, the differences are -3.067 accuracy points and +0.1977 NLL. Its accuracy difference from the original five-epoch joint rank 16 is -1.533 points.
 
 Mean accuracy is the arithmetic mean of the fifty stage test accuracies. NLL is uncalibrated, all-seen-class cross-entropy; lower is better. These are single-seed results, not estimates of training-run variability. Final-run times below exclude calibration.
 
@@ -22,6 +22,8 @@ Mean accuracy is the arithmetic mean of the fifty stage test accuracies. NLL is 
 ## Original full-stream comparison at both work budgets
 
 Each panel compares one SRT/uniform pair with the five existing task-free conditions. Historical curve names, values, and colors are unchanged. A budget of H-equivalent work means 4 x (current images + min(H, historical images)) presentations per task, not a memory cap. Both methods can revisit every arrived training image.
+
+The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.
 
 ![Original full-stream comparison at both work budgets](stage_accuracy.png)
 
@@ -56,11 +58,15 @@ These settings were requested after reviewing the original test curves. Treat th
 
 All four new conditions use a single rank-16 adapter. Colors distinguish standard and strict profiles; solid lines denote SRT and dashed lines their matched uniform controls. All five earlier task-free frontier and joint-IID conditions remain overlaid. The original selected-policy SRT curves remain on the preceding accuracy page.
 
+The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.
+
 ![Full-stream accuracy with the fixed-policy conditions](fixed_policy_stage_accuracy.png)
 
 ## Direct comparisons with the original SRT recipes
 
-Left: standard thresholds, old target 0.8, and unit 8 are fixed; only H changes from 1,024 to 4,096. Right: H=4,096 and strict thresholds are fixed; old target/unit change together from 0.5/1 to 0.8/8. The right comparison does not isolate mixture from spacing. Each uniform line copies its associated SRT batch schedule. The lower row shows NLL for the identical conditions; the joint rank-16 source has no retained NLL.
+Left: standard thresholds, old target 0.8, and unit 8 are fixed; only H changes from 1,024 to 4,096. Right: H=4,096 and strict thresholds are fixed; old target/unit change together from 0.5/1 to 0.8/8. The right comparison does not isolate mixture from spacing. Each uniform line copies its associated SRT batch schedule. The lower row shows NLL for the identical conditions; the original five-epoch joint rank-16 source has no retained NLL curve.
+
+The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.
 
 ![Direct comparisons with the original SRT recipes](fixed_policy_comparisons.png)
 
@@ -80,7 +86,9 @@ Joint rank 16 uses the same adapter targets, rank, and affine classification arc
 
 ## Probability quality and the joint-IID gap
 
-The rank-16 joint source did not retain NLL, so no rank-16 NLL curve is fabricated. The lower panel uses its retained accuracy curve. Neither joint reference is an execution gate or a mathematical upper bound. Each fresh joint model receives five epochs. The final rank-16 joint model received 120,000 training presentations and 1,875 updates, whereas continuing uniform H=1,024 received 294,368 presentations and 5,253 updates across its lifetime. Earlier joint-prefix models do not warm-start later ones.
+The original rank-16 joint source did not retain NLL, so no full-stream rank-16 NLL curve is fabricated. The lower panel uses its retained five-epoch accuracy curve. Neither original joint reference is an execution gate or a mathematical upper bound. Each original stage-matched joint model receives five epochs. The original final rank-16 joint model received 120,000 training presentations and 1,875 updates, whereas continuing uniform H=1,024 received 294,368 presentations and 5,253 updates across its lifetime. Earlier joint-prefix models do not warm-start later ones.
+
+The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.
 
 ![Probability quality and the joint-IID gap](nll_and_joint_gap.png)
 
@@ -234,3 +242,40 @@ Source: Atreya et al., https://arxiv.org/html/2608.17530v1#A3.SS2
 The same eight hash-selected training images appear in both profile panels. SRT marks sit above their paired uniform marks. Neither the identities nor their inclusion was selected using these outcomes. Timing is task arrival plus the within-task update fraction.
 
 ![Individual review histories for the fixed-policy follow-up](fixed_policy_sample_timelines.png)
+
+## Task-50 rank-16 joint IID: longer-training reference
+
+Development reached the predeclared validation-plateau rule after 47 epochs. The primary checkpoint is epoch 19, selected by validation accuracy before any new test evaluation. Three cold full-data refits reach 79.172% mean test accuracy (sample SD 0.167 points) and 1.0490 mean NLL (SD 0.0202).
+
+Per-seed primary results: 1993: 79.000% / 1.0677 NLL; 1994: 79.333% / 1.0516 NLL; 1995: 79.183% / 1.0276 NLL.
+
+Relative to the same three seeds' five-epoch endpoints, the selected recipe changes mean accuracy by +0.194 points and NLL by +0.1339. The terminal checkpoint changes mean accuracy by -0.267 points relative to the selected checkpoint.
+
+All endpoints below were defined from development before test evaluation; none is a test-selected winner. The primary reference is the accuracy-selected row. The diamond on the full-stream figures shows its task-50 mean and across-seed sample SD. It is not a new stage-matched curve or a mathematical upper bound. The original 78.867% five-epoch model and its historical curve remain unchanged.
+
+Against uniform replay with H=4,096, old=0.8, and the standard/unit-8 batch schedule, the selected joint mean differs by -1.744 accuracy points and +0.1539 NLL. This compares three joint seeds with one replay seed; it does not measure replay's seed variation.
+
+| Condition | Epoch | Test acc. mean +/- SD | Test NLL mean +/- SD |
+| --- | --- | --- | --- |
+| Joint IID rank 16, validation accuracy-selected | 19 | 79.172% +/- 0.167 | 1.0490 +/- 0.0202 |
+| Joint IID rank 16, five-epoch rerun | 5 | 78.978% +/- 0.280 | 0.9151 +/- 0.0168 |
+| Joint IID rank 16, validation NLL-selected | 3 | 78.739% +/- 0.164 | 0.9089 +/- 0.0114 |
+| Joint IID rank 16, terminal schedule checkpoint | 47 | 78.906% +/- 0.108 | 1.0715 +/- 0.0053 |
+
+## Joint-IID development convergence and checkpoint selection
+
+The existing 19,200/4,800 training-derived fit/validation partition selects the schedule. The model is the same pinned ViT-B/16, with rank/alpha-16 QKV and fc1 adapters and a 200-way affine head; every class is available jointly from the start. Initial SGD rates, momentum, decay, batch 64, and augmentation match the earlier joint recipe.
+
+An accuracy gain of at least 0.1 point or NLL reduction of at least 0.002 resets patience. Eight plateau epochs reduce both rates by five. After three reductions, twelve plateau epochs and at least thirty total epochs establish the declared validation plateau. Smaller gains accumulate against the last significant anchors. This is a generalization-plateau criterion, not proof of stationary training loss or a globally optimal classifier. Orange markers use raw validation metrics, not the plateau tolerances.
+
+![Joint-IID development convergence and checkpoint selection](joint_convergence_development.png)
+
+## Full-data refits, work, and interpretation limits
+
+Seeds 1993, 1994, and 1995 each restart from cold adapters and heads on all 24,000 training images. They replay the complete frozen development schedule by epochs. No validation or test metric can change those fits. The dotted vertical marker is the primary selected epoch. These are clean training-probe curves, not held-out estimates.
+
+Development plus the three complete refits used 4,286,400 training forward/backward image pairs and 66,975 optimizer updates. Including development validation, fit probes, and final testing gives 4,969,024 forward image paths in total. Measured training-batch work totals 205.35 minutes; evaluation and epoch artifact work totals 27.89 minutes. Training-batch time includes image loading but excludes step-checkpoint writes, model setup, and between-job overhead. Preflight work is separate.
+
+Transferring the schedule by epochs gives each full-data fit 25% more updates per epoch than development. The three seeds measure variation under one selected recipe, not three independent convergence searches. A validation plateau does not prove this is the best possible optimizer, augmentation, regularization, or accuracy attainable by rank 16. Mean NLL is a predictive-loss measure, not a calibration-error estimate. Every training and evaluation identity is bound to the original dataset manifest; the published test set was previously examined in earlier experiments.
+
+![Full-data refits, work, and interpretation limits](joint_convergence_full_refits.png)

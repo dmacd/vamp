@@ -12,3 +12,7 @@ srt_h4096_standard_rho80_unit8,"SRT rank 16, H=4,096; standard, old=0.8, unit=8"
 uniform_h4096_standard_rho80_unit8,"Uniform replay rank 16, H=4,096; standard, old=0.8, unit=8",standard,0.8,8.0
 srt_h4096_strict_rho80_unit8,"SRT rank 16, H=4,096; strict, old=0.8, unit=8",strict,0.8,8.0
 uniform_h4096_strict_rho80_unit8,"Uniform replay rank 16, H=4,096; strict, old=0.8, unit=8",strict,0.8,8.0
+joint_convergence_accuracy_selected,"Joint IID rank 16, validation accuracy-selected",,,
+joint_convergence_five_epoch,"Joint IID rank 16, five-epoch rerun",,,
+joint_convergence_nll_selected,"Joint IID rank 16, validation NLL-selected",,,
+joint_convergence_terminal,"Joint IID rank 16, terminal schedule checkpoint",,,
