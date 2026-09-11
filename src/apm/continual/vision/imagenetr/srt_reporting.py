@@ -30,6 +30,7 @@ from apm.continual.vision.imagenetr.persistent_affine_reporting import (
     LABEL_ORACLE_MLP, LABEL_RANK_JOINT, LABEL_STAGE_JOINT, _series,
 )
 from apm.continual.vision.imagenetr.srt_analysis import ReplayAnalysis, analyze_replay_job
+from apm.continual.vision.imagenetr.schedule_matched_reporting import draw_schedule_endpoint, load_schedule_reference, schedule_report_parts
 from apm.continual.vision.imagenetr.srt_evidence import CLOCK_FIELDS, read_sealed, sealed_record, trace_batches
 
 
@@ -124,6 +125,12 @@ def _shared_legend(figure: plt.Figure, axes: tuple[plt.Axes, ...]) -> None:
                   loc="outside lower center", ncol=2, frameon=False, fontsize=10)
 
 
+def _draw_task50_endpoints(axis: plt.Axes, references: dict[str, object], metric: str = "accuracy") -> None:
+    """Keep fixed offline endpoints distinct from the historical stage-matched curves."""
+    for draw in (draw_joint_endpoint, draw_schedule_endpoint):
+        draw(axis, references, metric)
+
+
 def plot_accuracy(reports: Path, references: dict[str, object], stages: pd.DataFrame) -> Path:
     """Overlay both SRT budgets against the unchanged task-free reference curves."""
     figure, axes = plt.subplots(2, 1, figsize=(9.5, 11), constrained_layout=True)
@@ -138,7 +145,7 @@ def plot_accuracy(reports: Path, references: dict[str, object], stages: pd.DataF
             color, style = NEW_STYLES[condition]
             axis.plot(rows.stage, rows.accuracy, color=color, linestyle=style, linewidth=2.5, label=CONDITION_LABELS[condition])
         _finish_axis(axis, "Test top-1 accuracy (%)", f"{capacity:,}-equivalent training budget")
-        draw_joint_endpoint(axis, references)
+        _draw_task50_endpoints(axis, references)
         _legend(axis)
     return _save_figure(figure, reports / "stage_accuracy.png")
 
@@ -154,7 +161,7 @@ def plot_followup_accuracy(reports: Path, references: dict[str, object], stages:
         rows = stages[stages.condition == condition]
         axis.plot(rows.stage, rows.accuracy, color=color, linestyle=style, linewidth=2.3, label=CONDITION_LABELS[condition])
     _finish_axis(axis, "Test top-1 accuracy (%)", "Fixed H=4,096, historical target 0.8, interval unit 8")
-    draw_joint_endpoint(axis, references)
+    _draw_task50_endpoints(axis, references)
     _legend(axis)
     return _save_figure(figure, reports / "fixed_policy_stage_accuracy.png")
 
@@ -177,8 +184,8 @@ def plot_policy_comparisons(reports: Path, references: dict[str, object], stages
                              color="#222222", linestyle=":", linewidth=1.5, label=LABEL_STAGE_JOINT)
         _finish_axis(axes[0, column], "Test accuracy (%)", title)
         _finish_axis(axes[1, column], "Test negative log likelihood", "Same conditions, probability quality")
-        draw_joint_endpoint(axes[0, column], references)
-        draw_joint_endpoint(axes[1, column], references, "nll")
+        _draw_task50_endpoints(axes[0, column], references)
+        _draw_task50_endpoints(axes[1, column], references, "nll")
     _shared_legend(figure, tuple(axes.flat))
     return _save_figure(figure, reports / "fixed_policy_comparisons.png")
 
@@ -218,7 +225,7 @@ def _plot_nll_and_gaps(reports: Path, references: dict[str, object], stages: pd.
         color, style = REFERENCE_STYLES[label]
         axes[0].plot(range(1, 51), values, color=color, linestyle=style, alpha=.7, label=label)
     _finish_axis(axes[0], "Test negative log likelihood", "Probability quality; original rank-16 reference NLL was not retained")
-    draw_joint_endpoint(axes[0], references, "nll")
+    _draw_task50_endpoints(axes[0], references, "nll")
     _finish_axis(axes[1], "Accuracy difference (percentage points)", "Difference from stage-matched joint IID, rank 16")
     axes[1].axhline(0, color="#222222", linewidth=1)
     _shared_legend(figure, tuple(axes))
@@ -399,6 +406,12 @@ def _sections(
     joint_marker_note = (() if references.get("joint_convergence") is None else (
         "The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. "
         "It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.",))
+    if references.get("schedule_matched_joint") is not None:
+        joint_marker_note = ((
+            "The black diamond at task 50 shows validation accuracy-selected joint IID; the hollow blue square shows offline joint IID with the replay-matched optimizer schedule. "
+            if references.get("joint_convergence") is not None else
+            "The hollow blue square at task 50 shows offline joint IID with the replay-matched optimizer schedule. "
+        ) + "Markers show three-seed means +/- sample SD, not new stage-matched curves. Details appear in the final sections.",)
     summaries = tuple(analyses[name].totals for name in NEW_STYLES)
     uniform_wins = sum(
         analyses[f"uniform_h{capacity}"].totals["final_accuracy"] > analyses[f"srt_h{capacity}"].totals["final_accuracy"]
@@ -730,7 +743,8 @@ def write_srt_report(run: Path) -> Path:
     selection = read_sealed(run / "calibration/selected.json", "imagenetr50-srt-selection-v1")
     if result["protocol_hash"] != protocol["content_hash"] or result["selection_hash"] != selection["content_hash"] or selection["test_used"]:
         raise ValueError("SRT report protocol or validation-only selection changed")
-    references = {**reference_results(run), "joint_convergence": load_joint_reference(run, result["content_hash"])}
+    references = {**reference_results(run), "joint_convergence": load_joint_reference(run, result["content_hash"]),
+                  "schedule_matched_joint": load_schedule_reference(run, result["content_hash"])}
     reports = run / "reports"
     reports.mkdir(parents=True, exist_ok=True)
     extra_roots, followup = followup_report_jobs(run, result["content_hash"])
@@ -769,6 +783,8 @@ def write_srt_report(run: Path) -> Path:
     summaries = tuple(analysis.totals for analysis in analyses.values())
     calibration, resources = _calibration_rows(run), _resource_rows(run, stages)
     joint_sections, joint_figures, joint_tables = joint_report_parts(reports, references["joint_convergence"], summaries)
+    schedule_sections, schedule_figures, schedule_tables = schedule_report_parts(
+        reports, references["schedule_matched_joint"], references["joint_convergence"], summaries)
     tables = {"stage_metrics": stages, "sample_replay": samples, "replay_histograms": histograms,
               "sample_timelines": timelines, "condition_summary": summaries, "calibration": calibration,
               "resource_metrics": resources, "task_metrics": _task_rows({"conditions": jobs}),
@@ -777,10 +793,10 @@ def write_srt_report(run: Path) -> Path:
                                          "historical_fraction": jobs[name]["policy"]["historical_fraction"] if name in jobs else None,
                                          "interval_unit": jobs[name]["policy"]["interval_unit"] if name in jobs else None}
                                         for name, label in CONDITION_LABELS.items() if name not in FOLLOWUP_STYLES or name in jobs),
-              **joint_tables}
+              **joint_tables, **schedule_tables}
     tables["condition_names"] += tuple({"condition": row["condition"], "label": row["label"], "profile": None,
                                          "historical_fraction": None, "interval_unit": None}
-                                        for row in joint_tables.get("joint_convergence_summary", ()))
+                                        for row in (*joint_tables.get("joint_convergence_summary", ()), *schedule_tables.get("schedule_matched_summary", ())))
     for name, rows in tables.items():
         _write_table(reports, name, rows)
     frame = pd.DataFrame(stages)
@@ -791,7 +807,7 @@ def write_srt_report(run: Path) -> Path:
         "intervals": _plot_requested_intervals(reports, pd.DataFrame(histograms)),
         "coverage": _plot_sample_coverage(reports, pd.DataFrame(samples), frame),
         "timelines": _plot_timelines(reports, pd.DataFrame(tuple(row for row in timelines if row["condition"] in NEW_STYLES))),
-        **joint_figures,
+        **joint_figures, **schedule_figures,
     }
     if followup is not None:
         figures = {**figures, "followup_accuracy": plot_followup_accuracy(reports, references, frame),
@@ -799,19 +815,23 @@ def write_srt_report(run: Path) -> Path:
                    "optimizer_work": plot_optimizer_work(reports, frame),
                    "followup_timelines": _plot_timelines(reports, pd.DataFrame(tuple(row for row in timelines if row["condition"] in FOLLOWUP_STYLES)),
                                                           "fixed_policy_sample_timelines.png")}
-    sections = _sections(run, reports, result, references, analyses, calibration, resources, figures) + joint_sections
+    sections = _sections(run, reports, result, references, analyses, calibration, resources, figures) + joint_sections + schedule_sections
     project = run.parents[4]
     pdf = project / "output/pdf/imagenetr50_srt_r16_report.pdf"
     render_report(sections, reports, pdf)
     material = {path.name: file_sha256(path) for path in Path(__file__).parent.glob("srt_*report*.py")}
     material["srt_analysis.py"] = file_sha256(Path(__file__).with_name("srt_analysis.py"))
     material["joint_convergence_reporting.py"] = file_sha256(Path(__file__).with_name("joint_convergence_reporting.py"))
+    material["schedule_matched_reporting.py"] = file_sha256(Path(__file__).with_name("schedule_matched_reporting.py"))
     manifest = sealed_record({
         "schema_version": "imagenetr50-srt-report-v1", "result_hash": result["content_hash"],
         "fixed_policy_followup": followup,
         "joint_convergence": None if references["joint_convergence"] is None else {
             "pointer": references["joint_convergence"]["pointer"], "protocol": references["joint_convergence"]["protocol"],
             "result_hash": references["joint_convergence"]["result"]["content_hash"]},
+        "schedule_matched_joint": None if references["schedule_matched_joint"] is None else {
+            "pointer": references["schedule_matched_joint"]["pointer"], "protocol": references["schedule_matched_joint"]["protocol"],
+            "result_hash": references["schedule_matched_joint"]["result"]["content_hash"]},
         "report_code": material, "pdf": str(pdf), "pdf_sha256": file_sha256(pdf),
         "reference_protocol_hash": result["protocol_hash"],
         "condition_names": {row["condition"]: row["label"] for row in tables["condition_names"]},

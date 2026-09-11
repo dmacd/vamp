@@ -180,8 +180,10 @@ def test_report_rejects_changed_followup_recipe(fixed_policy_report_source) -> N
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("include_followup,include_joint", ((False, False), (True, False), (True, True)))
-def test_complete_synthetic_report_layout(tiny_full_stream, tmp_path, include_followup, include_joint) -> None:
+@pytest.mark.parametrize("include_followup,include_joint,include_schedule", (
+    (False, False, False), (True, False, False), (True, True, False), (True, True, True),
+))
+def test_complete_synthetic_report_layout(tiny_full_stream, tmp_path, include_followup, include_joint, include_schedule) -> None:
     """Render all paper pages from explicitly synthetic measurements for visual QA."""
     import pandas as pd
     from pypdf import PdfReader
@@ -202,6 +204,10 @@ def test_complete_synthetic_report_layout(tiny_full_stream, tmp_path, include_fo
     if include_joint:
         references["joint_convergence"] = {"result": {"selection": {"endpoints": {"accuracy_selected": 25}},
             "evaluations": [{"seed": seed, "epoch": 25, "metrics": {"accuracy": 81. + (seed - 1993) * .1, "nll": .8}}
+                            for seed in (1993, 1994, 1995)]}}
+    if include_schedule:
+        references["schedule_matched_joint"] = {"result": {
+            "evaluations": [{"seed": seed, "metrics": {"accuracy": 82. + (seed - 1993) * .1, "nll": .7}}
                             for seed in (1993, 1994, 1995)]}}
     reports = tmp_path / "reports"
     reports.mkdir()
@@ -246,6 +252,7 @@ def test_complete_synthetic_report_layout(tiny_full_stream, tmp_path, include_fo
     assert len(pages) == len(sections)
     assert all("SYNTHETIC LAYOUT FIXTURE" in page.extract_text() for page in pages)
     assert ("black diamond at task 50" in pages[1].extract_text()) == include_joint
+    assert ("hollow blue square" in pages[1].extract_text()) == include_schedule
     first_hash = sha256(pdf.read_bytes()).hexdigest()
     reporting.render_report(sections, reports, pdf)
     assert sha256(pdf.read_bytes()).hexdigest() == first_hash

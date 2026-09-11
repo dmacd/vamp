@@ -36,9 +36,20 @@
   zero-step reuse; the actual source schedule audit also passes. The complete
   focused vision slice passes 178 tests, with eleven integration/benchmark
   tests deselected, in one pytest process.
-- Remaining: run the real mixed-batch GPU preflight; commit
-  the fixed training protocol; run three sequential nice-10 fits with active
-  agent-loop health checks; authenticate final predictions and fresh-process
+- Training code/protocol were committed and pushed as `0a644c3` before the
+  run. Real preflight authenticated all 30,000 image bytes, passed exact
+  interrupted/uninterrupted mixed-batch weights and zero-step reuse, and
+  peaked at 4.15 GB allocated VRAM. Run
+  `7a027ff732874edd48617b430fc5812149990913edbf103b4fe653cc32744766`
+  is training three sequential nice-10 fits with active agent-loop health
+  checks. Test evaluation waits until all three fits complete.
+- Report integration is implemented: existing accuracy/NLL figures gain a
+  hollow-square task-50 mean/SD; three additional pages compare endpoints,
+  show training-only diagnostics, and account for updates and model passes.
+  The focused vision slice passes 180 tests. Explicit synthetic layout and
+  full evidence-authentication checks pass; actual-result rendering and
+  final artifact audits remain pending until training finishes.
+- Remaining: finish the fits; authenticate final predictions and fresh-process
   reuse; update and visually verify the existing SRT report, then publish
   compact evidence. Use two loader workers because host RAM is currently tight.
   The main figures gain a distinct task-50-only endpoint; diagnostic curves

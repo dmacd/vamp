@@ -1,0 +1,254 @@
+"""Authenticated offline schedule-control results added to the existing SRT report."""
+
+from __future__ import annotations
+
+import math
+from pathlib import Path
+from statistics import mean, stdev
+import textwrap
+from typing import TYPE_CHECKING
+
+import matplotlib.pyplot as plt
+import pyarrow.parquet as pq
+
+from apm.continual.artifacts import file_sha256, record_sha256
+from apm.continual.vision.imagenetr.joint_convergence_reporting import endpoint_summary
+from apm.continual.vision.imagenetr.schedule_matched_joint import ScheduleControlConfig, source_schedule
+from apm.continual.vision.imagenetr.schedule_matched_training import ScheduledBatch, require_schedule, validate_schedule_job
+from apm.continual.vision.imagenetr.srt_evidence import read_sealed
+
+if TYPE_CHECKING:
+    from apm.continual.vision.imagenetr.srt_reporting import ReportSection
+
+
+CONDITION = "joint_rank16_replay_schedule_matched"
+LABEL = "Offline joint IID rank 16, replay-schedule matched"
+PLOT_LABEL = LABEL + " (task 50; mean +/- SD)"
+COLOR = "#003f5c"
+
+
+def load_schedule_reference(source: Path, source_hash: str) -> dict[str, object] | None:
+    """Require exact source schedule, isolated populations, all seeds, and reconstructed test metrics."""
+    source = source.resolve()
+    pointer_path = source / "reports/schedule_matched_joint.json"
+    if not pointer_path.is_file():
+        return None
+    pointer = read_sealed(pointer_path, "imagenetr50-schedule-matched-pointer-v1")
+    project = source.parents[4]
+    root = (project / pointer["run"]).resolve()
+    if not root.is_relative_to(project / "artifacts/imagenetr50/schedule_matched_joint_r16/runs"):
+        raise ValueError("offline control pointer leaves its artifact namespace")
+    result = read_sealed(root / "result.json", "imagenetr50-schedule-matched-result-v1")
+    protocol = read_sealed(root / "protocol.json", "imagenetr50-schedule-matched-protocol-v1")
+    original = read_sealed(source / "result.json")
+    original_protocol = read_sealed(source / "protocol.json")
+    if (root.name != protocol["content_hash"] or result["protocol_hash"] != root.name
+            or pointer["result_hash"] != result["content_hash"] or pointer["source_result_hash"] != source_hash
+            or result["source_result_hash"] != source_hash or protocol["source_result_hash"] != source_hash
+            or original["content_hash"] != source_hash or not result["zero_step_reuse"] or not result["source_unchanged"]
+            or any(protocol[name] != original_protocol[name] for name in ("dataset_hash", "model_sha256"))):
+        raise ValueError("offline control identity or original source changed")
+    config = ScheduleControlConfig(**{**protocol["config"], "seeds": tuple(protocol["config"]["seeds"])})
+    if config.seeds != (1993, 1994, 1995) or config.source_result_hash != source_hash:
+        raise ValueError("offline control configuration differs from the fixed seed/source matrix")
+    source_batches, source_evidence = source_schedule(source, config)
+    schedule_record = read_sealed(root / "schedule.json")
+    if file_sha256(root / "schedule.parquet") != schedule_record["schedule_parquet_sha256"]:
+        raise ValueError("offline control schedule file changed")
+    batches = tuple(ScheduledBatch(**row) for row in pq.read_table(root / "schedule.parquet").to_pylist())
+    if (batches != source_batches or protocol["source_job_hash"] != source_evidence["source_job_hash"]
+            or require_schedule(batches, 64) != protocol["schedule_hash"] or result["schedule_hash"] != protocol["schedule_hash"]
+            or any(schedule_record[name] != source_evidence[name] for name in source_evidence)):
+        raise ValueError("offline control differs from the exact replay schedule")
+    populations = read_sealed(root / "populations.json")
+    fitting, probe, test = (set(populations[name]) for name in ("fitting", "probe", "test"))
+    if ((len(fitting), len(probe), len(test)) != (24000, 2048, 6000) or fitting & test or not probe <= fitting
+            or any(len(populations[name]) != len(set(populations[name])) for name in ("fitting", "probe", "test"))):
+        raise ValueError("offline control training/test populations are not isolated")
+    index = pq.read_table(source / "final/image_index.parquet").to_pylist()
+    if fitting != {row["image_id"] for row in index}:
+        raise ValueError("offline control does not use the complete original training population")
+    names = {f"seed_{seed}" for seed in (1993, 1994, 1995)}
+    if set(result["jobs"]) != names or set(result["reuse"]) != names or set(result["draw_audits"]) != names:
+        raise ValueError("offline control seed matrix is incomplete")
+    for name in sorted(names):
+        folder = root / "seeds" / name
+        job = validate_schedule_job(folder)
+        definition = read_sealed(folder / "job.json")
+        audit = read_sealed(folder / "draw_audit.json")
+        if (result["jobs"][name] != job or result["draw_audits"][name] != audit or audit["result_hash"] != job["content_hash"]
+                or definition["protocol_hash"] != root.name or definition["fitting_examples"] != 24000
+                or definition["probe_examples"] != 2048 or definition["fitting_ids_hash"] != record_sha256(populations["fitting"])
+                or definition["probe_ids_hash"] != record_sha256(populations["probe"])
+                or definition["schedule_hash"] != protocol["schedule_hash"] or definition["optimizer"] != protocol["optimizer"]
+                or definition["optimizer_config_hash"] != protocol["optimizer_config_hash"]
+                or job["optimizer_steps"] != 56243 or job["training_presentations"] != 844640
+                or job["model_forward_images"] != 947040 or name != f"seed_{job['seed']}"
+                or len(job["blocks"]) != 50 or job["test_used"] or job["stop_reason"] != "complete_frozen_schedule"
+                or audit["verified_updates"] != 56243 or audit["verified_presentations"] != 844640
+                or not audit["training_only"] or not audit["schedule_and_rates_matched"]
+                or result["reuse"][name]["optimizer_steps"] or result["reuse"][name]["result_hash"] != job["content_hash"]):
+            raise ValueError("offline control job, draw audit, or reuse evidence differs")
+    original_predictions = source / "final/srt_h1024/stages/050/predictions.parquet"
+    if file_sha256(original_predictions) != original["conditions"]["srt_h1024"]["rows"][-1]["predictions_sha256"]:
+        raise ValueError("original test population evidence changed")
+    labels = {row["image_id"]: (row["label"], row["task"]) for row in pq.read_table(original_predictions).to_pylist()}
+    if set(labels) != test or len(result["evaluations"]) != 3 or {row["seed"] for row in result["evaluations"]} != {1993, 1994, 1995}:
+        raise ValueError("offline test population or endpoint matrix differs")
+    for row in result["evaluations"]:
+        folder = root / "evaluations" / f"seed_{row['seed']}"
+        if (read_sealed(folder / "result.json") != row or row["protocol_hash"] != root.name
+                or row["model_sha256"] != result["jobs"][f"seed_{row['seed']}"]["blocks"][-1]["model_sha256"]
+                or file_sha256(folder / "predictions.parquet") != row["predictions_sha256"]):
+            raise ValueError("offline test predictions changed")
+        predictions = pq.read_table(folder / "predictions.parquet").to_pylist()
+        if len(predictions) != 6000 or {value["image_id"]: (value["label"], value["task"]) for value in predictions} != labels:
+            raise ValueError("offline test identities differ")
+        accuracy = 100 * sum(value["prediction"] == value["label"] for value in predictions) / 6000
+        nll = math.fsum(value["nll"] for value in predictions) / 6000
+        if (row["metrics"]["examples"] != 6000 or not math.isclose(accuracy, row["metrics"]["accuracy"], abs_tol=1e-10)
+                or not math.isclose(nll, row["metrics"]["nll"], abs_tol=1e-10)):
+            raise ValueError("offline reconstructed metrics disagree")
+    return {"pointer": pointer, "protocol": protocol, "result": result, "schedule": schedule_record}
+
+
+def control_summary(reference: dict[str, object]) -> dict[str, object]:
+    """Summarize the fixed final endpoint without test-based checkpoint selection."""
+    rows = reference["result"]["evaluations"]
+    if len(rows) != 3 or {row["seed"] for row in rows} != {1993, 1994, 1995}:
+        raise ValueError("offline summary requires exactly three seeds")
+    return {"condition": CONDITION, "label": LABEL, "stage": 50, "seeds": 3,
+            **{f"{metric}_{suffix}": function(row["metrics"][metric] for row in rows)
+               for metric in ("accuracy", "nll") for suffix, function in (("mean", mean), ("sample_sd", stdev))},
+            "training_presentations_per_seed": 844640, "optimizer_steps_per_seed": 56243}
+
+
+def draw_schedule_endpoint(axis: plt.Axes, references: dict[str, object], metric: str = "accuracy") -> None:
+    """Show only the final task-50 mean/SD, never a future-informed CL curve."""
+    reference = references.get("schedule_matched_joint")
+    if reference is None:
+        return
+    row = control_summary(reference)
+    axis.errorbar([50], [row[f"{metric}_mean"]], yerr=[row[f"{metric}_sample_sd"]], fmt="s",
+                  color=COLOR, markerfacecolor="white", markeredgewidth=1.7, markersize=7, capsize=4,
+                  linewidth=1.7, zorder=21, label=PLOT_LABEL)
+    axis.set_xlim(1, 51)
+
+
+def schedule_report_parts(
+    reports: Path, reference: dict[str, object] | None, joint: dict[str, object] | None,
+    replay: tuple[dict[str, object], ...],
+) -> tuple[tuple[ReportSection, ...], dict[str, Path], dict[str, tuple[dict[str, object], ...]]]:
+    """Append direct comparisons, training diagnostics, and exact optimizer-work accounting."""
+    if reference is None:
+        return (), {}, {}
+    from apm.continual.vision.imagenetr.srt_reporting import ReportSection, ReportTable
+    result, summary = reference["result"], control_summary(reference)
+    evaluations = sorted(result["evaluations"], key=lambda row: row["seed"])
+    endpoints = tuple({"condition": CONDITION, "seed": row["seed"], "accuracy": row["metrics"]["accuracy"],
+                       "nll": row["metrics"]["nll"], "examples": row["metrics"]["examples"],
+                       "optimizer_steps": 56243, "training_presentations": 844640,
+                       "model_sha256": row["model_sha256"], "predictions_sha256": row["predictions_sha256"]} for row in evaluations)
+    blocks = tuple({"seed": job["seed"], "work_block": row["block"], "optimizer_steps": row["steps_total"],
+                    "training_presentations": row["presentations_total"], "mean_batch_size": row["training_presentations"] / row["optimizer_steps"],
+                    "fit_probe_accuracy": row["fit_probe"]["accuracy"], "fit_probe_nll": row["fit_probe"]["nll"],
+                    "augmented_preupdate_accuracy": row["training_accuracy"], "augmented_preupdate_nll": row["training_nll"],
+                    **{name: row[name] for name in ("training_wall_seconds", "checkpoint_wall_seconds", "evaluation_and_artifact_seconds", "model_sha256")}}
+                   for job in result["jobs"].values() for row in job["blocks"])
+    resources = tuple({"condition": CONDITION, "seed": job["seed"],
+                       **{name: job[name] for name in ("optimizer_steps", "training_presentations", "model_forward_images", "training_wall_seconds",
+                                                      "checkpoint_wall_seconds", "evaluation_and_artifact_seconds")},
+                       "test_forward_images": 6000, "all_forward_images": job["model_forward_images"] + 6000,
+                       "test_wall_seconds": next(row["metrics"]["wall_seconds"] for row in evaluations if row["seed"] == job["seed"])}
+                      for job in result["jobs"].values())
+    comparisons = ({**summary, "display": "Offline joint, replay-schedule matched"},)
+    if joint is not None:
+        comparisons += tuple({**row, "display": {"accuracy_selected": "Joint, validation accuracy-selected", "five_epoch": "Joint, five epochs",
+                                                "nll_selected": "Joint, validation NLL-selected", "terminal": f"Joint, terminal epoch {row['epoch']}"}[row["role"]]}
+                             for row in endpoint_summary(joint))
+    comparisons += tuple({"condition": row["condition"], "display": row["condition"].replace("uniform_h4096_standard_rho80_unit8", "Uniform replay, matched source")
+                           .replace("uniform_h1024", "Uniform replay, H=1,024"),
+                           "accuracy_mean": row["final_accuracy"], "accuracy_sample_sd": None, "nll_mean": row["final_nll"], "nll_sample_sd": None,
+                           "seeds": 1} for row in replay if row["condition"] in ("uniform_h4096_standard_rho80_unit8", "uniform_h1024"))
+    comparison_rows = tuple({**{name: row[name] for name in ("condition", "display", "seeds", "accuracy_mean", "accuracy_sample_sd", "nll_mean", "nll_sample_sd")},
+                             "control_minus_reference_accuracy_points": summary["accuracy_mean"] - row["accuracy_mean"],
+                             "control_minus_reference_nll": summary["nll_mean"] - row["nll_mean"]} for row in comparisons)
+    figure, axes = plt.subplots(1, 2, figsize=(10.5, 5), sharey=True, constrained_layout=True)
+    for axis, metric, title in zip(axes, ("accuracy", "nll"), ("Task-50 accuracy (%)", "Task-50 negative log likelihood"), strict=True):
+        for index, row in enumerate(comparison_rows):
+            color = COLOR if row["condition"] == CONDITION else "#666666"
+            axis.errorbar(row[f"{metric}_mean"], index, xerr=row[f"{metric}_sample_sd"], color=color,
+                          fmt="s" if row["condition"] == CONDITION else "o", capsize=4, markersize=6)
+        axis.set(xlabel=title, yticks=range(len(comparison_rows)), yticklabels=[textwrap.fill(row["display"], 27) for row in comparison_rows])
+        axis.grid(axis="x", alpha=.25)
+    axes[0].invert_yaxis()
+    comparison_path = reports / "schedule_matched_joint_comparison.png"
+    figure.savefig(comparison_path, dpi=180, bbox_inches="tight")
+    plt.close(figure)
+    figure, axes = plt.subplots(3, 1, figsize=(9.5, 9), constrained_layout=True)
+    for seed in (1993, 1994, 1995):
+        rows = tuple(row for row in blocks if row["seed"] == seed)
+        for axis, metric in zip(axes[:2], ("fit_probe_accuracy", "fit_probe_nll"), strict=True):
+            axis.plot([row["optimizer_steps"] / 1000 for row in rows], [row[metric] for row in rows], label=f"Seed {seed}")
+    rows = tuple(row for row in blocks if row["seed"] == 1993)
+    axes[2].plot([row["optimizer_steps"] / 1000 for row in rows], [row["mean_batch_size"] for row in rows], color=COLOR)
+    for axis, ylabel in zip(axes, ("Clean fit-probe accuracy (%)", "Clean fit-probe NLL", "Mean batch size in work block"), strict=True):
+        axis.set(xlabel="Cumulative optimizer updates (thousands)", ylabel=ylabel)
+        axis.grid(alpha=.2)
+    axes[0].legend(loc="lower right")
+    axes[0].set_title("Offline all-data training: diagnostics, not held-out or CL curves")
+    diagnostic_path = reports / "schedule_matched_joint_diagnostics.png"
+    figure.savefig(diagnostic_path, dpi=180, bbox_inches="tight")
+    plt.close(figure)
+    source = next(row for row in comparison_rows if row["condition"] == "uniform_h4096_standard_rho80_unit8")
+    joint_selected = next((row for row in comparison_rows if row["condition"] == "joint_convergence_accuracy_selected"), None)
+    difference = (f"Relative to the prior validation accuracy-selected joint mean, accuracy changes by "
+                  f"{joint_selected['control_minus_reference_accuracy_points']:+.3f} points and NLL by {joint_selected['control_minus_reference_nll']:+.4f}. "
+                  if joint_selected is not None else "")
+    sections = (
+        ReportSection("Offline joint IID with the replay optimizer schedule", (
+            "This control keeps the rank-16 architecture and copies every batch size from uniform H=4,096, standard/old=0.8/unit=8: "
+            "56,243 optimizer updates and 844,640 training-image presentations per seed. From the first update, all 24,000 training images "
+            "can be sampled and all 200 classifier rows are active. Sampling is uniform over images without replacement within a batch, independent between batches.",
+            "SGD retains momentum 0.9, weight decay 0.0005, constant LoRA rate 0.0005, and constant head rate 0.01. Each actual batch uses mean "
+            "cross-entropy and one full update; no gradient accumulation or rate reductions occur. Source work boundaries do not reset weights, "
+            "change the class set, or select training images. There is no validation search or early stopping in this control.",
+            f"The fixed final endpoint averages {summary['accuracy_mean']:.3f}% test accuracy (sample SD {summary['accuracy_sample_sd']:.3f} points) "
+            f"and {summary['nll_mean']:.4f} NLL (SD {summary['nll_sample_sd']:.4f}). All three cold fits completed before any new test evaluation. "
+            "The hollow blue square on the main figures shows this task-50 endpoint, not a future-informed continual-learning curve.",
+            difference + f"Against the single-seed matched replay source, the differences are {source['control_minus_reference_accuracy_points']:+.3f} accuracy "
+            f"points and {source['control_minus_reference_nll']:+.4f} NLL. These are observed differences, not significance tests.",
+        ), table=ReportTable(("Seed / summary", "Task-50 accuracy", "Task-50 NLL", "Optimizer updates"),
+                             tuple((str(row["seed"]), f"{row['accuracy']:.3f}%", f"{row['nll']:.4f}", "56,243") for row in endpoints)
+                             + (("Mean +/- sample SD", f"{summary['accuracy_mean']:.3f}% +/- {summary['accuracy_sample_sd']:.3f}",
+                                 f"{summary['nll_mean']:.4f} +/- {summary['nll_sample_sd']:.4f}", "56,243 per seed"),))),
+        ReportSection("Task-50 comparisons and what this control isolates", (
+            "All rows use the same test population and rank-16 adapter architecture. Error bars show across-seed sample standard deviation, "
+            "not a confidence interval. Replay rows are single-seed results, so no seed-variation bar is available. Every previous joint endpoint "
+            "keeps its original validation selection; no checkpoint was chosen from these test comparisons.",
+            "This comparison holds the optimizer schedule fixed while changing the staged class/data curriculum and cumulative image weighting together. "
+            "It does not isolate those remaining effects from one another. The source schedule itself came from a single seed's SRT partner; "
+            "three offline seeds do not replicate that replay arm or schedule selection. This follow-up was requested after inspecting earlier test results.",
+            "A higher offline result would show that replay is not needed to obtain that measured accuracy under the copied optimization schedule. "
+            "A remaining replay advantage would motivate curriculum and weighting ablations; it would not prove that joint IID lacks capacity "
+            "or that no better all-data optimizer exists. This is not a broadly validation-tuned ceiling study.",
+        ), (comparison_path,)),
+        ReportSection("Offline control training diagnostics and measured work", (
+            "The same 2,048 hash-selected clean training images are probed at the fifty source work boundaries. These are training-fit diagnostics, "
+            "not validation or test curves. The horizontal axis is optimizer work: the model already has access to every training class at the left edge. "
+            "The bottom panel shows the inherited changing batch size, identical across the three seeds.",
+            f"The three fits total {sum(row['training_presentations'] for row in resources):,} forward/backward training-image pairs and "
+            f"{sum(row['optimizer_steps'] for row in resources):,} optimizer updates. Including clean probes and final tests gives "
+            f"{sum(row['all_forward_images'] for row in resources):,} forward image paths. Measured training-batch time totals "
+            f"{sum(row['training_wall_seconds'] for row in resources) / 60:.2f} minutes; checkpoint writes add "
+            f"{sum(row['checkpoint_wall_seconds'] for row in resources) / 60:.2f} minutes, and probe/test/model-artifact work adds "
+            f"{sum(row['evaluation_and_artifact_seconds'] + row['test_wall_seconds'] for row in resources) / 60:.2f} minutes. "
+            "Batch time includes data loading; setup, source/draw audits, and preflight are separate. Counts are model image paths, not profiled FLOPs.",
+            "Every committed draw and augmentation ordinal was reconstructed against the all-training population. Final exposure counts and "
+            "per-update schedule/rate checks agree. Completed training and prediction artifacts are immutable and reused without optimizer steps.",
+        ), (diagnostic_path,)),
+    )
+    return sections, {"schedule_comparison": comparison_path, "schedule_diagnostics": diagnostic_path}, {
+        "schedule_matched_endpoints": endpoints, "schedule_matched_summary": (summary,), "schedule_matched_blocks": blocks,
+        "schedule_matched_resources": resources, "schedule_matched_comparisons": comparison_rows,
+    }
