@@ -67,6 +67,31 @@ and sample standard deviation describe seed variation, not a global optimum
 or an independently converged schedule for each seed. The original five-epoch
 curve stays intact; the convergence result is a task-50 endpoint only.
 
+## ImageNet-R Replay-Schedule-Matched Offline Control
+
+The offline control imports only the ordered optimizer batch sizes from an
+authenticated, completed replay run. All training images and all 200 affine
+classifier rows are available from the first update. Draws are uniform over
+images without replacement within a batch and independent between batches;
+source stages, identities, confidences, and old/new quotas do not restrict
+those draws. The source's constant SGD rates, mean-loss reduction, momentum,
+weight decay, presentation count, and update count remain fixed.
+
+Source stage boundaries are work checkpoints, not causal arrival stages.
+Clean training probes cannot select or stop the fit. Three cold seeds share
+the same source schedule and receive one final test after all fits complete.
+Reports place this control only at task 50 on stream plots and use optimizer
+work for its diagnostic curves. This is a schedule-matching intervention, not
+a convergence search or independent replication of the source replay arm.
+
+Per-image exposure counters use persistent vectors; counter-derived draws
+and augmentation ordinals make sampling independent of resume timing. Atomic
+optimizer checkpoints own partial work statistics and immutable update chunks.
+Saved draw hashes permit complete sample/ordinal reconstruction without model
+forwards. Uncommitted orphan chunks or work checkpoints cannot enter results.
+The control has a separate content-addressed run and authenticated report
+pointer; earlier training code, checkpoints, and scientific results stay fixed.
+
 ## Public Result Boundary
 
 Generated result trees remain ignored by default. A public result snapshot may

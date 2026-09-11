@@ -13,6 +13,38 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## In Progress - ImageNet-R Offline Joint Control with Replay-Matched Optimization
+
+- Implement the requested direct control for the 80.917% uniform H=4,096,
+  standard/old=0.8/unit=8 endpoint. Copy all 56,243 actual batch sizes and
+  844,640 image presentations, constant SGD rates, momentum, and weight decay.
+  Draw uniformly from all 24,000 training images from update one, with all
+  200 classifier rows active. No source task boundaries constrain sampling.
+- Config: `configs/vision/imagenetr/schedule_matched_joint_r16.yaml`; protocol:
+  `docs/imagenetr50_schedule_matched_joint_protocol.md`; default execution:
+  `bash scripts/vision/imagenetr/run_schedule_matched_joint_local.sh`.
+  Seeds 1993-1995 each start cold. The endpoint is the fixed end of the copied
+  schedule, without validation selection, early stopping, or a new parameter
+  search. This isolates the optimization schedule from the combined effects
+  of curriculum and sample weighting; it does not isolate those effects from
+  one another or establish a global joint-IID ceiling.
+- The new worker reuses the existing model, SGD/loss, loader, and evaluator.
+  It keeps immutable update chunks, sample/augmentation hashes, per-image
+  exposure counts, and fifty diagnostic work checkpoints. Model, momentum,
+  exposure counts, and partial work resume atomically. Fifteen short CPU tests
+  pass, including interruption at every mixed-batch boundary and completed
+  zero-step reuse; the actual source schedule audit also passes. The complete
+  focused vision slice passes 178 tests, with eleven integration/benchmark
+  tests deselected, in one pytest process.
+- Remaining: run the real mixed-batch GPU preflight; commit
+  the fixed training protocol; run three sequential nice-10 fits with active
+  agent-loop health checks; authenticate final predictions and fresh-process
+  reuse; update and visually verify the existing SRT report, then publish
+  compact evidence. Use two loader workers because host RAM is currently tight.
+  The main figures gain a distinct task-50-only endpoint; diagnostic curves
+  use training work, not continual-learning stage. No broader joint tuning
+  search or replay replication is included in this control.
+
 ## Completed Outcome - ImageNet-R Task-50 Rank-16 Joint-IID Convergence
 
 - The validation-converged reference reaches **79.172% mean test accuracy
