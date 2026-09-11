@@ -67,7 +67,7 @@ def test_incomplete_seed_matrix_and_unsafe_pointer_are_rejected(tmp_path, synthe
         load_joint_reference(source, "a" * 64)
 
 
-def test_authenticated_reference_reconstructs_metrics_and_rejects_changed_predictions(tmp_path) -> None:
+def test_authenticated_reference_reconstructs_metrics_and_rejects_changed_predictions(tmp_path, monkeypatch) -> None:
     """Exercise the report's complete evidence path using synthetic, sealed files."""
     source = tmp_path / "artifacts/imagenetr50/srt_r16_v1/runs/source"
     predictions = tuple({"image_id": str(index), "task": index % 50 + 1, "label": index % 200,
@@ -128,6 +128,8 @@ def test_authenticated_reference_reconstructs_metrics_and_rejects_changed_predic
         "source_result_hash": original["content_hash"], "result_hash": result["content_hash"],
     }))
     assert load_joint_reference(source, original["content_hash"])["result"] == result
+    monkeypatch.chdir(tmp_path)
+    assert load_joint_reference(source.relative_to(tmp_path), original["content_hash"])["result"] == result
     (root / "evaluations/seed_1993/epoch_005/predictions.parquet").write_bytes(b"changed")
     with pytest.raises(ValueError, match="predictions changed"):
         load_joint_reference(source, original["content_hash"])

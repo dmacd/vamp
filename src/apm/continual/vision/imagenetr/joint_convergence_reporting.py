@@ -28,6 +28,7 @@ PLOT_LABEL = ENDPOINT_LABELS["accuracy_selected"] + " (task 50; mean +/- SD)"
 
 def load_joint_reference(source: Path, source_hash: str) -> dict[str, object] | None:
     """Require a complete, authentic convergence study before adding its endpoint."""
+    source = source.resolve()
     pointer_path = source / "reports/joint_convergence.json"
     if not pointer_path.is_file():
         return None

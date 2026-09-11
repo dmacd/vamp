@@ -38,7 +38,16 @@
   is active on one nice-10 GPU worker. The real preflight authenticated all
   30,000 image bytes, verified exact interrupted/uninterrupted model states
   and zero-step reuse, and peaked at 4.20 GB allocated VRAM.
-- Development is running without test access. Report integration now includes
+- Development reached the predeclared validation plateau at epoch 47. The
+  frozen primary accuracy endpoint is epoch 19 (77.417% validation accuracy);
+  minimum validation NLL is epoch 3 (1.008731). Selection record
+  `e7e24a8b3593c9e5bad98f1bab4a9b63c5233c9cb54b675163ffa51ca244b13a`
+  fixes both endpoints, epoch five, and the terminal epoch before testing.
+  Full-data refits run sequentially. Seed 1993 completed all 47 epochs,
+  1,128,000 presentations, and 17,625 updates; its checkpoints and exact
+  schedule passed a separate verification pass. The remaining seeds are
+  underway; no new held-out test result exists.
+- Report integration now includes
   task-50-only mean/SD markers, development curves, full-data fit histories,
   predeclared checkpoint comparisons, and work ledgers. The three-page
   synthetic appendix passed rendering and visual checks; a sealed-file test
@@ -46,9 +55,10 @@
   rejection. The focused vision suite passes all 163 short tests. Thirteen
   reporting tests pass, including the combined old-curve/new-endpoint layout;
   figure-page prose distinguishes the new endpoint from the unchanged
-  five-epoch accuracy-gap reference. Remaining:
+  five-epoch accuracy-gap reference. The report-only command normalizes
+  relative paths before checking the convergence artifact namespace. Remaining:
   monitor all phases, verify the actual report, demonstrate fresh-process
-  reuse, and publish compact evidence. No convergence result is claimed yet.
+  reuse, and publish compact evidence. No held-out ceiling value is claimed yet.
 
 ## Completed Outcome - ImageNet-R SRT Fixed-Policy H=4,096 Follow-Up
 

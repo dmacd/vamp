@@ -721,6 +721,7 @@ def followup_report_jobs(run: Path, source_hash: str) -> tuple[dict[str, Path], 
 
 def write_srt_report(run: Path) -> Path:
     """Audit primary evidence and build only the separate SRT report artifacts."""
+    run = run.resolve()
     plt.rcParams.update({"font.size": 11, "axes.titlesize": 12, "axes.labelsize": 11, "legend.fontsize": 10})
     result = read_sealed(run / "result.json", "imagenetr50-srt-result-v1")
     if set(result["conditions"]) != set(NEW_STYLES) or not result["zero_step_reuse"] or not result["references_unchanged"]:
