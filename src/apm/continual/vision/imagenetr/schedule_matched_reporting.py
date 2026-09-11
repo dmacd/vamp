@@ -138,9 +138,15 @@ def export_schedule_updates(source: Path, reference: dict[str, object] | None) -
             raise ValueError("offline update export counts disagree")
         path = folder / "update_metrics.parquet"
         digest = write_parquet(path, rows)
+        first_block = tuple(row for row in rows if row["block"] == 1)
+        loss_peak = max(first_block, key=lambda row: row["loss_sum"] / row["batch_size"])
+        gradient_peak = max(first_block, key=lambda row: row["gradient_norm"])
         exports += ({"seed": job["seed"], "path": str(path.relative_to(root)), "sha256": digest,
                      "job_result_hash": job["content_hash"], "source_chunks_hash": record_sha256(job["chunks"]),
-                     "optimizer_steps": len(rows), "training_presentations": job["training_presentations"]},)
+                     "optimizer_steps": len(rows), "training_presentations": job["training_presentations"],
+                     "first_block_updates": len(first_block), "early_peak_batch_nll": loss_peak["loss_sum"] / loss_peak["batch_size"],
+                     "early_peak_loss_step": loss_peak["step"], "early_peak_loss_batch_size": loss_peak["batch_size"],
+                     "early_peak_gradient_norm": gradient_peak["gradient_norm"], "early_peak_gradient_step": gradient_peak["step"]},)
     record = sealed_record({"schema_version": "imagenetr50-schedule-update-export-v1", "protocol_hash": root.name,
                             "result_hash": reference["result"]["content_hash"], "tables": exports,
                             "purpose": "Exact per-update analysis tables; original checkpoint chunks and weights remain local"})
@@ -162,7 +168,7 @@ def draw_schedule_endpoint(axis: plt.Axes, references: dict[str, object], metric
 
 def schedule_report_parts(
     reports: Path, reference: dict[str, object] | None, joint: dict[str, object] | None,
-    replay: tuple[dict[str, object], ...],
+    replay: tuple[dict[str, object], ...], update_export: dict[str, object] | None,
 ) -> tuple[tuple[ReportSection, ...], dict[str, Path], dict[str, tuple[dict[str, object], ...]]]:
     """Append direct comparisons, training diagnostics, and exact optimizer-work accounting."""
     if reference is None:
@@ -186,6 +192,12 @@ def schedule_report_parts(
                        "test_forward_images": 6000, "all_forward_images": job["model_forward_images"] + 6000,
                        "test_wall_seconds": next(row["metrics"]["wall_seconds"] for row in evaluations if row["seed"] == job["seed"])}
                       for job in result["jobs"].values())
+    if update_export is None:
+        raise ValueError("offline report requires authenticated per-update diagnostics")
+    stability = tuple({**{name: row[name] for name in ("seed", "first_block_updates", "early_peak_batch_nll", "early_peak_loss_step",
+                                                      "early_peak_loss_batch_size", "early_peak_gradient_norm", "early_peak_gradient_step")},
+                       **{f"block_{block}_fit_accuracy": result["jobs"][f"seed_{row['seed']}"]["blocks"][block - 1]["fit_probe"]["accuracy"]
+                          for block in (1, 5, 50)}} for row in update_export["tables"])
     comparisons = ({**summary, "display": "Offline joint, replay-schedule matched"},)
     if joint is not None:
         comparisons += tuple({**row, "display": {"accuracy_selected": "Joint, validation accuracy-selected", "five_epoch": "Joint, five epochs",
@@ -217,9 +229,10 @@ def schedule_report_parts(
             axis.plot([row["optimizer_steps"] / 1000 for row in rows], [row[metric] for row in rows], label=f"Seed {seed}")
     rows = tuple(row for row in blocks if row["seed"] == 1993)
     axes[2].plot([row["optimizer_steps"] / 1000 for row in rows], [row["mean_batch_size"] for row in rows], color=COLOR)
-    for axis, ylabel in zip(axes, ("Clean fit-probe accuracy (%)", "Clean fit-probe NLL", "Mean batch size in work block"), strict=True):
+    for axis, ylabel in zip(axes, ("Clean fit-probe accuracy (%)", "Clean fit-probe NLL (log scale)", "Mean batch size in work block"), strict=True):
         axis.set(xlabel="Cumulative optimizer updates (thousands)", ylabel=ylabel)
         axis.grid(alpha=.2)
+    axes[1].set_yscale("log")
     axes[0].legend(loc="lower right")
     axes[0].set_title("Offline all-data training: diagnostics, not held-out or CL curves")
     diagnostic_path = reports / "schedule_matched_joint_diagnostics.png"
@@ -276,8 +289,26 @@ def schedule_report_parts(
             "Every committed draw and augmentation ordinal was reconstructed against the all-training population. Final exposure counts and "
             "per-update schedule/rate checks agree. Completed training and prediction artifacts are immutable and reused without optimizer steps.",
         ), (diagnostic_path,)),
+        ReportSection("Early optimization: individual seeds and loss spikes", (
+            "This diagnostic was added after observing slow early learning in seed 1995, before any new test evaluation. "
+            "It does not select a checkpoint or alter the fixed training schedule. Each seed changes initialization, sampled images, and augmentation; "
+            "these observations do not isolate which of those differences caused a different trajectory.",
+            "The table summarizes the first source work block. Peak batch NLL is mean pre-update cross-entropy in the worst batch; its actual batch size "
+            "is shown alongside it. Peak gradient norm is the Euclidean norm over all trainable-parameter gradients before SGD, and can occur at a "
+            "different update. The exact update indices and all batch records are retained in the analysis tables.",
+            "These are unmodified finite updates, including very small batches, at the full prescribed learning rates. Large early losses and subsequent "
+            "poor fitting are consistent with optimization instability, but do not identify a unique failing layer or prove that any particular clipping "
+            "threshold would repair it. Other seeds can recover despite early spikes. No seed was reset, discarded, or replaced.",
+            "All three final test results remain in the main mean and standard deviation. The individual-seed table and training curves are essential "
+            "when trajectories differ; a mean alone can obscure that difference. A stability intervention such as warm-up, a lower initial rate, or "
+            "different early batching would be a separate experiment, not a rescue silently folded into this control.",
+        ), table=ReportTable(("Seed", "Peak batch NLL", "Batch size at peak loss", "Peak gradient norm", "Block 1 fit acc.", "Block 5 fit acc.", "Final fit acc."),
+                             tuple((str(row["seed"]), f"{row['early_peak_batch_nll']:.3f}", str(row["early_peak_loss_batch_size"]),
+                                    f"{row['early_peak_gradient_norm']:.1f}", f"{row['block_1_fit_accuracy']:.2f}%",
+                                    f"{row['block_5_fit_accuracy']:.2f}%", f"{row['block_50_fit_accuracy']:.2f}%") for row in stability))),
     )
     return sections, {"schedule_comparison": comparison_path, "schedule_diagnostics": diagnostic_path}, {
         "schedule_matched_endpoints": endpoints, "schedule_matched_summary": (summary,), "schedule_matched_blocks": blocks,
         "schedule_matched_resources": resources, "schedule_matched_comparisons": comparison_rows,
+        "schedule_matched_stability": stability,
     }

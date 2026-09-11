@@ -1,5 +1,23 @@
 # Development Plan
 
+## Completed Outcome - Research Summary 1: VAMP through TinyWorlds
+
+- Completed a first-person LNCS research summary for an ML supervisor new
+  to VAMP: 15 body pages plus references, seven vector figures, and four
+  tables. It covers the initial concept, early MNIST and language experiments,
+  TinyWorlds benchmark development, Nouns-v2, and bounded addressing through
+  the August 9 follow-up. Subsequent Log-t work is excluded.
+- Recovered motivations and decisions from 14 selected user statements in
+  project Codex sessions. Verified 34 source hashes and recomputed every
+  Nouns-v2 stage curve and per-task forgetting from four 72,256-case ledgers,
+  including exact zero stored-node drift. Bounded-study quality, retrieval,
+  and adapter-work checks also pass. No new model experiments were run.
+- Source and reproducible analysis live under
+  `artifacts/research-summaries/01-vamp-to-tinyworlds/`; final output is
+  `output/pdf/vamp-research-summary-01.pdf`. Numerical audit, LNCS compilation,
+  and page-by-page visual QA are complete. Pinned measurement and session
+  extracts support rebuilding without the original private logs or raw data.
+
 ## Public Repository Surface
 
 - `README.md` now presents VAMP as a public research project and identifies
@@ -56,6 +74,14 @@
   evaluations still withheld. Report generation consolidates committed
   update chunks into one immutable, hash-bound analysis table per seed;
   original checkpoint chunks and weights remain local.
+- Seeds 1993 and 1994 both completed and passed draw audits. Seed 1995 is
+  running the unchanged schedule but shows early optimization instability:
+  block-five training-probe accuracy is 2.197%, versus 77.344% / 77.197% for
+  the other seeds. Its first work block includes a single-image NLL spike
+  of 122.752. Data/schedule/optimizer hashes agree and gradients remain
+  finite. It recovers to 68.018% training-probe accuracy at block seven
+  without any intervention. Do not reset or replace it. Add explicitly post-hoc, training-only
+  loss/gradient diagnostics and individual-seed results to the same report.
 - Remaining: finish the fits; authenticate final predictions and fresh-process
   reuse; update and visually verify the existing SRT report, then publish
   compact evidence. Use two loader workers because host RAM is currently tight.

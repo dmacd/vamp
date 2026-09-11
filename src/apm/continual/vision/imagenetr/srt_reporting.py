@@ -787,7 +787,7 @@ def write_srt_report(run: Path) -> Path:
     calibration, resources = _calibration_rows(run), _resource_rows(run, stages)
     joint_sections, joint_figures, joint_tables = joint_report_parts(reports, references["joint_convergence"], summaries)
     schedule_sections, schedule_figures, schedule_tables = schedule_report_parts(
-        reports, references["schedule_matched_joint"], references["joint_convergence"], summaries)
+        reports, references["schedule_matched_joint"], references["joint_convergence"], summaries, update_export)
     tables = {"stage_metrics": stages, "sample_replay": samples, "replay_histograms": histograms,
               "sample_timelines": timelines, "condition_summary": summaries, "calibration": calibration,
               "resource_metrics": resources, "task_metrics": _task_rows({"conditions": jobs}),

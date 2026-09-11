@@ -91,6 +91,7 @@ def test_report_authenticates_complete_synthetic_control(tmp_path, monkeypatch) 
     populations = sealed_record({"fitting": fitting, "probe": fitting[:2048], "test": [row["image_id"] for row in predictions]})
     publish_immutable_json(root / "populations.json", populations)
     updates = tuple({"step": batch.step, "block": batch.block, "batch_size": batch.size,
+                     "loss_sum": float(batch.size), "gradient_norm": float(batch.step),
                      "lora_learning_rate": .0005, "head_learning_rate": .01} for batch in batches)
     jobs, audits, evaluations = {}, {}, []
     for seed in (1993, 1994, 1995):
@@ -141,6 +142,7 @@ def test_report_authenticates_complete_synthetic_control(tmp_path, monkeypatch) 
     assert reference["result"] == result
     export = reporting.export_schedule_updates(source, reference)
     assert len(export["tables"]) == 3 and sum(row["optimizer_steps"] for row in export["tables"]) == 168729
+    assert export["tables"][0]["early_peak_batch_nll"] == 1. and export["tables"][0]["early_peak_gradient_norm"] == 1125.
     assert reporting.export_schedule_updates(source, reference) == export
     import pyarrow.parquet as pq
     assert pq.read_table(root / export["tables"][0]["path"]).to_pylist() == list(updates)
@@ -168,17 +170,21 @@ def test_schedule_matched_appendix_layout(tmp_path, synthetic_schedule_reference
     }}
     replay = tuple({"condition": name, "final_accuracy": 80.9, "final_nll": .9}
                    for name in ("uniform_h4096_standard_rho80_unit8", "uniform_h1024"))
-    sections, figures, tables = schedule_report_parts(tmp_path, synthetic_schedule_reference, joint, replay)
+    update_export = {"tables": [{"seed": seed, "first_block_updates": 106, "early_peak_batch_nll": 10. * (seed - 1992),
+                                "early_peak_loss_step": 90, "early_peak_loss_batch_size": 1,
+                                "early_peak_gradient_norm": 200. * (seed - 1992), "early_peak_gradient_step": 78}
+                               for seed in (1993, 1994, 1995)]}
+    sections, figures, tables = schedule_report_parts(tmp_path, synthetic_schedule_reference, joint, replay, update_export)
     sections = tuple(replace(section, paragraphs=("SYNTHETIC LAYOUT FIXTURE - NOT MEASURED RESULTS", *section.paragraphs))
                      for section in sections)
-    assert len(figures) == 2 and len(tables) == 5 and len(tables["schedule_matched_blocks"]) == 150
+    assert len(figures) == 2 and len(tables) == 6 and len(tables["schedule_matched_blocks"]) == 150
     assert len(tables["schedule_matched_comparisons"]) == 7 and len(tables["schedule_matched_endpoints"]) == 3
     assert sum(row["all_forward_images"] for row in tables["schedule_matched_resources"]) == 2859120
     assert tables["schedule_matched_comparisons"][-1]["control_minus_reference_accuracy_points"] == pytest.approx(.1)
     output = tmp_path / "synthetic_schedule_layout.pdf"
     render_report(sections, tmp_path, output)
     reader = PdfReader(output)
-    assert len(reader.pages) == 3 and all("SYNTHETIC LAYOUT FIXTURE" in page.extract_text() for page in reader.pages)
+    assert len(reader.pages) == 4 and all("SYNTHETIC LAYOUT FIXTURE" in page.extract_text() for page in reader.pages)
     assert "56,243" in reader.pages[0].extract_text() and "2,859,120" in reader.pages[2].extract_text()
     digest = file_sha256(output)
     render_report(sections, tmp_path, output)
