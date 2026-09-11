@@ -49,6 +49,13 @@
   The focused vision slice passes 180 tests. Explicit synthetic layout and
   full evidence-authentication checks pass; actual-result rendering and
   final artifact audits remain pending until training finishes.
+- Seed 1993 completed the exact 56,243 updates / 844,640 presentations and
+  passed complete draw reconstruction. Its training probe finishes at
+  98.828% accuracy / 0.03333 NLL; these are not test results. Every training
+  image was presented 13-59 times. Seed 1994 is running, with all final test
+  evaluations still withheld. Report generation consolidates committed
+  update chunks into one immutable, hash-bound analysis table per seed;
+  original checkpoint chunks and weights remain local.
 - Remaining: finish the fits; authenticate final predictions and fresh-process
   reuse; update and visually verify the existing SRT report, then publish
   compact evidence. Use two loader workers because host RAM is currently tight.

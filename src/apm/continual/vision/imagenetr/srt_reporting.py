@@ -30,7 +30,9 @@ from apm.continual.vision.imagenetr.persistent_affine_reporting import (
     LABEL_ORACLE_MLP, LABEL_RANK_JOINT, LABEL_STAGE_JOINT, _series,
 )
 from apm.continual.vision.imagenetr.srt_analysis import ReplayAnalysis, analyze_replay_job
-from apm.continual.vision.imagenetr.schedule_matched_reporting import draw_schedule_endpoint, load_schedule_reference, schedule_report_parts
+from apm.continual.vision.imagenetr.schedule_matched_reporting import (
+    draw_schedule_endpoint, export_schedule_updates, load_schedule_reference, schedule_report_parts,
+)
 from apm.continual.vision.imagenetr.srt_evidence import CLOCK_FIELDS, read_sealed, sealed_record, trace_batches
 
 
@@ -745,6 +747,7 @@ def write_srt_report(run: Path) -> Path:
         raise ValueError("SRT report protocol or validation-only selection changed")
     references = {**reference_results(run), "joint_convergence": load_joint_reference(run, result["content_hash"]),
                   "schedule_matched_joint": load_schedule_reference(run, result["content_hash"])}
+    update_export = export_schedule_updates(run, references["schedule_matched_joint"])
     reports = run / "reports"
     reports.mkdir(parents=True, exist_ok=True)
     extra_roots, followup = followup_report_jobs(run, result["content_hash"])
@@ -832,6 +835,7 @@ def write_srt_report(run: Path) -> Path:
         "schedule_matched_joint": None if references["schedule_matched_joint"] is None else {
             "pointer": references["schedule_matched_joint"]["pointer"], "protocol": references["schedule_matched_joint"]["protocol"],
             "result_hash": references["schedule_matched_joint"]["result"]["content_hash"]},
+        "schedule_update_export": update_export,
         "report_code": material, "pdf": str(pdf), "pdf_sha256": file_sha256(pdf),
         "reference_protocol_hash": result["protocol_hash"],
         "condition_names": {row["condition"]: row["label"] for row in tables["condition_names"]},

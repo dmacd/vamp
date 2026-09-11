@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING
 import matplotlib.pyplot as plt
 import pyarrow.parquet as pq
 
-from apm.continual.artifacts import file_sha256, record_sha256
+from apm.continual.artifacts import file_sha256, publish_immutable_json, record_sha256
 from apm.continual.vision.imagenetr.joint_convergence_reporting import endpoint_summary
 from apm.continual.vision.imagenetr.schedule_matched_joint import ScheduleControlConfig, source_schedule
 from apm.continual.vision.imagenetr.schedule_matched_training import ScheduledBatch, require_schedule, validate_schedule_job
-from apm.continual.vision.imagenetr.srt_evidence import read_sealed
+from apm.continual.vision.imagenetr.srt_evidence import read_sealed, sealed_record, write_parquet
 
 if TYPE_CHECKING:
     from apm.continual.vision.imagenetr.srt_reporting import ReportSection
@@ -123,6 +123,31 @@ def control_summary(reference: dict[str, object]) -> dict[str, object]:
             "training_presentations_per_seed": 844640, "optimizer_steps_per_seed": 56243}
 
 
+def export_schedule_updates(source: Path, reference: dict[str, object] | None) -> dict[str, object] | None:
+    """Consolidate authenticated update chunks into one immutable analysis table per seed."""
+    if reference is None:
+        return None
+    root = source.resolve().parents[4] / reference["pointer"]["run"]
+    exports = ()
+    for name, job in sorted(reference["result"]["jobs"].items()):
+        folder = root / "seeds" / name
+        if any(file_sha256(folder / chunk["path"]) != chunk["sha256"] for chunk in job["chunks"]):
+            raise ValueError("offline update export source changed")
+        rows = tuple(row for chunk in job["chunks"] for row in pq.read_table(folder / chunk["path"]).to_pylist())
+        if len(rows) != job["optimizer_steps"] or sum(row["batch_size"] for row in rows) != job["training_presentations"]:
+            raise ValueError("offline update export counts disagree")
+        path = folder / "update_metrics.parquet"
+        digest = write_parquet(path, rows)
+        exports += ({"seed": job["seed"], "path": str(path.relative_to(root)), "sha256": digest,
+                     "job_result_hash": job["content_hash"], "source_chunks_hash": record_sha256(job["chunks"]),
+                     "optimizer_steps": len(rows), "training_presentations": job["training_presentations"]},)
+    record = sealed_record({"schema_version": "imagenetr50-schedule-update-export-v1", "protocol_hash": root.name,
+                            "result_hash": reference["result"]["content_hash"], "tables": exports,
+                            "purpose": "Exact per-update analysis tables; original checkpoint chunks and weights remain local"})
+    publish_immutable_json(root / "update_export.json", record)
+    return record
+
+
 def draw_schedule_endpoint(axis: plt.Axes, references: dict[str, object], metric: str = "accuracy") -> None:
     """Show only the final task-50 mean/SD, never a future-informed CL curve."""
     reference = references.get("schedule_matched_joint")
@@ -210,6 +235,8 @@ def schedule_report_parts(
             "This control keeps the rank-16 architecture and copies every batch size from uniform H=4,096, standard/old=0.8/unit=8: "
             "56,243 optimizer updates and 844,640 training-image presentations per seed. From the first update, all 24,000 training images "
             "can be sampled and all 200 classifier rows are active. Sampling is uniform over images without replacement within a batch, independent between batches.",
+            "The source batch size averages 15.018 images (median 10); only 1,735 of 56,243 updates use a full batch of 64. "
+            "The model has 1,480,904 trainable adapter/classifier parameters, identical to the replay source.",
             "SGD retains momentum 0.9, weight decay 0.0005, constant LoRA rate 0.0005, and constant head rate 0.01. Each actual batch uses mean "
             "cross-entropy and one full update; no gradient accumulation or rate reductions occur. Source work boundaries do not reset weights, "
             "change the class set, or select training images. There is no validation search or early stopping in this control.",
@@ -218,6 +245,8 @@ def schedule_report_parts(
             "The hollow blue square on the main figures shows this task-50 endpoint, not a future-informed continual-learning curve.",
             difference + f"Against the single-seed matched replay source, the differences are {source['control_minus_reference_accuracy_points']:+.3f} accuracy "
             f"points and {source['control_minus_reference_nll']:+.4f} NLL. These are observed differences, not significance tests.",
+            "Compared with the previous epoch-trained joint fits, batch sizes, update count, learning-rate schedule, and between-batch sampling differ. "
+            "A gain over that reference cannot be assigned to any one of those changes. The exact schedule match is with the replay source.",
         ), table=ReportTable(("Seed / summary", "Task-50 accuracy", "Task-50 NLL", "Optimizer updates"),
                              tuple((str(row["seed"]), f"{row['accuracy']:.3f}%", f"{row['nll']:.4f}", "56,243") for row in endpoints)
                              + (("Mean +/- sample SD", f"{summary['accuracy_mean']:.3f}% +/- {summary['accuracy_sample_sd']:.3f}",

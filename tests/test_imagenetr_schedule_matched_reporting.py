@@ -137,7 +137,13 @@ def test_report_authenticates_complete_synthetic_control(tmp_path, monkeypatch) 
         "source_result_hash": original["content_hash"], "result_hash": result["content_hash"],
     }))
     monkeypatch.chdir(tmp_path)
-    assert load_schedule_reference(source.relative_to(tmp_path), original["content_hash"])["result"] == result
+    reference = load_schedule_reference(source.relative_to(tmp_path), original["content_hash"])
+    assert reference["result"] == result
+    export = reporting.export_schedule_updates(source, reference)
+    assert len(export["tables"]) == 3 and sum(row["optimizer_steps"] for row in export["tables"]) == 168729
+    assert reporting.export_schedule_updates(source, reference) == export
+    import pyarrow.parquet as pq
+    assert pq.read_table(root / export["tables"][0]["path"]).to_pylist() == list(updates)
     changed = sealed_record({**{key: value for key, value in populations.items() if key != "content_hash"},
                              "probe": [*populations["probe"][:-1], "test_0"]})
     atomic_write(root / "populations.json", canonical_json_bytes(changed))
