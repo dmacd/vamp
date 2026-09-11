@@ -32,11 +32,21 @@
   (seeds 1993-1995). Train all through the development stopping horizon, then
   evaluate epoch five, accuracy-selected, NLL-selected, and terminal models.
   No test-dependent stopping, seed selection, or checkpoint selection.
-- Current implementation has immutable epoch evidence, step checkpoints,
-  deterministic augmentations, explicit population isolation, and zero-step
-  reuse. Next: focused tests and real GPU resume preflight, run all phases,
-  monitor in the agent loop, add the task-50 endpoint and convergence/work
-  evidence to the current SRT report, verify, and publish compact artifacts.
+- Implementation and protocol were committed/pushed as `43fb39c` before
+  training. Twelve focused convergence/SGD tests passed. Run
+  `4fed5e0b39a01ebd7a7f2914adaaa51126157f0e40cf85c3a69432188ef959b2`
+  is active on one nice-10 GPU worker. The real preflight authenticated all
+  30,000 image bytes, verified exact interrupted/uninterrupted model states
+  and zero-step reuse, and peaked at 4.20 GB allocated VRAM.
+- Development is running without test access. Report integration now includes
+  task-50-only mean/SD markers, development curves, full-data fit histories,
+  predeclared checkpoint comparisons, and work ledgers. The three-page
+  synthetic appendix passed rendering and visual checks; a sealed-file test
+  verifies the complete report authentication path and prediction tampering
+  rejection. The focused vision suite passes all 163 tests, with nine marked
+  integration/benchmark tests excluded from that short slice. Remaining:
+  monitor all phases, verify the actual report, demonstrate fresh-process
+  reuse, and publish compact evidence. No convergence result is claimed yet.
 
 ## Completed Outcome - ImageNet-R SRT Fixed-Policy H=4,096 Follow-Up
 
