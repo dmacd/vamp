@@ -76,7 +76,8 @@ def test_report_authenticates_complete_synthetic_control(tmp_path, monkeypatch) 
     batches = tuple(ScheduledBatch(step, min(50, (step - 1) // 1125 + 1), 16 if step <= 995 else 15)
                     for step in range(1, 56244))
     schedule_hash = require_schedule(batches, 64)
-    evidence = {"schedule_hash": schedule_hash, "source_job_hash": "s" * 64}
+    evidence = {"schedule_hash": schedule_hash, "source_job_hash": "s" * 64,
+                "blocks": ({"block": 1, "batch_evidence": [{"path": "synthetic", "batches_sha256": "b" * 64}]},)}
     monkeypatch.setattr(reporting, "source_schedule", lambda _source, _config: (batches, evidence))
     optimizer = {"lora_learning_rate": .0005, "head_learning_rate": .01, "momentum": .9, "weight_decay": .0005}
     config = replace(load_config(), source_result_hash=original["content_hash"])

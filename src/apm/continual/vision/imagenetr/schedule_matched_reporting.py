@@ -58,7 +58,7 @@ def load_schedule_reference(source: Path, source_hash: str) -> dict[str, object]
     batches = tuple(ScheduledBatch(**row) for row in pq.read_table(root / "schedule.parquet").to_pylist())
     if (batches != source_batches or protocol["source_job_hash"] != source_evidence["source_job_hash"]
             or require_schedule(batches, 64) != protocol["schedule_hash"] or result["schedule_hash"] != protocol["schedule_hash"]
-            or any(schedule_record[name] != source_evidence[name] for name in source_evidence)):
+            or record_sha256({name: schedule_record[name] for name in source_evidence}) != record_sha256(source_evidence)):
         raise ValueError("offline control differs from the exact replay schedule")
     populations = read_sealed(root / "populations.json")
     fitting, probe, test = (set(populations[name]) for name in ("fitting", "probe", "test"))
@@ -295,14 +295,16 @@ def schedule_report_parts(
             "these observations do not isolate which of those differences caused a different trajectory.",
             "The table summarizes the first source work block. Peak batch NLL is mean pre-update cross-entropy in the worst batch; its actual batch size "
             "is shown alongside it. Peak gradient norm is the Euclidean norm over all trainable-parameter gradients before SGD, and can occur at a "
-            "different update. The exact update indices and all batch records are retained in the analysis tables.",
+            "different update. Fit accuracy uses the same 2,048 clean training images at the indicated update counts. "
+            "The exact peak-update indices and all batch records are retained in the analysis tables.",
             "These are unmodified finite updates, including very small batches, at the full prescribed learning rates. Large early losses and subsequent "
             "poor fitting are consistent with optimization instability, but do not identify a unique failing layer or prove that any particular clipping "
             "threshold would repair it. Other seeds can recover despite early spikes. No seed was reset, discarded, or replaced.",
             "All three final test results remain in the main mean and standard deviation. The individual-seed table and training curves are essential "
             "when trajectories differ; a mean alone can obscure that difference. A stability intervention such as warm-up, a lower initial rate, or "
-            "different early batching would be a separate experiment, not a rescue silently folded into this control.",
-        ), table=ReportTable(("Seed", "Peak batch NLL", "Batch size at peak loss", "Peak gradient norm", "Block 1 fit acc.", "Block 5 fit acc.", "Final fit acc."),
+            "different early batching would require a separate experiment. None was applied here.",
+        ), table=ReportTable(("Seed", "Peak batch NLL", "Batch size at peak loss", "Peak gradient norm",
+                              *(f"Fit acc. after {result['jobs']['seed_1993']['blocks'][block - 1]['steps_total']:,} updates" for block in (1, 5)), "Final fit acc."),
                              tuple((str(row["seed"]), f"{row['early_peak_batch_nll']:.3f}", str(row["early_peak_loss_batch_size"]),
                                     f"{row['early_peak_gradient_norm']:.1f}", f"{row['block_1_fit_accuracy']:.2f}%",
                                     f"{row['block_5_fit_accuracy']:.2f}%", f"{row['block_50_fit_accuracy']:.2f}%") for row in stability))),
