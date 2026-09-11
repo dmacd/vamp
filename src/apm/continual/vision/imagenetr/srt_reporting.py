@@ -396,6 +396,9 @@ def _sections(
     calibration: tuple[dict[str, object], ...], resources: tuple[dict[str, object], ...], figures: dict[str, Path],
 ) -> tuple[ReportSection, ...]:
     joint_final = references["stage_matched_joint"][-1]["accuracy"]
+    joint_marker_note = (() if references.get("joint_convergence") is None else (
+        "The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. "
+        "It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.",))
     summaries = tuple(analyses[name].totals for name in NEW_STYLES)
     uniform_wins = sum(
         analyses[f"uniform_h{capacity}"].totals["final_accuracy"] > analyses[f"srt_h{capacity}"].totals["final_accuracy"]
@@ -407,7 +410,7 @@ def _sections(
         f"and {analyses[f'srt_h{capacity}'].totals['final_nll']:.4f} NLL. Relative to its exposure-matched uniform control, "
         f"the differences are {analyses[f'srt_h{capacity}'].totals['final_accuracy'] - analyses[f'uniform_h{capacity}'].totals['final_accuracy']:+.3f} "
         f"accuracy points and {analyses[f'srt_h{capacity}'].totals['final_nll'] - analyses[f'uniform_h{capacity}'].totals['final_nll']:+.4f} NLL. "
-        f"Its accuracy difference from joint rank 16 is {analyses[f'srt_h{capacity}'].totals['final_accuracy'] - joint_final:+.3f} points."
+        f"Its accuracy difference from the original five-epoch joint rank 16 is {analyses[f'srt_h{capacity}'].totals['final_accuracy'] - joint_final:+.3f} points."
         for capacity in (1024, 4096)
     )
     table = ReportTable(("Condition", "Final acc.", "Mean acc.", "Final NLL", "Train min."), tuple(
@@ -437,6 +440,7 @@ def _sections(
             "Each panel compares one SRT/uniform pair with the five existing task-free conditions. Historical curve names, values, and colors are unchanged. "
             "A budget of H-equivalent work means 4 x (current images + min(H, historical images)) presentations per task, not a memory cap. "
             "Both methods can revisit every arrived training image.",
+            *joint_marker_note,
         ), (figures["accuracy"],)),
         ReportSection("Carried-forward accuracy figure", (
             "This is the original full-stream accuracy figure, copied byte-for-byte from the previous report. The pale dotted curves are label-aware "
@@ -445,10 +449,11 @@ def _sections(
             "Aggregate-rank-matched joint IID matches the total rank of the frontier nodes, not the rank of the single SRT adapter.",
         ), (run / "references/previous_stage_accuracy.png",)),
         ReportSection("Probability quality and the joint-IID gap", (
-            "The rank-16 joint source did not retain NLL, so no rank-16 NLL curve is fabricated. The lower panel uses its retained accuracy curve. "
-            "Neither joint reference is an execution gate or a mathematical upper bound. Each fresh joint model receives five epochs. "
-            "The final rank-16 joint model received 120,000 training presentations and 1,875 updates, whereas continuing uniform H=1,024 received "
+            "The original rank-16 joint source did not retain NLL, so no full-stream rank-16 NLL curve is fabricated. The lower panel uses its retained five-epoch accuracy curve. "
+            "Neither original joint reference is an execution gate or a mathematical upper bound. Each original stage-matched joint model receives five epochs. "
+            "The original final rank-16 joint model received 120,000 training presentations and 1,875 updates, whereas continuing uniform H=1,024 received "
             "294,368 presentations and 5,253 updates across its lifetime. Earlier joint-prefix models do not warm-start later ones.",
+            *joint_marker_note,
         ), (figures["nll"],)),
         ReportSection("Measured training work", (
             "Each new training presentation produces one ViT forward/backward pair. Confidence comes from that same forward: there are no quality-only "
@@ -561,12 +566,14 @@ def _sections(
         ReportSection("Full-stream accuracy with the fixed-policy conditions", (
             "All four new conditions use a single rank-16 adapter. Colors distinguish standard and strict profiles; solid lines denote SRT and dashed lines their matched uniform controls. "
             "All five earlier task-free frontier and joint-IID conditions remain overlaid. The original selected-policy SRT curves remain on the preceding accuracy page.",
+            *joint_marker_note,
         ), (figures["followup_accuracy"],)),
         ReportSection("Direct comparisons with the original SRT recipes", (
             "Left: standard thresholds, old target 0.8, and unit 8 are fixed; only H changes from 1,024 to 4,096. "
             "Right: H=4,096 and strict thresholds are fixed; old target/unit change together from 0.5/1 to 0.8/8. "
             "The right comparison does not isolate mixture from spacing. Each uniform line copies its associated SRT batch schedule. "
-            "The lower row shows NLL for the identical conditions; the joint rank-16 source has no retained NLL.",
+            "The lower row shows NLL for the identical conditions; the original five-epoch joint rank-16 source has no retained NLL curve.",
+            *joint_marker_note,
         ), (figures["policy_comparisons"],)),
         ReportSection("Equal image work does not mean equal optimizer work", (
             "Each line represents an SRT recipe and its exact-count uniform partner. H=4,096 fixes 844,640 image presentations, "

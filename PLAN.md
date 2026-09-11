@@ -43,8 +43,10 @@
   predeclared checkpoint comparisons, and work ledgers. The three-page
   synthetic appendix passed rendering and visual checks; a sealed-file test
   verifies the complete report authentication path and prediction tampering
-  rejection. The focused vision suite passes all 163 tests, with nine marked
-  integration/benchmark tests excluded from that short slice. Remaining:
+  rejection. The focused vision suite passes all 163 short tests. Thirteen
+  reporting tests pass, including the combined old-curve/new-endpoint layout;
+  figure-page prose distinguishes the new endpoint from the unchanged
+  five-epoch accuracy-gap reference. Remaining:
   monitor all phases, verify the actual report, demonstrate fresh-process
   reuse, and publish compact evidence. No convergence result is claimed yet.
 

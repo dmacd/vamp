@@ -180,8 +180,8 @@ def test_report_rejects_changed_followup_recipe(fixed_policy_report_source) -> N
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("include_followup", (False, True))
-def test_complete_synthetic_report_layout(tiny_full_stream, tmp_path, include_followup) -> None:
+@pytest.mark.parametrize("include_followup,include_joint", ((False, False), (True, False), (True, True)))
+def test_complete_synthetic_report_layout(tiny_full_stream, tmp_path, include_followup, include_joint) -> None:
     """Render all paper pages from explicitly synthetic measurements for visual QA."""
     import pandas as pd
     from pypdf import PdfReader
@@ -199,6 +199,10 @@ def test_complete_synthetic_report_layout(tiny_full_stream, tmp_path, include_fo
     references = {"arms": {str(capacity): [{"evaluation": evaluation}] * 50 for capacity in (4096, 8192)},
                   "mlp": {"rows": [{"evaluation": evaluation}] * 50},
                   "stage_matched_joint": [evaluation] * 50, "rank_matched_joint": [evaluation] * 50}
+    if include_joint:
+        references["joint_convergence"] = {"result": {"selection": {"endpoints": {"accuracy_selected": 25}},
+            "evaluations": [{"seed": seed, "epoch": 25, "metrics": {"accuracy": 81. + (seed - 1993) * .1, "nll": .8}}
+                            for seed in (1993, 1994, 1995)]}}
     reports = tmp_path / "reports"
     reports.mkdir()
     records = {name: tuple(row for analysis in analyses.values() for row in getattr(analysis, name))
@@ -241,6 +245,7 @@ def test_complete_synthetic_report_layout(tiny_full_stream, tmp_path, include_fo
     pages = PdfReader(pdf).pages
     assert len(pages) == len(sections)
     assert all("SYNTHETIC LAYOUT FIXTURE" in page.extract_text() for page in pages)
+    assert ("black diamond at task 50" in pages[1].extract_text()) == include_joint
     first_hash = sha256(pdf.read_bytes()).hexdigest()
     reporting.render_report(sections, reports, pdf)
     assert sha256(pdf.read_bytes()).hexdigest() == first_hash
