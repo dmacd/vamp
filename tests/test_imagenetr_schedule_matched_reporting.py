@@ -7,7 +7,7 @@ import pytest
 
 from apm.continual.artifacts import atomic_write, canonical_json_bytes, file_sha256, publish_immutable_json, record_sha256
 from apm.continual.vision.imagenetr.schedule_matched_reporting import (
-    CONDITION, PLOT_LABEL, control_summary, draw_schedule_endpoint, load_schedule_reference, schedule_report_parts,
+    CONDITION, PLOT_LABEL, control_summary, draw_schedule_endpoint, load_schedule_reference, prediction_loss_parts, schedule_report_parts,
 )
 from apm.continual.vision.imagenetr.srt_evidence import sealed_record, write_parquet
 
@@ -28,7 +28,21 @@ def synthetic_schedule_reference():
     evaluations = [{"seed": seed, "metrics": {"accuracy": 80. + seed - 1993, "nll": .8 + .1 * (seed - 1993),
                                                "examples": 6000, "wall_seconds": 10.},
                     "model_sha256": "f" * 64, "predictions_sha256": "b" * 64} for seed in (1993, 1994, 1995)]
-    return {"result": {"jobs": jobs, "evaluations": evaluations}}
+    quality = tuple({"condition": CONDITION, "seed": row["seed"], "correct_nll_contribution": .05,
+                     "wrong_nll_contribution": row["metrics"]["nll"] - .05} for row in evaluations)
+    quality += ({"condition": "uniform_h4096_standard_rho80_unit8", "seed": 1993,
+                 "correct_nll_contribution": .07, "wrong_nll_contribution": .83},)
+    return {"result": {"jobs": jobs, "evaluations": evaluations}, "prediction_quality": quality}
+
+
+def test_prediction_loss_parts_use_whole_test_denominator() -> None:
+    rows = [{"prediction": prediction, "label": 0, "nll": nll} for prediction, nll in ((0, .1), (0, .2), (1, 2.), (1, 3.))]
+    parts = prediction_loss_parts(CONDITION, 1993, rows)
+    assert parts["correct_examples"] == parts["wrong_examples"] == 2
+    assert parts["correct_mean_nll"] == pytest.approx(.15) and parts["wrong_mean_nll"] == 2.5
+    assert parts["correct_nll_contribution"] == pytest.approx(.075) and parts["wrong_nll_contribution"] == 1.25
+    assert parts["nll"] == pytest.approx(parts["correct_nll_contribution"] + parts["wrong_nll_contribution"])
+    assert prediction_loss_parts(CONDITION, 1993, rows[:2])["wrong_mean_nll"] is None
 
 
 def test_fixed_endpoint_mean_sd_and_final_only_marker(synthetic_schedule_reference) -> None:
@@ -76,11 +90,16 @@ def test_report_authenticates_complete_synthetic_control(tmp_path, monkeypatch) 
     batches = tuple(ScheduledBatch(step, min(50, (step - 1) // 1125 + 1), 16 if step <= 995 else 15)
                     for step in range(1, 56244))
     schedule_hash = require_schedule(batches, 64)
+    config = replace(load_config(), source_result_hash=original["content_hash"])
+    source_folder = source / "followups" / config.followup_hash / "final" / config.source_condition / "stages/050"
+    source_digest = write_parquet(source_folder / "predictions.parquet", predictions)
+    source_stage = sealed_record({"predictions_sha256": source_digest, "evaluation": {"accuracy": 100., "nll": .5}})
+    publish_immutable_json(source_folder / "result.json", source_stage)
     evidence = {"schedule_hash": schedule_hash, "source_job_hash": "s" * 64,
-                "blocks": ({"block": 1, "batch_evidence": [{"path": "synthetic", "batches_sha256": "b" * 64}]},)}
+                "blocks": ({"block": 1, "source_stage_hash": source_stage["content_hash"],
+                            "batch_evidence": [{"path": "synthetic", "batches_sha256": "b" * 64}]},)}
     monkeypatch.setattr(reporting, "source_schedule", lambda _source, _config: (batches, evidence))
     optimizer = {"lora_learning_rate": .0005, "head_learning_rate": .01, "momentum": .9, "weight_decay": .0005}
-    config = replace(load_config(), source_result_hash=original["content_hash"])
     protocol = sealed_record({"schema_version": "imagenetr50-schedule-matched-protocol-v1", "config": asdict(config),
                               "source_result_hash": original["content_hash"], **evidence, "optimizer": optimizer,
                               "optimizer_config_hash": "o" * 64,
@@ -141,6 +160,7 @@ def test_report_authenticates_complete_synthetic_control(tmp_path, monkeypatch) 
     monkeypatch.chdir(tmp_path)
     reference = load_schedule_reference(source.relative_to(tmp_path), original["content_hash"])
     assert reference["result"] == result
+    assert len(reference["prediction_quality"]) == 4 and reference["prediction_quality"][-1]["wrong_examples"] == 0
     export = reporting.export_schedule_updates(source, reference)
     assert len(export["tables"]) == 3 and sum(row["optimizer_steps"] for row in export["tables"]) == 168729
     assert export["tables"][0]["early_peak_batch_nll"] == 1. and export["tables"][0]["early_peak_gradient_norm"] == 1125.
@@ -178,7 +198,7 @@ def test_schedule_matched_appendix_layout(tmp_path, synthetic_schedule_reference
     sections, figures, tables = schedule_report_parts(tmp_path, synthetic_schedule_reference, joint, replay, update_export)
     sections = tuple(replace(section, paragraphs=("SYNTHETIC LAYOUT FIXTURE - NOT MEASURED RESULTS", *section.paragraphs))
                      for section in sections)
-    assert len(figures) == 2 and len(tables) == 6 and len(tables["schedule_matched_blocks"]) == 150
+    assert len(figures) == 2 and len(tables) == 7 and len(tables["schedule_matched_blocks"]) == 150
     assert len(tables["schedule_matched_comparisons"]) == 7 and len(tables["schedule_matched_endpoints"]) == 3
     assert sum(row["all_forward_images"] for row in tables["schedule_matched_resources"]) == 2859120
     assert tables["schedule_matched_comparisons"][-1]["control_minus_reference_accuracy_points"] == pytest.approx(.1)

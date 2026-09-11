@@ -1,0 +1,23 @@
+Schedule-matched joint working artifacts: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/schedule_matched_joint_r16/runs/7a027ff732874edd48617b430fc5812149990913edbf103b4fe653cc32744766
+Phase preflight: 2,533,920/2,533,920 training presentations; overall ETA 0.0 min
+Phase offline seed 1993: 2,533,920/2,533,920 training presentations; overall ETA 0.0 min
+Phase sample-draw audit, seed 1993
+Phase offline seed 1994: 2,533,920/2,533,920 training presentations; overall ETA 0.0 min
+Phase sample-draw audit, seed 1994
+Phase offline seed 1995: 2,533,920/2,533,920 training presentations; overall ETA 0.0 min
+Phase sample-draw audit, seed 1995
+Phase final tests: 2,533,920/2,533,920 training presentations; overall ETA 0.0 min
+Final test seed 1993: 81.183% / NLL 1.01384
+Final test seed 1994: 80.717% / NLL 1.04687
+Final test seed 1995: 80.583% / NLL 1.07816
+Phase report: 2,533,920/2,533,920 training presentations; overall ETA 0.0 min
+Report audit: SRT rank 16, 1,024-equivalent budget
+Report audit: Uniform replay rank 16, 1,024-equivalent budget
+Report audit: SRT rank 16, 4,096-equivalent budget
+Report audit: Uniform replay rank 16, 4,096-equivalent budget
+Report audit: SRT rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: SRT rank 16, H=4,096; strict, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; strict, old=0.8, unit=8
+Phase complete: 2,533,920/2,533,920 training presentations; overall ETA 0.0 min
+/home/daniel/projects/snet/rpa/output/pdf/imagenetr50_srt_r16_report.pdf

@@ -1,0 +1,2 @@
+condition,label,stage,seeds,accuracy_mean,accuracy_sample_sd,nll_mean,nll_sample_sd,training_presentations_per_seed,optimizer_steps_per_seed
+joint_rank16_replay_schedule_matched,"Offline joint IID rank 16, replay-schedule matched",50,3,80.82777777777778,0.31505437508351086,1.046290789201664,0.032162467545224324,844640,56243

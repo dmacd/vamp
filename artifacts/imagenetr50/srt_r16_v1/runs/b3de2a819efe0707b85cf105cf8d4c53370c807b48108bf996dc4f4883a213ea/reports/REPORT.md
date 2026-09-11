@@ -2,6 +2,8 @@
 
 ## Original validation-selected results
 
+Latest follow-up: offline joint IID with the replay-matched optimizer schedule reaches 80.828% mean task-50 accuracy (sample SD 0.315 points, three seeds) and 1.0463 NLL. The final sections compare it with the validation-selected joint reference and matched replay source. The original SRT results below are unchanged.
+
 Does confidence-based spaced repetition improve a single continuing rank-16 adapter compared with uniform replay under identical realized exposure? The ImageNet-R split is unchanged: 24,000 training images, 6,000 test images, and fifty four-class tasks in the existing seed-1993 order.
 
 Uniform replay has higher final accuracy and lower final NLL at 2 of the two tested budgets. This comparison tests the selected SRT recipes, not every possible confidence threshold or spacing rule.
@@ -23,7 +25,7 @@ Mean accuracy is the arithmetic mean of the fifty stage test accuracies. NLL is 
 
 Each panel compares one SRT/uniform pair with the five existing task-free conditions. Historical curve names, values, and colors are unchanged. A budget of H-equivalent work means 4 x (current images + min(H, historical images)) presentations per task, not a memory cap. Both methods can revisit every arrived training image.
 
-The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.
+The black diamond at task 50 shows validation accuracy-selected joint IID; the hollow blue square shows offline joint IID with the replay-matched optimizer schedule. Markers show three-seed means +/- sample SD, not new stage-matched curves. Details appear in the final sections.
 
 ![Original full-stream comparison at both work budgets](stage_accuracy.png)
 
@@ -58,7 +60,7 @@ These settings were requested after reviewing the original test curves. Treat th
 
 All four new conditions use a single rank-16 adapter. Colors distinguish standard and strict profiles; solid lines denote SRT and dashed lines their matched uniform controls. All five earlier task-free frontier and joint-IID conditions remain overlaid. The original selected-policy SRT curves remain on the preceding accuracy page.
 
-The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.
+The black diamond at task 50 shows validation accuracy-selected joint IID; the hollow blue square shows offline joint IID with the replay-matched optimizer schedule. Markers show three-seed means +/- sample SD, not new stage-matched curves. Details appear in the final sections.
 
 ![Full-stream accuracy with the fixed-policy conditions](fixed_policy_stage_accuracy.png)
 
@@ -66,7 +68,7 @@ The black diamond at task 50 is the validation accuracy-selected joint-IID rank-
 
 Left: standard thresholds, old target 0.8, and unit 8 are fixed; only H changes from 1,024 to 4,096. Right: H=4,096 and strict thresholds are fixed; old target/unit change together from 0.5/1 to 0.8/8. The right comparison does not isolate mixture from spacing. Each uniform line copies its associated SRT batch schedule. The lower row shows NLL for the identical conditions; the original five-epoch joint rank-16 source has no retained NLL curve.
 
-The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.
+The black diamond at task 50 shows validation accuracy-selected joint IID; the hollow blue square shows offline joint IID with the replay-matched optimizer schedule. Markers show three-seed means +/- sample SD, not new stage-matched curves. Details appear in the final sections.
 
 ![Direct comparisons with the original SRT recipes](fixed_policy_comparisons.png)
 
@@ -88,7 +90,7 @@ Joint rank 16 uses the same adapter targets, rank, and affine classification arc
 
 The original rank-16 joint source did not retain NLL, so no full-stream rank-16 NLL curve is fabricated. The lower panel uses its retained five-epoch accuracy curve. Neither original joint reference is an execution gate or a mathematical upper bound. Each original stage-matched joint model receives five epochs. The original final rank-16 joint model received 120,000 training presentations and 1,875 updates, whereas continuing uniform H=1,024 received 294,368 presentations and 5,253 updates across its lifetime. Earlier joint-prefix models do not warm-start later ones.
 
-The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.
+The black diamond at task 50 shows validation accuracy-selected joint IID; the hollow blue square shows offline joint IID with the replay-matched optimizer schedule. Markers show three-seed means +/- sample SD, not new stage-matched curves. Details appear in the final sections.
 
 ![Probability quality and the joint-IID gap](nll_and_joint_gap.png)
 
@@ -279,3 +281,62 @@ Development plus the three complete refits used 4,286,400 training forward/backw
 Transferring the schedule by epochs gives each full-data fit 25% more updates per epoch than development. The three seeds measure variation under one selected recipe, not three independent convergence searches. A validation plateau does not prove this is the best possible optimizer, augmentation, regularization, or accuracy attainable by rank 16. Mean NLL is a predictive-loss measure, not a calibration-error estimate. Every training and evaluation identity is bound to the original dataset manifest; the published test set was previously examined in earlier experiments.
 
 ![Full-data refits, work, and interpretation limits](joint_convergence_full_refits.png)
+
+## Offline joint IID with the replay optimizer schedule
+
+This control keeps the rank-16 architecture and copies every batch size from uniform H=4,096, standard/old=0.8/unit=8: 56,243 optimizer updates and 844,640 training-image presentations per seed. From the first update, all 24,000 training images can be sampled and all 200 classifier rows are active. Sampling is uniform over images without replacement within a batch, independent between batches.
+
+The source batch size averages 15.018 images (median 10); only 1,735 of 56,243 updates use a full batch of 64. The model has 1,480,904 trainable adapter/classifier parameters, identical to the replay source.
+
+SGD retains momentum 0.9, weight decay 0.0005, constant LoRA rate 0.0005, and constant head rate 0.01. Each actual batch uses mean cross-entropy and one full update; no gradient accumulation or rate reductions occur. Source work boundaries do not reset weights, change the class set, or select training images. There is no validation search or early stopping in this control.
+
+The fixed final endpoint averages 80.828% test accuracy (sample SD 0.315 points) and 1.0463 NLL (SD 0.0322). All three cold fits completed before any new test evaluation. The hollow blue square on the main figures shows this task-50 endpoint, not a future-informed continual-learning curve.
+
+Relative to the prior validation accuracy-selected joint mean, accuracy changes by +1.656 points and NLL by -0.0027. Against the single-seed matched replay source, the differences are -0.089 accuracy points and +0.1512 NLL. These are observed differences, not significance tests.
+
+Compared with the previous epoch-trained joint fits, batch sizes, update count, learning-rate schedule, and between-batch sampling differ. A gain over that reference cannot be assigned to any one of those changes. The exact schedule match is with the replay source.
+
+| Seed / summary | Task-50 accuracy | Task-50 NLL | Optimizer updates |
+| --- | --- | --- | --- |
+| 1993 | 81.183% | 1.0138 | 56,243 |
+| 1994 | 80.717% | 1.0469 | 56,243 |
+| 1995 | 80.583% | 1.0782 | 56,243 |
+| Mean +/- sample SD | 80.828% +/- 0.315 | 1.0463 +/- 0.0322 | 56,243 per seed |
+
+## Task-50 comparisons and what this control isolates
+
+All rows use the same test population and rank-16 adapter architecture. Error bars show across-seed sample standard deviation, not a confidence interval. Replay rows are single-seed results, so no seed-variation bar is available. Every previous joint endpoint keeps its original validation selection; no checkpoint was chosen from these test comparisons.
+
+This comparison holds the optimizer schedule fixed while changing the staged class/data curriculum and cumulative image weighting together. It does not isolate those remaining effects from one another. The source schedule itself came from a single seed's SRT partner; three offline seeds do not replicate that replay arm or schedule selection. This follow-up was requested after inspecting earlier test results.
+
+The offline mean is 0.089 accuracy points below the single-seed replay source. Its NLL is 0.1512 higher. Relative to the prior validation accuracy-selected joint mean, accuracy changes by +1.656 points and NLL by -0.0027. Similar top-1 accuracy does not imply similar true-label probabilities. These are observed differences, not an equivalence or significance test.
+
+Averaged across offline seeds, correctly classified images contribute 0.0430 to whole-test NLL, versus 0.0633 for replay. Errors contribute 1.0033, versus 0.8318. These two contributions sum to total NLL. The error sets are not identical; this decomposition is not a paired-error test or a full calibration measurement.
+
+![Task-50 comparisons and what this control isolates](schedule_matched_joint_comparison.png)
+
+## Offline control training diagnostics and measured work
+
+The same 2,048 hash-selected clean training images are probed at the fifty source work boundaries. These are training-fit diagnostics, not validation or test curves. The horizontal axis is optimizer work: the model already has access to every training class at the left edge. The bottom panel shows the inherited changing batch size, identical across the three seeds.
+
+The three fits total 2,533,920 forward/backward training-image pairs and 168,729 optimizer updates. Including clean probes and final tests gives 2,859,120 forward image paths. Measured training-batch time totals 190.61 minutes; checkpoint writes add 3.16 minutes, and probe/test/model-artifact work adds 16.84 minutes. Batch time includes data loading; setup, source/draw audits, and preflight are separate. Counts are model image paths, not profiled FLOPs.
+
+Every committed draw and augmentation ordinal was reconstructed against the all-training population. Final exposure counts and per-update schedule/rate checks agree. Completed training and prediction artifacts are immutable and reused without optimizer steps.
+
+![Offline control training diagnostics and measured work](schedule_matched_joint_diagnostics.png)
+
+## Early optimization: individual seeds and loss spikes
+
+This diagnostic was added after observing slow early learning in seed 1995, before any new test evaluation. It does not select a checkpoint or alter the fixed training schedule. Each seed changes initialization, sampled images, and augmentation; these observations do not isolate which of those differences caused a different trajectory.
+
+The table summarizes the first source work block. Peak batch NLL is mean pre-update cross-entropy in the worst batch; its actual batch size is shown alongside it. Peak gradient norm is the Euclidean norm over all trainable-parameter gradients before SGD, and can occur at a different update. Fit accuracy uses the same 2,048 clean training images at the indicated update counts. The exact peak-update indices and all batch records are retained in the analysis tables.
+
+These are unmodified finite updates, including very small batches, at the full prescribed learning rates. Large early losses and subsequent poor fitting are consistent with optimization instability, but do not identify a unique failing layer or prove that any particular clipping threshold would repair it. Other seeds can recover despite early spikes. No seed was reset, discarded, or replaced.
+
+All three final test results remain in the main mean and standard deviation. The individual-seed table and training curves are essential when trajectories differ; a mean alone can obscure that difference. A stability intervention such as warm-up, a lower initial rate, or different early batching would require a separate experiment. None was applied here.
+
+| Seed | Peak batch NLL | Batch size at peak loss | Peak gradient norm | Fit acc. after 106 updates | Fit acc. after 1,512 updates | Final fit acc. |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1993 | 48.412 | 2 | 905.4 | 1.12% | 77.34% | 98.83% |
+| 1994 | 22.898 | 1 | 200.7 | 13.57% | 77.20% | 99.27% |
+| 1995 | 122.752 | 1 | 1109.5 | 0.59% | 2.20% | 98.97% |

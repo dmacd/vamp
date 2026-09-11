@@ -31,7 +31,7 @@ from apm.continual.vision.imagenetr.persistent_affine_reporting import (
 )
 from apm.continual.vision.imagenetr.srt_analysis import ReplayAnalysis, analyze_replay_job
 from apm.continual.vision.imagenetr.schedule_matched_reporting import (
-    draw_schedule_endpoint, export_schedule_updates, load_schedule_reference, schedule_report_parts,
+    control_summary, draw_schedule_endpoint, export_schedule_updates, load_schedule_reference, schedule_report_parts,
 )
 from apm.continual.vision.imagenetr.srt_evidence import CLOCK_FIELDS, read_sealed, sealed_record, trace_batches
 
@@ -405,6 +405,13 @@ def _sections(
     calibration: tuple[dict[str, object], ...], resources: tuple[dict[str, object], ...], figures: dict[str, Path],
 ) -> tuple[ReportSection, ...]:
     joint_final = references["stage_matched_joint"][-1]["accuracy"]
+    latest_note = ()
+    if references.get("schedule_matched_joint") is not None:
+        control = control_summary(references["schedule_matched_joint"])
+        latest_note = (f"Latest follow-up: offline joint IID with the replay-matched optimizer schedule reaches "
+                       f"{control['accuracy_mean']:.3f}% mean task-50 accuracy (sample SD {control['accuracy_sample_sd']:.3f} points, three seeds) "
+                       f"and {control['nll_mean']:.4f} NLL. The final sections compare it with the validation-selected joint reference and matched replay source. "
+                       "The original SRT results below are unchanged.",)
     joint_marker_note = (() if references.get("joint_convergence") is None else (
         "The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. "
         "It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.",))
@@ -443,6 +450,7 @@ def _sections(
          f"{row['screen_accuracy']:.3f}", "-" if row["full_mean_accuracy"] is None else f"{row['full_mean_accuracy']:.3f}") for row in calibration))
     sections = (
         ReportSection("Original validation-selected results", (
+            *latest_note,
             "Does confidence-based spaced repetition improve a single continuing rank-16 adapter compared with uniform replay under identical realized exposure? "
             "The ImageNet-R split is unchanged: 24,000 training images, 6,000 test images, and fifty four-class tasks in the existing seed-1993 order.",
             f"Uniform replay has higher final accuracy and lower final NLL at {uniform_wins} of the two tested budgets. "

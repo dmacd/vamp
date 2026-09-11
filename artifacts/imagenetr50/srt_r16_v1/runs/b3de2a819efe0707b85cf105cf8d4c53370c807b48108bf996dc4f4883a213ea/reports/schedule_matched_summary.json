@@ -1,0 +1,1 @@
+[{"accuracy_mean":80.82777777777778,"accuracy_sample_sd":0.31505437508351086,"condition":"joint_rank16_replay_schedule_matched","label":"Offline joint IID rank 16, replay-schedule matched","nll_mean":1.046290789201664,"nll_sample_sd":0.032162467545224324,"optimizer_steps_per_seed":56243,"seeds":3,"stage":50,"training_presentations_per_seed":844640}]

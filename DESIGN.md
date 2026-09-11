@@ -92,6 +92,16 @@ forwards. Uncommitted orphan chunks or work checkpoints cannot enter results.
 The control has a separate content-addressed run and authenticated report
 pointer; earlier training code, checkpoints, and scientific results stay fixed.
 
+Reports consolidate only committed update chunks into one immutable Parquet
+table per seed, retaining every step's loss, gradient norm, batch size, rates,
+and sample/augmentation hashes. A sealed export record binds that compact
+table to its source chunks. Training-only post-hoc diagnostics never alter
+checkpoint selection or the schedule. Final prediction diagnostics first
+authenticate the common test identities and reconstruct accuracy/NLL. Correct
+and incorrect predictions contribute sums divided by the whole test count;
+these contributions add to total NLL but do not constitute a calibration test
+or a paired-error comparison when models make different errors.
+
 ## Public Result Boundary
 
 Generated result trees remain ignored by default. A public result snapshot may

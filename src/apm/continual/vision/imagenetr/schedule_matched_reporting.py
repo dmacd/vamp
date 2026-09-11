@@ -27,6 +27,19 @@ PLOT_LABEL = LABEL + " (task 50; mean +/- SD)"
 COLOR = "#003f5c"
 
 
+def prediction_loss_parts(condition: str, seed: int, predictions: list[dict[str, object]]) -> dict[str, object]:
+    """Decompose test NLL into correct/error contributions without changing predictions."""
+    if not predictions:
+        raise ValueError("prediction diagnostics require a nonempty test population")
+    groups = {name: tuple(row["nll"] for row in predictions if (row["prediction"] == row["label"]) == correct)
+              for name, correct in (("correct", True), ("wrong", False))}
+    return {"condition": condition, "seed": seed, "examples": len(predictions),
+            "nll": math.fsum(row["nll"] for row in predictions) / len(predictions),
+            **{f"{name}_{field}": value for name, values in groups.items() for field, value in (
+                ("examples", len(values)), ("mean_nll", math.fsum(values) / len(values) if values else None),
+                ("nll_contribution", math.fsum(values) / len(predictions)))}}
+
+
 def load_schedule_reference(source: Path, source_hash: str) -> dict[str, object] | None:
     """Require exact source schedule, isolated populations, all seeds, and reconstructed test metrics."""
     source = source.resolve()
@@ -95,6 +108,7 @@ def load_schedule_reference(source: Path, source_hash: str) -> dict[str, object]
     labels = {row["image_id"]: (row["label"], row["task"]) for row in pq.read_table(original_predictions).to_pylist()}
     if set(labels) != test or len(result["evaluations"]) != 3 or {row["seed"] for row in result["evaluations"]} != {1993, 1994, 1995}:
         raise ValueError("offline test population or endpoint matrix differs")
+    quality = ()
     for row in result["evaluations"]:
         folder = root / "evaluations" / f"seed_{row['seed']}"
         if (read_sealed(folder / "result.json") != row or row["protocol_hash"] != root.name
@@ -109,7 +123,21 @@ def load_schedule_reference(source: Path, source_hash: str) -> dict[str, object]
         if (row["metrics"]["examples"] != 6000 or not math.isclose(accuracy, row["metrics"]["accuracy"], abs_tol=1e-10)
                 or not math.isclose(nll, row["metrics"]["nll"], abs_tol=1e-10)):
             raise ValueError("offline reconstructed metrics disagree")
-    return {"pointer": pointer, "protocol": protocol, "result": result, "schedule": schedule_record}
+        quality += (prediction_loss_parts(CONDITION, row["seed"], predictions),)
+    source_folder = source / "followups" / config.followup_hash / "final" / config.source_condition / "stages/050"
+    source_stage = read_sealed(source_folder / "result.json")
+    if (source_stage["content_hash"] != source_evidence["blocks"][-1]["source_stage_hash"]
+            or file_sha256(source_folder / "predictions.parquet") != source_stage["predictions_sha256"]):
+        raise ValueError("matched replay source predictions changed")
+    source_predictions = pq.read_table(source_folder / "predictions.parquet").to_pylist()
+    if len(source_predictions) != 6000 or {row["image_id"]: (row["label"], row["task"]) for row in source_predictions} != labels:
+        raise ValueError("matched replay source test identities differ")
+    source_quality = prediction_loss_parts(config.source_condition, 1993, source_predictions)
+    if (not math.isclose(source_quality["nll"], source_stage["evaluation"]["nll"], abs_tol=1e-10)
+            or not math.isclose(100 * source_quality["correct_examples"] / 6000, source_stage["evaluation"]["accuracy"], abs_tol=1e-10)):
+        raise ValueError("matched replay source reconstructed metrics disagree")
+    return {"pointer": pointer, "protocol": protocol, "result": result, "schedule": schedule_record,
+            "prediction_quality": (*quality, source_quality)}
 
 
 def control_summary(reference: dict[str, object]) -> dict[str, object]:
@@ -243,6 +271,14 @@ def schedule_report_parts(
     difference = (f"Relative to the prior validation accuracy-selected joint mean, accuracy changes by "
                   f"{joint_selected['control_minus_reference_accuracy_points']:+.3f} points and NLL by {joint_selected['control_minus_reference_nll']:+.4f}. "
                   if joint_selected is not None else "")
+    quality = reference["prediction_quality"]
+    offline_quality = tuple(row for row in quality if row["condition"] == CONDITION)
+    source_quality = next(row for row in quality if row["condition"] != CONDITION)
+    outcome = (f"The offline mean is {abs(source['control_minus_reference_accuracy_points']):.3f} accuracy points "
+               f"{'above' if source['control_minus_reference_accuracy_points'] >= 0 else 'below'} the single-seed replay source. "
+               f"Its NLL is {abs(source['control_minus_reference_nll']):.4f} "
+               f"{'higher' if source['control_minus_reference_nll'] >= 0 else 'lower'}. "
+               + difference + "Similar top-1 accuracy does not imply similar true-label probabilities. These are observed differences, not an equivalence or significance test.")
     sections = (
         ReportSection("Offline joint IID with the replay optimizer schedule", (
             "This control keeps the rank-16 architecture and copies every batch size from uniform H=4,096, standard/old=0.8/unit=8: "
@@ -271,9 +307,11 @@ def schedule_report_parts(
             "This comparison holds the optimizer schedule fixed while changing the staged class/data curriculum and cumulative image weighting together. "
             "It does not isolate those remaining effects from one another. The source schedule itself came from a single seed's SRT partner; "
             "three offline seeds do not replicate that replay arm or schedule selection. This follow-up was requested after inspecting earlier test results.",
-            "A higher offline result would show that replay is not needed to obtain that measured accuracy under the copied optimization schedule. "
-            "A remaining replay advantage would motivate curriculum and weighting ablations; it would not prove that joint IID lacks capacity "
-            "or that no better all-data optimizer exists. This is not a broadly validation-tuned ceiling study.",
+            outcome,
+            f"Averaged across offline seeds, correctly classified images contribute {mean(row['correct_nll_contribution'] for row in offline_quality):.4f} "
+            f"to whole-test NLL, versus {source_quality['correct_nll_contribution']:.4f} for replay. Errors contribute "
+            f"{mean(row['wrong_nll_contribution'] for row in offline_quality):.4f}, versus {source_quality['wrong_nll_contribution']:.4f}. "
+            "These two contributions sum to total NLL. The error sets are not identical; this decomposition is not a paired-error test or a full calibration measurement.",
         ), (comparison_path,)),
         ReportSection("Offline control training diagnostics and measured work", (
             "The same 2,048 hash-selected clean training images are probed at the fifty source work boundaries. These are training-fit diagnostics, "
@@ -312,5 +350,5 @@ def schedule_report_parts(
     return sections, {"schedule_comparison": comparison_path, "schedule_diagnostics": diagnostic_path}, {
         "schedule_matched_endpoints": endpoints, "schedule_matched_summary": (summary,), "schedule_matched_blocks": blocks,
         "schedule_matched_resources": resources, "schedule_matched_comparisons": comparison_rows,
-        "schedule_matched_stability": stability,
+        "schedule_matched_stability": stability, "schedule_matched_prediction_quality": quality,
     }

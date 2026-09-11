@@ -1,0 +1,4 @@
+condition,seed,optimizer_steps,training_presentations,model_forward_images,training_wall_seconds,checkpoint_wall_seconds,evaluation_and_artifact_seconds,test_forward_images,all_forward_images,test_wall_seconds
+joint_rank16_replay_schedule_matched,1993,56243,844640,947040,3718.9958790391684,57.768978821113706,322.5558365341276,6000,953040,19.464608650654554
+joint_rank16_replay_schedule_matched,1994,56243,844640,947040,3853.6499571204185,58.35877640545368,315.83063245005906,6000,953040,18.911712273955345
+joint_rank16_replay_schedule_matched,1995,56243,844640,947040,3864.154655439779,73.2696696612984,315.1348934639245,6000,953040,18.609715593978763

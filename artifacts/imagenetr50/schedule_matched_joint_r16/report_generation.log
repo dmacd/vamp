@@ -1,0 +1,9 @@
+Report audit: SRT rank 16, 1,024-equivalent budget
+Report audit: Uniform replay rank 16, 1,024-equivalent budget
+Report audit: SRT rank 16, 4,096-equivalent budget
+Report audit: Uniform replay rank 16, 4,096-equivalent budget
+Report audit: SRT rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: SRT rank 16, H=4,096; strict, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; strict, old=0.8, unit=8
+/home/daniel/projects/snet/rpa/output/pdf/imagenetr50_srt_r16_report.pdf

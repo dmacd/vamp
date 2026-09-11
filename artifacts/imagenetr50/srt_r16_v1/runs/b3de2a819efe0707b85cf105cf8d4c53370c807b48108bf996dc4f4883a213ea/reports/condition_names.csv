@@ -16,3 +16,4 @@ joint_convergence_accuracy_selected,"Joint IID rank 16, validation accuracy-sele
 joint_convergence_five_epoch,"Joint IID rank 16, five-epoch rerun",,,
 joint_convergence_nll_selected,"Joint IID rank 16, validation NLL-selected",,,
 joint_convergence_terminal,"Joint IID rank 16, terminal schedule checkpoint",,,
+joint_rank16_replay_schedule_matched,"Offline joint IID rank 16, replay-schedule matched",,,

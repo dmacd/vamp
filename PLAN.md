@@ -31,63 +31,72 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
-## In Progress - ImageNet-R Offline Joint Control with Replay-Matched Optimization
+## Completed Outcome - ImageNet-R Offline Joint Control with Replay-Matched Optimization
 
-- Implement the requested direct control for the 80.917% uniform H=4,096,
-  standard/old=0.8/unit=8 endpoint. Copy all 56,243 actual batch sizes and
-  844,640 image presentations, constant SGD rates, momentum, and weight decay.
-  Draw uniformly from all 24,000 training images from update one, with all
-  200 classifier rows active. No source task boundaries constrain sampling.
+- The offline rank-16 control reaches **80.828% mean test accuracy (sample
+  SD 0.315 points) and 1.0463 mean NLL (SD 0.0322)** across three cold seeds.
+  It gains 1.656 accuracy points over the previous validation-selected joint
+  recipe (79.172%) and is 0.089 points below matched uniform replay (80.917%).
+  Most of the observed accuracy gap closes; the earlier reference was not
+  an architectural ceiling. NLL remains 0.1512 higher than replay's 0.8951.
+- The control copies all 56,243 actual batch sizes and 844,640 presentations,
+  constant SGD rates, momentum, and weight decay from uniform H=4,096,
+  standard/old=0.8/unit=8. It samples uniformly over all 24,000 training images
+  from update one, with all 200 classifier rows active. Source boundaries
+  neither reset weights nor constrain samples. Mean batch size is 15.018,
+  not 64; all 1,480,904 trainable adapter/head parameters match replay.
 - Config: `configs/vision/imagenetr/schedule_matched_joint_r16.yaml`; protocol:
   `docs/imagenetr50_schedule_matched_joint_protocol.md`; default execution:
   `bash scripts/vision/imagenetr/run_schedule_matched_joint_local.sh`.
-  Seeds 1993-1995 each start cold. The endpoint is the fixed end of the copied
-  schedule, without validation selection, early stopping, or a new parameter
-  search. This isolates the optimization schedule from the combined effects
-  of curriculum and sample weighting; it does not isolate those effects from
-  one another or establish a global joint-IID ceiling.
-- The new worker reuses the existing model, SGD/loss, loader, and evaluator.
-  It keeps immutable update chunks, sample/augmentation hashes, per-image
-  exposure counts, and fifty diagnostic work checkpoints. Model, momentum,
-  exposure counts, and partial work resume atomically. Fifteen short CPU tests
-  pass, including interruption at every mixed-batch boundary and completed
-  zero-step reuse; the actual source schedule audit also passes. The complete
-  focused vision slice passes 178 tests, with eleven integration/benchmark
-  tests deselected, in one pytest process.
-- Training code/protocol were committed and pushed as `0a644c3` before the
-  run. Real preflight authenticated all 30,000 image bytes, passed exact
-  interrupted/uninterrupted mixed-batch weights and zero-step reuse, and
-  peaked at 4.15 GB allocated VRAM. Run
+  There is no validation search, early stopping, or test-selected checkpoint.
+  All three fits complete before final test evaluation.
+- Training code/protocol were committed/pushed as `0a644c3` before training.
+  Run
   `7a027ff732874edd48617b430fc5812149990913edbf103b4fe653cc32744766`
-  is training three sequential nice-10 fits with active agent-loop health
-  checks. Test evaluation waits until all three fits complete.
-- Report integration is implemented: existing accuracy/NLL figures gain a
-  hollow-square task-50 mean/SD; three additional pages compare endpoints,
-  show training-only diagnostics, and account for updates and model passes.
-  The focused vision slice passes 180 tests. Explicit synthetic layout and
-  full evidence-authentication checks pass; actual-result rendering and
-  final artifact audits remain pending until training finishes.
-- Seed 1993 completed the exact 56,243 updates / 844,640 presentations and
-  passed complete draw reconstruction. Its training probe finishes at
-  98.828% accuracy / 0.03333 NLL; these are not test results. Every training
-  image was presented 13-59 times. Seed 1994 is running, with all final test
-  evaluations still withheld. Report generation consolidates committed
-  update chunks into one immutable, hash-bound analysis table per seed;
-  original checkpoint chunks and weights remain local.
-- Seeds 1993 and 1994 both completed and passed draw audits. Seed 1995 is
-  running the unchanged schedule but shows early optimization instability:
-  block-five training-probe accuracy is 2.197%, versus 77.344% / 77.197% for
-  the other seeds. Its first work block includes a single-image NLL spike
-  of 122.752. Data/schedule/optimizer hashes agree and gradients remain
-  finite. It recovers to 68.018% training-probe accuracy at block seven
-  without any intervention. Do not reset or replace it. Add explicitly post-hoc, training-only
-  loss/gradient diagnostics and individual-seed results to the same report.
-- Remaining: finish the fits; authenticate final predictions and fresh-process
-  reuse; update and visually verify the existing SRT report, then publish
-  compact evidence. Use two loader workers because host RAM is currently tight.
-  The main figures gain a distinct task-50-only endpoint; diagnostic curves
-  use training work, not continual-learning stage. No broader joint tuning
-  search or replay replication is included in this control.
+  completed on 2026-09-11 with sealed result
+  `ba351626e45f935c399357dd51d3e4982d53de2f4c1b36930bb7df749d2b1f47`.
+  One nice-10 GPU worker and two loader workers ran sequential seeds with
+  active agent-loop health checks; no training process failed.
+- Seeds 1993/1994/1995 score 81.183% / 80.717% / 80.583%, with NLL
+  1.01384 / 1.04687 / 1.07816. Seed 1995 had finite early optimization
+  instability (single-image batch NLL 122.752; 2.197% clean training-probe
+  accuracy after 1,512 updates), recovered without intervention, and remains
+  in all summaries. The added loss/gradient diagnostics are post-hoc and
+  training-only; no seed was reset, replaced, or discarded.
+- The NLL decomposition authenticates the same 6,000 test identities and
+  predictions. Errors contribute mean 1.0033 to whole-test NLL for the
+  offline fits versus 0.8318 for replay; correct predictions contribute
+  0.0430 versus 0.0633. Error sets differ: this is neither a paired-error
+  test nor a complete calibration measurement.
+- Total work is 168,729 updates, 2,533,920 training forward/backward image
+  pairs, and 2,859,120 total forward image paths including probes/tests.
+  Measured training batches take 190.61 minutes; checkpoint writes take
+  3.16 minutes and probe/test/model-artifact work 16.84 minutes. Setup, draw
+  audits, and preflight are separate; these are image paths, not FLOPs.
+- Preflight and post-training audits authenticate all 30,000 image bytes.
+  Mixed-batch interrupted/uninterrupted tensors match exactly; preflight
+  peak allocation is 4.15 GB. Every actual training draw and augmentation
+  ordinal is reconstructed, with no test identities in training/probes.
+  The final focused vision slice passes 181 tests (14 integration/benchmark
+  tests deselected) in one process; six explicit report/evidence/layout
+  checks also pass. Completed-job reuse performs zero optimizer updates.
+  A fresh default invocation exits successfully with all 3,884 scientific
+  and selected source files unchanged in hash, size, and modification time;
+  the regenerated report/PDF are byte-identical.
+- The existing SRT report has 26 visually reviewed pages. Seven new matching
+  JSON/CSV/Parquet table families and two figures retain individual seeds,
+  training diagnostics, resource counts, NLL decomposition, and limitations.
+  New hollow-square mean/SD markers appear only at task 50. Compact per-update
+  tables, exposure counts, final predictions, and provenance are retained
+  under `artifacts/imagenetr50/schedule_matched_joint_r16/`; original chunks,
+  model weights, and optimizer state stay local. Prior results remain fixed.
+- Three offline seeds share one replay-derived schedule; replay itself is
+  still a single seed. No equivalence or significance claim is supported.
+  This control holds the optimizer schedule fixed while changing curriculum
+  and cumulative sample weighting together. Compared with the older joint
+  recipe, batch sizes, update count, rate history, and sampling also differ.
+  Next useful work, not launched: replicate replay under this fixed schedule,
+  then separate curriculum from weighting if its NLL advantage persists.
 
 ## Completed Outcome - ImageNet-R Task-50 Rank-16 Joint-IID Convergence
 
