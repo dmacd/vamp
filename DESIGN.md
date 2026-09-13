@@ -102,6 +102,27 @@ and incorrect predictions contribute sums divided by the whole test count;
 these contributions add to total NLL but do not constitute a calibration test
 or a paired-error comparison when models make different errors.
 
+## ImageNet-R Fixed-Checkpoint Probability and Replay Diagnostics
+
+The checkpoint diagnostic runner has no optimizer. It authenticates the
+original model/data/environment identities and collects BF16 clean-view
+logits in immutable, ordered chunks. Independent float64 log-sum-exp must
+reconstruct saved class predictions and NLL before later endpoints proceed.
+All parameter/buffer fingerprints remain fixed; completed collections return
+without constructing a model. Scientific run identity excludes report code.
+
+One immutable class-stratified five-fold partition is shared across endpoints.
+Each positive scalar temperature uses four folds and scores only the fifth;
+no scored image's label participates in its own fit. These previously inspected
+test data support post-hoc calibration diagnosis, not an untouched confirmatory
+benchmark or checkpoint selection. Raw accuracy curves remain unchanged.
+
+Training-retention cohorts are defined by SRT history and applied to identical
+image identities under both SRT and uniform checkpoints. Final clean-view fit
+is not generalization, and comparison with a previous augmented pre-update
+confidence does not isolate forgetting. Replay age, sample difficulty, class
+arrival, and exposure concentration require separate causal controls.
+
 ## Public Result Boundary
 
 Generated result trees remain ignored by default. A public result snapshot may

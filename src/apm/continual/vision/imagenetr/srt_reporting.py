@@ -24,6 +24,7 @@ import pyarrow.parquet as pq
 from PIL import Image as PILImage
 
 from apm.continual.artifacts import atomic_write, canonical_json_bytes, file_sha256
+from apm.continual.vision.imagenetr.checkpoint_diagnostic_reporting import checkpoint_report_parts, load_checkpoint_diagnostics, probability_gap
 from apm.continual.vision.imagenetr.joint_convergence_reporting import draw_joint_endpoint, joint_report_parts, load_joint_reference
 from apm.continual.vision.imagenetr.persistent_affine_reporting import (
     LABEL_H4096, LABEL_H8192, LABEL_MLP, LABEL_ORACLE_H4096, LABEL_ORACLE_H8192,
@@ -412,6 +413,11 @@ def _sections(
                        f"{control['accuracy_mean']:.3f}% mean task-50 accuracy (sample SD {control['accuracy_sample_sd']:.3f} points, three seeds) "
                        f"and {control['nll_mean']:.4f} NLL. The final sections compare it with the validation-selected joint reference and matched replay source. "
                        "The original SRT results below are unchanged.",)
+    if references.get("checkpoint_diagnostics") is not None:
+        gaps = probability_gap(references["checkpoint_diagnostics"])
+        latest_note = (f"New checkpoint diagnostics: the offline-minus-uniform NLL gap changes from {gaps['raw']:+.4f} to {gaps['calibrated']:+.4f} "
+                       "after out-of-fold temperature scaling. The final four sections also compare the same clean training images by SRT review history. "
+                       "These are post-hoc diagnostics; all original benchmark scores remain raw and unchanged.",)
     joint_marker_note = (() if references.get("joint_convergence") is None else (
         "The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. "
         "It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.",))
@@ -754,7 +760,8 @@ def write_srt_report(run: Path) -> Path:
     if result["protocol_hash"] != protocol["content_hash"] or result["selection_hash"] != selection["content_hash"] or selection["test_used"]:
         raise ValueError("SRT report protocol or validation-only selection changed")
     references = {**reference_results(run), "joint_convergence": load_joint_reference(run, result["content_hash"]),
-                  "schedule_matched_joint": load_schedule_reference(run, result["content_hash"])}
+                  "schedule_matched_joint": load_schedule_reference(run, result["content_hash"]),
+                  "checkpoint_diagnostics": load_checkpoint_diagnostics(run, result["content_hash"])}
     update_export = export_schedule_updates(run, references["schedule_matched_joint"])
     reports = run / "reports"
     reports.mkdir(parents=True, exist_ok=True)
@@ -796,6 +803,7 @@ def write_srt_report(run: Path) -> Path:
     joint_sections, joint_figures, joint_tables = joint_report_parts(reports, references["joint_convergence"], summaries)
     schedule_sections, schedule_figures, schedule_tables = schedule_report_parts(
         reports, references["schedule_matched_joint"], references["joint_convergence"], summaries, update_export)
+    diagnostic_sections, diagnostic_figures, diagnostic_tables = checkpoint_report_parts(reports, references["checkpoint_diagnostics"])
     tables = {"stage_metrics": stages, "sample_replay": samples, "replay_histograms": histograms,
               "sample_timelines": timelines, "condition_summary": summaries, "calibration": calibration,
               "resource_metrics": resources, "task_metrics": _task_rows({"conditions": jobs}),
@@ -804,7 +812,7 @@ def write_srt_report(run: Path) -> Path:
                                          "historical_fraction": jobs[name]["policy"]["historical_fraction"] if name in jobs else None,
                                          "interval_unit": jobs[name]["policy"]["interval_unit"] if name in jobs else None}
                                         for name, label in CONDITION_LABELS.items() if name not in FOLLOWUP_STYLES or name in jobs),
-              **joint_tables, **schedule_tables}
+              **joint_tables, **schedule_tables, **diagnostic_tables}
     tables["condition_names"] += tuple({"condition": row["condition"], "label": row["label"], "profile": None,
                                          "historical_fraction": None, "interval_unit": None}
                                         for row in (*joint_tables.get("joint_convergence_summary", ()), *schedule_tables.get("schedule_matched_summary", ())))
@@ -818,7 +826,7 @@ def write_srt_report(run: Path) -> Path:
         "intervals": _plot_requested_intervals(reports, pd.DataFrame(histograms)),
         "coverage": _plot_sample_coverage(reports, pd.DataFrame(samples), frame),
         "timelines": _plot_timelines(reports, pd.DataFrame(tuple(row for row in timelines if row["condition"] in NEW_STYLES))),
-        **joint_figures, **schedule_figures,
+        **joint_figures, **schedule_figures, **diagnostic_figures,
     }
     if followup is not None:
         figures = {**figures, "followup_accuracy": plot_followup_accuracy(reports, references, frame),
@@ -826,7 +834,7 @@ def write_srt_report(run: Path) -> Path:
                    "optimizer_work": plot_optimizer_work(reports, frame),
                    "followup_timelines": _plot_timelines(reports, pd.DataFrame(tuple(row for row in timelines if row["condition"] in FOLLOWUP_STYLES)),
                                                           "fixed_policy_sample_timelines.png")}
-    sections = _sections(run, reports, result, references, analyses, calibration, resources, figures) + joint_sections + schedule_sections
+    sections = _sections(run, reports, result, references, analyses, calibration, resources, figures) + joint_sections + schedule_sections + diagnostic_sections
     project = run.parents[4]
     pdf = project / "output/pdf/imagenetr50_srt_r16_report.pdf"
     render_report(sections, reports, pdf)
@@ -834,6 +842,7 @@ def write_srt_report(run: Path) -> Path:
     material["srt_analysis.py"] = file_sha256(Path(__file__).with_name("srt_analysis.py"))
     material["joint_convergence_reporting.py"] = file_sha256(Path(__file__).with_name("joint_convergence_reporting.py"))
     material["schedule_matched_reporting.py"] = file_sha256(Path(__file__).with_name("schedule_matched_reporting.py"))
+    material["checkpoint_diagnostic_reporting.py"] = file_sha256(Path(__file__).with_name("checkpoint_diagnostic_reporting.py"))
     manifest = sealed_record({
         "schema_version": "imagenetr50-srt-report-v1", "result_hash": result["content_hash"],
         "fixed_policy_followup": followup,
@@ -844,6 +853,9 @@ def write_srt_report(run: Path) -> Path:
             "pointer": references["schedule_matched_joint"]["pointer"], "protocol": references["schedule_matched_joint"]["protocol"],
             "result_hash": references["schedule_matched_joint"]["result"]["content_hash"]},
         "schedule_update_export": update_export,
+        "checkpoint_diagnostics": None if references["checkpoint_diagnostics"] is None else {
+            "pointer": references["checkpoint_diagnostics"]["pointer"], "protocol": references["checkpoint_diagnostics"]["protocol"],
+            "result_hash": references["checkpoint_diagnostics"]["result"]["content_hash"]},
         "report_code": material, "pdf": str(pdf), "pdf_sha256": file_sha256(pdf),
         "reference_protocol_hash": result["protocol_hash"],
         "condition_names": {row["condition"]: row["label"] for row in tables["condition_names"]},

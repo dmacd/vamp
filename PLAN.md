@@ -31,6 +31,27 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
+## In Progress - ImageNet-R Fixed-Checkpoint Probability and Replay Diagnostics
+
+- Approved follow-up: collect full logits without training, cross-fit one
+  positive scalar temperature, and compare the same clean training images
+  under SRT and uniform using SRT-defined review-history cohorts. The fixed
+  matrix is three schedule-matched offline seeds plus both standard/strict
+  H=4,096, old=0.8, unit=8 replay pairs: 138,000 forward image paths total.
+- New isolated runner, deterministic five-fold protocol, float64 NLL checks,
+  immutable inference chunks, full model-tensor/source authentication, and
+  four diagnostic pages in the existing SRT report are implemented. Focused
+  tests and real-data preflight precede inference. No optimizer is constructed.
+- Calibration is explicitly post-hoc on an already inspected test set;
+  each image is scored using a temperature fitted only on other folds.
+  Original raw benchmark results and main accuracy plots remain unchanged.
+- Config: `configs/vision/imagenetr/checkpoint_diagnostics.yaml`; protocol:
+  `docs/imagenetr50_checkpoint_diagnostics_protocol.md`; execution:
+  `bash scripts/vision/imagenetr/run_checkpoint_diagnostics_local.sh`.
+  Use one nice-10 GPU process with serial image loading given host-memory
+  pressure. Finish inference, report QA, and zero-forward reuse evidence;
+  replay-policy changes remain a separate, unrun causal control.
+
 ## Completed Outcome - ImageNet-R Offline Joint Control with Replay-Matched Optimization
 
 - The offline rank-16 control reaches **80.828% mean test accuracy (sample
@@ -95,8 +116,49 @@
   This control holds the optimizer schedule fixed while changing curriculum
   and cumulative sample weighting together. Compared with the older joint
   recipe, batch sizes, update count, rate history, and sampling also differ.
-  Next useful work, not launched: replicate replay under this fixed schedule,
-  then separate curriculum from weighting if its NLL advantage persists.
+  Replay replication and curriculum/weighting controls remain unrun.
+
+### Read-only follow-up diagnosis, 2026-09-12
+
+- Authenticated and paired the final predictions by identical test image,
+  label, and task. For the three offline seeds versus matched uniform replay,
+  898/896/891 images are wrong under both models. Their loss difference
+  contributes mean +0.16774 to whole-test NLL, versus the net +0.15122 gap;
+  other groups partly offset it. Mean conditional NLL on these shared mistakes
+  is 1.125 higher offline, corresponding to about 3.08 times lower geometric
+  mean true-class probability. This supports testing logit scale/calibration,
+  but does not prove global temperature scaling explains the difference.
+- The H=4,096 standard/old=0.8/unit=8 SRT run learns the first ten tasks to
+  89.686% weighted test accuracy at their respective arrival stages, versus
+  uniform's 90.060%. At task 50 these same task cohorts score 70.553% versus
+  81.913%. This is primarily a later old-task loss, not a similar-sized
+  initial-learning deficit. SRT is worse on 44 of the fifty final task scores.
+- SRT leaves 7,563 training images unrevisited during tasks 40-50, versus
+  seven for matched uniform. Of those SRT images, 6,239 last had quality 5
+  (at least 0.9 correct-label probability on that augmented presentation).
+  Meanwhile its top 1% most-presented images receive 9.120% of presentations
+  versus 2.366% under uniform; maximum per-image counts are 1,418 versus 97.
+  These are measured allocation differences, not proof that every unrevisited
+  image was forgotten or that every heavily repeated image was unhelpful.
+- Reconstructed all 844,640 events per matched arm. Summing each occurrence's
+  mean-loss coefficient, 1/batch_size, gives exactly 56,243 per arm. The top
+  5% of images by this coefficient receive 30.769% versus 14.899% of its sum.
+  This is not measured gradient influence: gradient magnitudes, directions,
+  momentum, and timing also matter. Previously quality-5 SRT reviews fall
+  below probability 0.5 on 12.274% of same-stage returns (383,378 events),
+  21.229% after a task boundary (140,758), and 27.426% after at least five
+  stages (16,481; a subset of cross-stage returns). Crop variation and changed
+  model/class sets are confounded; never-returned images are not in this rate.
+- Next diagnostic priority (now approved and implemented above): collect full logits from existing
+  checkpoints and test global temperature scaling with a separate calibration
+  partition or explicitly post-hoc cross-fitting, never fit and report NLL on
+  the same cases. Current prediction files lack full logits. Also re-evaluate
+  a common clean training population, grouped by last rehearsal time, to test
+  stale high-confidence estimates directly. A subsequent fixed-budget replay
+  ablation should distinguish long gaps from uneven per-image allocation,
+  preserving batch/old-current counts and accounting for 1/batch_size weights.
+  No training, report regeneration, commits, or pushes were performed for
+  this read-only investigation; prior scientific artifacts remain unchanged.
 
 ## Completed Outcome - ImageNet-R Task-50 Rank-16 Joint-IID Convergence
 
