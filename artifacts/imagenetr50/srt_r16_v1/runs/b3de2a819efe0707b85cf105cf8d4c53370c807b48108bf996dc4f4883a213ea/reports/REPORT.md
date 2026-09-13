@@ -2,7 +2,7 @@
 
 ## Original validation-selected results
 
-Latest follow-up: offline joint IID with the replay-matched optimizer schedule reaches 80.828% mean task-50 accuracy (sample SD 0.315 points, three seeds) and 1.0463 NLL. The final sections compare it with the validation-selected joint reference and matched replay source. The original SRT results below are unchanged.
+New checkpoint diagnostics: the offline-minus-uniform NLL gap changes from +0.1512 to +0.0185 after out-of-fold temperature scaling. The final four sections also compare the same clean training images by SRT review history. These are post-hoc diagnostics; all original benchmark scores remain raw and unchanged.
 
 Does confidence-based spaced repetition improve a single continuing rank-16 adapter compared with uniform replay under identical realized exposure? The ImageNet-R split is unchanged: 24,000 training images, 6,000 test images, and fifty four-class tasks in the existing seed-1993 order.
 
@@ -340,3 +340,70 @@ All three final test results remain in the main mean and standard deviation. The
 | 1993 | 48.412 | 2 | 905.4 | 1.12% | 77.34% | 98.83% |
 | 1994 | 22.898 | 1 | 200.7 | 13.57% | 77.20% | 99.27% |
 | 1995 | 122.752 | 1 | 1109.5 | 0.59% | 2.20% | 98.97% |
+
+## Checkpoint diagnostic: does confidence scale explain NLL?
+
+These are the already-trained task-50 rank-16 checkpoints, with no further optimizer updates. Offline denotes the three replay-schedule-matched joint-IID seeds. Every SRT/uniform row uses H=4,096, old=0.8, unit=8 and seed 1993; standard and strict identify the original threshold profiles.
+
+Divide every logit by one positive temperature T. This changes probabilities, not the winning class. Five fixed class-stratified folds each contain 1,200 test images. For each checkpoint, fit T on the other 4,800 and score only the held-out 1,200. OOF means the combined out-of-fold scores; the T column spans the five fits.
+
+The offline three-seed mean minus standard uniform NLL is +0.1512 before calibration and +0.0185 after it. The reduction is 87.8% of the raw gap. This tests a global confidence-scale explanation for that NLL difference. All 42,000 predicted classes remain unchanged. The table retains every seed, not a selected winner.
+
+This is a post-hoc diagnosis on a previously inspected test set, not a new benchmark score or an untouched validation study. No image's label fits its own temperature. All original raw results and main accuracy curves remain unchanged.
+
+| Condition | Accuracy | Raw NLL | OOF NLL | Fitted T |
+| --- | --- | --- | --- | --- |
+| Offline joint IID, seed 1993 | 81.183% | 1.0138 | 0.8207 | 1.673-1.689 |
+| Offline joint IID, seed 1994 | 80.717% | 1.0469 | 0.8464 | 1.681-1.696 |
+| Offline joint IID, seed 1995 | 80.583% | 1.0782 | 0.8486 | 1.736-1.754 |
+| SRT, standard | 73.967% | 1.2682 | 1.1493 | 1.412-1.424 |
+| Uniform replay, standard | 80.917% | 0.8951 | 0.8201 | 1.380-1.389 |
+| SRT, strict | 75.717% | 1.2217 | 1.0740 | 1.489-1.508 |
+| Uniform replay, strict | 80.750% | 0.8974 | 0.8319 | 1.348-1.361 |
+
+## Checkpoint diagnostic: probability reliability
+
+Each point groups predictions into one of fifteen fixed probability intervals. Its horizontal position is the mean probability assigned to the winning class; its vertical position is the fraction correct. The dotted diagonal is agreement between confidence and accuracy. Empty bins are omitted; sparse bins can fluctuate strongly.
+
+A single temperature can correct a common score scale, but cannot change class rankings or repair image-dependent errors. Brier scores, entropy, bin counts, calibration errors, and per-image raw/OOF scores are retained in the matching analysis tables.
+
+Standard SRT still has 1.1493 calibrated NLL versus uniform's 0.8201. Temperature scaling does not explain away the SRT deficit: its worse class predictions remain. Offline seed variation and single-seed replay also limit conclusions about the small residual offline/uniform gap.
+
+Temperatures were constrained only by numerical bounds 0.01-100; 0 of 35 fits reached a bound. Independent float64 log-sum-exp reproduced all original winning classes; the largest per-image NLL difference was 1.1e-06.
+
+![Checkpoint diagnostic: probability reliability](checkpoint_reliability.png)
+
+## Checkpoint diagnostic: did neglected training images stay learned?
+
+These are clean-view predictions on all 24,000 training images, not test accuracy. Define every group using SRT's recorded history, then score those exact same images with both SRT and its paired uniform checkpoint. The uniform column is not a separately selected uniform-history group.
+
+Under standard SRT, 6,239 images had no reviews in tasks 40-50 and last recorded p(true) >= 0.9. At the final clean evaluation, SRT misclassifies 569; uniform misclassifies 40 on those same images. Their accuracies are 90.88% and 99.36% respectively.
+
+The broader group with no reviews in tasks 40-50 contains 7,563 images and accounts for 795 of the net 1,020 additional training errors under standard SRT. Its deficit is therefore not solely worse generalization on unseen test images.
+
+The high-exposure group is the top 240 images by SRT presentation count, with ties broken by image ID. Standard-profile accuracy on these repeatedly selected images is 85.00% under SRT and 84.58% under uniform. This is consistent with concentrated effort on persistently difficult images alongside neglected, otherwise learnable images. It does not establish that a particular review was wasted or measure its gradient influence.
+
+Strict SRT is an important qualification: overall training accuracy is 96.91% versus 97.29%, yet test accuracy is 75.72% versus 80.75%. It also learns the most-repeated group better than uniform. Stale confidence does not by itself explain the full held-out deficit; better fitting of selected training cases need not improve generalization.
+
+| Condition | Images | SRT acc. | Uniform acc. | SRT NLL | Uniform NLL |
+| --- | --- | --- | --- | --- | --- |
+| Standard: All training images | 24,000 | 93.40% | 97.65% | 0.244 | 0.095 |
+| Standard: No reviews in tasks 40-50 | 7,563 | 88.73% | 99.25% | 0.427 | 0.032 |
+| Standard: No late reviews; last p(true) >= 0.9 | 6,239 | 90.88% | 99.36% | 0.351 | 0.028 |
+| Standard: Top 1% SRT presentation count | 240 | 85.00% | 84.58% | 0.476 | 0.528 |
+| Strict: All training images | 24,000 | 96.91% | 97.29% | 0.125 | 0.107 |
+| Strict: No reviews in tasks 40-50 | 4,734 | 93.51% | 99.56% | 0.228 | 0.020 |
+| Strict: No late reviews; last p(true) >= 0.9 | 4,221 | 94.84% | 99.60% | 0.182 | 0.017 |
+| Strict: Top 1% SRT presentation count | 240 | 92.08% | 82.50% | 0.277 | 0.570 |
+
+## Checkpoint diagnostic: review age and remaining uncertainty
+
+Both curves in each panel use the same SRT-defined image groups; n is their shared count. Empty groups have no point. A late last review is not a randomized intervention: difficulty, class, task arrival, and past mistakes all affect membership.
+
+The previous confidence came from an augmented presentation before its optimizer update; the new score uses the final model, a clean view, and all 200 classes. Their difference combines later learning, crop changes, competing classes, and the last update. It is not a matched-view measurement of forgetting.
+
+The next causal control should keep realized batches and old/current counts fixed while changing replay selection: compare a maximum review-gap rule with a cap on repeated-image allocation. Neither intervention has run here. Replay endpoints remain single-seed; five calibration folds are not five independent model fits.
+
+Diagnostic work: 138,000 forward image paths, zero optimizer steps; 9.80 measured collection minutes. This time excludes setup, model restoration, report generation, and extra audits. Source identities and every model parameter/buffer are checked; immutable 1,024-image chunks allow completed inference to be reused.
+
+![Checkpoint diagnostic: review age and remaining uncertainty](checkpoint_training_review_age.png)

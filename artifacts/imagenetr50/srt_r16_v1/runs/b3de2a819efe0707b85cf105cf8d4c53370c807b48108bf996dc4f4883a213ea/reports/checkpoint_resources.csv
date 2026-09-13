@@ -1,0 +1,12 @@
+condition,split,model_forward_images,optimizer_steps,wall_seconds
+offline_seed_1993,test,6000,0,26.66293567046523
+offline_seed_1994,test,6000,0,24.826300295069814
+offline_seed_1995,test,6000,0,25.13079564832151
+srt_h4096_standard_rho80_unit8,test,6000,0,26.51466948725283
+srt_h4096_standard_rho80_unit8,train,24000,0,106.62326483801007
+uniform_h4096_standard_rho80_unit8,test,6000,0,26.020264459773898
+uniform_h4096_standard_rho80_unit8,train,24000,0,99.60779731720686
+srt_h4096_strict_rho80_unit8,test,6000,0,25.14893231727183
+srt_h4096_strict_rho80_unit8,train,24000,0,102.46601454168558
+uniform_h4096_strict_rho80_unit8,test,6000,0,25.281566763296723
+uniform_h4096_strict_rho80_unit8,train,24000,0,99.47642154246569

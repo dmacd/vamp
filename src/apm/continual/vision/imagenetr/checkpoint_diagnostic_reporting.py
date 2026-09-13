@@ -116,6 +116,8 @@ def plot_training_review_age(reports: Path, tables: dict[str, tuple[dict[str, ob
     """Compare identical SRT-defined last-review bins under SRT and uniform models."""
     figure, axes = plt.subplots(2, 2, figsize=(9.5, 7), constrained_layout=True)
     groups = ((1, 10), (11, 20), (21, 30), (31, 39), (40, 49), (50, 50))
+    minimum_accuracy = min(row["accuracy"] for row in tables["checkpoint_training_cohorts"]
+                           if row["cohort"].startswith("last_review_") and row["accuracy"] is not None)
     for column, profile in enumerate(("standard", "strict")):
         for axis, metric in zip(axes[:, column], ("accuracy", "nll"), strict=True):
             for method, color in (("srt", "#b5179e"), ("uniform", "#00796b")):
@@ -127,13 +129,13 @@ def plot_training_review_age(reports: Path, tables: dict[str, tuple[dict[str, ob
                 if method == "srt" and metric == "accuracy":
                     for index, row in enumerate(rows):
                         if row["examples"]:
-                            axis.annotate(f"n={row['examples']:,}", (index, row[metric]), xytext=(0, -14), textcoords="offset points",
-                                          ha="center", fontsize=8)
+                            axis.annotate(f"n={row['examples']:,}", (index, row[metric]), xytext=(-3 if index == 5 else 0, -14),
+                                          textcoords="offset points", ha="right" if index == 5 else "center", fontsize=9.5)
             axis.set(xticks=range(6), xticklabels=[f"{lo}-{hi}" if lo != hi else str(lo) for lo, hi in groups],
                      xlabel="Last training stage recorded under SRT", ylabel="Clean training accuracy (%)" if metric == "accuracy" else "Clean training NLL")
             if metric == "accuracy":
                 axis.set_title(profile.capitalize() + " profile; same images in both curves")
-                axis.set_ylim(0, 103)
+                axis.set_ylim(max(0, 5 * math.floor(minimum_accuracy / 5) - 5), 103)
             axis.grid(axis="y", alpha=.2)
     figure.legend(*axes[0, 0].get_legend_handles_labels(), loc="outside lower center", ncol=2, frameon=False, fontsize=11)
     path = reports / "checkpoint_training_review_age.png"
@@ -150,6 +152,8 @@ def checkpoint_report_parts(reports: Path, reference: dict[str, object] | None) 
     tables = reference["tables"]
     scores = {(row["condition"], row["score_mode"]): row for row in tables["checkpoint_probability_summary"]}
     gaps = probability_gap(reference)
+    reduction_note = (f"The reduction is {100 * (1 - gaps['calibrated'] / gaps['raw']):.1f}% of the raw gap. "
+                      if gaps["raw"] else "There is no raw mean gap to reduce. ")
     rows = tuple((LABELS[name], f"{scores[name, 'raw']['accuracy']:.3f}%", f"{scores[name, 'raw']['nll']:.4f}",
                   f"{scores[name, 'calibrated']['nll']:.4f}",
                   f"{scores[name, 'raw']['temperature_min']:.3f}-{scores[name, 'raw']['temperature_max']:.3f}") for name in LABELS)
@@ -164,6 +168,11 @@ def checkpoint_report_parts(reports: Path, reference: dict[str, object] | None) 
         for profile in ("standard", "strict") for group, label in groups
         for srt, uniform in ((cohorts[profile, group, "srt"], cohorts[profile, group, "uniform"]),)))
     stale = tuple(cohorts["standard", "unrevisited_and_last_probability_ge90", method] for method in ("srt", "uniform"))
+    unrevisited = tuple(cohorts["standard", "unrevisited_tasks40_50", method] for method in ("srt", "uniform"))
+    whole = tuple(cohorts["standard", "all", method] for method in ("srt", "uniform"))
+    repeated = tuple(cohorts["standard", "top1pct_presentations", method] for method in ("srt", "uniform"))
+    strict_fit = tuple(cohorts["strict", "all", method] for method in ("srt", "uniform"))
+    strict_test = tuple(scores[f"{method}_h4096_strict_rho80_unit8", "raw"] for method in ("srt", "uniform"))
     parity = max(row["maximum_nll_difference"] for row in tables["checkpoint_prediction_parity"])
     bound_count = sum(row["at_numerical_bound"] for row in tables["checkpoint_temperature_fits"])
     figures = {"checkpoint_reliability": plot_probability_diagnostics(reports, tables),
@@ -175,7 +184,8 @@ def checkpoint_report_parts(reports: Path, reference: dict[str, object] | None) 
             "Divide every logit by one positive temperature T. This changes probabilities, not the winning class. Five fixed class-stratified folds each contain 1,200 test images. "
             "For each checkpoint, fit T on the other 4,800 and score only the held-out 1,200. OOF means the combined out-of-fold scores; the T column spans the five fits.",
             f"The offline three-seed mean minus standard uniform NLL is {gaps['raw']:+.4f} before calibration and {gaps['calibrated']:+.4f} after it. "
-            "The table reports every seed, not a selected winner. All 42,000 predicted classes remain unchanged.",
+            + reduction_note + "This tests a global confidence-scale explanation for that NLL difference. "
+            "All 42,000 predicted classes remain unchanged. The table retains every seed, not a selected winner.",
             "This is a post-hoc diagnosis on a previously inspected test set, not a new benchmark score or an untouched validation study. "
             "No image's label fits its own temperature. All original raw results and main accuracy curves remain unchanged.",
         ), table=quality),
@@ -184,6 +194,9 @@ def checkpoint_report_parts(reports: Path, reference: dict[str, object] | None) 
             "its vertical position is the fraction correct. The dotted diagonal is agreement between confidence and accuracy. Empty bins are omitted; sparse bins can fluctuate strongly.",
             "A single temperature can correct a common score scale, but cannot change class rankings or repair image-dependent errors. "
             "Brier scores, entropy, bin counts, calibration errors, and per-image raw/OOF scores are retained in the matching analysis tables.",
+            f"Standard SRT still has {scores['srt_h4096_standard_rho80_unit8', 'calibrated']['nll']:.4f} calibrated NLL versus "
+            f"uniform's {scores['uniform_h4096_standard_rho80_unit8', 'calibrated']['nll']:.4f}. Temperature scaling does not explain away the SRT deficit: "
+            "its worse class predictions remain. Offline seed variation and single-seed replay also limit conclusions about the small residual offline/uniform gap.",
             f"Temperatures were constrained only by numerical bounds 0.01-100; {bound_count} of 35 fits reached a bound. "
             f"Independent float64 log-sum-exp reproduced all original winning classes; the largest per-image NLL difference was {parity:.3g}.",
         ), (figures["checkpoint_reliability"],)),
@@ -193,8 +206,17 @@ def checkpoint_report_parts(reports: Path, reference: dict[str, object] | None) 
             f"Under standard SRT, {stale[0]['examples']:,} images had no reviews in tasks 40-50 and last recorded p(true) >= 0.9. "
             f"At the final clean evaluation, SRT misclassifies {stale[0]['now_wrong']:,}; uniform misclassifies {stale[1]['now_wrong']:,} on those same images. "
             f"Their accuracies are {stale[0]['accuracy']:.2f}% and {stale[1]['accuracy']:.2f}% respectively.",
+            f"The broader group with no reviews in tasks 40-50 contains {unrevisited[0]['examples']:,} images and accounts for "
+            f"{unrevisited[0]['now_wrong'] - unrevisited[1]['now_wrong']:,} of the net {whole[0]['now_wrong'] - whole[1]['now_wrong']:,} "
+            "additional training errors under standard SRT. Its deficit is therefore not solely worse generalization on unseen test images.",
             "The high-exposure group is the top 240 images by SRT presentation count, with ties broken by image ID. "
-            "It tests whether repeated images remain difficult; it does not measure their gradient influence or establish that their reviews were wasted.",
+            f"Standard-profile accuracy on these repeatedly selected images is {repeated[0]['accuracy']:.2f}% under SRT and {repeated[1]['accuracy']:.2f}% under uniform. "
+            "This is consistent with concentrated effort on persistently difficult images alongside neglected, otherwise learnable images. "
+            "It does not establish that a particular review was wasted or measure its gradient influence.",
+            f"Strict SRT is an important qualification: overall training accuracy is {strict_fit[0]['accuracy']:.2f}% versus {strict_fit[1]['accuracy']:.2f}%, "
+            f"yet test accuracy is {strict_test[0]['accuracy']:.2f}% versus {strict_test[1]['accuracy']:.2f}%. "
+            "It also learns the most-repeated group better than uniform. Stale confidence does not by itself explain the full held-out deficit; "
+            "better fitting of selected training cases need not improve generalization.",
         ), table=retention),
         ReportSection("Checkpoint diagnostic: review age and remaining uncertainty", (
             "Both curves in each panel use the same SRT-defined image groups; n is their shared count. Empty groups have no point. "
@@ -204,7 +226,8 @@ def checkpoint_report_parts(reports: Path, reference: dict[str, object] | None) 
             "The next causal control should keep realized batches and old/current counts fixed while changing replay selection: compare a maximum review-gap rule with a cap on repeated-image allocation. "
             "Neither intervention has run here. Replay endpoints remain single-seed; five calibration folds are not five independent model fits.",
             f"Diagnostic work: 138,000 forward image paths, zero optimizer steps; {sum(row['wall_seconds'] for row in tables['checkpoint_resources']) / 60:.2f} measured collection minutes. "
-            "Source checkpoint/data identities and every model parameter/buffer are checked. Immutable 1,024-image chunks allow completed inference to be reused.",
+            "This time excludes setup, model restoration, report generation, and extra audits. Source identities and every model parameter/buffer are checked; "
+            "immutable 1,024-image chunks allow completed inference to be reused.",
         ), (figures["checkpoint_review_age"],)),
     )
     return sections, figures, tables

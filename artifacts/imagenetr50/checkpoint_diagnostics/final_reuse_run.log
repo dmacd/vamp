@@ -1,0 +1,19 @@
+Checkpoint diagnostic working artifacts: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/checkpoint_diagnostics/runs/6f23cffe01196eab7b2e36451d7ea3e2ab40c5360a5864aa857fdcbd3225d03c
+Phase immutable dataset-byte audit
+Original prediction parity: zero class mismatches; maximum NLL difference 9.25e-07
+Original prediction parity: zero class mismatches; maximum NLL difference 9.42e-07
+Original prediction parity: zero class mismatches; maximum NLL difference 1e-06
+Original prediction parity: zero class mismatches; maximum NLL difference 8.82e-07
+Original prediction parity: zero class mismatches; maximum NLL difference 6.16e-07
+Original prediction parity: zero class mismatches; maximum NLL difference 1.1e-06
+Original prediction parity: zero class mismatches; maximum NLL difference 7.55e-07
+Report audit: SRT rank 16, 1,024-equivalent budget
+Report audit: Uniform replay rank 16, 1,024-equivalent budget
+Report audit: SRT rank 16, 4,096-equivalent budget
+Report audit: Uniform replay rank 16, 4,096-equivalent budget
+Report audit: SRT rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: SRT rank 16, H=4,096; strict, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; strict, old=0.8, unit=8
+Diagnostic invocation: 0 forward images, zero optimizer steps
+/home/daniel/projects/snet/rpa/output/pdf/imagenetr50_srt_r16_report.pdf

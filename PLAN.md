@@ -31,26 +31,65 @@
   corpora, checkpoints, optimizer state, caches, and unselected generated
   artifacts remain excluded.
 
-## In Progress - ImageNet-R Fixed-Checkpoint Probability and Replay Diagnostics
+## Completed Results - ImageNet-R Fixed-Checkpoint Probability and Replay Diagnostics
 
 - Approved follow-up: collect full logits without training, cross-fit one
   positive scalar temperature, and compare the same clean training images
   under SRT and uniform using SRT-defined review-history cohorts. The fixed
   matrix is three schedule-matched offline seeds plus both standard/strict
   H=4,096, old=0.8, unit=8 replay pairs: 138,000 forward image paths total.
-- New isolated runner, deterministic five-fold protocol, float64 NLL checks,
-  immutable inference chunks, full model-tensor/source authentication, and
-  four diagnostic pages in the existing SRT report are implemented. Focused
-  tests and real-data preflight precede inference. No optimizer is constructed.
+- The run is
+  `6f23cffe01196eab7b2e36451d7ea3e2ab40c5360a5864aa857fdcbd3225d03c`,
+  sealed result
+  `5fbcf4ea2b16ad4b70396524a4468d54400b30e8bc117aa5215d5131dbbdef50`.
+  Code and protocol were committed/pushed as `79a760b` before inference.
+  All 138,000 forward image paths completed with zero optimizer steps;
+  measured collection time was 587.759 seconds, excluding setup, model
+  restoration, report generation, and additional audits. No worker failed.
+- Global positive temperature scaling removes 87.8% of the observed offline
+  versus standard-uniform NLL gap: 0.15122 raw becomes 0.01845 out of fold.
+  Offline three-seed mean NLL changes from 1.0463 to 0.8386; standard uniform
+  changes from 0.8951 to 0.8201. All winning classes remain unchanged. SRT's
+  calibrated NLL is still 1.1493 (standard) and 1.0740 (strict), versus
+  matched uniform's 0.8201 and 0.8319. Calibration does not remove its deficit.
+- Standard SRT's 6,239 stale/high-confidence training images score 90.880%
+  versus uniform's 99.359% on identical clean views (569 versus 40 errors).
+  The broader 7,563-image unrevisited cohort contributes 795 of its net
+  1,020 additional training errors. Its 240 most-presented images score
+  85.00% versus 84.58%, consistent with difficult-image concentration
+  alongside missed retention, not proof that every extra review was wasted.
+- Strict SRT qualifies that account: overall clean-training accuracy is
+  96.913% versus 97.288%, yet test accuracy is 75.717% versus 80.750%.
+  Its most-presented group improves to 92.08% versus 82.50%. Its 4,221
+  stale/high-confidence images still score 94.835% versus 99.597%.
+  Better fit on selected training cases does not explain held-out accuracy;
+  review age, difficulty, class arrival, and augmentation remain confounded.
 - Calibration is explicitly post-hoc on an already inspected test set;
   each image is scored using a temperature fitted only on other folds.
   Original raw benchmark results and main accuracy plots remain unchanged.
 - Config: `configs/vision/imagenetr/checkpoint_diagnostics.yaml`; protocol:
   `docs/imagenetr50_checkpoint_diagnostics_protocol.md`; execution:
   `bash scripts/vision/imagenetr/run_checkpoint_diagnostics_local.sh`.
-  Use one nice-10 GPU process with serial image loading given host-memory
-  pressure. Finish inference, report QA, and zero-forward reuse evidence;
-  replay-policy changes remain a separate, unrun causal control.
+- All 30,000 dataset image bytes and the exact seven source checkpoints,
+  original training code, and installed environment authenticate. Every
+  model parameter/buffer remains fixed. Independent float64 losses reproduce
+  all 42,000 original test predictions exactly; maximum per-image NLL
+  difference is 0.000001104. All 35 temperature fits are interior to bounds.
+- Completed-work reuse performs zero model forwards and zero optimizer steps;
+  340 scientific/source files retain identical hash, size, and modification
+  time. The single-process focused slices pass 189 tests (16 deliberately
+  excluded integration/benchmark cases); five explicit report/evidence/layout
+  checks also pass. No TRACE files or unrelated research-summary work changed.
+- The existing SRT report gains four visually reviewed diagnostic pages
+  (30 total), two figures,
+  and eight analysis table families, including all 42,000 out-of-fold test
+  records and 48,000 paired training records. Compact evidence and collection
+  manifests are retained under `artifacts/imagenetr50/checkpoint_diagnostics/`;
+  raw logit chunks, weights, and redundant large per-image JSON remain local.
+- Next causal control, not launched: preserve realized batches and old/current
+  counts while separately testing maximum review gaps and capped repeated-image
+  allocation, then replicate comparisons. Stale confidence alone does not
+  explain the strict profile's held-out deficit. No new gating rule is added.
 
 ## Completed Outcome - ImageNet-R Offline Joint Control with Replay-Matched Optimization
 
