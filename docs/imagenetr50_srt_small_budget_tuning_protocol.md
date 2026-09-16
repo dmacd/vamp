@@ -82,3 +82,16 @@ wall time, per-image replay counts and timing distributions. Authenticate
 membership and prediction/checkpoint hashes, verify exact paired schedules,
 prove zero-step completed-job reuse and inspect the final PDF. Use one nice-10
 GPU worker, bounded loading, resumable checkpoints and active health checks.
+
+## Commands
+
+```bash
+bash scripts/vision/imagenetr/run_srt_followup_local.sh run --config configs/vision/imagenetr/srt_h256_rho80_unit8.yaml
+bash scripts/vision/imagenetr/run_srt_followup_local.sh run --config configs/vision/imagenetr/srt_h128_rho80_unit8.yaml
+bash scripts/vision/imagenetr/run_srt_tuning_local.sh
+```
+
+Use `status` or `report` with the corresponding runner for non-training
+inspection or report reconstruction. Tuning refuses to start until the unchanged
+H=128 baseline has completed. All three workflows share the source-run worker
+lock, and completed jobs return without constructing a model or optimizing.

@@ -209,7 +209,8 @@ def test_lower_budget_figure_and_pages_include_all_budgets_and_offline_endpoints
     from apm.continual.vision.imagenetr.srt_reporting import ALL_STYLES, render_report
     root, index_path = tiny_full_stream
     source = analyze_replay_job(root, index_path, "srt_h1024")
-    analyses = {name: replace(source, totals={**source.totals, "condition": name}) for name in ALL_STYLES
+    analyses = {name: replace(source, histograms=tuple({**row, "condition": name} for row in source.histograms),
+                              totals={**source.totals, "condition": name}) for name in ALL_STYLES
                 if not any(f"_h{capacity}_" in name for capacity in (128, 256, 512) if capacity not in budgets)}
     references = {
         "stage_matched_joint": [{"accuracy": 80.}] * 50,
@@ -219,14 +220,14 @@ def test_lower_budget_figure_and_pages_include_all_budgets_and_offline_endpoints
             "evaluations": [{"seed": seed, "metrics": {"accuracy": 82., "nll": .7}} for seed in (1993, 1994, 1995)]}},
     }
     sections, figures = budget_report_parts(tmp_path, references, analyses)
-    assert len(sections) == 2
+    assert len(sections) == 3
     assert len(sections[0].table.rows) == 6 + 2 * len(budgets)
     assert figures["standard_budget_comparison"].is_file()
     sections = tuple(replace(section, paragraphs=("SYNTHETIC FIXTURE - NOT EXPERIMENTAL RESULTS.", *section.paragraphs)) for section in sections)
     pdf = tmp_path / "budget_fixture.pdf"
     render_report(sections, tmp_path, pdf)
     pages = PdfReader(pdf).pages
-    assert len(pages) == 2
+    assert len(pages) == 3
     assert f"H={min(budgets)}" in pages[0].extract_text()
     assert "56,243" in pages[0].extract_text()
     assert "NLL across fixed-policy budgets" in pages[1].extract_text()

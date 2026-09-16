@@ -22,8 +22,8 @@ preserve them in Parquet and the compact report tables without overflow.
 Review state, pool ordering, weights, momentum, RNG state, counters, and trace
 references share one atomic checkpoint boundary. Trace chunks are immutable;
 uncommitted orphan chunks cannot enter reports or affect replay after resume.
-Calibration sees only the training-derived fitting/validation partition and
-selects mean stage accuracy before fresh full-data runs. Comparison artifacts
+The original calibration sees only the training-derived fitting/validation
+partition and selects mean stage accuracy before fresh full-data runs. Comparison artifacts
 are imported read-only into a separate report, never appended to old results.
 
 Fixed-policy follow-ups live under the sealed SRT run's `followups/<hash>`
@@ -41,6 +41,21 @@ Separate sealed pointers register each completed extension. The report combines
 them only after authenticating their jobs and rejects overlapping condition
 identities instead of replacing an earlier result. Status queries select the
 requested configuration, not another follow-up's global latest-run pointer.
+
+The H=128 tuning extension instead selects **task-50 validation accuracy**.
+Every candidate reaches the full horizon, with NLL used only to break accuracy
+ties. A finite policy grid is followed by learning-rate changes and local
+one-coordinate refinements; the rule is frozen before training and each phase
+decision is sealed before constructing the next candidates. Recipe hashes
+deduplicate work across phases and resume. Training and SM-2 code remain shared
+with the original run; only explicit policy and learning-rate values change.
+
+The selected recipe is sealed before its full-data SRT/uniform refits. Its
+uniform control shares both the selected optimizer settings and realized batch
+schedule, not just H. An unchanged winning recipe reuses the existing baseline
+pair. The report reconstructs all validation decisions and predictions, and
+separates search cost from final-stream cost. No test score enters selection;
+single-seed results and reuse of the validation split remain explicit limits.
 
 The current complete per-image report projection is `replay_samples.parquet`
 (with CSV/JSON forms). The earlier `sample_replay.parquet` remains an immutable,

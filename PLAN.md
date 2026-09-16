@@ -111,9 +111,19 @@
   uniform control; reuse the baseline if its recipe wins unchanged. Append
   curves, selection evidence, replay timing and separate search/final-run work
   to the existing report. Keep original results and diagnostic inputs immutable.
-- Pending: commit/launch the two baseline pairs, implement and verify the
-  tuning workflow and report integration, run the frozen search, authenticate
-  the final selected pair, visually inspect the report and publish evidence.
+- Definitions and baseline report support were committed and pushed as
+  `eb8c7ce` before launch. H=256 is running at nice 10; H=128 is queued next.
+  No new training engine or source-algorithm change was needed.
+- The tuning runner, finite candidate constructors, validation-only selection,
+  immutable phase decisions, numerical-failure records, zero-step reuse and
+  report integration are implemented. Forty short tests and both synthetic
+  tuned-report layout variants pass. The core SRT training files remain unchanged.
+- The tuning implementation is committed before its GPU work. All five pages
+  of the synthetic search appendix pass visual review, including the complete
+  candidate ledger; none of those synthetic values are experiment evidence.
+- Pending: finish the two baseline pairs; run the frozen search; authenticate
+  the final selected pair, visually inspect the real report and publish the
+  complete evidence.
 
 ## Completed Outcome - ImageNet-R SRT versus Uniform at H=512
 

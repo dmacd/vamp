@@ -19,8 +19,8 @@ def budget_report_parts(
 ) -> tuple[tuple[ReportSection, ...], dict[str, Path]]:
     """Compare all completed fixed-policy budgets and explicitly labeled offline endpoints."""
     from apm.continual.vision.imagenetr.srt_reporting import (
-        ALL_STYLES, LABEL_STAGE_JOINT,
-        ReportSection, ReportTable, _draw_task50_endpoints, _finish_axis, _save_figure, _shared_legend,
+        ALL_STYLES, LABEL_STAGE_JOINT, LOW_BUDGET_STYLES,
+        ReportSection, ReportTable, _draw_task50_endpoints, _finish_axis, _plot_requested_intervals, _save_figure, _shared_legend,
     )
     from apm.continual.vision.imagenetr.joint_convergence_reporting import endpoint_summary
     from apm.continual.vision.imagenetr.schedule_matched_reporting import control_summary
@@ -90,4 +90,12 @@ def budget_report_parts(
             "The earlier report's other frontier and joint comparisons remain in their original panels.",
         ), (path,)),
     )
-    return sections, {"standard_budget_comparison": path}
+    intervals = _plot_requested_intervals(reports, pd.DataFrame(tuple(row for name in LOW_BUDGET_STYLES if name in analyses
+                                                                    for row in analyses[name].histograms)), "small_budget_intervals.png")
+    sections += (ReportSection("Small budgets: requested and realized review spacing", (
+        "These are the standard-policy H=128/256/512 runs that have completed. Requested intervals and actual gaps use the same scheduling clock. "
+        "A rightward shift means an image waited beyond its requested interval. The older-budget panels remain in the main replay-timing section.",
+        "H limits presentation work, not stored history. These scheduling-clock gaps are not optimizer-step gaps or wall time; "
+        "the report's replay-timing curves and per-image tables retain those distinctions.",
+    ), (intervals,)),)
+    return sections, {"standard_budget_comparison": path, "small_budget_intervals": intervals}

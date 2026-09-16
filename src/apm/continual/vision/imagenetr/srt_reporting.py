@@ -51,6 +51,8 @@ CONDITION_LABELS = {
     **{f"{method}_h{capacity}_standard_rho80_unit8":
        f"{'SRT' if method == 'srt' else 'Uniform replay'} rank 16, H={capacity}; standard, old=0.8, unit=8"
        for capacity in (128, 256, 512) for method in ("srt", "uniform")},
+    "srt_h128_tuned": "SRT rank 16, H=128; final-validation-accuracy tuned",
+    "uniform_h128_tuned": "Uniform replay rank 16, H=128; matched tuned-SRT recipe",
 }
 REFERENCE_STYLES = {
     LABEL_H4096: ("#1f77b4", "-"), LABEL_H8192: ("#d95f02", "-"),
@@ -66,7 +68,8 @@ FOLLOWUP_STYLES = {f"{method}_h4096_{profile}_rho80_unit8":
 LOW_BUDGET_STYLES = {f"{method}_h{capacity}_standard_rho80_unit8": (color, "-" if method == "srt" else "--")
                      for capacity, color in ((128, "#005b96"), (256, "#cb6b16"), (512, "#346b21"))
                      for method in ("srt", "uniform")}
-ALL_STYLES = {**NEW_STYLES, **FOLLOWUP_STYLES, **LOW_BUDGET_STYLES}
+TUNED_STYLES = {f"{method}_h128_tuned": ("#6a1b9a", "-" if method == "srt" else "--") for method in ("srt", "uniform")}
+ALL_STYLES = {**NEW_STYLES, **FOLLOWUP_STYLES, **LOW_BUDGET_STYLES, **TUNED_STYLES}
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,7 +320,7 @@ def _plot_replay(reports: Path, histograms: pd.DataFrame, stages: pd.DataFrame) 
     return _save_figure(figure, reports / "replay_timing.png")
 
 
-def _plot_requested_intervals(reports: Path, histograms: pd.DataFrame) -> Path:
+def _plot_requested_intervals(reports: Path, histograms: pd.DataFrame, filename: str = "requested_and_actual_intervals.png") -> Path:
     conditions = tuple(name for name in ALL_STYLES if name.startswith("srt_") and name in set(histograms.condition))
     rows = math.ceil(len(conditions) / 2)
     figure, axes = plt.subplots(rows, 2, figsize=(9.5, 4 * rows), constrained_layout=True, squeeze=False)
@@ -332,7 +335,7 @@ def _plot_requested_intervals(reports: Path, histograms: pd.DataFrame) -> Path:
                  title=textwrap.fill(CONDITION_LABELS[condition], 43), ylim=(0, 1.02))
         axis.legend(frameon=False, fontsize=10)
         axis.grid(alpha=.2)
-    return _save_figure(figure, reports / "requested_and_actual_intervals.png")
+    return _save_figure(figure, reports / filename)
 
 
 def _plot_sample_coverage(reports: Path, samples: pd.DataFrame, stages: pd.DataFrame) -> Path:
@@ -436,8 +439,14 @@ def _sections(
         latest_note = (f"Latest fixed-policy follow-up: H={capacity} with standard thresholds, old=0.8 and unit=8 reaches "
                        f"{srt['final_accuracy']:.3f}% SRT accuracy / {srt['final_nll']:.4f} NLL versus "
                        f"{uniform['final_accuracy']:.3f}% uniform / {uniform['final_nll']:.4f} NLL. "
-                       "The next two sections compare budgets under the same configured policy and include the newer offline references. "
+                       "The opening comparison sections cover budgets under the same configured policy and include the newer offline references. "
                        "All earlier results and checkpoint diagnostics remain unchanged.",)
+    if references.get("srt_tuning") is not None:
+        tuned = references["srt_tuning"]
+        chosen_srt = analyses[next(name for name in tuned["result"]["conditions"] if name.startswith("srt_"))].totals
+        latest_note = (f"H=128 final-accuracy tuning is complete: the validation-selected SRT recipe reaches {chosen_srt['final_accuracy']:.3f}% "
+                       f"task-50 test accuracy and {chosen_srt['final_nll']:.4f} raw NLL. The opening sections show its selected hyperparameters, "
+                       "matched uniform control, full candidate ledger and separately charged search cost.", *latest_note)
     joint_marker_note = (() if references.get("joint_convergence") is None else (
         "The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. "
         "It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.",))
@@ -798,6 +807,9 @@ def write_srt_report(run: Path) -> Path:
     references = {**reference_results(run), "joint_convergence": load_joint_reference(run, result["content_hash"]),
                   "schedule_matched_joint": load_schedule_reference(run, result["content_hash"]),
                   "checkpoint_diagnostics": load_checkpoint_diagnostics(run, result["content_hash"])}
+    from apm.continual.vision.imagenetr.srt_tuning_reporting import load_tuning_reference, tuning_report_parts
+    tuning = load_tuning_reference(run, result["content_hash"])
+    references = {**references, "srt_tuning": tuning}
     if (references["checkpoint_diagnostics"] is not None
             and file_sha256(run / "reports/sample_replay.parquet") != references["checkpoint_diagnostics"]["protocol"]["config"]["history_sha256"]):
         raise ValueError("the frozen replay-history input to checkpoint diagnostics changed")
@@ -805,6 +817,10 @@ def write_srt_report(run: Path) -> Path:
     reports = run / "reports"
     reports.mkdir(parents=True, exist_ok=True)
     extra_roots, followup = followup_report_jobs(run, result["content_hash"])
+    if tuning is not None and not tuning["result"]["baseline_reused"]:
+        if extra_roots.keys() & tuning["roots"].keys():
+            raise ValueError("tuned conditions would overwrite fixed-policy evidence")
+        extra_roots = {**extra_roots, **tuning["roots"]}
     job_roots = {**{name: run / "final" / name for name in NEW_STYLES}, **extra_roots}
     jobs = {name: read_sealed(root / "result.json") for name, root in job_roots.items()}
     analyses = {}
@@ -843,6 +859,7 @@ def write_srt_report(run: Path) -> Path:
     schedule_sections, schedule_figures, schedule_tables = schedule_report_parts(
         reports, references["schedule_matched_joint"], references["joint_convergence"], summaries, update_export)
     diagnostic_sections, diagnostic_figures, diagnostic_tables = checkpoint_report_parts(reports, references["checkpoint_diagnostics"])
+    tuning_sections, tuning_figures, tuning_tables = tuning_report_parts(reports, tuning, references, analyses)
     tables = {"stage_metrics": stages, "replay_samples": samples, "replay_histograms": histograms,
               "sample_timelines": timelines, "condition_summary": summaries, "calibration": calibration,
               "resource_metrics": resources, "task_metrics": _task_rows({"conditions": jobs}),
@@ -851,7 +868,7 @@ def write_srt_report(run: Path) -> Path:
                                          "historical_fraction": jobs[name]["policy"]["historical_fraction"] if name in jobs else None,
                                          "interval_unit": jobs[name]["policy"]["interval_unit"] if name in jobs else None}
                                         for name, label in CONDITION_LABELS.items() if name not in ALL_STYLES or name in jobs),
-              **joint_tables, **schedule_tables, **diagnostic_tables}
+              **joint_tables, **schedule_tables, **diagnostic_tables, **tuning_tables}
     tables["condition_names"] += tuple({"condition": row["condition"], "label": row["label"], "profile": None,
                                          "historical_fraction": None, "interval_unit": None}
                                         for row in (*joint_tables.get("joint_convergence_summary", ()), *schedule_tables.get("schedule_matched_summary", ())))
@@ -862,10 +879,10 @@ def write_srt_report(run: Path) -> Path:
         "accuracy": plot_accuracy(reports, references, frame), "nll": _plot_nll_and_gaps(reports, references, frame),
         "resources": _plot_resources(reports, pd.DataFrame(resources)),
         "replay": _plot_replay(reports, pd.DataFrame(histograms), frame),
-        "intervals": _plot_requested_intervals(reports, pd.DataFrame(histograms)),
+        "intervals": _plot_requested_intervals(reports, pd.DataFrame(tuple(row for row in histograms if row["condition"] in {*NEW_STYLES, *FOLLOWUP_STYLES}))),
         "coverage": _plot_sample_coverage(reports, pd.DataFrame(samples), frame),
         "timelines": _plot_timelines(reports, pd.DataFrame(tuple(row for row in timelines if row["condition"] in NEW_STYLES))),
-        **joint_figures, **schedule_figures, **diagnostic_figures,
+        **joint_figures, **schedule_figures, **diagnostic_figures, **tuning_figures,
     }
     if set(FOLLOWUP_STYLES) <= set(jobs):
         figures = {**figures, "followup_accuracy": plot_followup_accuracy(reports, references, frame),
@@ -877,7 +894,7 @@ def write_srt_report(run: Path) -> Path:
     budget_sections, budget_figures = budget_report_parts(reports, references, analyses)
     figures = {**figures, **budget_figures}
     primary_sections = _sections(run, reports, result, references, analyses, calibration, resources, figures)
-    sections = primary_sections[:1] + budget_sections + primary_sections[1:] + joint_sections + schedule_sections + diagnostic_sections
+    sections = primary_sections[:1] + tuning_sections + budget_sections + primary_sections[1:] + joint_sections + schedule_sections + diagnostic_sections
     project = run.parents[4]
     pdf = project / "output/pdf/imagenetr50_srt_r16_report.pdf"
     render_report(sections, reports, pdf)
@@ -889,6 +906,8 @@ def write_srt_report(run: Path) -> Path:
     manifest = sealed_record({
         "schema_version": "imagenetr50-srt-report-v1", "result_hash": result["content_hash"],
         "fixed_policy_followups": followup,
+        "h128_tuning": None if tuning is None else {"pointer": tuning["pointer"], "protocol": tuning["protocol"],
+                                                    "selection_hash": tuning["selection"]["content_hash"], "result_hash": tuning["result"]["content_hash"]},
         "frozen_replay_history_input": None if references["checkpoint_diagnostics"] is None else {
             "path": "sample_replay.parquet", "sha256": references["checkpoint_diagnostics"]["protocol"]["config"]["history_sha256"],
             "purpose": "immutable input of the earlier checkpoint diagnostic; current complete export is replay_samples.parquet"},
@@ -913,7 +932,7 @@ def write_srt_report(run: Path) -> Path:
     })
     atomic_write(reports / "report_manifest.json", canonical_json_bytes(manifest))
     for command in (("xdg-open", str(pdf)),
-                    ("notify-send", "ImageNet-R SRT experiment finished", "The separate SRT report and replay-analysis tables are ready.")):
+                    ("notify-send", "ImageNet-R SRT report updated", "Completed conditions are in the updated report and replay-analysis tables.")):
         if shutil.which(command[0]):
             subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     return pdf
