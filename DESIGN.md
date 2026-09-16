@@ -35,6 +35,19 @@ lets the existing SRT report combine their evidence without modifying the
 original result or validation selection. Follow-ups requested after inspecting
 test results are labeled exploratory, not independently selected outcomes.
 
+Follow-up budgets and profile counts are configuration-driven; total work is
+derived from the frozen task populations rather than a matrix-specific constant.
+Separate sealed pointers register each completed extension. The report combines
+them only after authenticating their jobs and rejects overlapping condition
+identities instead of replacing an earlier result. Status queries select the
+requested configuration, not another follow-up's global latest-run pointer.
+
+The current complete per-image report projection is `replay_samples.parquet`
+(with CSV/JSON forms). The earlier `sample_replay.parquet` remains an immutable,
+hash-pinned input to the completed checkpoint diagnostic, not a live export.
+The report manifest distinguishes that historical input from current tables,
+so appending a budget comparison cannot invalidate the earlier diagnostic's reuse.
+
 The due-only scheduler treats batch size 64 as a maximum, not a guaranteed
 batch size. Image-presentation budgets therefore do not fix optimizer-step
 counts. Reports retain both counters and the realized batch-size curve.

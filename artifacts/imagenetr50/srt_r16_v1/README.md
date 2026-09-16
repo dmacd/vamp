@@ -7,9 +7,27 @@ Its sealed result hash is
 
 Read that run's `reports/REPORT.md` or self-contained `reports/REPORT.html`.
 The rendered report is `output/pdf/imagenetr50_srt_r16_report.pdf` at the
-repository root. The previous report and its results were not rewritten.
+repository root. It now includes the fixed-policy H=4,096 and H=512 extensions,
+the offline joint controls and checkpoint diagnostics. The earlier persistent
+frontier report and its results were not rewritten.
 
-Uniform replay outperformed the selected SRT recipe at both work budgets:
+## Latest extension: H=512
+
+Standard thresholds, old target 0.8, interval unit 8, seed 1993: SRT finishes at
+78.933% accuracy / 0.9690 raw NLL; uniform at 78.367% / 0.9589. Mean stage
+accuracy favors uniform, 83.943% versus 83.677%. Both use 196,204 training
+presentations and 3,358 updates. These are single-seed exploratory results,
+not evidence that SRT generally wins. Uniform is below the newer 80.828%
+three-seed offline mean, which matches the H=4,096 schedule rather than H=512.
+
+See `artifacts/imagenetr50/srt_h512/README.md` for run identities, verification,
+resource measurements and rerun instructions. The main report adds a common
+accuracy/NLL figure for the standard H=512/1,024/4,096 pairs. Older comparison
+panels remain available.
+
+## Original validation-selected comparison
+
+Uniform replay outperformed the selected SRT recipe at both original work budgets:
 
 | Condition | Final accuracy | Mean stage accuracy | Final NLL |
 | --- | ---: | ---: | ---: |
@@ -27,9 +45,11 @@ thresholds were hand-chosen candidates, not reported paper values.
 
 - `reports/`: all figures, stage/task metrics, measured work, replay timing
   distributions, per-image replay summaries, sample timelines, calibration
-  comparisons, and consistent condition names. Tables use CSV, JSON, and
-  Parquet, except the large redundant `sample_replay.json` stays local.
-  Its identical 96,000 records are retained as CSV and Parquet.
+  comparisons, and consistent condition names. Small tables use CSV, JSON and
+  Parquet. The current complete per-image projection, `replay_samples.parquet`,
+  contains 240,000 rows across ten conditions; its redundant CSV/JSON forms
+  stay local. The earlier `sample_replay` tables are frozen inputs to the
+  checkpoint diagnostics, not current exports. Their hash remains unchanged.
 - `result.json` and `final/*/result.json`: all 50 stages for each final model,
   including per-task counts, metrics, work, and checkpoint/prediction hashes.
 - `final/*/stages/050/predictions.parquet`: final per-image predictions and

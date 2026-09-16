@@ -91,6 +91,117 @@
   allocation, then replicate comparisons. Stale confidence alone does not
   explain the strict profile's held-out deficit. No new gating rule is added.
 
+## Completed Outcome - ImageNet-R SRT versus Uniform at H=512
+
+- User chose a smaller-budget comparison before the proposed coverage/cap
+  interventions. Run only ordinary SRT and exact-batch-matched uniform, standard
+  thresholds, old target 0.8, interval unit 8, seed 1993, all 50 tasks. Keep the
+  original model, optimizer, data split, augmentation and training implementation
+  unchanged. No threshold search or intervention is added.
+- Configuration: `configs/vision/imagenetr/srt_h512_rho80_unit8.yaml`; frozen
+  scientific choices: `docs/imagenetr50_srt_h512_protocol.md`. Each stream uses
+  196,204 training presentations, with all arrived images available for replay.
+  The shared follow-up runner now derives work and pair count from configuration.
+- All 30,000 prepared image hashes, memberships and split isolation pass. Focused
+  follow-up, scheduler and report tests pass before launch. No competing training
+  job uses the GPU; host memory is tight, so tests and training run separately.
+- Append to the existing SRT report without replacing the H=4,096 follow-up.
+  Add a same-policy H=512/1,024/4,096 accuracy/NLL figure and carry forward both
+  the original stage-matched curves and newer offline endpoints. The 80.828%
+  schedule-matched offline reference matches H=4,096 work, not H=512 work.
+- Both 50-task streams are complete: SRT 78.933% accuracy / 0.9690 raw NLL;
+  uniform 78.367% / 0.9589. Mean stage accuracy instead favors uniform,
+  83.943% versus 83.677%. Each used 196,204 image forward/backward pairs and
+  3,358 updates. Training took 10.208 / 9.356 minutes; evaluation took
+  6.117 / 5.750 minutes, respectively. No crash or training recovery occurred.
+- SRT's 0.567-point final advantage is 34 of 6,000 test examples in one seed,
+  not a general win. H=512 uniform is 2.461 points below the newer offline
+  mean; that control matches H=4,096 work, not H=512. Lower budgets change
+  actual batch/update/review schedules, so this alone does not explain the
+  older uniform-versus-joint discrepancy. No new temperature fitting is done.
+- The sealed run is `c2ea171a6b060ebbce0fcb3e5f5d74a7fe4a2e9e6377be055791328c201bfc5c`;
+  result hash `15edeec8c9ca6c2a0868d5708395349db372c5290de98d40b6fef4a6c948ba36`.
+  Both jobs prove zero-step reuse. All first-two-stage checkpoint/prediction
+  hashes exactly match the original H=1,024 jobs. A fresh invocation reused
+  both completed streams and rebuilt the report without training.
+- All 78 focused and explicit integration tests pass in one `-n 0` process,
+  including every new checkpoint/prediction hash and independent task-50 score
+  reconstruction. The full event and paired-schedule audits pass; all previous
+  condition summaries and scientific source results remain unchanged. The
+  32-page PDF passed visual QA, including its new common budget figure.
+- The current per-image export is `replay_samples.parquet`; the older diagnostic
+  input `sample_replay.parquet` stays frozen. The artifact README records work,
+  interpretation limits, verification and retained evidence. No further
+  experiment is launched automatically; coverage/cap interventions remain
+  deferred pending the user's next choice.
+
+## Deferred Proposal - ImageNet-R Replay Coverage and Concentration Controls
+
+- Deferred in favor of the H=512 ordinary SRT/uniform comparison. The original
+  proposed matrix keeps H=4,096, old target 0.8, interval unit 8,
+  the rank-16 adapter/head, data split, class order, augmentation recipe,
+  confidence thresholds, optimizer, and full 50-task horizon unchanged.
+- Lower-budget alternative discussed, not selected or launched: H=1,024 is
+  a useful cheaper first comparison, retaining all 50 tasks and matching its
+  own per-update schedule. Its existing standard/old=0.8/unit=8 pair provides
+  references at 79.267% SRT versus 80.533% uniform accuracy; three new modified
+  arms complete that profile's matrix. A strict-profile matrix needs new
+  original-SRT and uniform references as well. Each existing standard arm used
+  294,368 presentations and 5,253 updates, with about 14-15 training minutes
+  plus six evaluation minutes. The smaller 1.267-point deficit and different
+  queue/update regime mean a null result cannot rule out benefit at H=4,096.
+  Budget-relative age protection also permits longer task gaps at H=1,024;
+  record intervention activation and achieved allocation changes. Retain
+  H=4,096 confirmation before claiming to explain its failure, and replicate
+  paired seeds before interpreting small gains. No experiment has started.
+- Use five conditions within each standard/strict profile: original SRT,
+  SRT with review-age protection, SRT with a repetition cap, SRT with both,
+  and uniform replay. Use each profile/seed's original SRT batch trace as the
+  immutable work template, preserving every batch size, introduction boundary,
+  and old/current count. Match initial parameters and seed within each block.
+  The seed-1993 templates contain 844,640 presentations each but 56,243
+  standard versus 21,926 strict updates; do not pool those work schedules.
+- Review-age protection: accumulate historical review opportunities as
+  old_slots / arrived_historical_images for each batch. Initialize an image's
+  age when it becomes historical and reset it on review. Once its age reaches
+  two expected uniform reviews, prioritize it in the existing historical slots,
+  oldest first, regardless of its old confidence or SM-2 due time. Ordinary
+  SRT fills remaining slots. Audit missed deadlines rather than add work or
+  claim a hard maximum without demonstrating feasibility. A fixed task-gap
+  bound would require growing work as the historical population grows.
+- Repetition cap: excluding mandatory first presentations, cap each image's
+  cumulative reviews at ceil(4 * its cumulative expected uniform reviews).
+  Compute that expectation from the frozen old/current slot counts and the
+  eligible population at each update, starting only when the image is eligible.
+  This accounts for arrival time and both replay pools; do not use one lifetime
+  count limit for every image. Keep the existing SRT selection among eligible
+  candidates. The factors two and four are proposed intervention strengths,
+  not validated optima or accuracy gates; freeze them before new results.
+- The fixed-work selector must preserve batch quotas even when a modified
+  due pool is short. Specify deterministic virtual-time advancement and
+  candidate fallback before training; log forced, capped, and fallback choices.
+  Require the no-intervention seed-1993 path to reproduce original selections,
+  test quota/cap feasibility, and test resume equality. Do not silently change
+  batch size, switch old/current quota, or add model-based quality rescoring.
+- First run the six new seed-1993 conditions; reuse the four original SRT/
+  uniform results after provenance/parity checks. Then run the complete five-arm
+  comparison for seeds 1994 and 1995 in both profiles, without selecting only
+  favorable arms for replication. This is a post-hoc follow-up on the existing
+  split, not untouched confirmation or a new SOTA claim.
+- Append all stage accuracy/raw-NLL curves, final scores, paired seed differences,
+  per-task retention, and clean training-cohort comparisons to the existing SRT
+  report. Record review-age distributions, unique coverage, top-1%/top-5% replay
+  shares, per-image counts and sum(1/batch_size), exceptions, optimizer updates,
+  model-pass work, and wall time. A count cap is not a gradient-influence cap.
+  Fixed clean-view training probes may measure forgetting but must not feed
+  selection; count their forward work separately. Carry the existing offline
+  references forward without treating them as gates or strict-profile work matches.
+- Age protection and repetition caps can change both coverage and concentration.
+  Their separate and combined results test interventions, not perfectly isolated
+  mediators. Improved old-task retention supports the stale-review explanation;
+  improved held-out accuracy despite worse hard-image training fit supports
+  misallocated repetition. Neither outcome is assumed in advance.
+
 ## Completed Outcome - ImageNet-R Offline Joint Control with Replay-Matched Optimization
 
 - The offline rank-16 control reaches **80.828% mean test accuracy (sample

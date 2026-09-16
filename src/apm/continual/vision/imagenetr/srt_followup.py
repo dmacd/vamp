@@ -41,9 +41,10 @@ class SRTFollowupConfig:
     def policies(self, training: SRTConfig) -> tuple[RecallPolicy, ...]:
         """Resolve named thresholds from the unchanged source training config."""
         profiles = dict(training.profiles)
-        if (self.capacity != 4096 or self.historical_fraction != .8 or self.interval_unit != 8
-                or self.profiles != ("standard", "strict")):
-            raise ValueError("follow-up differs from the requested H4096/rho80/unit8 matrix")
+        if (type(self.capacity) is not int or self.capacity <= 0 or not self.profiles
+                or len(set(self.profiles)) != len(self.profiles)
+                or any(name not in profiles for name in self.profiles)):
+            raise ValueError("follow-up requires a positive budget and distinct known profiles")
         return tuple(RecallPolicy(name, profiles[name], self.historical_fraction, self.interval_unit)
                      for name in self.profiles)
 
@@ -72,6 +73,12 @@ def followup_conditions(config: SRTFollowupConfig, training: SRTConfig) -> tuple
     """Keep method, profile, mixture, and spacing explicit in each stable name."""
     return tuple((f"{method}_h{config.capacity}_{policy.name}", method, policy)
                  for policy in config.policies(training) for method in ("srt", "uniform"))
+
+
+def followup_presentations(capacity: int, task_counts: tuple[int, ...]) -> int:
+    """Derive per-stream image work from the actual task populations and budget."""
+    return sum(presentation_budget(count, sum(task_counts[:stage]), capacity)
+               for stage, count in enumerate(task_counts))
 
 
 def bootstrap_followup(config_path: Path = DEFAULT_FOLLOWUP_CONFIG) -> FollowupInputs:
@@ -124,8 +131,8 @@ def _progress(inputs: FollowupInputs, phase: str, current: dict[str, object] | N
     results = tuple(read_sealed(path) for path in (inputs.run / "final").glob("*/result.json") if path.parent.name != current.get("job"))
     completed = sum(result["image_presentations"] for result in results) + int(current.get("image_presentations", 0))
     counts = Counter(row.task_index for row in inputs.manifest.select("train"))
-    planned = 4 * sum(presentation_budget(counts[stage], sum(counts[old] for old in range(stage)), inputs.config.capacity)
-                      for stage in range(50))
+    planned = len(followup_conditions(inputs.config, inputs.training)) * followup_presentations(
+        inputs.config.capacity, tuple(counts[stage] for stage in range(inputs.training.tasks)))
     stage_rows = tuple(read_sealed(path) for path in (inputs.run / "final").glob("*/stages/*/result.json"))
     measured_images = sum(row["fit"]["image_presentations"] for row in stage_rows)
     measured_seconds = math.fsum(row["fit"]["wall_seconds"] + row["evaluation"]["wall_seconds"] for row in stage_rows)
@@ -139,7 +146,7 @@ def _progress(inputs: FollowupInputs, phase: str, current: dict[str, object] | N
 
 
 def run_followup(config_path: Path = DEFAULT_FOLLOWUP_CONFIG) -> Path:
-    """Run the four resumable streams, prove reuse, then update the existing report."""
+    """Run the configured resumable pairs, prove reuse, then update the existing report."""
     os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     import torch
     from apm.continual.vision.imagenetr.srt_data import SelectedImageLoader
@@ -168,7 +175,9 @@ def run_followup(config_path: Path = DEFAULT_FOLLOWUP_CONFIG) -> Path:
                                  paired_root=inputs.run / "final" / name.replace("uniform_", "srt_", 1) if method == "uniform" else None,
                                  progress_callback=lambda row, phase=phase: _progress(inputs, phase, row), **common)
             results = {name: read_sealed(inputs.run / "final" / name / "result.json") for name, _, _ in jobs}
-            if any(len(result["rows"]) != 50 or result["image_presentations"] != 844640 for result in results.values()):
+            counts = Counter(row.task_index for row in inputs.manifest.select("train"))
+            expected_work = followup_presentations(inputs.config.capacity, tuple(counts[stage] for stage in range(50)))
+            if any(len(result["rows"]) != 50 or result["image_presentations"] != expected_work for result in results.values()):
                 raise ValueError("fixed-policy matrix has incomplete or unexpected training work")
             reuse = {}
             for name, method, policy in jobs:
@@ -186,7 +195,8 @@ def run_followup(config_path: Path = DEFAULT_FOLLOWUP_CONFIG) -> Path:
             publish_immutable_json(inputs.run / "result.json", result)
         pointer = sealed_record({"schema_version": "imagenetr50-srt-followup-pointer-v1", "run_hash": inputs.run.name,
                                  "result_hash": result["content_hash"], "source_result_hash": inputs.config.source_result_hash})
-        publish_immutable_json(inputs.source / "reports/fixed_policy_followup.json", pointer)
+        policy_names = "_".join(policy.name for policy in inputs.config.policies(inputs.training))
+        publish_immutable_json(inputs.source / f"reports/fixed_policy_followup_h{inputs.config.capacity}_{policy_names}.json", pointer)
         _progress(inputs, "build and verify updated report")
         from apm.continual.vision.imagenetr.srt_reporting import write_srt_report
         report = write_srt_report(inputs.source)
@@ -209,10 +219,14 @@ def main() -> None:
     if args.command == "run":
         print(run_followup(args.config))
         return
-    source = args.config.resolve().parents[3] / load_followup_config(args.config).source_run
+    config = load_followup_config(args.config)
+    source = args.config.resolve().parents[3] / config.source_run
     if args.command == "status":
-        latest = json.loads((source / "followups/LATEST_RUN.json").read_text())
-        print((source / "followups" / latest["run_hash"] / "status.json").read_text())
+        candidates = tuple(path.parent / "status.json" for path in (source / "followups").glob("*/protocol.json")
+                           if canonical_json_bytes(read_sealed(path)["config"]) == canonical_json_bytes(asdict(config))
+                           and (path.parent / "status.json").is_file())
+        print(max(candidates, key=lambda path: path.stat().st_mtime_ns).read_text() if candidates
+              else json.dumps({"phase": "not started", "config": str(args.config)}))
     else:
         from apm.continual.vision.imagenetr.srt_reporting import write_srt_report
         print(write_srt_report(source))

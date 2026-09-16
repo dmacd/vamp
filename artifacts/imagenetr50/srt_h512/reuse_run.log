@@ -1,0 +1,16 @@
+Follow-up working artifacts: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/srt_r16_v1/runs/b3de2a819efe0707b85cf105cf8d4c53370c807b48108bf996dc4f4883a213ea/followups/c2ea171a6b060ebbce0fcb3e5f5d74a7fe4a2e9e6377be055791328c201bfc5c
+Overall 392,408/392,408 presentations; ETA 0.0 min. srt_h512_standard_rho80_unit8, tasks 1-50
+Overall 392,408/392,408 presentations; ETA 0.0 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+Overall 392,408/392,408 presentations; ETA 0.0 min. build and verify updated report
+Report audit: SRT rank 16, 1,024-equivalent budget
+Report audit: Uniform replay rank 16, 1,024-equivalent budget
+Report audit: SRT rank 16, 4,096-equivalent budget
+Report audit: Uniform replay rank 16, 4,096-equivalent budget
+Report audit: SRT rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: SRT rank 16, H=4,096; strict, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; strict, old=0.8, unit=8
+Report audit: SRT rank 16, H=512; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=512; standard, old=0.8, unit=8
+Overall 392,408/392,408 presentations; ETA 0.0 min. complete
+/home/daniel/projects/snet/rpa/output/pdf/imagenetr50_srt_r16_report.pdf

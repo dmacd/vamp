@@ -121,27 +121,29 @@ def test_analysis_tables_preserve_unbounded_virtual_clocks(tmp_path) -> None:
     assert str(10 ** 80) in (tmp_path / "exact_clocks.csv").read_text()
 
 
-@pytest.fixture
-def fixed_policy_report_source(tmp_path):
+def _fixed_policy_report_source(tmp_path, capacity, profiles):
     """Seal minimal explicit extension provenance without fabricating model results."""
     from apm.continual.vision.imagenetr.srt_config import load_srt_config
     from apm.continual.vision.imagenetr.srt_followup import followup_conditions, load_followup_config
     training, config = load_srt_config(), load_followup_config()
-    jobs = followup_conditions(config, training)
     source_hash = "a" * 64
+    config = replace(config, source_result_hash=source_hash, capacity=capacity, profiles=profiles)
+    jobs = followup_conditions(config, training)
     protocol = sealed_record({"schema_version": "imagenetr50-srt-followup-protocol-v1", "source_result_hash": source_hash,
-                              "conditions": [name for name, _, _ in jobs]})
+                              "config": asdict(config), "conditions": [name for name, _, _ in jobs]})
     root = tmp_path / "followups" / protocol["content_hash"]
     publish_immutable_json(root / "protocol.json", protocol)
     publish_immutable_json(tmp_path / "config_resolved.json", sealed_record(asdict(training)))
+    from apm.continual.vision.imagenetr.srt_config import presentation_budget
+    rows = [{"current_examples": 480, "historical_examples_available": stage * 480} for stage in range(50)]
     results, definitions = {}, {}
     for name, method, policy in jobs:
         definitions[name] = sealed_record({"schema_version": "imagenetr50-srt-job-v1", "protocol_hash": protocol["content_hash"],
-                                           "policy": asdict(policy), "method": method, "capacity": 4096,
+                                           "policy": asdict(policy), "method": method, "capacity": capacity,
                                            "paired_job_hash": definitions[name.replace("uniform_", "srt_", 1)]["content_hash"] if method == "uniform" else None})
         results[name] = sealed_record({"schema_version": "imagenetr50-srt-job-result-v1", "job_hash": definitions[name]["content_hash"],
-                                      "policy": asdict(policy), "method": method, "capacity": 4096,
-                                      "rows": [{}] * 50, "image_presentations": 844640})
+                                      "policy": asdict(policy), "method": method, "capacity": capacity,
+                                      "rows": rows, "image_presentations": sum(presentation_budget(480, stage * 480, capacity) for stage in range(50))})
         for filename, record in (("job.json", definitions[name]), ("result.json", results[name])):
             publish_immutable_json(root / "final" / name / filename, record)
     result = sealed_record({"schema_version": "imagenetr50-srt-followup-result-v1", "source_result_hash": source_hash,
@@ -149,19 +151,26 @@ def fixed_policy_report_source(tmp_path):
                             "zero_step_reuse": True, "reuse": {name: {"optimizer_steps": 0, "result_hash": job["content_hash"]}
                                                                  for name, job in results.items()}})
     publish_immutable_json(root / "result.json", result)
-    publish_immutable_json(tmp_path / "reports/fixed_policy_followup.json", sealed_record({
+    pointer_name = "fixed_policy_followup.json" if capacity == 4096 else f"fixed_policy_followup_h{capacity}.json"
+    publish_immutable_json(tmp_path / "reports" / pointer_name, sealed_record({
         "schema_version": "imagenetr50-srt-followup-pointer-v1", "source_result_hash": source_hash,
         "run_hash": protocol["content_hash"], "result_hash": result["content_hash"],
     }))
     return tmp_path, source_hash, root
 
 
+@pytest.fixture(params=((4096, ("standard", "strict")), (512, ("standard",))))
+def fixed_policy_report_source(tmp_path, request):
+    return _fixed_policy_report_source(tmp_path, *request.param)
+
+
 def test_report_loads_only_complete_authenticated_followups(fixed_policy_report_source) -> None:
-    from apm.continual.vision.imagenetr.srt_reporting import FOLLOWUP_STYLES, followup_report_jobs
-    source, source_hash, _ = fixed_policy_report_source
+    from apm.continual.vision.imagenetr.srt_reporting import followup_report_jobs
+    from apm.continual.vision.imagenetr.srt_evidence import read_sealed
+    source, source_hash, root = fixed_policy_report_source
     roots, evidence = followup_report_jobs(source, source_hash)
-    assert set(roots) == set(FOLLOWUP_STYLES)
-    assert evidence["pointer"]["source_result_hash"] == source_hash
+    assert set(roots) == set(read_sealed(root / "protocol.json")["conditions"])
+    assert evidence[root.name]["pointer"]["source_result_hash"] == source_hash
     with pytest.raises(ValueError, match="identity or source"):
         followup_report_jobs(source, "b" * 64)
 
@@ -171,12 +180,54 @@ def test_report_rejects_changed_followup_recipe(fixed_policy_report_source) -> N
     from apm.continual.vision.imagenetr.srt_evidence import read_sealed
     from apm.continual.vision.imagenetr.srt_reporting import followup_report_jobs
     source, source_hash, root = fixed_policy_report_source
-    path = root / "final/srt_h4096_standard_rho80_unit8/job.json"
+    path = next(root.glob("final/srt_*/job.json"))
     record = read_sealed(path)
     record = {**record, "policy": {**record["policy"], "historical_fraction": .5}}
     atomic_write(path, canonical_json_bytes(sealed_record({key: value for key, value in record.items() if key != "content_hash"})))
     with pytest.raises(ValueError, match="explicit requested recipe"):
         followup_report_jobs(source, source_hash)
+
+
+def test_report_combines_followups_without_overwriting_evidence(tmp_path) -> None:
+    from apm.continual.vision.imagenetr.srt_reporting import FOLLOWUP_STYLES, LOW_BUDGET_STYLES, followup_report_jobs
+    from apm.continual.vision.imagenetr.srt_evidence import read_sealed
+    source, source_hash, first = _fixed_policy_report_source(tmp_path, 4096, ("standard", "strict"))
+    _, _, second = _fixed_policy_report_source(tmp_path, 512, ("standard",))
+    roots, evidence = followup_report_jobs(source, source_hash)
+    assert set(roots) == set(FOLLOWUP_STYLES) | set(LOW_BUDGET_STYLES)
+    assert set(evidence) == {first.name, second.name}
+    publish_immutable_json(source / "reports/fixed_policy_followup_duplicate.json",
+                           read_sealed(source / "reports/fixed_policy_followup_h512.json"))
+    with pytest.raises(ValueError, match="duplicate"):
+        followup_report_jobs(source, source_hash)
+
+
+def test_lower_budget_figure_and_pages_include_all_budgets_and_offline_endpoints(tiny_full_stream, tmp_path) -> None:
+    from pypdf import PdfReader
+    from apm.continual.vision.imagenetr.srt_budget_reporting import budget_report_parts
+    from apm.continual.vision.imagenetr.srt_reporting import ALL_STYLES, render_report
+    root, index_path = tiny_full_stream
+    source = analyze_replay_job(root, index_path, "srt_h1024")
+    analyses = {name: replace(source, totals={**source.totals, "condition": name}) for name in ALL_STYLES}
+    references = {
+        "stage_matched_joint": [{"accuracy": 80.}] * 50,
+        "joint_convergence": {"result": {"selection": {"endpoints": {"accuracy_selected": 25}},
+            "evaluations": [{"seed": seed, "epoch": 25, "metrics": {"accuracy": 81., "nll": .8}} for seed in (1993, 1994, 1995)]}},
+        "schedule_matched_joint": {"result": {
+            "evaluations": [{"seed": seed, "metrics": {"accuracy": 82., "nll": .7}} for seed in (1993, 1994, 1995)]}},
+    }
+    sections, figures = budget_report_parts(tmp_path, references, analyses)
+    assert len(sections) == 2
+    assert len(sections[0].table.rows) == 8
+    assert figures["standard_budget_comparison"].is_file()
+    sections = tuple(replace(section, paragraphs=("SYNTHETIC FIXTURE - NOT EXPERIMENTAL RESULTS.", *section.paragraphs)) for section in sections)
+    pdf = tmp_path / "budget_fixture.pdf"
+    render_report(sections, tmp_path, pdf)
+    pages = PdfReader(pdf).pages
+    assert len(pages) == 2
+    assert "H=512" in pages[0].extract_text()
+    assert "56,243" in pages[0].extract_text()
+    assert "NLL across fixed-policy budgets" in pages[1].extract_text()
 
 
 @pytest.mark.integration

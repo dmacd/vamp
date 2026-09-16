@@ -31,6 +31,7 @@ from apm.continual.vision.imagenetr.persistent_affine_reporting import (
     LABEL_ORACLE_MLP, LABEL_RANK_JOINT, LABEL_STAGE_JOINT, _series,
 )
 from apm.continual.vision.imagenetr.srt_analysis import ReplayAnalysis, analyze_replay_job
+from apm.continual.vision.imagenetr.srt_config import presentation_budget
 from apm.continual.vision.imagenetr.schedule_matched_reporting import (
     control_summary, draw_schedule_endpoint, export_schedule_updates, load_schedule_reference, schedule_report_parts,
 )
@@ -47,6 +48,9 @@ CONDITION_LABELS = {
     **{f"{method}_h4096_{profile}_rho80_unit8":
        f"{'SRT' if method == 'srt' else 'Uniform replay'} rank 16, H=4,096; {profile}, old=0.8, unit=8"
        for profile in ("standard", "strict") for method in ("srt", "uniform")},
+    **{f"{method}_h512_standard_rho80_unit8":
+       f"{'SRT' if method == 'srt' else 'Uniform replay'} rank 16, H=512; standard, old=0.8, unit=8"
+       for method in ("srt", "uniform")},
 }
 REFERENCE_STYLES = {
     LABEL_H4096: ("#1f77b4", "-"), LABEL_H8192: ("#d95f02", "-"),
@@ -59,7 +63,9 @@ NEW_STYLES = {f"{method}_h{capacity}": ("#c62828" if capacity == 1024 else "#007
 FOLLOWUP_STYLES = {f"{method}_h4096_{profile}_rho80_unit8":
                    ("#b5179e" if profile == "standard" else "#9a6700", "-" if method == "srt" else "--")
                    for profile in ("standard", "strict") for method in ("srt", "uniform")}
-ALL_STYLES = {**NEW_STYLES, **FOLLOWUP_STYLES}
+LOW_BUDGET_STYLES = {f"{method}_h512_standard_rho80_unit8": ("#346b21", "-" if method == "srt" else "--")
+                     for method in ("srt", "uniform")}
+ALL_STYLES = {**NEW_STYLES, **FOLLOWUP_STYLES, **LOW_BUDGET_STYLES}
 
 
 @dataclass(frozen=True, slots=True)
@@ -312,8 +318,11 @@ def _plot_replay(reports: Path, histograms: pd.DataFrame, stages: pd.DataFrame) 
 
 def _plot_requested_intervals(reports: Path, histograms: pd.DataFrame) -> Path:
     conditions = tuple(name for name in ALL_STYLES if name.startswith("srt_") and name in set(histograms.condition))
-    figure, axes = plt.subplots(len(conditions) // 2, 2, figsize=(9.5, 4 * (len(conditions) // 2)), constrained_layout=True, squeeze=False)
-    for axis, condition in zip(axes.flat, conditions, strict=True):
+    rows = math.ceil(len(conditions) / 2)
+    figure, axes = plt.subplots(rows, 2, figsize=(9.5, 4 * rows), constrained_layout=True, squeeze=False)
+    for axis in tuple(axes.flat)[len(conditions):]:
+        axis.set_visible(False)
+    for axis, condition in zip(axes.flat, conditions):
         for metric, label, style in (("interval_before", "Requested interval", "--"), ("clock_gap", "Actual interval", "-")):
             rows = histograms[(histograms.condition == condition) & (histograms.metric == metric)
                               & (histograms.kind == "historical") & (histograms.previous_quality == "all")]
@@ -418,6 +427,13 @@ def _sections(
         latest_note = (f"New checkpoint diagnostics: the offline-minus-uniform NLL gap changes from {gaps['raw']:+.4f} to {gaps['calibrated']:+.4f} "
                        "after out-of-fold temperature scaling. The final four sections also compare the same clean training images by SRT review history. "
                        "These are post-hoc diagnostics; all original benchmark scores remain raw and unchanged.",)
+    if set(LOW_BUDGET_STYLES) <= analyses.keys():
+        srt, uniform = (analyses[name].totals for name in LOW_BUDGET_STYLES)
+        latest_note = (f"Latest follow-up: H=512 with standard thresholds, old=0.8 and unit=8 reaches "
+                       f"{srt['final_accuracy']:.3f}% SRT accuracy / {srt['final_nll']:.4f} NLL versus "
+                       f"{uniform['final_accuracy']:.3f}% uniform / {uniform['final_nll']:.4f} NLL. "
+                       "The next two sections compare budgets under the same configured policy and include the newer offline references. "
+                       "All earlier results and checkpoint diagnostics remain unchanged.",)
     joint_marker_note = (() if references.get("joint_convergence") is None else (
         "The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. "
         "It is one endpoint, not a new stage-matched curve; its convergence evidence appears at the end of this report.",))
@@ -459,7 +475,7 @@ def _sections(
             *latest_note,
             "Does confidence-based spaced repetition improve a single continuing rank-16 adapter compared with uniform replay under identical realized exposure? "
             "The ImageNet-R split is unchanged: 24,000 training images, 6,000 test images, and fifty four-class tasks in the existing seed-1993 order.",
-            f"Uniform replay has higher final accuracy and lower final NLL at {uniform_wins} of the two tested budgets. "
+            f"In the original H=1,024/H=4,096 selected-policy comparison, uniform replay has higher final accuracy and lower final NLL at {uniform_wins} of the two budgets. "
             "This comparison tests the selected SRT recipes, not every possible confidence threshold or spacing rule.",
             *differences,
             "Mean accuracy is the arithmetic mean of the fifty stage test accuracies. NLL is uncalibrated, all-seen-class cross-entropy; lower is better. "
@@ -712,40 +728,56 @@ def render_report(sections: tuple[ReportSection, ...], reports: Path, pdf: Path)
 
 
 def followup_report_jobs(run: Path, source_hash: str) -> tuple[dict[str, Path], dict[str, object] | None]:
-    """Authenticate a completed fixed-policy extension without changing its source."""
-    pointer_path = run / "reports/fixed_policy_followup.json"
-    if not pointer_path.is_file():
+    """Authenticate all sealed fixed-policy extensions without replacing older evidence."""
+    from apm.continual.vision.imagenetr.srt_followup import SRTFollowupConfig, followup_conditions
+    from apm.continual.vision.imagenetr.srt_config import SRTConfig
+
+    pointers = tuple(sorted((run / "reports").glob("fixed_policy_followup*.json")))
+    if not pointers:
         return {}, None
-    pointer = read_sealed(pointer_path, "imagenetr50-srt-followup-pointer-v1")
-    root = run / "followups" / pointer["run_hash"]
-    protocol = read_sealed(root / "protocol.json", "imagenetr50-srt-followup-protocol-v1")
-    result = read_sealed(root / "result.json", "imagenetr50-srt-followup-result-v1")
-    if (pointer["source_result_hash"] != source_hash or result["source_result_hash"] != source_hash
-            or protocol["source_result_hash"] != source_hash or pointer["result_hash"] != result["content_hash"]
-            or protocol["content_hash"] != pointer["run_hash"] or result["protocol_hash"] != protocol["content_hash"]
-            or not result["zero_step_reuse"] or not result["source_unchanged"]
-            or set(result["conditions"]) != set(FOLLOWUP_STYLES) or set(protocol["conditions"]) != set(FOLLOWUP_STYLES)):
-        raise ValueError("fixed-policy follow-up identity or source changed")
-    profiles = dict(read_sealed(run / "config_resolved.json")["profiles"])
-    roots = {name: root / "final" / name for name in FOLLOWUP_STYLES}
-    for name, job_root in roots.items():
-        job = read_sealed(job_root / "result.json", "imagenetr50-srt-job-result-v1")
-        definition = read_sealed(job_root / "job.json", "imagenetr50-srt-job-v1")
-        profile = "standard" if "_standard_" in name else "strict"
-        method = name.split("_", 1)[0]
-        expected = {"profile": profile, "thresholds": profiles[profile], "historical_fraction": .8, "interval_unit": 8}
-        reuse = result["reuse"][name]
-        if (job != result["conditions"][name] or job["policy"] != expected or definition["policy"] != expected
-                or definition["protocol_hash"] != protocol["content_hash"] or job["job_hash"] != definition["content_hash"]
-                or job["method"] != method or definition["method"] != method or job["capacity"] != 4096
-                or definition["capacity"] != 4096 or len(job["rows"]) != 50 or job["image_presentations"] != 844640
-                or reuse["optimizer_steps"] != 0 or reuse["result_hash"] != job["content_hash"]):
-            raise ValueError("fixed-policy job differs from its explicit requested recipe")
-        if method == "uniform":
-            paired = read_sealed(roots[name.replace("uniform_", "srt_", 1)] / "job.json")
-            if definition["paired_job_hash"] != paired["content_hash"]:
-                raise ValueError("fixed-policy uniform control uses the wrong SRT partner")
-    return roots, {"pointer": pointer, "protocol": protocol, "result_hash": result["content_hash"]}
+    recorded = read_sealed(run / "config_resolved.json")
+    training = SRTConfig(**{name: (tuple((profile, tuple(values)) for profile, values in value) if name == "profiles"
+                                 else tuple(value) if name in {"budgets", "historical_fractions", "interval_units"} else value)
+                           for name, value in recorded.items() if name != "content_hash"})
+    roots, evidence = {}, {}
+    for pointer_path in pointers:
+        pointer = read_sealed(pointer_path, "imagenetr50-srt-followup-pointer-v1")
+        root = run / "followups" / pointer["run_hash"]
+        protocol = read_sealed(root / "protocol.json", "imagenetr50-srt-followup-protocol-v1")
+        result = read_sealed(root / "result.json", "imagenetr50-srt-followup-result-v1")
+        config = SRTFollowupConfig(**{**protocol["config"], "profiles": tuple(protocol["config"]["profiles"])})
+        conditions = followup_conditions(config, training)
+        names = {name for name, _, _ in conditions}
+        if (pointer["source_result_hash"] != source_hash or result["source_result_hash"] != source_hash
+                or protocol["source_result_hash"] != source_hash or config.source_result_hash != source_hash
+                or pointer["result_hash"] != result["content_hash"] or protocol["content_hash"] != pointer["run_hash"]
+                or result["protocol_hash"] != protocol["content_hash"] or not result["zero_step_reuse"] or not result["source_unchanged"]
+                or set(result["conditions"]) != names or set(protocol["conditions"]) != names or not names <= set(ALL_STYLES)):
+            raise ValueError("fixed-policy follow-up identity or source changed")
+        if names & roots.keys():
+            raise ValueError("duplicate fixed-policy conditions would overwrite report evidence")
+        for name, method, policy in conditions:
+            job_root = root / "final" / name
+            job = read_sealed(job_root / "result.json", "imagenetr50-srt-job-result-v1")
+            definition = read_sealed(job_root / "job.json", "imagenetr50-srt-job-v1")
+            expected = {"profile": policy.profile, "thresholds": list(policy.thresholds),
+                        "historical_fraction": policy.historical_fraction, "interval_unit": policy.interval_unit}
+            reuse = result["reuse"][name]
+            expected_work = sum(presentation_budget(row["current_examples"], row["historical_examples_available"], config.capacity)
+                                for row in job["rows"])
+            if (job != result["conditions"][name] or job["policy"] != expected or definition["policy"] != expected
+                    or definition["protocol_hash"] != protocol["content_hash"] or job["job_hash"] != definition["content_hash"]
+                    or job["method"] != method or definition["method"] != method or job["capacity"] != config.capacity
+                    or definition["capacity"] != config.capacity or len(job["rows"]) != 50 or job["image_presentations"] != expected_work
+                    or reuse["optimizer_steps"] != 0 or reuse["result_hash"] != job["content_hash"]):
+                raise ValueError("fixed-policy job differs from its explicit requested recipe")
+            if method == "uniform":
+                paired = read_sealed(roots[name.replace("uniform_", "srt_", 1)] / "job.json")
+                if definition["paired_job_hash"] != paired["content_hash"]:
+                    raise ValueError("fixed-policy uniform control uses the wrong SRT partner")
+            roots[name] = job_root
+        evidence[root.name] = {"pointer": pointer, "protocol": protocol, "result_hash": result["content_hash"]}
+    return roots, evidence
 
 
 def write_srt_report(run: Path) -> Path:
@@ -762,6 +794,9 @@ def write_srt_report(run: Path) -> Path:
     references = {**reference_results(run), "joint_convergence": load_joint_reference(run, result["content_hash"]),
                   "schedule_matched_joint": load_schedule_reference(run, result["content_hash"]),
                   "checkpoint_diagnostics": load_checkpoint_diagnostics(run, result["content_hash"])}
+    if (references["checkpoint_diagnostics"] is not None
+            and file_sha256(run / "reports/sample_replay.parquet") != references["checkpoint_diagnostics"]["protocol"]["config"]["history_sha256"]):
+        raise ValueError("the frozen replay-history input to checkpoint diagnostics changed")
     update_export = export_schedule_updates(run, references["schedule_matched_joint"])
     reports = run / "reports"
     reports.mkdir(parents=True, exist_ok=True)
@@ -804,14 +839,14 @@ def write_srt_report(run: Path) -> Path:
     schedule_sections, schedule_figures, schedule_tables = schedule_report_parts(
         reports, references["schedule_matched_joint"], references["joint_convergence"], summaries, update_export)
     diagnostic_sections, diagnostic_figures, diagnostic_tables = checkpoint_report_parts(reports, references["checkpoint_diagnostics"])
-    tables = {"stage_metrics": stages, "sample_replay": samples, "replay_histograms": histograms,
+    tables = {"stage_metrics": stages, "replay_samples": samples, "replay_histograms": histograms,
               "sample_timelines": timelines, "condition_summary": summaries, "calibration": calibration,
               "resource_metrics": resources, "task_metrics": _task_rows({"conditions": jobs}),
               "condition_names": tuple({"condition": name, "label": label,
                                          "profile": jobs[name]["policy"]["profile"] if name in jobs else None,
                                          "historical_fraction": jobs[name]["policy"]["historical_fraction"] if name in jobs else None,
                                          "interval_unit": jobs[name]["policy"]["interval_unit"] if name in jobs else None}
-                                        for name, label in CONDITION_LABELS.items() if name not in FOLLOWUP_STYLES or name in jobs),
+                                        for name, label in CONDITION_LABELS.items() if name not in ALL_STYLES or name in jobs),
               **joint_tables, **schedule_tables, **diagnostic_tables}
     tables["condition_names"] += tuple({"condition": row["condition"], "label": row["label"], "profile": None,
                                          "historical_fraction": None, "interval_unit": None}
@@ -828,13 +863,17 @@ def write_srt_report(run: Path) -> Path:
         "timelines": _plot_timelines(reports, pd.DataFrame(tuple(row for row in timelines if row["condition"] in NEW_STYLES))),
         **joint_figures, **schedule_figures, **diagnostic_figures,
     }
-    if followup is not None:
+    if set(FOLLOWUP_STYLES) <= set(jobs):
         figures = {**figures, "followup_accuracy": plot_followup_accuracy(reports, references, frame),
                    "policy_comparisons": plot_policy_comparisons(reports, references, frame),
                    "optimizer_work": plot_optimizer_work(reports, frame),
                    "followup_timelines": _plot_timelines(reports, pd.DataFrame(tuple(row for row in timelines if row["condition"] in FOLLOWUP_STYLES)),
                                                           "fixed_policy_sample_timelines.png")}
-    sections = _sections(run, reports, result, references, analyses, calibration, resources, figures) + joint_sections + schedule_sections + diagnostic_sections
+    from apm.continual.vision.imagenetr.srt_budget_reporting import budget_report_parts
+    budget_sections, budget_figures = budget_report_parts(reports, references, analyses)
+    figures = {**figures, **budget_figures}
+    primary_sections = _sections(run, reports, result, references, analyses, calibration, resources, figures)
+    sections = primary_sections[:1] + budget_sections + primary_sections[1:] + joint_sections + schedule_sections + diagnostic_sections
     project = run.parents[4]
     pdf = project / "output/pdf/imagenetr50_srt_r16_report.pdf"
     render_report(sections, reports, pdf)
@@ -845,7 +884,10 @@ def write_srt_report(run: Path) -> Path:
     material["checkpoint_diagnostic_reporting.py"] = file_sha256(Path(__file__).with_name("checkpoint_diagnostic_reporting.py"))
     manifest = sealed_record({
         "schema_version": "imagenetr50-srt-report-v1", "result_hash": result["content_hash"],
-        "fixed_policy_followup": followup,
+        "fixed_policy_followups": followup,
+        "frozen_replay_history_input": None if references["checkpoint_diagnostics"] is None else {
+            "path": "sample_replay.parquet", "sha256": references["checkpoint_diagnostics"]["protocol"]["config"]["history_sha256"],
+            "purpose": "immutable input of the earlier checkpoint diagnostic; current complete export is replay_samples.parquet"},
         "joint_convergence": None if references["joint_convergence"] is None else {
             "pointer": references["joint_convergence"]["pointer"], "protocol": references["joint_convergence"]["protocol"],
             "result_hash": references["joint_convergence"]["result"]["content_hash"]},

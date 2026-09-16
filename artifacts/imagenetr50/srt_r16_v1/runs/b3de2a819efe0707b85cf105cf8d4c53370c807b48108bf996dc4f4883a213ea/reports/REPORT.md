@@ -2,11 +2,11 @@
 
 ## Original validation-selected results
 
-New checkpoint diagnostics: the offline-minus-uniform NLL gap changes from +0.1512 to +0.0185 after out-of-fold temperature scaling. The final four sections also compare the same clean training images by SRT review history. These are post-hoc diagnostics; all original benchmark scores remain raw and unchanged.
+Latest follow-up: H=512 with standard thresholds, old=0.8 and unit=8 reaches 78.933% SRT accuracy / 0.9690 NLL versus 78.367% uniform / 0.9589 NLL. The next two sections compare budgets under the same configured policy and include the newer offline references. All earlier results and checkpoint diagnostics remain unchanged.
 
 Does confidence-based spaced repetition improve a single continuing rank-16 adapter compared with uniform replay under identical realized exposure? The ImageNet-R split is unchanged: 24,000 training images, 6,000 test images, and fifty four-class tasks in the existing seed-1993 order.
 
-Uniform replay has higher final accuracy and lower final NLL at 2 of the two tested budgets. This comparison tests the selected SRT recipes, not every possible confidence threshold or spacing rule.
+In the original H=1,024/H=4,096 selected-policy comparison, uniform replay has higher final accuracy and lower final NLL at 2 of the two budgets. This comparison tests the selected SRT recipes, not every possible confidence threshold or spacing rule.
 
 At the 1,024-equivalent budget, SRT finishes at 79.267% accuracy and 0.9585 NLL. Relative to its exposure-matched uniform control, the differences are -1.267 accuracy points and +0.0993 NLL. Its accuracy difference from the original five-epoch joint rank 16 is +0.400 points.
 
@@ -20,6 +20,35 @@ Mean accuracy is the arithmetic mean of the fifty stage test accuracies. NLL is 
 | Uniform replay rank 16, 1,024-equivalent budget | 80.533% | 85.059% | 0.8592 | 14.05 |
 | SRT rank 16, 4,096-equivalent budget | 77.333% | 81.908% | 1.1100 | 40.11 |
 | Uniform replay rank 16, 4,096-equivalent budget | 80.400% | 84.197% | 0.9123 | 40.46 |
+
+## Lower replay budget: H=512
+
+Two fresh 50-task streams use standard thresholds, old target 0.8 and interval unit 8, with the original seed 1993, model, data and optimizer. Only H changes. H limits presentation work, not stored history; all arrived training images remain available. The proposed review-age and repetition-cap interventions are not applied.
+
+SRT finishes at 78.933% accuracy / 0.9690 raw NLL; matched uniform at 78.367% / 0.9589. SRT minus uniform is +0.567 accuracy points and +0.0102 NLL. Mean stage accuracy is 83.677% / 83.943% respectively. Each uses 196,204 training forward/backward image pairs and 3,358 updates. Training takes 10.21 / 9.36 minutes; evaluation is separate in the resource ledger.
+
+The newer offline rank-16 control reaches 80.828% mean accuracy (sample SD 0.315 points, three seeds), not the older five-epoch joint recipe's endpoint. It matches the standard H=4,096 optimizer schedule, not H=512. Neither offline reference gates this experiment.
+
+Replay rows are single-seed results; offline rows are means across three seeds. These are exploratory results on an already inspected test set, not evidence of significance or a new SOTA claim. Lower budgets also change actual batch sizes and review schedules. Raw NLL remains the benchmark score; no new temperature is fitted.
+
+| Condition | Task-50 acc. | Raw NLL | Training pairs | Updates |
+| --- | --- | --- | --- | --- |
+| SRT rank 16, H=512 | 78.933% | 0.9690 | 196,204 | 3,358 |
+| Uniform replay rank 16, H=512 | 78.367% | 0.9589 | 196,204 | 3,358 |
+| SRT rank 16, H=1,024 | 79.267% | 0.9585 | 294,368 | 5,253 |
+| Uniform replay rank 16, H=1,024 | 80.533% | 0.8592 | 294,368 | 5,253 |
+| SRT rank 16, H=4,096 | 73.967% | 1.2682 | 844,640 | 56,243 |
+| Uniform replay rank 16, H=4,096 | 80.917% | 0.8951 | 844,640 | 56,243 |
+| Joint IID, validation selected | 79.172% | 1.0490 | 456,000 | 7,125 |
+| Joint IID, H=4,096 schedule | 80.828% | 1.0463 | 844,640 | 56,243 |
+
+## Full-stream accuracy and NLL across fixed-policy budgets
+
+Both panels use identical condition names, colors and line styles: solid SRT and dashed uniform, with one color per H. All six replay curves use standard thresholds, old target 0.8 and interval unit 8. Uniform copies its own SRT partner's batch schedule; schedules are not matched across budgets.
+
+The dotted accuracy curve is the original stage-matched joint rank-16 recipe. Its stage NLL was not retained, so no NLL curve is invented. Offline validation-selected and replay-schedule-matched markers are three-seed task-50 means with sample SD, not full-stream curves. The earlier report's other frontier and joint comparisons remain in their original panels.
+
+![Full-stream accuracy and NLL across fixed-policy budgets](standard_budget_comparison.png)
 
 ## Original full-stream comparison at both work budgets
 
@@ -110,6 +139,8 @@ Training time sums measured batch work and committed checkpoint I/O. Loader and 
 | Uniform replay rank 16, H=4,096; standard, old=0.8, unit=8 | 844,640 | 0 | 62.77 |
 | SRT rank 16, H=4,096; strict, old=0.8, unit=8 | 844,640 | 0 | 43.32 |
 | Uniform replay rank 16, H=4,096; strict, old=0.8, unit=8 | 844,640 | 0 | 43.46 |
+| SRT rank 16, H=512; standard, old=0.8, unit=8 | 196,204 | 0 | 10.21 |
+| Uniform replay rank 16, H=512; standard, old=0.8, unit=8 | 196,204 | 0 | 9.36 |
 | Persistent single-affine + adaptive node LoRAs, H=4,096 | 3,050,765 | 2,385,440 | 104.23 |
 | Stage-matched joint IID, rank 16 | 3,140,210 | 0 | 80.72 |
 | Aggregate-rank-matched joint IID | 3,140,210 | 0 | 85.88 |

@@ -1,0 +1,53 @@
+{
+  "schema_version": "imagenetr50-srt-h512-verification-v1",
+  "verified_at_utc": "2026-09-16T18:33:34Z",
+  "run_hash": "c2ea171a6b060ebbce0fcb3e5f5d74a7fe4a2e9e6377be055791328c201bfc5c",
+  "result_content_hash": "15edeec8c9ca6c2a0868d5708395349db372c5290de98d40b6fef4a6c948ba36",
+  "test_suite": {
+    "passed": 78,
+    "failed": 0,
+    "skipped": 0,
+    "pytest_workers": 0,
+    "log": "final_tests.log",
+    "junit": "final_tests.xml",
+    "scope": "eleven focused SRT, joint-control and checkpoint-diagnostic files, including explicit integration tests; not the entire repository"
+  },
+  "dataset": {
+    "image_bytes_validated": 30000,
+    "training_images": 24000,
+    "test_images": 6000,
+    "overlap": 0
+  },
+  "new_evidence": {
+    "streams": 2,
+    "stages_per_stream": 50,
+    "authenticated_model_files": 100,
+    "authenticated_prediction_files": 100,
+    "task50_metrics_reconstructed_from_predictions": true,
+    "first_two_stages_equal_original_h1024_hashes": true,
+    "image_forward_backward_pairs_per_stream": 196204,
+    "optimizer_updates_per_stream": 3358,
+    "exact_paired_exposure_audit_passed": true,
+    "full_replay_event_audit_passed": true,
+    "sealed_reuse_optimizer_updates": 0,
+    "fresh_invocation_reused_same_completed_run": true,
+    "older_condition_summaries_unchanged": 8
+  },
+  "preserved": {
+    "source_results_and_frontier_report": "../source_hashes_before.sha256",
+    "all_preservation_checks_passed": true,
+    "frozen_sample_replay_parquet_sha256": "d213ecc22cdf59f7048e54a813f2982aa765288fa41f5b8686be98d701588069",
+    "core_training_implementation_unchanged": true,
+    "trace_files_changed": false
+  },
+  "report": {
+    "pdf": "output/pdf/imagenetr50_srt_r16_report.pdf",
+    "sha256": "303a4862eea110f3a19dc014cd7a44497886bbd5a038a4639be849dc223ef3f9",
+    "manifest_content_hash": "2dd25b415c3f7187f941d2e40a1620de377d784174393a2d0dbdd6df4c7a3aac",
+    "pages": 32,
+    "all_pages_visually_checked": true,
+    "stage_metric_rows": 500,
+    "current_per_image_rows": 240000,
+    "current_per_image_table": "replay_samples.parquet"
+  }
+}

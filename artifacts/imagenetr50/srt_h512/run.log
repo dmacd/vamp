@@ -1,0 +1,316 @@
+Follow-up working artifacts: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/srt_r16_v1/runs/b3de2a819efe0707b85cf105cf8d4c53370c807b48108bf996dc4f4883a213ea/followups/c2ea171a6b060ebbce0fcb3e5f5d74a7fe4a2e9e6377be055791328c201bfc5c
+Overall 0/392,408 presentations; ETA measuring. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 01:   0%|          | 0/1900 [00:00<?, ?image/s]srt H512 task 01:  53%|█████▎    | 1008/1900 [00:05<00:04, 201.25image/s]Overall 1,900/392,408 presentations; ETA measuring. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 01: 100%|██████████| 1900/1900 [00:10<00:00, 188.96image/s]
+Completed srt_h512_standard_rho80_unit8 task 1/50: 89.831% NLL 1.4865; 1,900 cumulative presentations
+srt H512 task 02:   0%|          | 0/3956 [00:00<?, ?image/s]srt H512 task 02:  41%|████▏     | 1634/3956 [00:05<00:07, 323.19image/s]srt H512 task 02:  82%|████████▏ | 3258/3956 [00:10<00:02, 314.95image/s]Overall 5,856/392,408 presentations; ETA 35.7 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 02: 100%|██████████| 3956/3956 [00:13<00:00, 285.09image/s]
+Completed srt_h512_standard_rho80_unit8 task 2/50: 88.710% NLL 0.4593; 5,856 cumulative presentations
+srt H512 task 03:   0%|          | 0/4392 [00:00<?, ?image/s]srt H512 task 03:  37%|███▋      | 1610/4392 [00:05<00:08, 321.02image/s]srt H512 task 03:  74%|███████▍  | 3244/4392 [00:10<00:03, 322.74image/s]Overall 10,248/392,408 presentations; ETA 27.4 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 03: 100%|██████████| 4392/4392 [00:13<00:00, 315.77image/s]
+Completed srt_h512_standard_rho80_unit8 task 3/50: 88.832% NLL 0.4326; 10,248 cumulative presentations
+srt H512 task 04:   0%|          | 0/4864 [00:00<?, ?image/s]srt H512 task 04:  36%|███▌      | 1728/4864 [00:05<00:09, 340.50image/s]srt H512 task 04:  73%|███████▎  | 3560/4864 [00:10<00:03, 352.25image/s]Overall 15,112/392,408 presentations; ETA 24.6 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 04: 100%|██████████| 4864/4864 [00:14<00:00, 335.39image/s]
+Completed srt_h512_standard_rho80_unit8 task 4/50: 90.702% NLL 0.4289; 15,112 cumulative presentations
+srt H512 task 05:   0%|          | 0/4112 [00:00<?, ?image/s]srt H512 task 05:  44%|████▎     | 1796/4112 [00:05<00:06, 347.93image/s]srt H512 task 05:  86%|████████▌ | 3546/4112 [00:10<00:01, 348.44image/s]Overall 19,224/392,408 presentations; ETA 23.1 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 05: 100%|██████████| 4112/4112 [00:11<00:00, 347.76image/s]
+Completed srt_h512_standard_rho80_unit8 task 5/50: 90.688% NLL 0.4003; 19,224 cumulative presentations
+srt H512 task 06:   0%|          | 0/3976 [00:00<?, ?image/s]srt H512 task 06:  44%|████▍     | 1762/3976 [00:05<00:06, 344.19image/s]srt H512 task 06:  88%|████████▊ | 3490/3976 [00:10<00:01, 337.88image/s]Overall 23,200/392,408 presentations; ETA 22.3 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 06: 100%|██████████| 3976/3976 [00:11<00:00, 339.73image/s]
+Completed srt_h512_standard_rho80_unit8 task 6/50: 89.242% NLL 0.4318; 23,200 cumulative presentations
+srt H512 task 07:   0%|          | 0/3892 [00:00<?, ?image/s]srt H512 task 07:  43%|████▎     | 1677/3892 [00:05<00:06, 325.34image/s]srt H512 task 07:  86%|████████▌ | 3341/3892 [00:10<00:01, 318.99image/s]Overall 27,092/392,408 presentations; ETA 21.9 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 07: 100%|██████████| 3892/3892 [00:12<00:00, 318.51image/s]
+Completed srt_h512_standard_rho80_unit8 task 7/50: 89.282% NLL 0.4396; 27,092 cumulative presentations
+srt H512 task 08:   0%|          | 0/4188 [00:00<?, ?image/s]srt H512 task 08:  39%|███▉      | 1623/4188 [00:05<00:07, 323.84image/s]srt H512 task 08:  80%|████████  | 3351/4188 [00:10<00:02, 331.88image/s]Overall 31,280/392,408 presentations; ETA 21.7 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 08: 100%|██████████| 4188/4188 [00:12<00:00, 328.57image/s]
+Completed srt_h512_standard_rho80_unit8 task 8/50: 89.400% NLL 0.4397; 31,280 cumulative presentations
+srt H512 task 09:   0%|          | 0/4164 [00:00<?, ?image/s]srt H512 task 09:  40%|████      | 1681/4164 [00:05<00:07, 327.51image/s]srt H512 task 09:  83%|████████▎ | 3473/4164 [00:10<00:02, 338.90image/s]Overall 35,444/392,408 presentations; ETA 21.5 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 09: 100%|██████████| 4164/4164 [00:12<00:00, 329.97image/s]
+Completed srt_h512_standard_rho80_unit8 task 9/50: 87.917% NLL 0.4735; 35,444 cumulative presentations
+srt H512 task 10:   0%|          | 0/4236 [00:00<?, ?image/s]srt H512 task 10:  40%|████      | 1699/4236 [00:05<00:07, 339.79image/s]srt H512 task 10:  81%|████████  | 3427/4236 [00:10<00:02, 338.78image/s]Overall 39,680/392,408 presentations; ETA 21.3 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 10: 100%|██████████| 4236/4236 [00:12<00:00, 337.80image/s]
+Completed srt_h512_standard_rho80_unit8 task 10/50: 87.818% NLL 0.4869; 39,680 cumulative presentations
+srt H512 task 11:   0%|          | 0/3628 [00:00<?, ?image/s]srt H512 task 11:  46%|████▌     | 1675/3628 [00:05<00:05, 332.22image/s]srt H512 task 11:  92%|█████████▏| 3339/3628 [00:10<00:00, 331.37image/s]Overall 43,308/392,408 presentations; ETA 21.1 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 11: 100%|██████████| 3628/3628 [00:11<00:00, 329.80image/s]
+Completed srt_h512_standard_rho80_unit8 task 11/50: 87.274% NLL 0.4977; 43,308 cumulative presentations
+srt H512 task 12:   0%|          | 0/3892 [00:00<?, ?image/s]srt H512 task 12:  43%|████▎     | 1677/3892 [00:05<00:06, 334.74image/s]srt H512 task 12:  89%|████████▉ | 3469/3892 [00:10<00:01, 347.45image/s]Overall 47,200/392,408 presentations; ETA 21.0 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 12: 100%|██████████| 3892/3892 [00:11<00:00, 339.59image/s]
+Completed srt_h512_standard_rho80_unit8 task 12/50: 87.516% NLL 0.5071; 47,200 cumulative presentations
+srt H512 task 13:   0%|          | 0/4092 [00:00<?, ?image/s]srt H512 task 13:  44%|████▍     | 1791/4092 [00:05<00:06, 349.80image/s]srt H512 task 13:  88%|████████▊ | 3583/4092 [00:10<00:01, 352.46image/s]Overall 51,292/392,408 presentations; ETA 20.9 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 13: 100%|██████████| 4092/4092 [00:11<00:00, 344.46image/s]
+Completed srt_h512_standard_rho80_unit8 task 13/50: 87.448% NLL 0.4943; 51,292 cumulative presentations
+srt H512 task 14:   0%|          | 0/4152 [00:00<?, ?image/s]srt H512 task 14:  39%|███▉      | 1614/4152 [00:05<00:07, 320.03image/s]srt H512 task 14:  80%|████████  | 3342/4152 [00:10<00:02, 329.14image/s]Overall 55,444/392,408 presentations; ETA 20.7 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 14: 100%|██████████| 4152/4152 [00:12<00:00, 328.16image/s]
+Completed srt_h512_standard_rho80_unit8 task 14/50: 86.156% NLL 0.5479; 55,444 cumulative presentations
+srt H512 task 15:   0%|          | 0/3908 [00:00<?, ?image/s]srt H512 task 15:  45%|████▍     | 1745/3908 [00:05<00:06, 333.39image/s]srt H512 task 15:  92%|█████████▏| 3601/3908 [00:10<00:00, 347.59image/s]Overall 59,352/392,408 presentations; ETA 20.6 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 15: 100%|██████████| 3908/3908 [00:11<00:00, 341.55image/s]
+Completed srt_h512_standard_rho80_unit8 task 15/50: 86.418% NLL 0.5515; 59,352 cumulative presentations
+srt H512 task 16:   0%|          | 0/4164 [00:00<?, ?image/s]srt H512 task 16:  39%|███▉      | 1617/4164 [00:05<00:08, 317.51image/s]srt H512 task 16:  80%|████████  | 3345/4164 [00:10<00:02, 327.60image/s]Overall 63,516/392,408 presentations; ETA 20.5 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 16: 100%|██████████| 4164/4164 [00:13<00:00, 306.01image/s]
+Completed srt_h512_standard_rho80_unit8 task 16/50: 84.724% NLL 0.5956; 63,516 cumulative presentations
+srt H512 task 17:   0%|          | 0/4040 [00:00<?, ?image/s]srt H512 task 17:  42%|████▏     | 1714/4040 [00:05<00:06, 335.26image/s]srt H512 task 17:  85%|████████▌ | 3442/4040 [00:10<00:01, 333.90image/s]Overall 67,556/392,408 presentations; ETA 20.5 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 17: 100%|██████████| 4040/4040 [00:12<00:00, 332.11image/s]
+Completed srt_h512_standard_rho80_unit8 task 17/50: 84.826% NLL 0.6021; 67,556 cumulative presentations
+srt H512 task 18:   0%|          | 0/3740 [00:00<?, ?image/s]srt H512 task 18:  46%|████▌     | 1703/3740 [00:05<00:05, 340.15image/s]srt H512 task 18:  92%|█████████▏| 3431/3740 [00:10<00:00, 339.44image/s]Overall 71,296/392,408 presentations; ETA 20.4 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 18: 100%|██████████| 3740/3740 [00:11<00:00, 328.72image/s]
+Completed srt_h512_standard_rho80_unit8 task 18/50: 85.135% NLL 0.5969; 71,296 cumulative presentations
+srt H512 task 19:   0%|          | 0/3780 [00:00<?, ?image/s]srt H512 task 19:  45%|████▌     | 1713/3780 [00:05<00:06, 327.93image/s]srt H512 task 19:  89%|████████▉ | 3377/3780 [00:10<00:01, 330.68image/s]Overall 75,076/392,408 presentations; ETA 20.3 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 19: 100%|██████████| 3780/3780 [00:11<00:00, 322.10image/s]
+Completed srt_h512_standard_rho80_unit8 task 19/50: 85.019% NLL 0.6103; 75,076 cumulative presentations
+srt H512 task 20:   0%|          | 0/3672 [00:00<?, ?image/s]srt H512 task 20:  46%|████▌     | 1686/3672 [00:05<00:06, 325.58image/s]srt H512 task 20:  93%|█████████▎| 3414/3672 [00:10<00:00, 336.80image/s]Overall 78,748/392,408 presentations; ETA 20.3 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 20: 100%|██████████| 3672/3672 [00:11<00:00, 322.82image/s]
+Completed srt_h512_standard_rho80_unit8 task 20/50: 83.666% NLL 0.7172; 78,748 cumulative presentations
+srt H512 task 21:   0%|          | 0/4364 [00:00<?, ?image/s]srt H512 task 21:  37%|███▋      | 1603/4364 [00:05<00:08, 320.22image/s]srt H512 task 21:  78%|███████▊  | 3395/4364 [00:10<00:02, 339.06image/s]Overall 83,112/392,408 presentations; ETA 20.2 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 21: 100%|██████████| 4364/4364 [00:13<00:00, 324.57image/s]
+Completed srt_h512_standard_rho80_unit8 task 21/50: 84.668% NLL 0.6351; 83,112 cumulative presentations
+srt H512 task 22:   0%|          | 0/3968 [00:00<?, ?image/s]srt H512 task 22:  46%|████▌     | 1824/3968 [00:05<00:06, 348.51image/s]srt H512 task 22:  91%|█████████ | 3616/3968 [00:10<00:01, 341.46image/s]Overall 87,080/392,408 presentations; ETA 20.1 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 22: 100%|██████████| 3968/3968 [00:11<00:00, 336.72image/s]
+Completed srt_h512_standard_rho80_unit8 task 22/50: 84.068% NLL 0.6689; 87,080 cumulative presentations
+srt H512 task 23:   0%|          | 0/3920 [00:00<?, ?image/s]srt H512 task 23:  41%|████▏     | 1620/3920 [00:05<00:07, 323.96image/s]srt H512 task 23:  85%|████████▌ | 3348/3920 [00:10<00:01, 336.21image/s]Overall 91,000/392,408 presentations; ETA 20.0 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 23: 100%|██████████| 3920/3920 [00:11<00:00, 329.58image/s]
+Completed srt_h512_standard_rho80_unit8 task 23/50: 83.847% NLL 0.6881; 91,000 cumulative presentations
+srt H512 task 24:   0%|          | 0/3424 [00:00<?, ?image/s]srt H512 task 24:  49%|████▉     | 1688/3424 [00:05<00:05, 324.54image/s]Overall 94,424/392,408 presentations; ETA 19.9 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 24: 100%|██████████| 3424/3424 [00:10<00:00, 330.69image/s]
+Completed srt_h512_standard_rho80_unit8 task 24/50: 82.329% NLL 0.7656; 94,424 cumulative presentations
+srt H512 task 25:   0%|          | 0/3084 [00:00<?, ?image/s]srt H512 task 25:  54%|█████▍    | 1667/3084 [00:05<00:04, 328.27image/s]Overall 97,508/392,408 presentations; ETA 19.9 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 25: 100%|██████████| 3084/3084 [00:09<00:00, 321.63image/s]
+Completed srt_h512_standard_rho80_unit8 task 25/50: 82.345% NLL 0.7224; 97,508 cumulative presentations
+srt H512 task 26:   0%|          | 0/4020 [00:00<?, ?image/s]srt H512 task 26:  41%|████      | 1645/4020 [00:05<00:07, 324.10image/s]srt H512 task 26:  85%|████████▌ | 3437/4020 [00:10<00:01, 336.99image/s]Overall 101,528/392,408 presentations; ETA 19.8 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 26: 100%|██████████| 4020/4020 [00:12<00:00, 322.94image/s]
+Completed srt_h512_standard_rho80_unit8 task 26/50: 82.526% NLL 0.7492; 101,528 cumulative presentations
+srt H512 task 27:   0%|          | 0/3848 [00:00<?, ?image/s]srt H512 task 27:  45%|████▍     | 1730/3848 [00:05<00:06, 342.33image/s]srt H512 task 27:  90%|████████▉ | 3458/3848 [00:10<00:01, 335.46image/s]Overall 105,376/392,408 presentations; ETA 19.7 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 27: 100%|██████████| 3848/3848 [00:11<00:00, 331.57image/s]
+Completed srt_h512_standard_rho80_unit8 task 27/50: 82.090% NLL 0.7579; 105,376 cumulative presentations
+srt H512 task 28:   0%|          | 0/3664 [00:00<?, ?image/s]srt H512 task 28:  48%|████▊     | 1748/3664 [00:05<00:05, 339.79image/s]srt H512 task 28:  95%|█████████▍| 3476/3664 [00:10<00:00, 338.30image/s]Overall 109,040/392,408 presentations; ETA 19.5 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 28: 100%|██████████| 3664/3664 [00:11<00:00, 330.84image/s]
+Completed srt_h512_standard_rho80_unit8 task 28/50: 81.683% NLL 0.7796; 109,040 cumulative presentations
+srt H512 task 29:   0%|          | 0/3872 [00:00<?, ?image/s]srt H512 task 29:  42%|████▏     | 1608/3872 [00:05<00:07, 320.17image/s]srt H512 task 29:  85%|████████▍ | 3272/3872 [00:10<00:01, 323.72image/s]Overall 112,912/392,408 presentations; ETA 19.4 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 29: 100%|██████████| 3872/3872 [00:12<00:00, 318.81image/s]
+Completed srt_h512_standard_rho80_unit8 task 29/50: 80.763% NLL 0.8082; 112,912 cumulative presentations
+srt H512 task 30:   0%|          | 0/5472 [00:00<?, ?image/s]srt H512 task 30:  32%|███▏      | 1752/5472 [00:05<00:10, 340.43image/s]srt H512 task 30:  66%|██████▌   | 3608/5472 [00:10<00:05, 352.88image/s]srt H512 task 30:  99%|█████████▊| 5400/5472 [00:15<00:00, 344.61image/s]Overall 118,384/392,408 presentations; ETA 19.2 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 30: 100%|██████████| 5472/5472 [00:16<00:00, 339.82image/s]
+Completed srt_h512_standard_rho80_unit8 task 30/50: 81.929% NLL 0.7582; 118,384 cumulative presentations
+srt H512 task 31:   0%|          | 0/3880 [00:00<?, ?image/s]srt H512 task 31:  41%|████▏     | 1610/3880 [00:05<00:07, 318.03image/s]srt H512 task 31:  86%|████████▌ | 3338/3880 [00:10<00:01, 330.23image/s]Overall 122,264/392,408 presentations; ETA 19.0 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 31: 100%|██████████| 3880/3880 [00:11<00:00, 323.98image/s]
+Completed srt_h512_standard_rho80_unit8 task 31/50: 81.158% NLL 0.7747; 122,264 cumulative presentations
+srt H512 task 32:   0%|          | 0/3680 [00:00<?, ?image/s]srt H512 task 32:  44%|████▍     | 1624/3680 [00:05<00:06, 321.40image/s]srt H512 task 32:  95%|█████████▍| 3480/3680 [00:10<00:00, 344.41image/s]Overall 125,944/392,408 presentations; ETA 18.9 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 32: 100%|██████████| 3680/3680 [00:11<00:00, 332.36image/s]
+Completed srt_h512_standard_rho80_unit8 task 32/50: 81.424% NLL 0.7846; 125,944 cumulative presentations
+srt H512 task 33:   0%|          | 0/3820 [00:00<?, ?image/s]srt H512 task 33:  43%|████▎     | 1659/3820 [00:05<00:06, 323.60image/s]srt H512 task 33:  89%|████████▊ | 3387/3820 [00:10<00:01, 336.03image/s]Overall 129,764/392,408 presentations; ETA 18.8 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 33: 100%|██████████| 3820/3820 [00:11<00:00, 320.24image/s]
+Completed srt_h512_standard_rho80_unit8 task 33/50: 81.811% NLL 0.7574; 129,764 cumulative presentations
+srt H512 task 34:   0%|          | 0/3176 [00:00<?, ?image/s]srt H512 task 34:  53%|█████▎    | 1690/3176 [00:05<00:04, 329.11image/s]Overall 132,940/392,408 presentations; ETA 18.8 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 34: 100%|██████████| 3176/3176 [00:10<00:00, 313.54image/s]
+Completed srt_h512_standard_rho80_unit8 task 34/50: 81.122% NLL 0.7805; 132,940 cumulative presentations
+srt H512 task 35:   0%|          | 0/4300 [00:00<?, ?image/s]srt H512 task 35:  38%|███▊      | 1651/4300 [00:05<00:08, 329.48image/s]srt H512 task 35:  77%|███████▋  | 3315/4300 [00:10<00:03, 320.74image/s]Overall 137,240/392,408 presentations; ETA 18.6 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 35: 100%|██████████| 4300/4300 [00:13<00:00, 318.52image/s]
+Completed srt_h512_standard_rho80_unit8 task 35/50: 81.231% NLL 0.8080; 137,240 cumulative presentations
+srt H512 task 36:   0%|          | 0/4524 [00:00<?, ?image/s]srt H512 task 36:  35%|███▍      | 1579/4524 [00:05<00:09, 305.76image/s]srt H512 task 36:  73%|███████▎  | 3307/4524 [00:10<00:03, 323.27image/s]Overall 141,764/392,408 presentations; ETA 18.5 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 36: 100%|██████████| 4524/4524 [00:14<00:00, 314.45image/s]
+Completed srt_h512_standard_rho80_unit8 task 36/50: 81.433% NLL 0.7797; 141,764 cumulative presentations
+srt H512 task 37:   0%|          | 0/4576 [00:00<?, ?image/s]srt H512 task 37:  36%|███▌      | 1656/4576 [00:05<00:08, 324.90image/s]srt H512 task 37:  74%|███████▍  | 3384/4576 [00:10<00:03, 317.60image/s]Overall 146,340/392,408 presentations; ETA 18.3 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 37: 100%|██████████| 4576/4576 [00:14<00:00, 316.11image/s]
+Completed srt_h512_standard_rho80_unit8 task 37/50: 80.646% NLL 0.8657; 146,340 cumulative presentations
+srt H512 task 38:   0%|          | 0/4348 [00:00<?, ?image/s]srt H512 task 38:  37%|███▋      | 1599/4348 [00:05<00:08, 318.94image/s]srt H512 task 38:  74%|███████▎  | 3199/4348 [00:10<00:03, 313.93image/s]Overall 150,688/392,408 presentations; ETA 18.1 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 38: 100%|██████████| 4348/4348 [00:13<00:00, 312.63image/s]
+Completed srt_h512_standard_rho80_unit8 task 38/50: 80.085% NLL 0.8611; 150,688 cumulative presentations
+srt H512 task 39:   0%|          | 0/3884 [00:00<?, ?image/s]srt H512 task 39:  37%|███▋      | 1419/3884 [00:05<00:08, 281.18image/s]srt H512 task 39:  78%|███████▊  | 3019/3884 [00:10<00:02, 298.87image/s]Overall 154,572/392,408 presentations; ETA 17.9 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 39: 100%|██████████| 3884/3884 [00:13<00:00, 288.80image/s]
+Completed srt_h512_standard_rho80_unit8 task 39/50: 80.828% NLL 0.8041; 154,572 cumulative presentations
+srt H512 task 40:   0%|          | 0/4264 [00:00<?, ?image/s]srt H512 task 40:  40%|████      | 1706/4264 [00:05<00:07, 334.96image/s]srt H512 task 40:  81%|████████  | 3434/4264 [00:10<00:02, 326.46image/s]Overall 158,836/392,408 presentations; ETA 17.8 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 40: 100%|██████████| 4264/4264 [00:13<00:00, 321.17image/s]
+Completed srt_h512_standard_rho80_unit8 task 40/50: 80.776% NLL 0.8261; 158,836 cumulative presentations
+srt H512 task 41:   0%|          | 0/3236 [00:00<?, ?image/s]srt H512 task 41:  51%|█████     | 1641/3236 [00:05<00:04, 324.57image/s]Overall 162,072/392,408 presentations; ETA 17.6 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 41: 100%|██████████| 3236/3236 [00:10<00:00, 310.18image/s]
+Completed srt_h512_standard_rho80_unit8 task 41/50: 80.701% NLL 0.8325; 162,072 cumulative presentations
+srt H512 task 42:   0%|          | 0/4240 [00:00<?, ?image/s]srt H512 task 42:  42%|████▏     | 1764/4240 [00:05<00:07, 343.98image/s]srt H512 task 42:  82%|████████▏ | 3492/4240 [00:10<00:02, 330.62image/s]Overall 166,312/392,408 presentations; ETA 17.5 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 42: 100%|██████████| 4240/4240 [00:12<00:00, 326.74image/s]
+Completed srt_h512_standard_rho80_unit8 task 42/50: 80.803% NLL 0.8353; 166,312 cumulative presentations
+srt H512 task 43:   0%|          | 0/3576 [00:00<?, ?image/s]srt H512 task 43:  43%|████▎     | 1534/3576 [00:05<00:06, 299.16image/s]srt H512 task 43:  91%|█████████ | 3262/3576 [00:10<00:00, 323.03image/s]Overall 169,888/392,408 presentations; ETA 17.3 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 43: 100%|██████████| 3576/3576 [00:11<00:00, 308.42image/s]
+Completed srt_h512_standard_rho80_unit8 task 43/50: 80.868% NLL 0.8179; 169,888 cumulative presentations
+srt H512 task 44:   0%|          | 0/3220 [00:00<?, ?image/s]srt H512 task 44:  49%|████▉     | 1573/3220 [00:05<00:05, 303.74image/s]Overall 173,108/392,408 presentations; ETA 17.2 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 44: 100%|██████████| 3220/3220 [00:10<00:00, 310.23image/s]
+Completed srt_h512_standard_rho80_unit8 task 44/50: 80.586% NLL 0.8677; 173,108 cumulative presentations
+srt H512 task 45:   0%|          | 0/3736 [00:00<?, ?image/s]srt H512 task 45:  40%|████      | 1510/3736 [00:05<00:07, 297.00image/s]srt H512 task 45:  87%|████████▋ | 3238/3736 [00:10<00:01, 321.03image/s]Overall 176,844/392,408 presentations; ETA 17.1 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 45: 100%|██████████| 3736/3736 [00:12<00:00, 302.93image/s]
+Completed srt_h512_standard_rho80_unit8 task 45/50: 79.967% NLL 0.8809; 176,844 cumulative presentations
+srt H512 task 46:   0%|          | 0/4084 [00:00<?, ?image/s]srt H512 task 46:  39%|███▉      | 1597/4084 [00:05<00:07, 315.35image/s]srt H512 task 46:  78%|███████▊  | 3197/4084 [00:10<00:02, 309.61image/s]Overall 180,928/392,408 presentations; ETA 16.9 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 46: 100%|██████████| 4084/4084 [00:13<00:00, 307.52image/s]
+Completed srt_h512_standard_rho80_unit8 task 46/50: 79.273% NLL 0.9043; 180,928 cumulative presentations
+srt H512 task 47:   0%|          | 0/3852 [00:00<?, ?image/s]srt H512 task 47:  45%|████▍     | 1731/3852 [00:05<00:06, 342.28image/s]srt H512 task 47:  90%|████████▉ | 3459/3852 [00:10<00:01, 322.50image/s]Overall 184,780/392,408 presentations; ETA 16.7 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 47: 100%|██████████| 3852/3852 [00:12<00:00, 316.83image/s]
+Completed srt_h512_standard_rho80_unit8 task 47/50: 78.417% NLL 1.0036; 184,780 cumulative presentations
+srt H512 task 48:   0%|          | 0/3880 [00:00<?, ?image/s]srt H512 task 48:  41%|████▏     | 1610/3880 [00:05<00:07, 310.74image/s]srt H512 task 48:  83%|████████▎ | 3210/3880 [00:10<00:02, 313.75image/s]Overall 188,660/392,408 presentations; ETA 16.6 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 48: 100%|██████████| 3880/3880 [00:12<00:00, 306.51image/s]
+Completed srt_h512_standard_rho80_unit8 task 48/50: 78.189% NLL 1.0261; 188,660 cumulative presentations
+srt H512 task 49:   0%|          | 0/3720 [00:00<?, ?image/s]srt H512 task 49:  42%|████▏     | 1570/3720 [00:05<00:07, 305.38image/s]srt H512 task 49:  89%|████████▊ | 3298/3720 [00:10<00:01, 325.51image/s]Overall 192,380/392,408 presentations; ETA 16.4 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 49: 100%|██████████| 3720/3720 [00:12<00:00, 309.25image/s]
+Completed srt_h512_standard_rho80_unit8 task 49/50: 78.744% NLL 0.9502; 192,380 cumulative presentations
+srt H512 task 50:   0%|          | 0/3824 [00:00<?, ?image/s]srt H512 task 50:  42%|████▏     | 1596/3824 [00:05<00:07, 311.05image/s]srt H512 task 50:  85%|████████▌ | 3260/3824 [00:10<00:01, 319.94image/s]Overall 196,204/392,408 presentations; ETA 16.2 min. srt_h512_standard_rho80_unit8, tasks 1-50
+srt H512 task 50: 100%|██████████| 3824/3824 [00:12<00:00, 303.44image/s]
+Completed srt_h512_standard_rho80_unit8 task 50/50: 78.933% NLL 0.9690; 196,204 cumulative presentations
+Overall 196,204/392,408 presentations; ETA 16.3 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 01:   0%|          | 0/1900 [00:00<?, ?image/s]uniform H512 task 01:  83%|████████▎ | 1585/1900 [00:05<00:01, 309.99image/s]Overall 198,104/392,408 presentations; ETA 16.2 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 01: 100%|██████████| 1900/1900 [00:07<00:00, 261.88image/s]
+Completed uniform_h512_standard_rho80_unit8 task 1/50: 91.525% NLL 1.5258; 1,900 cumulative presentations
+uniform H512 task 02:   0%|          | 0/3956 [00:00<?, ?image/s]uniform H512 task 02:  46%|████▌     | 1819/3956 [00:05<00:05, 360.39image/s]uniform H512 task 02:  92%|█████████▏| 3621/3956 [00:11<00:01, 300.64image/s]Overall 202,060/392,408 presentations; ETA 15.8 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 02: 100%|██████████| 3956/3956 [00:13<00:00, 297.63image/s]
+Completed uniform_h512_standard_rho80_unit8 task 2/50: 89.919% NLL 0.5367; 5,856 cumulative presentations
+uniform H512 task 03:   0%|          | 0/4392 [00:00<?, ?image/s]uniform H512 task 03:  41%|████      | 1802/4392 [00:05<00:07, 343.10image/s]uniform H512 task 03:  80%|████████  | 3535/4392 [00:10<00:02, 334.26image/s]Overall 206,452/392,408 presentations; ETA 15.4 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 03: 100%|██████████| 4392/4392 [00:13<00:00, 325.67image/s]
+Completed uniform_h512_standard_rho80_unit8 task 3/50: 89.594% NLL 0.3989; 10,248 cumulative presentations
+uniform H512 task 04:   0%|          | 0/4864 [00:00<?, ?image/s]uniform H512 task 04:  37%|███▋      | 1792/4864 [00:05<00:08, 351.82image/s]uniform H512 task 04:  75%|███████▌  | 3660/4864 [00:10<00:03, 361.77image/s]Overall 211,316/392,408 presentations; ETA 14.8 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 04: 100%|██████████| 4864/4864 [00:13<00:00, 356.94image/s]
+Completed uniform_h512_standard_rho80_unit8 task 4/50: 91.754% NLL 0.3745; 15,112 cumulative presentations
+uniform H512 task 05:   0%|          | 0/4112 [00:00<?, ?image/s]uniform H512 task 05:  45%|████▌     | 1860/4112 [00:05<00:06, 366.93image/s]uniform H512 task 05:  93%|█████████▎| 3844/4112 [00:10<00:00, 380.65image/s]Overall 215,428/392,408 presentations; ETA 14.4 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 05: 100%|██████████| 4112/4112 [00:10<00:00, 374.14image/s]
+Completed uniform_h512_standard_rho80_unit8 task 5/50: 90.688% NLL 0.3562; 19,224 cumulative presentations
+uniform H512 task 06:   0%|          | 0/3976 [00:00<?, ?image/s]uniform H512 task 06:  44%|████▍     | 1762/3976 [00:05<00:06, 349.24image/s]uniform H512 task 06:  89%|████████▉ | 3554/3976 [00:10<00:01, 350.50image/s]Overall 219,404/392,408 presentations; ETA 14.0 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 06: 100%|██████████| 3976/3976 [00:11<00:00, 349.71image/s]
+Completed uniform_h512_standard_rho80_unit8 task 6/50: 88.998% NLL 0.4028; 23,200 cumulative presentations
+uniform H512 task 07:   0%|          | 0/3892 [00:00<?, ?image/s]uniform H512 task 07:  46%|████▋     | 1805/3892 [00:05<00:05, 350.96image/s]uniform H512 task 07:  96%|█████████▌| 3725/3892 [00:10<00:00, 366.57image/s]Overall 223,296/392,408 presentations; ETA 13.6 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 07: 100%|██████████| 3892/3892 [00:10<00:00, 362.05image/s]
+Completed uniform_h512_standard_rho80_unit8 task 7/50: 89.603% NLL 0.3996; 27,092 cumulative presentations
+uniform H512 task 08:   0%|          | 0/4188 [00:00<?, ?image/s]uniform H512 task 08:  43%|████▎     | 1815/4188 [00:05<00:06, 351.24image/s]uniform H512 task 08:  88%|████████▊ | 3671/4188 [00:10<00:01, 357.98image/s]Overall 227,484/392,408 presentations; ETA 13.2 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 08: 100%|██████████| 4188/4188 [00:11<00:00, 353.81image/s]
+Completed uniform_h512_standard_rho80_unit8 task 8/50: 89.493% NLL 0.4173; 31,280 cumulative presentations
+uniform H512 task 09:   0%|          | 0/4164 [00:00<?, ?image/s]uniform H512 task 09:  43%|████▎     | 1809/4164 [00:05<00:06, 356.39image/s]uniform H512 task 09:  88%|████████▊ | 3665/4164 [00:10<00:01, 364.07image/s]Overall 231,648/392,408 presentations; ETA 12.8 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 09: 100%|██████████| 4164/4164 [00:11<00:00, 357.37image/s]
+Completed uniform_h512_standard_rho80_unit8 task 9/50: 88.917% NLL 0.4415; 35,444 cumulative presentations
+uniform H512 task 10:   0%|          | 0/4236 [00:00<?, ?image/s]uniform H512 task 10:  45%|████▍     | 1891/4236 [00:05<00:06, 368.70image/s]uniform H512 task 10:  88%|████████▊ | 3747/4236 [00:10<00:01, 356.37image/s]Overall 235,884/392,408 presentations; ETA 12.4 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 10: 100%|██████████| 4236/4236 [00:11<00:00, 357.63image/s]
+Completed uniform_h512_standard_rho80_unit8 task 10/50: 87.593% NLL 0.5327; 39,680 cumulative presentations
+uniform H512 task 11:   0%|          | 0/3628 [00:00<?, ?image/s]uniform H512 task 11:  50%|████▉     | 1803/3628 [00:05<00:05, 356.23image/s]Overall 239,512/392,408 presentations; ETA 12.0 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 11: 100%|██████████| 3628/3628 [00:10<00:00, 361.31image/s]
+Completed uniform_h512_standard_rho80_unit8 task 11/50: 87.761% NLL 0.4837; 43,308 cumulative presentations
+uniform H512 task 12:   0%|          | 0/3892 [00:00<?, ?image/s]uniform H512 task 12:  48%|████▊     | 1869/3892 [00:05<00:05, 363.01image/s]uniform H512 task 12:  97%|█████████▋| 3789/3892 [00:10<00:00, 367.82image/s]Overall 243,404/392,408 presentations; ETA 11.7 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 12: 100%|██████████| 3892/3892 [00:10<00:00, 362.64image/s]
+Completed uniform_h512_standard_rho80_unit8 task 12/50: 87.452% NLL 0.5025; 47,200 cumulative presentations
+uniform H512 task 13:   0%|          | 0/4092 [00:00<?, ?image/s]uniform H512 task 13:  45%|████▌     | 1855/4092 [00:05<00:06, 364.13image/s]uniform H512 task 13:  91%|█████████ | 3711/4092 [00:10<00:01, 364.07image/s]Overall 247,496/392,408 presentations; ETA 11.3 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 13: 100%|██████████| 4092/4092 [00:11<00:00, 362.41image/s]
+Completed uniform_h512_standard_rho80_unit8 task 13/50: 87.983% NLL 0.4900; 51,292 cumulative presentations
+uniform H512 task 14:   0%|          | 0/4152 [00:00<?, ?image/s]uniform H512 task 14:  40%|████      | 1678/4152 [00:05<00:07, 327.13image/s]uniform H512 task 14:  82%|████████▏ | 3406/4152 [00:10<00:02, 332.09image/s]Overall 251,648/392,408 presentations; ETA 10.9 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 14: 100%|██████████| 4152/4152 [00:12<00:00, 336.66image/s]
+Completed uniform_h512_standard_rho80_unit8 task 14/50: 87.369% NLL 0.5056; 55,444 cumulative presentations
+uniform H512 task 15:   0%|          | 0/3908 [00:00<?, ?image/s]uniform H512 task 15:  45%|████▍     | 1745/3908 [00:05<00:06, 348.82image/s]uniform H512 task 15:  94%|█████████▍| 3665/3908 [00:10<00:00, 365.06image/s]Overall 255,556/392,408 presentations; ETA 10.6 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 15: 100%|██████████| 3908/3908 [00:10<00:00, 359.51image/s]
+Completed uniform_h512_standard_rho80_unit8 task 15/50: 86.418% NLL 0.5334; 59,352 cumulative presentations
+uniform H512 task 16:   0%|          | 0/4164 [00:00<?, ?image/s]uniform H512 task 16:  43%|████▎     | 1809/4164 [00:05<00:06, 352.77image/s]uniform H512 task 16:  86%|████████▋ | 3601/4164 [00:10<00:01, 351.63image/s]Overall 259,720/392,408 presentations; ETA 10.3 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 16: 100%|██████████| 4164/4164 [00:12<00:00, 338.74image/s]
+Completed uniform_h512_standard_rho80_unit8 task 16/50: 85.403% NLL 0.5945; 63,516 cumulative presentations
+uniform H512 task 17:   0%|          | 0/4040 [00:00<?, ?image/s]uniform H512 task 17:  46%|████▌     | 1842/4040 [00:05<00:05, 367.04image/s]uniform H512 task 17:  92%|█████████▏| 3698/4040 [00:10<00:00, 360.87image/s]Overall 263,760/392,408 presentations; ETA 9.9 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 17: 100%|██████████| 4040/4040 [00:11<00:00, 355.37image/s]
+Completed uniform_h512_standard_rho80_unit8 task 17/50: 85.146% NLL 0.5883; 67,556 cumulative presentations
+uniform H512 task 18:   0%|          | 0/3740 [00:00<?, ?image/s]uniform H512 task 18:  49%|████▉     | 1831/3740 [00:05<00:05, 360.03image/s]uniform H512 task 18:  99%|█████████▊| 3687/3740 [00:10<00:00, 357.47image/s]Overall 267,500/392,408 presentations; ETA 9.6 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 18: 100%|██████████| 3740/3740 [00:10<00:00, 351.63image/s]
+Completed uniform_h512_standard_rho80_unit8 task 18/50: 85.571% NLL 0.5923; 71,296 cumulative presentations
+uniform H512 task 19:   0%|          | 0/3780 [00:00<?, ?image/s]uniform H512 task 19:  45%|████▌     | 1713/3780 [00:05<00:06, 342.39image/s]uniform H512 task 19:  96%|█████████▌| 3633/3780 [00:10<00:00, 361.13image/s]Overall 271,280/392,408 presentations; ETA 9.3 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 19: 100%|██████████| 3780/3780 [00:10<00:00, 352.63image/s]
+Completed uniform_h512_standard_rho80_unit8 task 19/50: 85.227% NLL 0.5997; 75,076 cumulative presentations
+uniform H512 task 20:   0%|          | 0/3672 [00:00<?, ?image/s]uniform H512 task 20:  49%|████▉     | 1814/3672 [00:05<00:05, 357.36image/s]Overall 274,952/392,408 presentations; ETA 9.0 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 20: 100%|██████████| 3672/3672 [00:10<00:00, 360.20image/s]
+Completed uniform_h512_standard_rho80_unit8 task 20/50: 84.425% NLL 0.6753; 78,748 cumulative presentations
+uniform H512 task 21:   0%|          | 0/4364 [00:00<?, ?image/s]uniform H512 task 21:  41%|████      | 1795/4364 [00:05<00:07, 350.49image/s]uniform H512 task 21:  85%|████████▌ | 3715/4364 [00:10<00:01, 365.14image/s]Overall 279,316/392,408 presentations; ETA 8.7 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 21: 100%|██████████| 4364/4364 [00:12<00:00, 360.88image/s]
+Completed uniform_h512_standard_rho80_unit8 task 21/50: 84.970% NLL 0.6168; 83,112 cumulative presentations
+uniform H512 task 22:   0%|          | 0/3968 [00:00<?, ?image/s]uniform H512 task 22:  49%|████▉     | 1952/3968 [00:05<00:05, 381.07image/s]uniform H512 task 22:  98%|█████████▊| 3872/3968 [00:10<00:00, 362.11image/s]Overall 283,284/392,408 presentations; ETA 8.4 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 22: 100%|██████████| 3968/3968 [00:11<00:00, 359.24image/s]
+Completed uniform_h512_standard_rho80_unit8 task 22/50: 84.754% NLL 0.6464; 87,080 cumulative presentations
+uniform H512 task 23:   0%|          | 0/3920 [00:00<?, ?image/s]uniform H512 task 23:  45%|████▍     | 1748/3920 [00:05<00:06, 348.40image/s]uniform H512 task 23:  92%|█████████▏| 3604/3920 [00:10<00:00, 358.24image/s]Overall 287,204/392,408 presentations; ETA 8.0 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 23: 100%|██████████| 3920/3920 [00:11<00:00, 347.16image/s]
+Completed uniform_h512_standard_rho80_unit8 task 23/50: 83.882% NLL 0.6693; 91,000 cumulative presentations
+uniform H512 task 24:   0%|          | 0/3424 [00:00<?, ?image/s]uniform H512 task 24:  55%|█████▍    | 1880/3424 [00:05<00:04, 369.34image/s]Overall 290,628/392,408 presentations; ETA 7.8 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 24: 100%|██████████| 3424/3424 [00:09<00:00, 365.85image/s]
+Completed uniform_h512_standard_rho80_unit8 task 24/50: 82.969% NLL 0.6927; 94,424 cumulative presentations
+uniform H512 task 25:   0%|          | 0/3084 [00:00<?, ?image/s]uniform H512 task 25:  58%|█████▊    | 1795/3084 [00:05<00:03, 349.06image/s]Overall 293,712/392,408 presentations; ETA 7.5 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 25: 100%|██████████| 3084/3084 [00:08<00:00, 348.92image/s]
+Completed uniform_h512_standard_rho80_unit8 task 25/50: 82.510% NLL 0.7105; 97,508 cumulative presentations
+uniform H512 task 26:   0%|          | 0/4020 [00:00<?, ?image/s]uniform H512 task 26:  41%|████      | 1645/4020 [00:05<00:07, 327.26image/s]uniform H512 task 26:  87%|████████▋ | 3501/4020 [00:10<00:01, 349.31image/s]Overall 297,732/392,408 presentations; ETA 7.2 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 26: 100%|██████████| 4020/4020 [00:12<00:00, 333.58image/s]
+Completed uniform_h512_standard_rho80_unit8 task 26/50: 83.033% NLL 0.7229; 101,528 cumulative presentations
+uniform H512 task 27:   0%|          | 0/3848 [00:00<?, ?image/s]uniform H512 task 27:  48%|████▊     | 1858/3848 [00:05<00:05, 368.91image/s]uniform H512 task 27:  97%|█████████▋| 3714/3848 [00:10<00:00, 361.00image/s]Overall 301,580/392,408 presentations; ETA 6.9 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 27: 100%|██████████| 3848/3848 [00:10<00:00, 353.53image/s]
+Completed uniform_h512_standard_rho80_unit8 task 27/50: 82.427% NLL 0.7364; 105,376 cumulative presentations
+uniform H512 task 28:   0%|          | 0/3664 [00:00<?, ?image/s]uniform H512 task 28:  53%|█████▎    | 1940/3664 [00:05<00:04, 378.47image/s]Overall 305,244/392,408 presentations; ETA 6.7 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 28: 100%|██████████| 3664/3664 [00:10<00:00, 358.49image/s]
+Completed uniform_h512_standard_rho80_unit8 task 28/50: 81.743% NLL 0.7789; 109,040 cumulative presentations
+uniform H512 task 29:   0%|          | 0/3872 [00:00<?, ?image/s]uniform H512 task 29:  46%|████▋     | 1800/3872 [00:05<00:05, 352.20image/s]uniform H512 task 29:  94%|█████████▍| 3656/3872 [00:10<00:00, 362.30image/s]Overall 309,116/392,408 presentations; ETA 6.4 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 29: 100%|██████████| 3872/3872 [00:11<00:00, 350.63image/s]
+Completed uniform_h512_standard_rho80_unit8 task 29/50: 81.365% NLL 0.7913; 112,912 cumulative presentations
+uniform H512 task 30:   0%|          | 0/5472 [00:00<?, ?image/s]uniform H512 task 30:  32%|███▏      | 1752/5472 [00:05<00:10, 349.11image/s]uniform H512 task 30:  67%|██████▋   | 3672/5472 [00:10<00:04, 366.40image/s]Overall 314,588/392,408 presentations; ETA 6.0 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 30: 100%|██████████| 5472/5472 [00:15<00:00, 355.06image/s]
+Completed uniform_h512_standard_rho80_unit8 task 30/50: 81.929% NLL 0.7319; 118,384 cumulative presentations
+uniform H512 task 31:   0%|          | 0/3880 [00:00<?, ?image/s]uniform H512 task 31:  46%|████▋     | 1802/3880 [00:05<00:05, 351.37image/s]uniform H512 task 31:  98%|█████████▊| 3786/3880 [00:10<00:00, 372.32image/s]Overall 318,468/392,408 presentations; ETA 5.7 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 31: 100%|██████████| 3880/3880 [00:10<00:00, 360.77image/s]
+Completed uniform_h512_standard_rho80_unit8 task 31/50: 81.944% NLL 0.7324; 122,264 cumulative presentations
+uniform H512 task 32:   0%|          | 0/3680 [00:00<?, ?image/s]uniform H512 task 32:  49%|████▉     | 1816/3680 [00:05<00:05, 354.64image/s]uniform H512 task 32: 100%|█████████▉| 3672/3680 [00:10<00:00, 363.28image/s]Overall 322,148/392,408 presentations; ETA 5.4 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 32: 100%|██████████| 3680/3680 [00:10<00:00, 350.30image/s]
+Completed uniform_h512_standard_rho80_unit8 task 32/50: 81.500% NLL 0.7560; 125,944 cumulative presentations
+uniform H512 task 33:   0%|          | 0/3820 [00:00<?, ?image/s]uniform H512 task 33:  47%|████▋     | 1787/3820 [00:05<00:05, 348.41image/s]uniform H512 task 33:  94%|█████████▎| 3579/3820 [00:10<00:00, 351.18image/s]Overall 325,968/392,408 presentations; ETA 5.1 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 33: 100%|██████████| 3820/3820 [00:11<00:00, 344.10image/s]
+Completed uniform_h512_standard_rho80_unit8 task 33/50: 82.159% NLL 0.7442; 129,764 cumulative presentations
+uniform H512 task 34:   0%|          | 0/3176 [00:00<?, ?image/s]uniform H512 task 34:  59%|█████▉    | 1882/3176 [00:05<00:03, 366.26image/s]Overall 329,144/392,408 presentations; ETA 4.9 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 34: 100%|██████████| 3176/3176 [00:09<00:00, 348.99image/s]
+Completed uniform_h512_standard_rho80_unit8 task 34/50: 82.098% NLL 0.7525; 132,940 cumulative presentations
+uniform H512 task 35:   0%|          | 0/4300 [00:00<?, ?image/s]uniform H512 task 35:  44%|████▍     | 1907/4300 [00:05<00:06, 374.35image/s]uniform H512 task 35:  89%|████████▉ | 3827/4300 [00:10<00:01, 360.96image/s]Overall 333,444/392,408 presentations; ETA 4.5 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 35: 100%|██████████| 4300/4300 [00:12<00:00, 356.15image/s]
+Completed uniform_h512_standard_rho80_unit8 task 35/50: 81.820% NLL 0.7876; 137,240 cumulative presentations
+uniform H512 task 36:   0%|          | 0/4524 [00:00<?, ?image/s]uniform H512 task 36:  38%|███▊      | 1707/4524 [00:05<00:08, 340.42image/s]uniform H512 task 36:  79%|███████▉  | 3563/4524 [00:10<00:02, 352.40image/s]Overall 337,968/392,408 presentations; ETA 4.2 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 36: 100%|██████████| 4524/4524 [00:13<00:00, 345.05image/s]
+Completed uniform_h512_standard_rho80_unit8 task 36/50: 81.706% NLL 0.7539; 141,764 cumulative presentations
+uniform H512 task 37:   0%|          | 0/4576 [00:00<?, ?image/s]uniform H512 task 37:  40%|████      | 1848/4576 [00:05<00:07, 364.20image/s]uniform H512 task 37:  81%|████████  | 3704/4576 [00:10<00:02, 347.25image/s]Overall 342,544/392,408 presentations; ETA 3.8 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 37: 100%|██████████| 4576/4576 [00:13<00:00, 344.84image/s]
+Completed uniform_h512_standard_rho80_unit8 task 37/50: 80.624% NLL 0.8255; 146,340 cumulative presentations
+uniform H512 task 38:   0%|          | 0/4348 [00:00<?, ?image/s]uniform H512 task 38:  41%|████      | 1791/4348 [00:05<00:07, 354.81image/s]uniform H512 task 38:  82%|████████▏ | 3583/4348 [00:10<00:02, 348.63image/s]Overall 346,892/392,408 presentations; ETA 3.5 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 38: 100%|██████████| 4348/4348 [00:12<00:00, 347.22image/s]
+Completed uniform_h512_standard_rho80_unit8 task 38/50: 80.788% NLL 0.8068; 150,688 cumulative presentations
+uniform H512 task 39:   0%|          | 0/3884 [00:00<?, ?image/s]uniform H512 task 39:  43%|████▎     | 1675/3884 [00:05<00:06, 326.04image/s]uniform H512 task 39:  94%|█████████▍| 3659/3884 [00:10<00:00, 361.80image/s]Overall 350,776/392,408 presentations; ETA 3.2 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 39: 100%|██████████| 3884/3884 [00:11<00:00, 345.71image/s]
+Completed uniform_h512_standard_rho80_unit8 task 39/50: 80.994% NLL 0.7816; 154,572 cumulative presentations
+uniform H512 task 40:   0%|          | 0/4264 [00:00<?, ?image/s]uniform H512 task 40:  43%|████▎     | 1834/4264 [00:05<00:06, 364.90image/s]uniform H512 task 40:  87%|████████▋ | 3690/4264 [00:10<00:01, 358.63image/s]Overall 355,040/392,408 presentations; ETA 2.9 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 40: 100%|██████████| 4264/4264 [00:12<00:00, 354.28image/s]
+Completed uniform_h512_standard_rho80_unit8 task 40/50: 81.443% NLL 0.7890; 158,836 cumulative presentations
+uniform H512 task 41:   0%|          | 0/3236 [00:00<?, ?image/s]uniform H512 task 41:  59%|█████▊    | 1897/3236 [00:05<00:03, 379.27image/s]Overall 358,276/392,408 presentations; ETA 2.7 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 41: 100%|██████████| 3236/3236 [00:09<00:00, 341.51image/s]
+Completed uniform_h512_standard_rho80_unit8 task 41/50: 80.681% NLL 0.8171; 162,072 cumulative presentations
+uniform H512 task 42:   0%|          | 0/4240 [00:00<?, ?image/s]uniform H512 task 42:  46%|████▌     | 1956/4240 [00:05<00:06, 380.58image/s]uniform H512 task 42:  91%|█████████▏| 3876/4240 [00:10<00:00, 365.14image/s]Overall 362,516/392,408 presentations; ETA 2.3 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 42: 100%|██████████| 4240/4240 [00:11<00:00, 359.80image/s]
+Completed uniform_h512_standard_rho80_unit8 task 42/50: 79.794% NLL 0.8354; 166,312 cumulative presentations
+uniform H512 task 43:   0%|          | 0/3576 [00:00<?, ?image/s]uniform H512 task 43:  48%|████▊     | 1726/3576 [00:05<00:05, 341.91image/s]uniform H512 task 43:  98%|█████████▊| 3518/3576 [00:10<00:00, 350.55image/s]Overall 366,092/392,408 presentations; ETA 2.1 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 43: 100%|██████████| 3576/3576 [00:10<00:00, 337.49image/s]
+Completed uniform_h512_standard_rho80_unit8 task 43/50: 80.221% NLL 0.8133; 169,888 cumulative presentations
+uniform H512 task 44:   0%|          | 0/3220 [00:00<?, ?image/s]uniform H512 task 44:  57%|█████▋    | 1829/3220 [00:05<00:03, 356.21image/s]Overall 369,312/392,408 presentations; ETA 1.8 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 44: 100%|██████████| 3220/3220 [00:09<00:00, 343.87image/s]
+Completed uniform_h512_standard_rho80_unit8 task 44/50: 79.872% NLL 0.8760; 173,108 cumulative presentations
+uniform H512 task 45:   0%|          | 0/3736 [00:00<?, ?image/s]uniform H512 task 45:  46%|████▌     | 1702/3736 [00:05<00:06, 336.38image/s]uniform H512 task 45:  95%|█████████▌| 3558/3736 [00:10<00:00, 351.55image/s]Overall 373,048/392,408 presentations; ETA 1.5 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 45: 100%|██████████| 3736/3736 [00:11<00:00, 329.57image/s]
+Completed uniform_h512_standard_rho80_unit8 task 45/50: 79.507% NLL 0.8694; 176,844 cumulative presentations
+uniform H512 task 46:   0%|          | 0/4084 [00:00<?, ?image/s]uniform H512 task 46:  47%|████▋     | 1917/4084 [00:05<00:05, 382.41image/s]uniform H512 task 46:  94%|█████████▍| 3837/4084 [00:10<00:00, 357.44image/s]Overall 377,132/392,408 presentations; ETA 1.2 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 46: 100%|██████████| 4084/4084 [00:11<00:00, 347.12image/s]
+Completed uniform_h512_standard_rho80_unit8 task 46/50: 78.877% NLL 0.9023; 180,928 cumulative presentations
+uniform H512 task 47:   0%|          | 0/3852 [00:00<?, ?image/s]uniform H512 task 47:  50%|████▉     | 1923/3852 [00:05<00:05, 374.63image/s]uniform H512 task 47: 100%|█████████▉| 3843/3852 [00:10<00:00, 357.89image/s]Overall 380,984/392,408 presentations; ETA 0.9 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 47: 100%|██████████| 3852/3852 [00:11<00:00, 348.27image/s]
+Completed uniform_h512_standard_rho80_unit8 task 47/50: 78.117% NLL 0.9927; 184,780 cumulative presentations
+uniform H512 task 48:   0%|          | 0/3880 [00:00<?, ?image/s]uniform H512 task 48:  45%|████▍     | 1738/3880 [00:05<00:06, 347.09image/s]uniform H512 task 48:  93%|█████████▎| 3594/3880 [00:10<00:00, 361.23image/s]Overall 384,864/392,408 presentations; ETA 0.6 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 48: 100%|██████████| 3880/3880 [00:11<00:00, 348.18image/s]
+Completed uniform_h512_standard_rho80_unit8 task 48/50: 78.016% NLL 1.0100; 188,660 cumulative presentations
+uniform H512 task 49:   0%|          | 0/3720 [00:00<?, ?image/s]uniform H512 task 49:  42%|████▏     | 1570/3720 [00:05<00:06, 313.95image/s]uniform H512 task 49:  92%|█████████▏| 3426/3720 [00:10<00:00, 344.99image/s]Overall 388,584/392,408 presentations; ETA 0.3 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 49: 100%|██████████| 3720/3720 [00:11<00:00, 330.78image/s]
+Completed uniform_h512_standard_rho80_unit8 task 49/50: 78.183% NLL 0.9509; 192,380 cumulative presentations
+uniform H512 task 50:   0%|          | 0/3824 [00:00<?, ?image/s]uniform H512 task 50:  47%|████▋     | 1788/3824 [00:05<00:05, 349.36image/s]uniform H512 task 50:  94%|█████████▎| 3580/3824 [00:10<00:00, 349.86image/s]Overall 392,408/392,408 presentations; ETA 0.0 min. uniform_h512_standard_rho80_unit8, tasks 1-50
+uniform H512 task 50: 100%|██████████| 3824/3824 [00:11<00:00, 340.33image/s]
+Completed uniform_h512_standard_rho80_unit8 task 50/50: 78.367% NLL 0.9589; 196,204 cumulative presentations
+Overall 392,408/392,408 presentations; ETA 0.0 min. build and verify updated report
+Report audit: SRT rank 16, 1,024-equivalent budget
+Report audit: Uniform replay rank 16, 1,024-equivalent budget
+Report audit: SRT rank 16, 4,096-equivalent budget
+Report audit: Uniform replay rank 16, 4,096-equivalent budget
+Report audit: SRT rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: SRT rank 16, H=4,096; strict, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; strict, old=0.8, unit=8
+Report audit: SRT rank 16, H=512; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=512; standard, old=0.8, unit=8
+Overall 392,408/392,408 presentations; ETA 0.0 min. complete
+/home/daniel/projects/snet/rpa/output/pdf/imagenetr50_srt_r16_report.pdf
