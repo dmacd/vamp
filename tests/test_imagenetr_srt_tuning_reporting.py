@@ -1,6 +1,7 @@
 """Bounded provenance guards and explicit synthetic layout checks for H=128 tuning."""
 
 from dataclasses import asdict, replace
+from pathlib import Path
 
 import pytest
 
@@ -46,10 +47,13 @@ def test_tuning_appendix_layout_and_complete_candidate_table(tmp_path, baseline_
     names = ("srt_h128_standard_rho80_unit8", "uniform_h128_standard_rho80_unit8", *final_names)
     stages = tuple({"stage": stage, "accuracy": 80., "nll": .8} for stage in range(1, 51))
     totals = {"final_accuracy": 80., "final_nll": .8, "mean_stage_accuracy": 85., "optimizer_steps": 2200}
-    analyses = {name: ReplayAnalysis(stages, (), (), (), totals) for name in names}
+    analyses = {name: ReplayAnalysis(stages, (), tuple({"condition": name, "metric": metric, "kind": "historical",
+                                                       "previous_quality": "all", "count": 10, "upper": 8}
+                                                      for metric in ("interval_before", "clock_gap")), (), totals) for name in names}
     references = {"stage_matched_joint": [{"accuracy": 79.}] * 50}
     sections, figures, tables = tuning_report_parts(tmp_path, reference, references, analyses)
-    assert len(sections) == 5 and len(figures) == 2
+    assert len(sections) == (5 if baseline_reused else 6)
+    assert len(figures) == (2 if baseline_reused else 3)
     assert len(tables["h128_tuning_candidates"]) == 32
     assert sum(row["selected"] for row in tables["h128_tuning_candidates"]) == 1
     sections = tuple(replace(section, paragraphs=("SYNTHETIC LAYOUT FIXTURE - NOT EXPERIMENTAL RESULTS.", *section.paragraphs)) for section in sections)
@@ -62,3 +66,45 @@ def test_tuning_appendix_layout_and_complete_candidate_table(tmp_path, baseline_
     digest = file_sha256(pdf)
     render_report(sections, tmp_path, pdf)
     assert file_sha256(pdf) == digest
+
+
+@pytest.mark.integration
+def test_completed_real_tuning_selection_and_report_authenticate():
+    """Audit frozen phase choices, held-out predictions, chosen refits and report exports."""
+    from concurrent.futures import ThreadPoolExecutor
+    import pyarrow.parquet as pq
+    from apm.continual.vision.imagenetr.srt_evidence import read_sealed
+    from apm.continual.vision.imagenetr.srt_followup import load_followup_config
+
+    project = Path(__file__).resolve().parents[1]
+    config = load_followup_config(project / "configs/vision/imagenetr/srt_h128_rho80_unit8.yaml")
+    source = project / config.source_run
+    if not (source / "reports/srt_h128_tuning.json").is_file():
+        pytest.skip("the full H=128 validation search has not completed locally")
+    reference = load_tuning_reference(source, config.source_result_hash)
+    report = read_sealed(source / "reports/report_manifest.json")
+    assert report["h128_tuning"]["result_hash"] == reference["result"]["content_hash"]
+    assert report["event_audit_passed"] and report["paired_exposure_audit_passed"]
+    assert file_sha256(Path(report["pdf"])) == report["pdf_sha256"]
+    candidates = pq.read_table(source / "reports/h128_tuning_candidates.parquet").to_pylist()
+    assert {row["candidate_hash"] for row in candidates} == {
+        row["candidate_hash"] for row in reference["selection"]["candidates"]}
+    assert len(candidates) <= 32 and sum(row["selected"] for row in candidates) == 1
+    selected = next(row for row in candidates if row["selected"])
+    assert selected["candidate_hash"] == reference["selection"]["selected"]["candidate_hash"]
+    conditions = set(reference["result"]["conditions"])
+    assert conditions <= report["condition_names"].keys()
+    stages = pq.read_table(source / "reports/stage_metrics.parquet").to_pylist()
+    assert len([row for row in stages if row["condition"] in conditions]) == 100
+    samples = pq.read_table(source / "reports/replay_samples.parquet").to_pylist()
+    assert len([row for row in samples if row["condition"] in conditions]) == 48000
+    candidate_roots = tuple(reference["root"] / "calibration" / row["job"] for row in reference["selection"]["candidates"]
+                            if row["status"] == "complete")
+    jobs = tuple((root, read_sealed(root / "result.json")) for root in (*candidate_roots, *reference["roots"].values()))
+    for root, job in jobs:
+        assert len(job["rows"]) == 50
+        assert all(read_sealed(root / f"stages/{row['stage']:03d}/result.json") == row for row in job["rows"])
+    checks = tuple((root / f"stages/{row['stage']:03d}" / filename, row[field]) for root, job in jobs for row in job["rows"]
+                   for filename, field in (("model.safetensors", "model_sha256"), ("predictions.parquet", "predictions_sha256")))
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        assert tuple(executor.map(file_sha256, (path for path, _ in checks))) == tuple(expected for _, expected in checks)

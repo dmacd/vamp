@@ -71,7 +71,7 @@ Sealed result:
 
 ```bash
 bash scripts/vision/imagenetr/run_srt_followup_local.sh run --config configs/vision/imagenetr/srt_h512_rho80_unit8.yaml
-.venv-vision/bin/python -m pytest -n 0 -q -m integration tests/test_imagenetr_srt_h512_evidence.py
+.venv-vision/bin/python -m pytest -n 0 -q -m integration tests/test_imagenetr_srt_small_budget_evidence.py
 ```
 
 The run command uses one nice-10 GPU worker and reuses completed jobs with

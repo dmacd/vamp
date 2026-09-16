@@ -279,7 +279,8 @@ def test_complete_synthetic_report_layout(tiny_full_stream, tmp_path, include_fo
         "nll": reporting._plot_nll_and_gaps(reports, references, stages),
         "resources": reporting._plot_resources(reports, pd.DataFrame(resources)),
         "replay": reporting._plot_replay(reports, histograms, stages),
-        "intervals": reporting._plot_requested_intervals(reports, histograms),
+        "intervals": reporting._plot_requested_intervals(reports, histograms[histograms.condition.isin(
+            {*reporting.NEW_STYLES, *reporting.FOLLOWUP_STYLES})]),
         "coverage": reporting._plot_sample_coverage(reports, samples, stages),
         "timelines": reporting._plot_timelines(reports, timelines[timelines.condition.isin(reporting.NEW_STYLES)]),
     }

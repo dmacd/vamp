@@ -112,16 +112,20 @@
   curves, selection evidence, replay timing and separate search/final-run work
   to the existing report. Keep original results and diagnostic inputs immutable.
 - Definitions and baseline report support were committed and pushed as
-  `eb8c7ce` before launch. H=256 is running at nice 10; H=128 is queued next.
-  No new training engine or source-algorithm change was needed.
+  `eb8c7ce` before launch. H=256 completed: SRT 77.166667% / 1.052572 NLL
+  versus matched uniform 76.816667% / 1.067371, each 146,176 presentations
+  and 2,462 updates. Its completed jobs reuse with zero optimizer steps.
+  H=128 follows sequentially at nice 10. No source-algorithm change was needed.
 - The tuning runner, finite candidate constructors, validation-only selection,
   immutable phase decisions, numerical-failure records, zero-step reuse and
   report integration are implemented. Forty short tests and both synthetic
   tuned-report layout variants pass. The core SRT training files remain unchanged.
-- The tuning implementation is committed before its GPU work. All five pages
-  of the synthetic search appendix pass visual review, including the complete
-  candidate ledger; none of those synthetic values are experiment evidence.
-- Pending: finish the two baseline pairs; run the frozen search; authenticate
+- The tuning implementation was committed and pushed as `5491e5c` before its
+  GPU work. Synthetic appendix checks include the complete candidate ledger
+  and original-versus-tuned replay-spacing panels; none of those synthetic
+  values are experiment evidence. The shared training/scheduler/diagnostic
+  regression slice also passes all 42 tests.
+- Pending: finish the H=128 baseline pair; run the frozen search; authenticate
   the final selected pair, visually inspect the real report and publish the
   complete evidence.
 

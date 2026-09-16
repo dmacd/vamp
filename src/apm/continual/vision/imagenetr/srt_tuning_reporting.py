@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
+import pandas as pd
 import pyarrow.parquet as pq
 
 from apm.continual.artifacts import file_sha256, record_sha256
@@ -154,7 +155,7 @@ def tuning_report_parts(
         return (), {}, {}
     from apm.continual.vision.imagenetr.srt_reporting import (
         ALL_STYLES, CONDITION_LABELS, LABEL_STAGE_JOINT, ReportSection, ReportTable,
-        _draw_task50_endpoints, _finish_axis, _save_figure, _shared_legend,
+        _draw_task50_endpoints, _finish_axis, _plot_requested_intervals, _save_figure, _shared_legend,
     )
     selection, result = reference["selection"], reference["result"]
     chosen = candidate_from_record(selection["selected"]["candidate"])
@@ -236,6 +237,17 @@ def tuning_report_parts(
             "a failed in-flight batch may not have a checkpoint. Search and final-run resource tables distinguish these costs.",
         ), (search_figure,)),
     )
+    figures = {"h128_tuning_comparison": comparison, "h128_validation_search": search_figure}
+    if not result["baseline_reused"]:
+        histogram_rows = tuple(row for name in conditions if name.startswith("srt_") for row in analyses[name].histograms)
+        intervals = _plot_requested_intervals(reports, pd.DataFrame(histogram_rows), "h128_tuned_intervals.png")
+        sections += (ReportSection("H=128: how the selected policy changes replay spacing", (
+            "The two panels compare the original SRT recipe with the validation-selected recipe on their fresh full-data runs. "
+            "Dashed curves show requested intervals and solid curves show completed historical-review gaps on the same scheduling clock.",
+            "These curves describe completed reviews, not images still waiting when training stopped. The per-image tables retain never-reviewed images "
+            "and censored final waits. Scheduling ticks are not optimizer steps or wall time; the main replay-timing figure also compares actual optimizer-step gaps.",
+        ), (intervals,)),)
+        figures = {**figures, "h128_tuned_intervals": intervals}
     for offset in range(0, len(candidate_rows), 16):
         rows = tuple((f"{row['index']}{'*' if row['selected'] else ''}", row["phase"],
                       f"{row['validation_accuracy']:.3f}" if row["status"] == "complete" else "FAILED",
@@ -246,4 +258,4 @@ def tuning_report_parts(
             "The starred candidate is the final validation choice, not a test-selected checkpoint. Accuracies are percentages on validation at task 50; NLL is raw. "
             "Old/unit gives the requested historical fraction and interval unit. Full threshold values, hashes, work and per-stage evidence are retained in the candidate ledger.",
         ), table=ReportTable(("Candidate", "Phase", "Val. acc.", "Val. NLL", "Profile; old/unit", "LoRA/head LR"), rows)),)
-    return sections, {"h128_tuning_comparison": comparison, "h128_validation_search": search_figure}, {"h128_tuning_candidates": candidate_rows}
+    return sections, figures, {"h128_tuning_candidates": candidate_rows}

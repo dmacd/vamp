@@ -1,4 +1,4 @@
-"""Explicit, non-training authentication of the completed H=512 follow-up."""
+"""Explicit, non-training authentication of completed small-budget follow-ups."""
 
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -12,21 +12,22 @@ from apm.continual.vision.imagenetr.srt_evidence import read_sealed
 
 
 @pytest.mark.integration
-def test_completed_h512_pair_and_report_authenticate() -> None:
+@pytest.mark.parametrize("capacity", (128, 256, 512))
+def test_completed_small_budget_pair_and_report_authenticate(capacity: int) -> None:
     """Verify every new checkpoint, common test identity, paired count and preserved prior summary."""
     import pyarrow.parquet as pq
     from apm.continual.vision.imagenetr.data import load_dataset_manifest, validate_prepared_dataset
-    from apm.continual.vision.imagenetr.srt_followup import load_followup_config
+    from apm.continual.vision.imagenetr.srt_followup import followup_presentations, load_followup_config
     from apm.continual.vision.imagenetr.srt_reporting import LOW_BUDGET_STYLES, followup_report_jobs
 
     project = Path(__file__).resolve().parents[1]
-    config = load_followup_config(project / "configs/vision/imagenetr/srt_h512_rho80_unit8.yaml")
+    config = load_followup_config(project / f"configs/vision/imagenetr/srt_h{capacity}_rho80_unit8.yaml")
     source = project / config.source_run
-    pointer_path = source / "reports/fixed_policy_followup_h512_standard_rho80_unit8.json"
+    pointer_path = source / f"reports/fixed_policy_followup_h{capacity}_standard_rho80_unit8.json"
     if not pointer_path.is_file():
-        pytest.skip("the H=512 experiment has not completed locally")
+        pytest.skip(f"the H={capacity} experiment has not completed locally")
     pointer = read_sealed(pointer_path)
-    conditions = {name for name in LOW_BUDGET_STYLES if "_h512_" in name}
+    conditions = {name for name in LOW_BUDGET_STYLES if f"_h{capacity}_" in name}
     run = source / "followups" / pointer["run_hash"]
     result = read_sealed(run / "result.json")
     assert set(result["conditions"]) == conditions
@@ -41,6 +42,8 @@ def test_completed_h512_pair_and_report_authenticate() -> None:
     expected_labels = {row.image_id: (row.remapped_class_index, row.task_index + 1) for row in test}
     assert len(train) == 24000 and len(test) == 6000
     assert not {row.image_id for row in train} & expected_labels.keys()
+    task_counts = tuple(sum(row.task_index == stage for row in train) for stage in range(50))
+    identical_stages = sum(sum(task_counts[:stage]) <= capacity for stage in range(50))
     roots, evidence = followup_report_jobs(source, config.source_result_hash)
     assert conditions <= roots.keys() and run.name in evidence
 
@@ -51,13 +54,12 @@ def test_completed_h512_pair_and_report_authenticate() -> None:
         definition = read_sealed(root / "job.json")
         assert definition["training_ids_hash"] == record_sha256([row.image_id for row in train])
         assert definition["evaluation_ids_hash"] == record_sha256([row.image_id for row in test])
-        assert job["image_presentations"] == 196204
+        assert job["image_presentations"] == followup_presentations(capacity, task_counts)
         assert len(job["rows"]) == 50
-        # History contains fewer than 512 images during the first two tasks,
-        # so both budgets must produce exactly the same learned checkpoints.
+        # Before the history exceeds H, changing this cap cannot change a draw.
         previous = original["conditions"][f"{job['method']}_h1024"]
-        assert [(row["model_sha256"], row["predictions_sha256"]) for row in job["rows"][:2]] == [
-            (row["model_sha256"], row["predictions_sha256"]) for row in previous["rows"][:2]]
+        assert [(row["model_sha256"], row["predictions_sha256"]) for row in job["rows"][:identical_stages]] == [
+            (row["model_sha256"], row["predictions_sha256"]) for row in previous["rows"][:identical_stages]]
         for row in job["rows"]:
             stage = root / f"stages/{row['stage']:03d}"
             assert read_sealed(stage / "result.json") == row

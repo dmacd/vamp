@@ -274,8 +274,8 @@ def _plot_resources(reports: Path, resources: pd.DataFrame) -> Path:
         color, style = ALL_STYLES[condition] if condition in ALL_STYLES else REFERENCE_STYLES[label]
         axes[0].plot(rows.stage, rows.cumulative_training_wall_seconds / 60, color=color, linestyle=style, label=label)
         axes[1].plot(rows.stage, rows.cumulative_training_backwards / 1e6, color=color, linestyle=style, label=label)
-    _finish_axis(axes[0], "Cumulative training time (minutes)", "Final-run training time; calibration shown separately")
-    _finish_axis(axes[1], "Cumulative forward/backward pairs (millions)", "One pair per trained image path; recomputation listed separately")
+    _finish_axis(axes[0], "Cumulative training\ntime (minutes)", "Final-run training time; calibration shown separately")
+    _finish_axis(axes[1], "Cumulative forward/backward\nimage pairs (millions)", "One pair per trained image path; recomputation listed separately")
     _shared_legend(figure, tuple(axes))
     return _save_figure(figure, reports / "cumulative_work.png")
 
@@ -307,6 +307,7 @@ def _plot_replay(reports: Path, histograms: pd.DataFrame, stages: pd.DataFrame) 
             _gap_cdf(axis, subset, color, style, CONDITION_LABELS[condition])
             axis.set(xscale="symlog", xlabel="Optimizer steps" if metric == "step_gap" else "Scheduling ticks late",
                      ylabel="Fraction of reviews below x", title=title, ylim=(0, 1.02))
+            axis.set_xlim(left=0)
             axis.grid(alpha=.2)
         rows = stages[stages.condition == condition]
         axes[1, 0].plot(rows.stage, rows.actual_historical_fraction, color=color, linestyle=style,
@@ -333,6 +334,7 @@ def _plot_requested_intervals(reports: Path, histograms: pd.DataFrame, filename:
             _gap_cdf(axis, rows, ALL_STYLES[condition][0], style, label)
         axis.set(xscale="log", xlabel="Scheduling ticks", ylabel="Fraction of reviews below x",
                  title=textwrap.fill(CONDITION_LABELS[condition], 43), ylim=(0, 1.02))
+        axis.set_xlim(left=1)
         axis.legend(frameon=False, fontsize=10)
         axis.grid(alpha=.2)
     return _save_figure(figure, reports / filename)
