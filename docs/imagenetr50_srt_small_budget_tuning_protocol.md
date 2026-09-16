@@ -18,6 +18,12 @@ H=128 stream uses 121,088. H is a presentation-work parameter, not a bound on
 stored history. All arrived training images remain eligible. No quality,
 coverage or accuracy gate is introduced.
 
+At each stage the unchanged budget is `4 * (new_images + min(H, old_images))`.
+Every new image is introduced once; the scheduler allocates the remaining
+presentations using the configured old/current target and available due pools.
+H therefore does not itself specify either the number of distinct old images
+or the exact number of historical presentations.
+
 ## H=128 search objective and held-out data
 
 Optimize **task-50 validation accuracy**, not mean-stage accuracy, an early-task
@@ -48,7 +54,7 @@ results are exploratory, not untouched confirmation or a SOTA claim.
    [0,1]; halve or double the interval unit, rounded to a positive integer.
    Keep the selected learning rates. Deduplicate exact recipes by content hash.
 
-Threshold powers preserve ordering and all five quality levels. They are
+Threshold powers preserve ordering of the five thresholds (six quality grades). They are
 candidate hyperparameters to test, not calibrated probabilities or assumed
 optima. Momentum 0.9, weight decay 0.0005, maximum batch size 64, presentation
 formula and all SM-2 update equations remain unchanged. Changing quality,
