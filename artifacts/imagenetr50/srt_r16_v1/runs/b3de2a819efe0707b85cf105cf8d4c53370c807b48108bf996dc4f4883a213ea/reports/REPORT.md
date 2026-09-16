@@ -2,7 +2,7 @@
 
 ## Original validation-selected results
 
-Latest follow-up: H=512 with standard thresholds, old=0.8 and unit=8 reaches 78.933% SRT accuracy / 0.9690 NLL versus 78.367% uniform / 0.9589 NLL. The next two sections compare budgets under the same configured policy and include the newer offline references. All earlier results and checkpoint diagnostics remain unchanged.
+Latest fixed-policy follow-up: H=128 with standard thresholds, old=0.8 and unit=8 reaches 75.100% SRT accuracy / 1.1400 NLL versus 74.333% uniform / 1.1771 NLL. The opening comparison sections cover budgets under the same configured policy and include the newer offline references. All earlier results and checkpoint diagnostics remain unchanged.
 
 Does confidence-based spaced repetition improve a single continuing rank-16 adapter compared with uniform replay under identical realized exposure? The ImageNet-R split is unchanged: 24,000 training images, 6,000 test images, and fifty four-class tasks in the existing seed-1993 order.
 
@@ -21,18 +21,22 @@ Mean accuracy is the arithmetic mean of the fifty stage test accuracies. NLL is 
 | SRT rank 16, 4,096-equivalent budget | 77.333% | 81.908% | 1.1100 | 40.11 |
 | Uniform replay rank 16, 4,096-equivalent budget | 80.400% | 84.197% | 0.9123 | 40.46 |
 
-## Lower replay budget: H=512
+## Lower replay budgets: latest H=128
 
-Two fresh 50-task streams use standard thresholds, old target 0.8 and interval unit 8, with the original seed 1993, model, data and optimizer. Only H changes. H limits presentation work, not stored history; all arrived training images remain available. The proposed review-age and repetition-cap interventions are not applied.
+Each fresh pair of 50-task streams uses standard thresholds, old target 0.8 and interval unit 8, with the original seed 1993, model, data and optimizer. Only H changes. H limits presentation work, not stored history; all arrived training images remain available. The proposed review-age and repetition-cap interventions are not applied.
 
-SRT finishes at 78.933% accuracy / 0.9690 raw NLL; matched uniform at 78.367% / 0.9589. SRT minus uniform is +0.567 accuracy points and +0.0102 NLL. Mean stage accuracy is 83.677% / 83.943% respectively. Each uses 196,204 training forward/backward image pairs and 3,358 updates. Training takes 10.21 / 9.36 minutes; evaluation is separate in the resource ledger.
+At H=128, SRT finishes at 75.100% accuracy / 1.1400 raw NLL; matched uniform at 74.333% / 1.1771. SRT minus uniform is +0.767 accuracy points and -0.0371 NLL. Mean stage accuracy is 81.164% / 80.995% respectively. Each uses 121,088 training forward/backward image pairs and 2,046 updates. Training takes 6.28 / 5.86 minutes; evaluation is separate in the resource ledger.
 
-The newer offline rank-16 control reaches 80.828% mean accuracy (sample SD 0.315 points, three seeds), not the older five-epoch joint recipe's endpoint. It matches the standard H=4,096 optimizer schedule, not H=512. Neither offline reference gates this experiment.
+The newer offline rank-16 control reaches 80.828% mean accuracy (sample SD 0.315 points, three seeds), not the older five-epoch joint recipe's endpoint. It matches the standard H=4,096 optimizer schedule, not the smaller budgets. Neither offline reference gates this experiment.
 
 Replay rows are single-seed results; offline rows are means across three seeds. These are exploratory results on an already inspected test set, not evidence of significance or a new SOTA claim. Lower budgets also change actual batch sizes and review schedules. Raw NLL remains the benchmark score; no new temperature is fitted.
 
 | Condition | Task-50 acc. | Raw NLL | Training pairs | Updates |
 | --- | --- | --- | --- | --- |
+| SRT rank 16, H=128 | 75.100% | 1.1400 | 121,088 | 2,046 |
+| Uniform replay rank 16, H=128 | 74.333% | 1.1771 | 121,088 | 2,046 |
+| SRT rank 16, H=256 | 77.167% | 1.0526 | 146,176 | 2,462 |
+| Uniform replay rank 16, H=256 | 76.817% | 1.0674 | 146,176 | 2,462 |
 | SRT rank 16, H=512 | 78.933% | 0.9690 | 196,204 | 3,358 |
 | Uniform replay rank 16, H=512 | 78.367% | 0.9589 | 196,204 | 3,358 |
 | SRT rank 16, H=1,024 | 79.267% | 0.9585 | 294,368 | 5,253 |
@@ -44,11 +48,19 @@ Replay rows are single-seed results; offline rows are means across three seeds. 
 
 ## Full-stream accuracy and NLL across fixed-policy budgets
 
-Both panels use identical condition names, colors and line styles: solid SRT and dashed uniform, with one color per H. All six replay curves use standard thresholds, old target 0.8 and interval unit 8. Uniform copies its own SRT partner's batch schedule; schedules are not matched across budgets.
+Both panels use identical condition names, colors and line styles: solid SRT and dashed uniform, with one color per H. All replay curves use standard thresholds, old target 0.8 and interval unit 8. Uniform copies its own SRT partner's batch schedule; schedules are not matched across budgets.
 
 The dotted accuracy curve is the original stage-matched joint rank-16 recipe. Its stage NLL was not retained, so no NLL curve is invented. Offline validation-selected and replay-schedule-matched markers are three-seed task-50 means with sample SD, not full-stream curves. The earlier report's other frontier and joint comparisons remain in their original panels.
 
 ![Full-stream accuracy and NLL across fixed-policy budgets](standard_budget_comparison.png)
+
+## Small budgets: requested and realized review spacing
+
+These are the standard-policy H=128/256/512 runs that have completed. Requested intervals and actual gaps use the same scheduling clock. A rightward shift means an image waited beyond its requested interval. The older-budget panels remain in the main replay-timing section.
+
+H limits presentation work, not stored history. These scheduling-clock gaps are not optimizer-step gaps or wall time; the report's replay-timing curves and per-image tables retain those distinctions.
+
+![Small budgets: requested and realized review spacing](small_budget_intervals.png)
 
 ## Original full-stream comparison at both work budgets
 
@@ -139,6 +151,10 @@ Training time sums measured batch work and committed checkpoint I/O. Loader and 
 | Uniform replay rank 16, H=4,096; standard, old=0.8, unit=8 | 844,640 | 0 | 62.77 |
 | SRT rank 16, H=4,096; strict, old=0.8, unit=8 | 844,640 | 0 | 43.32 |
 | Uniform replay rank 16, H=4,096; strict, old=0.8, unit=8 | 844,640 | 0 | 43.46 |
+| SRT rank 16, H=128; standard, old=0.8, unit=8 | 121,088 | 0 | 6.28 |
+| Uniform replay rank 16, H=128; standard, old=0.8, unit=8 | 121,088 | 0 | 5.86 |
+| SRT rank 16, H=256; standard, old=0.8, unit=8 | 146,176 | 0 | 7.68 |
+| Uniform replay rank 16, H=256; standard, old=0.8, unit=8 | 146,176 | 0 | 7.17 |
 | SRT rank 16, H=512; standard, old=0.8, unit=8 | 196,204 | 0 | 10.21 |
 | Uniform replay rank 16, H=512; standard, old=0.8, unit=8 | 196,204 | 0 | 9.36 |
 | Persistent single-affine + adaptive node LoRAs, H=4,096 | 3,050,765 | 2,385,440 | 104.23 |

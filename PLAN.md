@@ -114,8 +114,10 @@
 - Definitions and baseline report support were committed and pushed as
   `eb8c7ce` before launch. H=256 completed: SRT 77.166667% / 1.052572 NLL
   versus matched uniform 76.816667% / 1.067371, each 146,176 presentations
-  and 2,462 updates. Its completed jobs reuse with zero optimizer steps.
-  H=128 follows sequentially at nice 10. No source-algorithm change was needed.
+  and 2,462 updates. H=128 completed: SRT 75.100000% / 1.139954 NLL versus
+  matched uniform 74.333333% / 1.177052, each 121,088 presentations and 2,046
+  updates. All four completed jobs reuse with zero optimizer steps. No
+  source-algorithm change was needed.
 - The tuning runner, finite candidate constructors, validation-only selection,
   immutable phase decisions, numerical-failure records, zero-step reuse and
   report integration are implemented. Forty short tests and both synthetic
@@ -125,8 +127,14 @@
   and original-versus-tuned replay-spacing panels; none of those synthetic
   values are experiment evidence. The shared training/scheduler/diagnostic
   regression slice also passes all 42 tests.
-- Pending: finish the H=128 baseline pair; run the frozen search; authenticate
-  the final selected pair, visually inspect the real report and publish the
+- The fixed-policy evidence audit passes for H=128, H=256 and H=512, including
+  all image bytes and checkpoint/prediction hashes. Both new baseline reports
+  completed before the tuner started. Search identity is `e193c7cefcf9...`;
+  the first full-horizon validation candidate is running at nice 10.
+  Additional report/audit changes and the budget/quality-grade clarification
+  were pushed as `21d024a` and `6926b35`, also before tuning.
+- Pending: finish the frozen search; authenticate
+  the final selected pair, visually inspect the final report and publish the
   complete evidence.
 
 ## Completed Outcome - ImageNet-R SRT versus Uniform at H=512
