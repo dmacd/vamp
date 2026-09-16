@@ -26,9 +26,10 @@ def test_completed_h512_pair_and_report_authenticate() -> None:
     if not pointer_path.is_file():
         pytest.skip("the H=512 experiment has not completed locally")
     pointer = read_sealed(pointer_path)
+    conditions = {name for name in LOW_BUDGET_STYLES if "_h512_" in name}
     run = source / "followups" / pointer["run_hash"]
     result = read_sealed(run / "result.json")
-    assert set(result["conditions"]) == set(LOW_BUDGET_STYLES)
+    assert set(result["conditions"]) == conditions
     assert result["content_hash"] == pointer["result_hash"]
     assert result["zero_step_reuse"] and result["source_unchanged"]
     assert all(row["optimizer_steps"] == 0 for row in result["reuse"].values())
@@ -41,7 +42,7 @@ def test_completed_h512_pair_and_report_authenticate() -> None:
     assert len(train) == 24000 and len(test) == 6000
     assert not {row.image_id for row in train} & expected_labels.keys()
     roots, evidence = followup_report_jobs(source, config.source_result_hash)
-    assert len(roots) == 6 and len(evidence) == 2
+    assert conditions <= roots.keys() and run.name in evidence
 
     checks = tuple((project / row["path"], row["sha256"]) for row in read_sealed(source / "code_manifest.json")["files"])
     original = read_sealed(source / "result.json")
@@ -76,13 +77,13 @@ def test_completed_h512_pair_and_report_authenticate() -> None:
     reports = source / "reports"
     report = read_sealed(reports / "report_manifest.json")
     assert report["event_audit_passed"] and report["paired_exposure_audit_passed"]
-    assert set(LOW_BUDGET_STYLES) <= report["condition_names"].keys()
+    assert conditions <= report["condition_names"].keys()
     assert "standard_budget_comparison" in report["figures"]
     assert file_sha256(Path(report["pdf"])) == report["pdf_sha256"]
     stages = pq.read_table(reports / "stage_metrics.parquet").to_pylist()
-    assert len(stages) == 500
+    assert len([row for row in stages if row["condition"] in conditions]) == 100
     samples = pq.read_table(reports / "replay_samples.parquet").to_pylist()
-    assert len(samples) == 240000
+    assert len([row for row in samples if row["condition"] in conditions]) == 48000
     frozen = report["frozen_replay_history_input"]
     assert file_sha256(reports / frozen["path"]) == frozen["sha256"]
     previous = json.loads((project / "artifacts/imagenetr50/srt_h512/prior_condition_summary.json").read_text())

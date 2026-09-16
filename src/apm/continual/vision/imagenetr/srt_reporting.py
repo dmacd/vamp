@@ -48,9 +48,9 @@ CONDITION_LABELS = {
     **{f"{method}_h4096_{profile}_rho80_unit8":
        f"{'SRT' if method == 'srt' else 'Uniform replay'} rank 16, H=4,096; {profile}, old=0.8, unit=8"
        for profile in ("standard", "strict") for method in ("srt", "uniform")},
-    **{f"{method}_h512_standard_rho80_unit8":
-       f"{'SRT' if method == 'srt' else 'Uniform replay'} rank 16, H=512; standard, old=0.8, unit=8"
-       for method in ("srt", "uniform")},
+    **{f"{method}_h{capacity}_standard_rho80_unit8":
+       f"{'SRT' if method == 'srt' else 'Uniform replay'} rank 16, H={capacity}; standard, old=0.8, unit=8"
+       for capacity in (128, 256, 512) for method in ("srt", "uniform")},
 }
 REFERENCE_STYLES = {
     LABEL_H4096: ("#1f77b4", "-"), LABEL_H8192: ("#d95f02", "-"),
@@ -63,7 +63,8 @@ NEW_STYLES = {f"{method}_h{capacity}": ("#c62828" if capacity == 1024 else "#007
 FOLLOWUP_STYLES = {f"{method}_h4096_{profile}_rho80_unit8":
                    ("#b5179e" if profile == "standard" else "#9a6700", "-" if method == "srt" else "--")
                    for profile in ("standard", "strict") for method in ("srt", "uniform")}
-LOW_BUDGET_STYLES = {f"{method}_h512_standard_rho80_unit8": ("#346b21", "-" if method == "srt" else "--")
+LOW_BUDGET_STYLES = {f"{method}_h{capacity}_standard_rho80_unit8": (color, "-" if method == "srt" else "--")
+                     for capacity, color in ((128, "#005b96"), (256, "#cb6b16"), (512, "#346b21"))
                      for method in ("srt", "uniform")}
 ALL_STYLES = {**NEW_STYLES, **FOLLOWUP_STYLES, **LOW_BUDGET_STYLES}
 
@@ -427,9 +428,12 @@ def _sections(
         latest_note = (f"New checkpoint diagnostics: the offline-minus-uniform NLL gap changes from {gaps['raw']:+.4f} to {gaps['calibrated']:+.4f} "
                        "after out-of-fold temperature scaling. The final four sections also compare the same clean training images by SRT review history. "
                        "These are post-hoc diagnostics; all original benchmark scores remain raw and unchanged.",)
-    if set(LOW_BUDGET_STYLES) <= analyses.keys():
-        srt, uniform = (analyses[name].totals for name in LOW_BUDGET_STYLES)
-        latest_note = (f"Latest follow-up: H=512 with standard thresholds, old=0.8 and unit=8 reaches "
+    completed_budgets = tuple(capacity for capacity in (128, 256, 512)
+                              if all(f"{method}_h{capacity}_standard_rho80_unit8" in analyses for method in ("srt", "uniform")))
+    if completed_budgets:
+        capacity = min(completed_budgets)
+        srt, uniform = (analyses[f"{method}_h{capacity}_standard_rho80_unit8"].totals for method in ("srt", "uniform"))
+        latest_note = (f"Latest fixed-policy follow-up: H={capacity} with standard thresholds, old=0.8 and unit=8 reaches "
                        f"{srt['final_accuracy']:.3f}% SRT accuracy / {srt['final_nll']:.4f} NLL versus "
                        f"{uniform['final_accuracy']:.3f}% uniform / {uniform['final_nll']:.4f} NLL. "
                        "The next two sections compare budgets under the same configured policy and include the newer offline references. "

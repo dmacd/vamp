@@ -21,11 +21,12 @@ def test_requested_followup_has_both_profiles_and_their_uniform_controls() -> No
     assert presentation_budget(444, 23556, config.capacity) == 18160
 
 
-def test_h512_is_one_matched_pair_with_derived_work() -> None:
-    config = load_followup_config(Path("configs/vision/imagenetr/srt_h512_rho80_unit8.yaml"))
+@pytest.mark.parametrize("capacity,final_budget", ((128, 2288), (256, 2800), (512, 3824)))
+def test_lower_budget_is_one_matched_pair_with_derived_work(capacity, final_budget) -> None:
+    config = load_followup_config(Path(f"configs/vision/imagenetr/srt_h{capacity}_rho80_unit8.yaml"))
     jobs = followup_conditions(config, load_srt_config())
-    assert tuple(name for name, _, _ in jobs) == ("srt_h512_standard_rho80_unit8", "uniform_h512_standard_rho80_unit8")
-    assert presentation_budget(444, 23556, config.capacity) == 3824
+    assert tuple(name for name, _, _ in jobs) == tuple(f"{method}_h{capacity}_standard_rho80_unit8" for method in ("srt", "uniform"))
+    assert presentation_budget(444, 23556, config.capacity) == final_budget
     assert followup_presentations(512, (475, 514, 586)) == 1900 + 3956 + 4392
     assert len(jobs) * followup_presentations(512, (475, 514, 586)) == 20496
 

@@ -17,18 +17,20 @@ if TYPE_CHECKING:
 def budget_report_parts(
     reports: Path, references: dict[str, object], analyses: dict[str, ReplayAnalysis],
 ) -> tuple[tuple[ReportSection, ...], dict[str, Path]]:
-    """Compare H=512 with identical-policy older budgets and explicitly labeled offline endpoints."""
+    """Compare all completed fixed-policy budgets and explicitly labeled offline endpoints."""
     from apm.continual.vision.imagenetr.srt_reporting import (
-        ALL_STYLES, LABEL_STAGE_JOINT, LOW_BUDGET_STYLES,
+        ALL_STYLES, LABEL_STAGE_JOINT,
         ReportSection, ReportTable, _draw_task50_endpoints, _finish_axis, _save_figure, _shared_legend,
     )
     from apm.continual.vision.imagenetr.joint_convergence_reporting import endpoint_summary
     from apm.continual.vision.imagenetr.schedule_matched_reporting import control_summary
 
-    if not set(LOW_BUDGET_STYLES) <= analyses.keys():
+    completed_budgets = tuple(capacity for capacity in (128, 256, 512)
+                              if all(f"{method}_h{capacity}_standard_rho80_unit8" in analyses for method in ("srt", "uniform")))
+    if not completed_budgets:
         return (), {}
     conditions = tuple((capacity, method, f"{method}_h{capacity}" + ("" if capacity == 1024 else "_standard_rho80_unit8"))
-                       for capacity in (512, 1024, 4096) for method in ("srt", "uniform"))
+                       for capacity in (*completed_budgets, 1024, 4096) for method in ("srt", "uniform"))
     conditions = tuple(row for row in conditions if row[2] in analyses)
     figure, axes = plt.subplots(2, 1, figsize=(9.5, 10.5), constrained_layout=True)
     for capacity, method, name in conditions:
@@ -59,14 +61,15 @@ def budget_report_parts(
         rows += (("Joint IID, H=4,096 schedule", f"{summary['accuracy_mean']:.3f}%", f"{summary['nll_mean']:.4f}", "844,640", "56,243"),)
         offline_note = (f"The newer offline rank-16 control reaches {summary['accuracy_mean']:.3f}% mean accuracy "
                         f"(sample SD {summary['accuracy_sample_sd']:.3f} points, three seeds), not the older five-epoch joint recipe's endpoint. "
-                        "It matches the standard H=4,096 optimizer schedule, not H=512. Neither offline reference gates this experiment.",)
-    srt, uniform = (analyses[name].totals for name in LOW_BUDGET_STYLES)
+                        "It matches the standard H=4,096 optimizer schedule, not the smaller budgets. Neither offline reference gates this experiment.",)
+    capacity = min(completed_budgets)
+    srt, uniform = (analyses[f"{method}_h{capacity}_standard_rho80_unit8"].totals for method in ("srt", "uniform"))
     sections = (
-        ReportSection("Lower replay budget: H=512", (
-            "Two fresh 50-task streams use standard thresholds, old target 0.8 and interval unit 8, with the original seed 1993, model, data and optimizer. "
+        ReportSection(f"Lower replay budgets: latest H={capacity}", (
+            "Each fresh pair of 50-task streams uses standard thresholds, old target 0.8 and interval unit 8, with the original seed 1993, model, data and optimizer. "
             "Only H changes. H limits presentation work, not stored history; all arrived training images remain available. "
             "The proposed review-age and repetition-cap interventions are not applied.",
-            f"SRT finishes at {srt['final_accuracy']:.3f}% accuracy / {srt['final_nll']:.4f} raw NLL; matched uniform at "
+            f"At H={capacity}, SRT finishes at {srt['final_accuracy']:.3f}% accuracy / {srt['final_nll']:.4f} raw NLL; matched uniform at "
             f"{uniform['final_accuracy']:.3f}% / {uniform['final_nll']:.4f}. SRT minus uniform is "
             f"{srt['final_accuracy'] - uniform['final_accuracy']:+.3f} accuracy points and {srt['final_nll'] - uniform['final_nll']:+.4f} NLL. "
             f"Mean stage accuracy is {srt['mean_stage_accuracy']:.3f}% / {uniform['mean_stage_accuracy']:.3f}% respectively. "
@@ -80,7 +83,7 @@ def budget_report_parts(
         ), table=ReportTable(("Condition", "Task-50 acc.", "Raw NLL", "Training pairs", "Updates"), rows)),
         ReportSection("Full-stream accuracy and NLL across fixed-policy budgets", (
             "Both panels use identical condition names, colors and line styles: solid SRT and dashed uniform, with one color per H. "
-            "All six replay curves use standard thresholds, old target 0.8 and interval unit 8. Uniform copies its own SRT partner's batch schedule; "
+            "All replay curves use standard thresholds, old target 0.8 and interval unit 8. Uniform copies its own SRT partner's batch schedule; "
             "schedules are not matched across budgets.",
             "The dotted accuracy curve is the original stage-matched joint rank-16 recipe. Its stage NLL was not retained, so no NLL curve is invented. "
             "Offline validation-selected and replay-schedule-matched markers are three-seed task-50 means with sample SD, not full-stream curves. "

@@ -91,6 +91,30 @@
   allocation, then replicate comparisons. Stale confidence alone does not
   explain the strict profile's held-out deficit. No new gating rule is added.
 
+## Active Study - ImageNet-R H=256/H=128 and H=128 Final-Accuracy Tuning
+
+- H=512 implementation/results were committed and pushed as `c6de142` before
+  the user requested further work. Commit new definitions before launching.
+- Run fresh standard/old=0.8/unit=8 SRT/uniform pairs at H=256 then H=128,
+  all 50 tasks, seed 1993. Each stream uses 146,176 / 121,088 presentations,
+  respectively. Use unchanged core training and exact matched batch schedules.
+- Then maximize H=128 task-50 validation accuracy on the existing 19,200/4,800
+  training-derived split, with NLL only as an exact-accuracy tie-breaker.
+  Every candidate reaches task 50; test results never select hyperparameters.
+  The finite search covers 18 policy settings, eight new learning-rate settings
+  around their winner and up to six local refinements. Deduplicate recipes.
+- Frozen choices are in `docs/imagenetr50_srt_small_budget_tuning_protocol.md`
+  and `configs/vision/imagenetr/srt_h128_tuning.yaml`. No threshold gate or
+  review-age/cap intervention is introduced. This is a single-seed finite
+  search, not proof of a global optimum; validation reuse is acknowledged.
+- Refit the selected recipe on full training data, with an exactly matched
+  uniform control; reuse the baseline if its recipe wins unchanged. Append
+  curves, selection evidence, replay timing and separate search/final-run work
+  to the existing report. Keep original results and diagnostic inputs immutable.
+- Pending: commit/launch the two baseline pairs, implement and verify the
+  tuning workflow and report integration, run the frozen search, authenticate
+  the final selected pair, visually inspect the report and publish evidence.
+
 ## Completed Outcome - ImageNet-R SRT versus Uniform at H=512
 
 - User chose a smaller-budget comparison before the proposed coverage/cap

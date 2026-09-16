@@ -1,0 +1,10 @@
+baseline_config: configs/vision/imagenetr/srt_h128_rho80_unit8.yaml
+capacity: 128
+profiles: [relaxed, standard, strict]
+historical_fractions: [0.5, 0.8, 0.95]
+interval_units: [1, 8]
+lora_rate_multipliers: [0.5, 1.0, 2.0]
+head_rate_multipliers: [0.5, 1.0, 2.0]
+threshold_powers: [0.8, 1.25]
+historical_fraction_offsets: [-0.1, 0.1]
+interval_multipliers: [0.5, 2.0]

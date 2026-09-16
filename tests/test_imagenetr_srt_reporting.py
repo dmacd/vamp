@@ -159,7 +159,7 @@ def _fixed_policy_report_source(tmp_path, capacity, profiles):
     return tmp_path, source_hash, root
 
 
-@pytest.fixture(params=((4096, ("standard", "strict")), (512, ("standard",))))
+@pytest.fixture(params=((4096, ("standard", "strict")), (512, ("standard",)), (256, ("standard",)), (128, ("standard",))))
 def fixed_policy_report_source(tmp_path, request):
     return _fixed_policy_report_source(tmp_path, *request.param)
 
@@ -194,7 +194,7 @@ def test_report_combines_followups_without_overwriting_evidence(tmp_path) -> Non
     source, source_hash, first = _fixed_policy_report_source(tmp_path, 4096, ("standard", "strict"))
     _, _, second = _fixed_policy_report_source(tmp_path, 512, ("standard",))
     roots, evidence = followup_report_jobs(source, source_hash)
-    assert set(roots) == set(FOLLOWUP_STYLES) | set(LOW_BUDGET_STYLES)
+    assert set(roots) == set(FOLLOWUP_STYLES) | {name for name in LOW_BUDGET_STYLES if "_h512_" in name}
     assert set(evidence) == {first.name, second.name}
     publish_immutable_json(source / "reports/fixed_policy_followup_duplicate.json",
                            read_sealed(source / "reports/fixed_policy_followup_h512.json"))
@@ -202,13 +202,15 @@ def test_report_combines_followups_without_overwriting_evidence(tmp_path) -> Non
         followup_report_jobs(source, source_hash)
 
 
-def test_lower_budget_figure_and_pages_include_all_budgets_and_offline_endpoints(tiny_full_stream, tmp_path) -> None:
+@pytest.mark.parametrize("budgets", ((512,), (256, 512), (128, 256, 512)))
+def test_lower_budget_figure_and_pages_include_all_budgets_and_offline_endpoints(tiny_full_stream, tmp_path, budgets) -> None:
     from pypdf import PdfReader
     from apm.continual.vision.imagenetr.srt_budget_reporting import budget_report_parts
     from apm.continual.vision.imagenetr.srt_reporting import ALL_STYLES, render_report
     root, index_path = tiny_full_stream
     source = analyze_replay_job(root, index_path, "srt_h1024")
-    analyses = {name: replace(source, totals={**source.totals, "condition": name}) for name in ALL_STYLES}
+    analyses = {name: replace(source, totals={**source.totals, "condition": name}) for name in ALL_STYLES
+                if not any(f"_h{capacity}_" in name for capacity in (128, 256, 512) if capacity not in budgets)}
     references = {
         "stage_matched_joint": [{"accuracy": 80.}] * 50,
         "joint_convergence": {"result": {"selection": {"endpoints": {"accuracy_selected": 25}},
@@ -218,14 +220,14 @@ def test_lower_budget_figure_and_pages_include_all_budgets_and_offline_endpoints
     }
     sections, figures = budget_report_parts(tmp_path, references, analyses)
     assert len(sections) == 2
-    assert len(sections[0].table.rows) == 8
+    assert len(sections[0].table.rows) == 6 + 2 * len(budgets)
     assert figures["standard_budget_comparison"].is_file()
     sections = tuple(replace(section, paragraphs=("SYNTHETIC FIXTURE - NOT EXPERIMENTAL RESULTS.", *section.paragraphs)) for section in sections)
     pdf = tmp_path / "budget_fixture.pdf"
     render_report(sections, tmp_path, pdf)
     pages = PdfReader(pdf).pages
     assert len(pages) == 2
-    assert "H=512" in pages[0].extract_text()
+    assert f"H={min(budgets)}" in pages[0].extract_text()
     assert "56,243" in pages[0].extract_text()
     assert "NLL across fixed-policy budgets" in pages[1].extract_text()
 
