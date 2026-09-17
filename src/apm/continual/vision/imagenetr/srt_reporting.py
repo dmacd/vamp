@@ -341,7 +341,7 @@ def _plot_requested_intervals(reports: Path, histograms: pd.DataFrame, filename:
 
 
 def _plot_sample_coverage(reports: Path, samples: pd.DataFrame, stages: pd.DataFrame) -> Path:
-    figure, axes = plt.subplots(2, 1, figsize=(9.5, 8), constrained_layout=True)
+    figure, axes = plt.subplots(2, 1, figsize=(9.5, 9), constrained_layout=True)
     for condition, (color, style) in ALL_STYLES.items():
         rows = samples[samples.condition == condition]
         if rows.empty:
@@ -354,7 +354,7 @@ def _plot_sample_coverage(reports: Path, samples: pd.DataFrame, stages: pd.DataF
     axes[1].set(xlabel="Historical reviews received", ylabel="Fraction of training images", title="Per-image historical replay count distribution", xscale="symlog")
     for axis in axes:
         axis.grid(alpha=.2)
-    _legend(axes[1])
+    _shared_legend(figure, tuple(axes))
     return _save_figure(figure, reports / "sample_coverage.png")
 
 
@@ -445,9 +445,13 @@ def _sections(
                        "All earlier results and checkpoint diagnostics remain unchanged.",)
     if references.get("srt_tuning") is not None:
         tuned = references["srt_tuning"]
-        chosen_srt = analyses[next(name for name in tuned["result"]["conditions"] if name.startswith("srt_"))].totals
+        chosen_srt, chosen_uniform = (
+            analyses[next(name for name in tuned["result"]["conditions"] if name.startswith(method))].totals
+            for method in ("srt_", "uniform_"))
         latest_note = (f"H=128 final-accuracy tuning is complete: the validation-selected SRT recipe reaches {chosen_srt['final_accuracy']:.3f}% "
-                       f"task-50 test accuracy and {chosen_srt['final_nll']:.4f} raw NLL. The opening sections show its selected hyperparameters, "
+                       f"task-50 test accuracy and {chosen_srt['final_nll']:.4f} raw NLL, versus "
+                       f"{chosen_uniform['final_accuracy']:.3f}% / {chosen_uniform['final_nll']:.4f} for matched uniform. "
+                       "The opening sections show its selected hyperparameters, "
                        "matched uniform control, full candidate ledger and separately charged search cost.", *latest_note)
     joint_marker_note = (() if references.get("joint_convergence") is None else (
         "The black diamond at task 50 is the validation accuracy-selected joint-IID rank-16 reference: three full-data seeds, mean +/- sample SD. "

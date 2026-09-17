@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="2.306" timestamp="2026-09-16T18:19:03.522061-07:00" hostname="clx"><testcase classname="tests.test_imagenetr_srt_reporting" name="test_expanded_coverage_legend_clears_axis_label" time="2.238" /></testsuite></testsuites>

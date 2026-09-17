@@ -2,6 +2,8 @@
 
 ## Original validation-selected results
 
+H=128 final-accuracy tuning is complete: the validation-selected SRT recipe reaches 76.667% task-50 test accuracy and 1.0375 raw NLL, versus 77.017% / 1.0311 for matched uniform. The opening sections show its selected hyperparameters, matched uniform control, full candidate ledger and separately charged search cost.
+
 Latest fixed-policy follow-up: H=128 with standard thresholds, old=0.8 and unit=8 reaches 75.100% SRT accuracy / 1.1400 NLL versus 74.333% uniform / 1.1771 NLL. The opening comparison sections cover budgets under the same configured policy and include the newer offline references. All earlier results and checkpoint diagnostics remain unchanged.
 
 Does confidence-based spaced repetition improve a single continuing rank-16 adapter compared with uniform replay under identical realized exposure? The ImageNet-R split is unchanged: 24,000 training images, 6,000 test images, and fifty four-class tasks in the existing seed-1993 order.
@@ -20,6 +22,99 @@ Mean accuracy is the arithmetic mean of the fifty stage test accuracies. NLL is 
 | Uniform replay rank 16, 1,024-equivalent budget | 80.533% | 85.059% | 0.8592 | 14.05 |
 | SRT rank 16, 4,096-equivalent budget | 77.333% | 81.908% | 1.1100 | 40.11 |
 | Uniform replay rank 16, 4,096-equivalent budget | 80.400% | 84.197% | 0.9123 | 40.46 |
+
+## H=128: hyperparameters selected for final accuracy
+
+The search used only the existing training-derived 19,200/4,800 fit/validation split. Every completed candidate trained all fifty tasks. The objective was task-50 validation accuracy; ties used lower validation NLL and then candidate identity. Mean-stage accuracy did not select the winner.
+
+Selected thresholds: [0.05, 0.15, 0.3, 0.6, 0.85]; old target 0.95; interval unit 4; LoRA/head learning rates 0.001/0.005. Task-50 validation accuracy was 76.083%, with raw NLL 1.0789. The lead over the next completed recipe is 0.0208 percentage points on 4,800 validation images; this ranking has not been replicated.
+
+The choice was sealed before cold full-data refits. The new uniform control copies the chosen SRT batch schedule and optimizer settings; it is not independently tuned uniform replay.
+
+Selected SRT changes task-50 test accuracy by +1.567 percentage points and raw NLL by -0.1024 relative to the original H=128 SRT recipe. All final H=128 streams use 121,088 training image presentations; the number and size of updates can change with the selected policy.
+
+This is a single-seed finite coordinate search, not a global optimum. Validation was reused from earlier studies and the test set had already been inspected. No offline reference was a gate; raw benchmark NLL is unchanged by calibration.
+
+| Condition | Task-50 acc. | Raw NLL | Mean acc. | Updates |
+| --- | --- | --- | --- | --- |
+| SRT rank 16, H=128; standard, old=0.8, unit=8 | 75.100% | 1.1400 | 81.164% | 2,046 |
+| Uniform replay rank 16, H=128; standard, old=0.8, unit=8 | 74.333% | 1.1771 | 80.995% | 2,046 |
+| SRT rank 16, H=128; final-validation-accuracy tuned | 76.667% | 1.0375 | 82.372% | 1,974 |
+| Uniform replay rank 16, H=128; matched tuned-SRT recipe | 77.017% | 1.0311 | 82.086% | 1,974 |
+
+## H=128: original and selected recipes across all tasks
+
+Both panels use the same condition names, colors and line styles. Solid lines are SRT and dashed lines their exact-schedule uniform partners. The two pairs share H but can have different optimizer schedules. The dotted curve is the original stage-matched joint rank-16 accuracy reference.
+
+Offline symbols are task-50 means across three seeds, not new stage curves or H=128 work matches. The search adds at most one full-data SRT/uniform pair; other candidates are compared on validation, not on new test runs.
+
+![H=128: original and selected recipes across all tasks](h128_tuning_comparison.png)
+
+## H=128: validation search and its separate cost
+
+The frozen search evaluated 32 distinct recipes: eighteen policy combinations, learning-rate changes around the policy winner, then one-coordinate local refinements. Exact duplicate recipes reused their existing artifacts. All phase decisions are saved and reconstructed by the report audit.
+
+Completed candidates consumed 3,260,416 training presentations, 54,883 optimizer updates and 4,015,552 validation forwards. Measured training took 161.55 minutes and validation 141.63 minutes. These search costs are not charged to one final stream's deployment cost.
+
+Numerically failed candidates: 0. Any failed candidate has a recorded cause and committed-work lower bound; a failed in-flight batch may not have a checkpoint. Search and final-run resource tables distinguish these costs.
+
+Completed candidates ranged from 1.542% to 76.083% final validation accuracy. The lowest-scoring recipe used relaxed, old target 0.95, interval unit 8, and LoRA/head rates 0.001/0.02; its raw validation NLL was 5.2760. Completed means all fifty tasks finished with finite scores, not that the model remained useful. Finite low-accuracy runs are retained in the search plot and ledger.
+
+![H=128: validation search and its separate cost](h128_validation_search.png)
+
+## H=128: how the selected policy changes replay spacing
+
+The two panels compare the original SRT recipe with the validation-selected recipe on their fresh full-data runs. Dashed curves show requested intervals and solid curves show completed historical-review gaps on the same scheduling clock.
+
+These curves describe completed reviews, not images still waiting when training stopped. The per-image tables retain never-reviewed images and censored final waits. Scheduling ticks are not optimizer steps or wall time; the main replay-timing figure also compares actual optimizer-step gaps.
+
+![H=128: how the selected policy changes replay spacing](h128_tuned_intervals.png)
+
+## H=128: complete validation candidates 1-16
+
+The starred candidate is the final validation choice, not a test-selected checkpoint. Accuracies are percentages on validation at task 50; NLL is raw. Old/unit gives the requested historical fraction and interval unit. Full threshold values, hashes, work and per-stage evidence are retained in the candidate ledger.
+
+| Candidate | Phase | Val. acc. | Val. NLL | Profile; old/unit | LoRA/head LR |
+| --- | --- | --- | --- | --- | --- |
+| 1 | policy | 66.417 | 1.5652 | relaxed; 0.5/1 | 0.0005/0.01 |
+| 2 | policy | 68.146 | 1.4517 | relaxed; 0.5/8 | 0.0005/0.01 |
+| 3 | policy | 72.104 | 1.2765 | relaxed; 0.8/1 | 0.0005/0.01 |
+| 4 | policy | 72.792 | 1.2598 | relaxed; 0.8/8 | 0.0005/0.01 |
+| 5 | policy | 73.625 | 1.1961 | relaxed; 0.95/1 | 0.0005/0.01 |
+| 6 | policy | 74.333 | 1.1849 | relaxed; 0.95/8 | 0.0005/0.01 |
+| 7 | policy | 65.271 | 1.5618 | standard; 0.5/1 | 0.0005/0.01 |
+| 8 | policy | 69.375 | 1.4096 | standard; 0.5/8 | 0.0005/0.01 |
+| 9 | policy | 72.604 | 1.2655 | standard; 0.8/1 | 0.0005/0.01 |
+| 10 | policy | 72.646 | 1.2148 | standard; 0.8/8 | 0.0005/0.01 |
+| 11 | policy | 73.188 | 1.2005 | standard; 0.95/1 | 0.0005/0.01 |
+| 12 | policy | 73.625 | 1.2297 | standard; 0.95/8 | 0.0005/0.01 |
+| 13 | policy | 66.812 | 1.5336 | strict; 0.5/1 | 0.0005/0.01 |
+| 14 | policy | 66.896 | 1.5124 | strict; 0.5/8 | 0.0005/0.01 |
+| 15 | policy | 72.688 | 1.2484 | strict; 0.8/1 | 0.0005/0.01 |
+| 16 | policy | 71.958 | 1.2798 | strict; 0.8/8 | 0.0005/0.01 |
+
+## H=128: complete validation candidates 17-32
+
+The starred candidate is the final validation choice, not a test-selected checkpoint. Accuracies are percentages on validation at task 50; NLL is raw. Old/unit gives the requested historical fraction and interval unit. Full threshold values, hashes, work and per-stage evidence are retained in the candidate ledger.
+
+| Candidate | Phase | Val. acc. | Val. NLL | Profile; old/unit | LoRA/head LR |
+| --- | --- | --- | --- | --- | --- |
+| 17 | policy | 74.146 | 1.1985 | strict; 0.95/1 | 0.0005/0.01 |
+| 18 | policy | 73.812 | 1.1791 | strict; 0.95/8 | 0.0005/0.01 |
+| 19 | rates | 71.625 | 1.2688 | relaxed; 0.95/8 | 0.00025/0.005 |
+| 20 | rates | 72.208 | 1.2394 | relaxed; 0.95/8 | 0.00025/0.01 |
+| 21 | rates | 73.333 | 1.2635 | relaxed; 0.95/8 | 0.00025/0.02 |
+| 22 | rates | 74.312 | 1.1652 | relaxed; 0.95/8 | 0.0005/0.005 |
+| 23 | rates | 75.000 | 1.1635 | relaxed; 0.95/8 | 0.0005/0.02 |
+| 24 | rates | 75.042 | 1.1047 | relaxed; 0.95/8 | 0.001/0.005 |
+| 25 | rates | 2.458 | 4.9861 | relaxed; 0.95/8 | 0.001/0.01 |
+| 26 | rates | 1.542 | 5.2760 | relaxed; 0.95/8 | 0.001/0.02 |
+| 27 | refinement | 75.458 | 1.1066 | relaxed_power0.8; 0.95/8 | 0.001/0.005 |
+| 28 | refinement | 75.417 | 1.0749 | relaxed_power1.25; 0.95/8 | 0.001/0.005 |
+| 29 | refinement | 75.229 | 1.1256 | relaxed; 0.85/8 | 0.001/0.005 |
+| 30 | refinement | 76.062 | 1.0644 | relaxed; 1/8 | 0.001/0.005 |
+| 31* | refinement | 76.083 | 1.0789 | relaxed; 0.95/4 | 0.001/0.005 |
+| 32 | refinement | 75.854 | 1.0764 | relaxed; 0.95/16 | 0.001/0.005 |
 
 ## Lower replay budgets: latest H=128
 
@@ -157,6 +252,8 @@ Training time sums measured batch work and committed checkpoint I/O. Loader and 
 | Uniform replay rank 16, H=256; standard, old=0.8, unit=8 | 146,176 | 0 | 7.17 |
 | SRT rank 16, H=512; standard, old=0.8, unit=8 | 196,204 | 0 | 10.21 |
 | Uniform replay rank 16, H=512; standard, old=0.8, unit=8 | 196,204 | 0 | 9.36 |
+| SRT rank 16, H=128; final-validation-accuracy tuned | 121,088 | 0 | 5.98 |
+| Uniform replay rank 16, H=128; matched tuned-SRT recipe | 121,088 | 0 | 5.77 |
 | Persistent single-affine + adaptive node LoRAs, H=4,096 | 3,050,765 | 2,385,440 | 104.23 |
 | Stage-matched joint IID, rank 16 | 3,140,210 | 0 | 80.72 |
 | Aggregate-rank-matched joint IID | 3,140,210 | 0 | 85.88 |

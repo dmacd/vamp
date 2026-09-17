@@ -35,7 +35,8 @@ def test_tuning_appendix_layout_and_complete_candidate_table(tmp_path, baseline_
     candidates = unique_candidates(initial + rate_candidates(config, training, baseline) + refinement_candidates(config, baseline))
     chosen = baseline if baseline_reused else candidates[-1]
     summaries = tuple({"candidate": asdict(candidate), "candidate_hash": candidate.content_hash, "job": candidate.name,
-                       "status": "complete", "validation_accuracy": 80. + index / 100, "validation_nll": .8,
+                       "status": "complete", "validation_accuracy": 81. if candidate == chosen else (2.5 if index == 24 else 80. + index / 100),
+                       "validation_nll": 5. if index == 24 else .8,
                        "mean_stage_accuracy": 85., "image_presentations": 101888, "optimizer_steps": 2000,
                        "training_wall_seconds": 60., "validation_wall_seconds": 10., "validation_forward_images": 120000}
                       for index, candidate in enumerate(candidates))
@@ -63,6 +64,9 @@ def test_tuning_appendix_layout_and_complete_candidate_table(tmp_path, baseline_
     assert len(pages) == len(sections)
     assert all("SYNTHETIC LAYOUT FIXTURE" in page.extract_text() for page in pages)
     assert ("exactly equals the original" in pages[0].extract_text()) == baseline_reused
+    assert "ranking has not been replicated" in pages[0].extract_text()
+    assert "Completed means all fifty tasks finished with finite scores" in pages[2].extract_text()
+    assert "2.500%" in pages[2].extract_text()
     digest = file_sha256(pdf)
     render_report(sections, tmp_path, pdf)
     assert file_sha256(pdf) == digest
@@ -108,3 +112,12 @@ def test_completed_real_tuning_selection_and_report_authenticate():
                    for filename, field in (("model.safetensors", "model_sha256"), ("predictions.parquet", "predictions_sha256")))
     with ThreadPoolExecutor(max_workers=8) as executor:
         assert tuple(executor.map(file_sha256, (path for path, _ in checks))) == tuple(expected for _, expected in checks)
+    # No historical images exist at task 1: changing only their target fraction
+    # must leave the cold-start model and predictions exactly unchanged.
+    candidates = tuple(row for row in reference["selection"]["candidates"] if row["status"] == "complete")
+    initial_recipe = lambda row: (tuple(row["candidate"]["policy"]["thresholds"]), row["candidate"]["policy"]["interval_unit"],
+                                  row["candidate"]["lora_learning_rate"], row["candidate"]["head_learning_rate"])
+    for recipe in {initial_recipe(row) for row in candidates}:
+        first_stages = tuple(read_sealed(reference["root"] / "calibration" / row["job"] / "stages/001/result.json")
+                             for row in candidates if initial_recipe(row) == recipe)
+        assert len({(row["model_sha256"], row["predictions_sha256"]) for row in first_stages}) == 1

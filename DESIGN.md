@@ -15,6 +15,9 @@ forward. A persistent leftist heap and indexed due sets avoid per-batch full
 history scans. Virtual scheduling time may advance without optimization when
 both pools are empty; actual optimizer/presentation gaps remain separate.
 Uniform controls copy realized SRT old/current batch counts but not selection.
+The historical fraction is a target after mandatory introductions, not a
+hard quota: a shortage in one due pool can be filled from the other pool.
+Even a historical target of one therefore permits current-image reviews.
 SM-2 arithmetic uses integer hundredths for ease updates and interval ceilings.
 Scheduling clocks have arbitrary integer width; exact decimal-string columns
 preserve them in Parquet and the compact report tables without overflow.
@@ -49,6 +52,9 @@ one-coordinate refinements; the rule is frozen before training and each phase
 decision is sealed before constructing the next candidates. Recipe hashes
 deduplicate work across phases and resume. Training and SM-2 code remain shared
 with the original run; only explicit policy and learning-rate values change.
+Numerical exceptions produce explicit failed-candidate records. A finite
+low-accuracy stream remains a completed candidate in the full ledger; no
+accuracy gate suppresses it or changes the frozen search.
 
 The selected recipe is sealed before its full-data SRT/uniform refits. Its
 uniform control shares both the selected optimizer settings and realized batch

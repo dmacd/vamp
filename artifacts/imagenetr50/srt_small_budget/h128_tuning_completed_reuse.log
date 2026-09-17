@@ -1,0 +1,54 @@
+H=128 tuning working artifacts: /home/daniel/projects/snet/rpa/artifacts/imagenetr50/srt_r16_v1/runs/b3de2a819efe0707b85cf105cf8d4c53370c807b48108bf996dc4f4883a213ea/tuning/e193c7cefcf995fe9f0e1ccb84147e820d9438e282555abe17ed76bfb1364429
+Tuning phase: policy 1/18: relaxed_rho50_unit1; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 2/18: relaxed_rho50_unit8; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 3/18: relaxed_rho80_unit1; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 4/18: relaxed_rho80_unit8; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 5/18: relaxed_rho95_unit1; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 6/18: relaxed_rho95_unit8; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 7/18: standard_rho50_unit1; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 8/18: standard_rho50_unit8; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 9/18: standard_rho80_unit1; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 10/18: standard_rho80_unit8; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 11/18: standard_rho95_unit1; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 12/18: standard_rho95_unit8; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 13/18: strict_rho50_unit1; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 14/18: strict_rho50_unit8; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 15/18: strict_rho80_unit1; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 16/18: strict_rho80_unit8; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 17/18: strict_rho95_unit1; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: policy 18/18: strict_rho95_unit8; LoRA/head LR 0.0005/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: rates 1/9: relaxed_rho95_unit8; LoRA/head LR 0.00025/0.005; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: rates 2/9: relaxed_rho95_unit8; LoRA/head LR 0.00025/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: rates 3/9: relaxed_rho95_unit8; LoRA/head LR 0.00025/0.02; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: rates 4/9: relaxed_rho95_unit8; LoRA/head LR 0.0005/0.005; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: rates 6/9: relaxed_rho95_unit8; LoRA/head LR 0.0005/0.02; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: rates 7/9: relaxed_rho95_unit8; LoRA/head LR 0.001/0.005; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: rates 8/9: relaxed_rho95_unit8; LoRA/head LR 0.001/0.01; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: rates 9/9: relaxed_rho95_unit8; LoRA/head LR 0.001/0.02; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: refinement 1/6: relaxed_power0.8_rho95_unit8; LoRA/head LR 0.001/0.005; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: refinement 2/6: relaxed_power1.25_rho95_unit8; LoRA/head LR 0.001/0.005; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: refinement 3/6: relaxed_rho85_unit8; LoRA/head LR 0.001/0.005; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: refinement 4/6: relaxed_rho100_unit8; LoRA/head LR 0.001/0.005; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: refinement 5/6: relaxed_rho95_unit4; LoRA/head LR 0.001/0.005; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: refinement 6/6: relaxed_rho95_unit16; LoRA/head LR 0.001/0.005; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: selected full-data srt_h128_tuned; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: selected full-data uniform_h128_tuned; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Tuning phase: audit and rebuild report; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+Report audit: SRT rank 16, 1,024-equivalent budget
+Report audit: Uniform replay rank 16, 1,024-equivalent budget
+Report audit: SRT rank 16, 4,096-equivalent budget
+Report audit: Uniform replay rank 16, 4,096-equivalent budget
+Report audit: SRT rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; standard, old=0.8, unit=8
+Report audit: SRT rank 16, H=4,096; strict, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=4,096; strict, old=0.8, unit=8
+Report audit: SRT rank 16, H=128; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=128; standard, old=0.8, unit=8
+Report audit: SRT rank 16, H=256; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=256; standard, old=0.8, unit=8
+Report audit: SRT rank 16, H=512; standard, old=0.8, unit=8
+Report audit: Uniform replay rank 16, H=512; standard, old=0.8, unit=8
+Report audit: SRT rank 16, H=128; final-validation-accuracy tuned
+Report audit: Uniform replay rank 16, H=128; matched tuned-SRT recipe
+Tuning phase: complete; 3,502,592/3,502,592 maximum presentations; ETA 0.0 min (upper-bound search plan)
+/home/daniel/projects/snet/rpa/output/pdf/imagenetr50_srt_r16_report.pdf

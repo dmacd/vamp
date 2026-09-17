@@ -192,6 +192,11 @@ def tuning_report_parts(
         rows = tuple(row for row in candidate_rows if row["phase"] == phase and row["status"] == "complete")
         axis.scatter([row["index"] for row in rows], [row["validation_accuracy"] for row in rows], color=color, s=45, label=phase)
     best = next(row for row in candidate_rows if row["selected"])
+    worst = min((row for row in candidate_rows if row["status"] == "complete"),
+                key=lambda row: (row["validation_accuracy"], row["candidate_hash"]))
+    runner_up_accuracy = max((row["validation_accuracy"] for row in candidate_rows
+                              if row["status"] == "complete" and not row["selected"]),
+                             default=best["validation_accuracy"])
     axis.scatter([best["index"]], [best["validation_accuracy"]], facecolors="none", edgecolors="black", marker="o", s=155,
                  linewidths=1.5, label="Selected by final validation accuracy")
     axis.set(xlabel="Distinct candidate in execution order", ylabel="Task-50 validation accuracy (%)",
@@ -205,11 +210,13 @@ def tuning_report_parts(
     original_srt = analyses["srt_h128_standard_rho80_unit8"].totals
     sections = (
         ReportSection("H=128: hyperparameters selected for final accuracy", (
-            "The search used only the existing training-derived 19,200/4,800 fit/validation split. Every candidate trained all fifty tasks. "
+            "The search used only the existing training-derived 19,200/4,800 fit/validation split. Every completed candidate trained all fifty tasks. "
             "The objective was task-50 validation accuracy; ties used lower validation NLL and then candidate identity. Mean-stage accuracy did not select the winner.",
             f"Selected thresholds: {list(chosen.policy.thresholds)}; old target {chosen.policy.historical_fraction:g}; interval unit {chosen.policy.interval_unit}; "
             f"LoRA/head learning rates {chosen.lora_learning_rate:g}/{chosen.head_learning_rate:g}. "
-            f"Task-50 validation accuracy was {best['validation_accuracy']:.3f}%, with raw NLL {best['validation_nll']:.4f}.",
+            f"Task-50 validation accuracy was {best['validation_accuracy']:.3f}%, with raw NLL {best['validation_nll']:.4f}. "
+            f"The lead over the next completed recipe is {best['validation_accuracy'] - runner_up_accuracy:.4f} percentage points "
+            "on 4,800 validation images; this ranking has not been replicated.",
             ("The selected recipe exactly equals the original H=128 recipe. Its completed SRT/uniform pair is reused without training or duplicate curves."
              if result["baseline_reused"] else
              "The choice was sealed before cold full-data refits. The new uniform control copies the chosen SRT batch schedule and optimizer settings; it is not independently tuned uniform replay."),
@@ -222,8 +229,8 @@ def tuning_report_parts(
         ReportSection("H=128: original and selected recipes across all tasks", (
             "Both panels use the same condition names, colors and line styles. Solid lines are SRT and dashed lines their exact-schedule uniform partners. "
             "The two pairs share H but can have different optimizer schedules. The dotted curve is the original stage-matched joint rank-16 accuracy reference.",
-            "Offline symbols are task-50 means across three seeds, not new stage curves or H=128 work matches. Only the selected SRT recipe gets a new test refit; "
-            "the remaining search candidates are compared on validation, not test.",
+            "Offline symbols are task-50 means across three seeds, not new stage curves or H=128 work matches. "
+            "The search adds at most one full-data SRT/uniform pair; other candidates are compared on validation, not on new test runs.",
         ), (comparison,)),
         ReportSection("H=128: validation search and its separate cost", (
             f"The frozen search evaluated {len(candidate_rows)} distinct recipes: eighteen policy combinations, learning-rate changes around the policy winner, "
@@ -235,6 +242,10 @@ def tuning_report_parts(
             f"{sum(row['validation_wall_seconds'] or 0 for row in candidate_rows) / 60:.2f} minutes. These search costs are not charged to one final stream's deployment cost.",
             f"Numerically failed candidates: {sum(row['status'] == 'failed' for row in candidate_rows)}. Any failed candidate has a recorded cause and committed-work lower bound; "
             "a failed in-flight batch may not have a checkpoint. Search and final-run resource tables distinguish these costs.",
+            f"Completed candidates ranged from {worst['validation_accuracy']:.3f}% to {best['validation_accuracy']:.3f}% final validation accuracy. "
+            f"The lowest-scoring recipe used {worst['profile']}, old target {worst['historical_fraction']:g}, interval unit {worst['interval_unit']}, "
+            f"and LoRA/head rates {worst['lora_learning_rate']:g}/{worst['head_learning_rate']:g}; its raw validation NLL was {worst['validation_nll']:.4f}. "
+            "Completed means all fifty tasks finished with finite scores, not that the model remained useful. Finite low-accuracy runs are retained in the search plot and ledger.",
         ), (search_figure,)),
     )
     figures = {"h128_tuning_comparison": comparison, "h128_validation_search": search_figure}

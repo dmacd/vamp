@@ -91,51 +91,52 @@
   allocation, then replicate comparisons. Stale confidence alone does not
   explain the strict profile's held-out deficit. No new gating rule is added.
 
-## Active Study - ImageNet-R H=256/H=128 and H=128 Final-Accuracy Tuning
+## Completed Outcome - ImageNet-R H=256/H=128 and H=128 Final-Accuracy Tuning
 
-- H=512 implementation/results were committed and pushed as `c6de142` before
-  the user requested further work. Commit new definitions before launching.
-- Run fresh standard/old=0.8/unit=8 SRT/uniform pairs at H=256 then H=128,
-  all 50 tasks, seed 1993. Each stream uses 146,176 / 121,088 presentations,
-  respectively. Use unchanged core training and exact matched batch schedules.
-- Then maximize H=128 task-50 validation accuracy on the existing 19,200/4,800
-  training-derived split, with NLL only as an exact-accuracy tie-breaker.
-  Every candidate reaches task 50; test results never select hyperparameters.
-  The finite search covers 18 policy settings, eight new learning-rate settings
-  around their winner and up to six local refinements. Deduplicate recipes.
-- Frozen choices are in `docs/imagenetr50_srt_small_budget_tuning_protocol.md`
-  and `configs/vision/imagenetr/srt_h128_tuning.yaml`. No threshold gate or
-  review-age/cap intervention is introduced. This is a single-seed finite
-  search, not proof of a global optimum; validation reuse is acknowledged.
-- Refit the selected recipe on full training data, with an exactly matched
-  uniform control; reuse the baseline if its recipe wins unchanged. Append
-  curves, selection evidence, replay timing and separate search/final-run work
-  to the existing report. Keep original results and diagnostic inputs immutable.
-- Definitions and baseline report support were committed and pushed as
-  `eb8c7ce` before launch. H=256 completed: SRT 77.166667% / 1.052572 NLL
-  versus matched uniform 76.816667% / 1.067371, each 146,176 presentations
-  and 2,462 updates. H=128 completed: SRT 75.100000% / 1.139954 NLL versus
-  matched uniform 74.333333% / 1.177052, each 121,088 presentations and 2,046
-  updates. All four completed jobs reuse with zero optimizer steps. No
-  source-algorithm change was needed.
-- The tuning runner, finite candidate constructors, validation-only selection,
-  immutable phase decisions, numerical-failure records, zero-step reuse and
-  report integration are implemented. Forty short tests and both synthetic
-  tuned-report layout variants pass. The core SRT training files remain unchanged.
-- The tuning implementation was committed and pushed as `5491e5c` before its
-  GPU work. Synthetic appendix checks include the complete candidate ledger
-  and original-versus-tuned replay-spacing panels; none of those synthetic
-  values are experiment evidence. The shared training/scheduler/diagnostic
-  regression slice also passes all 42 tests.
-- The fixed-policy evidence audit passes for H=128, H=256 and H=512, including
-  all image bytes and checkpoint/prediction hashes. Both new baseline reports
-  completed before the tuner started. Search identity is `e193c7cefcf9...`;
-  the first full-horizon validation candidate is running at nice 10.
-  Additional report/audit changes and the budget/quality-grade clarification
-  were pushed as `21d024a` and `6926b35`, also before tuning.
-- Pending: finish the frozen search; authenticate
-  the final selected pair, visually inspect the final report and publish the
-  complete evidence.
+- Preceding H=512 work was committed and pushed as `c6de142`. The new baseline
+  definitions (`eb8c7ce`) and tuning implementation/protocol (`5491e5c`,
+  `21d024a`, `6926b35`) were committed and pushed before their GPU runs.
+  One nice-10 worker completed every stream; original training code is unchanged.
+- Fixed standard/old=0.8/unit=8 H=256: SRT 77.166667% / 1.052572 NLL versus
+  matched uniform 76.816667% / 1.067371, each 146,176 presentations and 2,462
+  updates. H=128: SRT 75.100000% / 1.139954 versus uniform 74.333333% /
+  1.177052, each 121,088 presentations and 2,046 updates. These completed
+  comparisons and their audited report were pushed as `b13df3c` during tuning.
+- The frozen search `e193c7cefcf9...` completed 32 full 50-task candidates on
+  the existing 19,200/4,800 training-derived fit/validation partition. Selection
+  maximizes final task-50 validation accuracy, with NLL only breaking ties.
+  No test score, mean-stage score, or offline reference gates the choice.
+- Winner: relaxed thresholds `[0.05, 0.15, 0.3, 0.6, 0.85]`, old target 0.95,
+  interval unit 4, LoRA/head learning rates 0.001/0.005. Validation accuracy
+  is 76.083333% / 1.078863 NLL versus the original recipe's 72.645833% /
+  1.214815. The winner leads the runner-up by just one validation image.
+- Fresh full-data selected H=128 pair: SRT 76.666667% / 1.037512 NLL versus
+  uniform 77.016667% / 1.031127. Both use 121,088 presentations and 1,974
+  exactly paired updates. SRT improves 1.566667 points over its original
+  H=128 result, but uniform leads the selected pair by 0.350000 points.
+  Uniform shares SRT's selected settings; it was not independently tuned.
+- Search cost is separate: 3,260,416 training presentations, 54,883 updates,
+  4,015,552 validation forwards, 161.55 measured training minutes and 141.63
+  validation minutes. Two finite learning-rate combinations collapsed early
+  and remain visible in the complete ledger; there were no numerical exceptions.
+- All 34 tuning jobs reuse with zero optimizer steps and unchanged hashes.
+  Reinvoking the completed workflow reproduced the report byte-for-byte before
+  a final report-only legend-spacing correction. The original results and
+  frozen checkpoint-diagnostic replay history remain unchanged.
+- Verification passes: 83 focused short tests, four real-artifact audits and
+  both synthetic tuning-layout variants, all in explicit `-n 0` slices.
+  Audits reconstruct selection and final scores, check all stage model and
+  prediction hashes, and verify task-1 parity when only the old target changes.
+  The 39-page existing report has consistent curves, all 32 candidates,
+  replay-timing/work tables and visually checked new/changed pages. Compact
+  evidence and logs live in `artifacts/imagenetr50/srt_small_budget/README.md`
+  and the source run's `tuning/` tree; checkpoints/raw events stay local.
+- Remaining scientific limit: this is a finite single-seed search using a
+  previously inspected validation/test split, not a global optimum or SOTA
+  result. Neither selected stream reaches the longer-trained rank-16 joint-IID
+  mean, which uses more work. Replicate the selected SRT/uniform comparison
+  before interpreting a 0.35-point method difference or the one-image search
+  ranking; further experiments require a new user decision.
 
 ## Completed Outcome - ImageNet-R SRT versus Uniform at H=512
 

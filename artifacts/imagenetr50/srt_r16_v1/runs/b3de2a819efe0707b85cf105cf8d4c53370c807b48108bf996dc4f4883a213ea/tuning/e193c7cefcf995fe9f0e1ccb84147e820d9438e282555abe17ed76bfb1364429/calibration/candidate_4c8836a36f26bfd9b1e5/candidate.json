@@ -1,0 +1,1 @@
+{"content_hash":"4c8836a36f26bfd9b1e5d9bda7e89534fe5139d262280161693e7b330c8f13f9","head_learning_rate":0.005,"lora_learning_rate":0.001,"policy":{"historical_fraction":0.95,"interval_unit":8,"profile":"relaxed_power0.8","thresholds":[0.09102821,0.21921638,0.38167789,0.66453981,0.87808213]}}

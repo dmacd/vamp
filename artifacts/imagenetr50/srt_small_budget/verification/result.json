@@ -1,0 +1,76 @@
+{
+  "schema_version": "imagenetr50-srt-small-budget-verification-v1",
+  "verified_date_utc": "2026-09-17",
+  "source_run": "b3de2a819efe0707b85cf105cf8d4c53370c807b48108bf996dc4f4883a213ea",
+  "tuning_run": "e193c7cefcf995fe9f0e1ccb84147e820d9438e282555abe17ed76bfb1364429",
+  "selection_content_hash": "3909a1344db5af7f28004557bab4a66aa791ef93654e0baea88045cc670b5e83",
+  "tuning_result_content_hash": "3712f1d3c19fe6db3b4278912fcd70901cb17469e8746f4b673b39b8c8b510d4",
+  "tuning_result_file_sha256": "e17e38796c58052526c6c050e7ded08e9c9ee65e6919e5cf361e47026536c4cb",
+  "selected_candidate_hash": "c84fa3d51903a2cfff9746d3fb7d87e58f18853a92b2be9675d3171c2ff0836e",
+  "selection_used_test_scores": false,
+  "candidate_count": 32,
+  "numerical_exception_count": 0,
+  "finite_collapsed_candidates_retained": 2,
+  "selected_hyperparameters": {
+    "thresholds": [0.05, 0.15, 0.3, 0.6, 0.85],
+    "historical_fraction_target": 0.95,
+    "interval_unit": 4,
+    "lora_learning_rate": 0.001,
+    "head_learning_rate": 0.005
+  },
+  "validation": {
+    "fit_examples": 19200,
+    "validation_examples": 4800,
+    "accuracy_percent": 76.08333333333333,
+    "raw_nll": 1.0788625861934367,
+    "lead_over_runner_up_examples": 1
+  },
+  "selected_full_data_pair": {
+    "test_examples": 6000,
+    "training_presentations_per_method": 121088,
+    "optimizer_updates_per_method": 1974,
+    "srt_accuracy_percent": 76.66666666666667,
+    "srt_raw_nll": 1.0375122395362995,
+    "uniform_accuracy_percent": 77.01666666666667,
+    "uniform_raw_nll": 1.031126956185954,
+    "uniform_independently_tuned": false,
+    "exact_per_update_pairing_verified": true
+  },
+  "completed_job_reuse": {
+    "tuning_jobs": 34,
+    "additional_optimizer_steps": 0,
+    "all_result_hashes_unchanged": true,
+    "whole_workflow_reinvocation_exit_code": 0,
+    "pdf_before_and_after_reinvocation_sha256": "c6371219ee206a19755471e5d648f9fae7772089b418bfeed67588e1f4965c52",
+    "note": "Deterministic workflow reuse preceded a final report-only layout and opening-summary correction. Scientific results did not change."
+  },
+  "preservation": {
+    "prior_source_hash_checks_passed": true,
+    "core_training_code_unchanged": true,
+    "frozen_replay_history_sha256": "d213ecc22cdf59f7048e54a813f2982aa765288fa41f5b8686be98d701588069"
+  },
+  "tests": {
+    "final_training_regression_tests": {"passed": 42, "deselected": 1},
+    "final_workflow_tests": {"passed": 41, "deselected": 7},
+    "selected_layout_tests": {"passed": 2, "deselected": 2},
+    "completed_all_evidence_tests": {"passed": 4, "deselected": 3},
+    "pytest_workers": 0,
+    "full_repository_suite_rerun": false,
+    "coverage_regression": "Reproduced label/legend overlap before the fix; now passes and is included in final_workflow_tests."
+  },
+  "report": {
+    "path": "output/pdf/imagenetr50_srt_r16_report.pdf",
+    "pages": 39,
+    "sha256": "a6e3b17b24ba61b9ac186d458a0564d391853f5b9ef5931e2aa9b41dc76b04a9",
+    "manifest_content_hash": "4615b8a7e3ff29ea02a1f0298877010b5e0efe560affa9660427139acbdc869a",
+    "replay_event_audit_passed": true,
+    "paired_exposure_audit_passed": true,
+    "new_and_changed_pages_visually_checked": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15, 17, 18, 19, 20, 21]
+  },
+  "limits": [
+    "Finite single-seed search, not a global optimum.",
+    "Previously inspected validation split and test set.",
+    "Final uniform is a control matched to the selected SRT recipe, not a separately optimized uniform condition.",
+    "The one-image validation ranking and 0.35-point final method difference require replication."
+  ]
+}

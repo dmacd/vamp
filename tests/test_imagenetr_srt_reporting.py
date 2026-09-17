@@ -311,3 +311,25 @@ def test_complete_synthetic_report_layout(tiny_full_stream, tmp_path, include_fo
     first_hash = sha256(pdf.read_bytes()).hexdigest()
     reporting.render_report(sections, reports, pdf)
     assert sha256(pdf.read_bytes()).hexdigest() == first_hash
+
+
+def test_expanded_coverage_legend_clears_axis_label(tmp_path, monkeypatch):
+    """Keep the complete condition legend below the historical-review axis label."""
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    from apm.continual.vision.imagenetr import srt_reporting as reporting
+
+    def check_layout(figure, path):
+        """Check actual rendered bounds before closing this synthetic figure."""
+        figure.canvas.draw()
+        renderer = figure.canvas.get_renderer()
+        axis = figure.axes[1]
+        legend = figure.legends[0] if figure.legends else axis.get_legend()
+        assert legend.get_window_extent(renderer).y1 < axis.xaxis.label.get_window_extent(renderer).y0
+        plt.close(figure)
+        return path
+
+    monkeypatch.setattr(reporting, "_save_figure", check_layout)
+    samples = pd.DataFrame(tuple({"condition": name, "arrival_stage": stage, "historical_reviews": stage}
+                                 for name in reporting.ALL_STYLES for stage in (1, 2)))
+    reporting._plot_sample_coverage(tmp_path, samples, pd.DataFrame())
